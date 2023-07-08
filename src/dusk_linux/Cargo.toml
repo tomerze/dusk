@@ -1,0 +1,15 @@
+[package]
+name = "dusk_linux"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embassy-executor = { version = "0.2.0", features = ["arch-std", "executor-thread", "log", "nightly", "integrated-timers"] }
+embassy-time = { version = "0.1.2", features = ["std", "log", "nightly"] }
+embassy-sync = { version = "0.2.0", features = ["log"] }
+
+env_logger = "0.10.0"
+log = "0.4.19"
+static_cell = "1.2.0"
+
+dusk = { path = "../dusk" }
