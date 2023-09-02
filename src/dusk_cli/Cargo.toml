@@ -3,7 +3,9 @@ name = "dusk_cli"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "dusk"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1.25.0", features = ["full", "tracing"] }
@@ -17,3 +19,9 @@ argfile = "0.1.5"
 shellfish = { version = "0.8.0", features = ["app", "async", "rustyline"] }
 rustyline = "11.0.0"
 colored = "2.0.4"
+reedline = { version = "0.21.0", features = ["sqlite"] }
+crossterm = "0.26.1"
+nu-ansi-term = "0.47.0"
+chrono = "0.4.26"
+pretty-duration = "0.1.1"
+static_cell = "1.2.0"

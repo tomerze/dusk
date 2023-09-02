@@ -2,8 +2,10 @@
 
 extern crate alloc;
 
+use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
+
 use alloc::sync::Arc;
 use log::info;
 
@@ -19,43 +21,19 @@ impl Namespace {
         info!("namespace `{}` created", id);
         Namespace { id }
     }
-
-    pub async fn session(&mut self) {
-        info!("session");
-    }
-
-    pub async fn exec(&mut self) {
-        info!("exec")
-    }
 }
 
-
 #[embassy_executor::task]
-pub async fn session(namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>) {
-    let mut namespace_guard = namespace.lock().await;
-    namespace_guard.session().await
+pub async fn session(
+    namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>,
+    _spawner: Arc<Mutex<CriticalSectionRawMutex, Spawner>>,
+) {
+    let mut _namespace_guard = namespace.lock().await;
+    info!("session");
 }
 
 #[embassy_executor::task]
 pub async fn exec(namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>) {
-    let mut namespace_guard = namespace.lock().await;
-    namespace_guard.exec().await
+    let mut _namespace_guard = namespace.lock().await;
+    info!("exec");
 }
-
-
-// static ROOT_NAMESPACE: StaticCell<Namespace> = StaticCell::new();
-
-// // TODO: Bring rsock and wsock with this function params (probably with Box<dyn ...>)
-// #[embassy_executor::task]
-// pub async fn root(spawner: Spawner) {
-//     info!("Dusk started");
-
-//     ROOT_NAMESPACE.init(Namespace::new(spawner));
-
-//     //  let serv = SSHServer::new(&mut ssh_rxbuf, &mut ssh_txbuf)?;
-//     //
-//     //     pub async fn run<B: ?Sized, M: RawMutex>(&self,
-//     //     rsock: &mut impl asynch::Read,
-//     //     wsock: &mut impl asynch::Write,
-//     //     b: &Mutex<M, B>) -> Result<()>
-// }

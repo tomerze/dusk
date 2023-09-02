@@ -1,3 +1,6 @@
 /src/dusk/target
 /src/dusk_linux/target
 /src/dusk_cli/target
+/target
+/Cargo.lock
+/src/dusk/Cargo.lock
