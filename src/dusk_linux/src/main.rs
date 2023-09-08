@@ -2,8 +2,8 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 
-use dusk::Namespace;
-use embassy_executor::{Executor, Spawner};
+use dusk::namespace::Namespace;
+use embassy_executor::Executor;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use static_cell::StaticCell;
@@ -26,10 +26,7 @@ fn main() {
     ));
 
     executor.run(|spawner| {
-        let spawner_mutex = Arc::new(Mutex::<CriticalSectionRawMutex, Spawner>::new(
-        spawner));
-        let session_task = dusk::session(root.clone(), spawner_mutex.clone());
-        let spawner_guard = spawner_mutex.try_lock().unwrap();
-        spawner_guard.spawn(session_task).unwrap();
+        let session_task = dusk::session(root.clone());
+        spawner.spawn(session_task).unwrap();
     });
 }

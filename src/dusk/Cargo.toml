@@ -5,7 +5,14 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.71"
-embassy-executor = { version = "0.2.0", features = ["log", "nightly", "integrated-timers"] }
+embassy-executor = { version = "0.3.0", features = ["log", "nightly", "integrated-timers"] }
 embassy-sync = { version = "0.2.0", features = ["log"] }
 log = "0.4.0"
 static_cell = "1.2.0"
+capnp = { version = "0.18.0", default-features = false, features = ["alloc"] }
+capnp-rpc = { version = "0.18.0", default-features = false } 
+futures = { version = "0.3.28", default-features = false }
+
+[build-dependencies]
+capnpc = { version = "0.18.0", default-features = false }
+
