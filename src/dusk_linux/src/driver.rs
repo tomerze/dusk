@@ -1,11 +1,15 @@
+use anyhow::{anyhow, Result};
 use dusk::driver::Driver;
+use nix::unistd::gethostname;
 
 struct LinuxDriver {}
 
 dusk::dusk_driver_impl!(static DRIVER: LinuxDriver = LinuxDriver{});
 
 impl Driver for LinuxDriver {
-    fn hostname(&self, _namespace: u64) -> String {
-        String::from("linux")
+    fn hostname(&self, _namespace: u64) -> Result<String> {
+        Ok(String::from(gethostname()?.into_string().map_err(
+            |os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"),
+        )?))
     }
 }

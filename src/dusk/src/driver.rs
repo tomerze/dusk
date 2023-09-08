@@ -1,16 +1,17 @@
 use alloc::string::String;
+use anyhow::Result;
 
 /// Dusk driver
 #[async_trait::async_trait]
 pub trait Driver: Send + Sync + 'static {
-    fn hostname(&self, namespace: u64) -> String;
+    fn hostname(&self, namespace: u64) -> Result<String>;
 }
 
 extern "Rust" {
-    fn _dusk_hostname(namespace: u64) -> String;
+    fn _dusk_hostname(namespace: u64) -> Result<String>;
 }
 
-pub fn hostname(namespace: u64) -> String {
+pub fn hostname(namespace: u64) -> Result<String> {
     unsafe { _dusk_hostname(namespace) }
 }
 
@@ -21,7 +22,7 @@ macro_rules! dusk_driver_impl {
         static $name: $t = $val;
 
         #[no_mangle]
-        fn _dusk_hostname(namespace: u64) -> String {
+        fn _dusk_hostname(namespace: u64) -> Result<String> {
             <$t as $crate::driver::Driver>::hostname(&$name, namespace)
         }
     };

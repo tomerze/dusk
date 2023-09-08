@@ -8,8 +8,11 @@ embassy-executor = { version = "0.3.0", features = ["arch-std", "executor-thread
 embassy-time = { version = "0.1.2", features = ["std", "log", "nightly"] }
 embassy-sync = { version = "0.2.0", features = ["log"] }
 
+anyhow = "1.0.75"
+async-net = "1.7.0"
 env_logger = "0.10.0"
 log = "0.4.19"
 static_cell = "1.2.0"
-
+futures = "0.3.28"
+nix = { version = "0.27.1", features = ["hostname"] }
 dusk = { path = "../dusk" }
