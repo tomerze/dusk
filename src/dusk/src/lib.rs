@@ -41,13 +41,14 @@ async fn rpc_system_wrapper(rpc_system: RpcSystem<rpc_twoparty_capnp::Side>) {
 
 #[embassy_executor::task]
 pub async fn session(
-    _namespace: Arc<Mutex<CriticalSectionRawMutex, namespace::Namespace>>,
+    namespace: Arc<Mutex<CriticalSectionRawMutex, namespace::Namespace>>,
     reader: Pin<Box<dyn AsyncRead>>,
     writer: Pin<Box<dyn AsyncWrite>>,
 ) {
     info!("session started");
 
-    let dusk_client: dusk_capnp::dusk::Client = capnp_rpc::new_client(server::DuskImpl);
+    let dusk_client: dusk_capnp::dusk::Client =
+        capnp_rpc::new_client(server::DuskImpl::new(namespace));
 
     let network = twoparty::VatNetwork::new(
         reader,

@@ -1,8 +1,19 @@
 use crate::dusk_capnp::dusk;
-
+use crate::namespace::Namespace;
+use alloc::sync::Arc;
 use capnp::capability::Promise;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 
-pub struct DuskImpl;
+pub struct DuskImpl {
+    namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>,
+}
+
+impl DuskImpl {
+    pub fn new(namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>) -> Self {
+        DuskImpl { namespace }
+    }
+}
 
 impl dusk::Server for DuskImpl {
     fn exec(
