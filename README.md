@@ -1,3 +1,3 @@
 # Dusk
 
-An os shell for embedded applications using `embassy + captnp`
+An os shell for embedded applications using `embassy + capnp`
