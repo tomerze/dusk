@@ -17,11 +17,16 @@ clap = { version = "4.1.6", features = ["derive"] }
 wild = "2.1.0"
 argfile = "0.1.5"
 shellfish = { version = "0.8.0", features = ["app", "async", "rustyline"] }
-rustyline = "11.0.0"
+rustyline = "12.0.0"
 colored = "2.0.4"
+tokio-util = { version = "0.7.8", features = ["compat"]}
 reedline = { version = "0.21.0", features = ["sqlite"] }
 crossterm = "0.26.1"
 nu-ansi-term = "0.47.0"
 chrono = "0.4.26"
 pretty-duration = "0.1.1"
 static_cell = "1.2.0"
+capnp =  "0.18.0"
+capnp-rpc = "0.18.0"
+futures = "0.3.28"
+dusk = { path = "../dusk" }

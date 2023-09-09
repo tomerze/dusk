@@ -6,8 +6,6 @@ use anyhow::{anyhow, Result};
 use async_net::TcpListener;
 use dusk::namespace::Namespace;
 use embassy_executor::{Executor, Spawner};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
 use futures::io::AsyncReadExt;
 use log::error;
 use static_cell::StaticCell;
@@ -17,9 +15,7 @@ mod driver;
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 async fn init() -> Result<()> {
-    let root = alloc::sync::Arc::new(Mutex::<CriticalSectionRawMutex, Namespace>::new(
-        Namespace::new(0),
-    ));
+    let root = alloc::sync::Arc::new(Namespace::new(0));
     loop {
         let listener =
             TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 8080)).await?;

@@ -1,16 +1,17 @@
+use crate::driver;
 use crate::dusk_capnp::dusk;
 use crate::namespace::Namespace;
+use alloc::string::String;
 use alloc::sync::Arc;
 use capnp::capability::Promise;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
+use log::error;
 
 pub struct DuskImpl {
-    namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>,
+    namespace: Arc<Namespace>,
 }
 
 impl DuskImpl {
-    pub fn new(namespace: Arc<Mutex<CriticalSectionRawMutex, Namespace>>) -> Self {
+    pub fn new(namespace: Arc<Namespace>) -> Self {
         DuskImpl { namespace }
     }
 }
@@ -43,8 +44,17 @@ impl dusk::Server for DuskImpl {
     fn hostname(
         &mut self,
         _params: dusk::HostnameParams,
-        mut _results: dusk::HostnameResults,
+        mut results: dusk::HostnameResults,
     ) -> Promise<(), ::capnp::Error> {
+        let hostname = match driver::hostname(self.namespace.id) {
+            Ok(id) => id,
+            Err(err) => {
+                error!("failed to receive hostname from driver: `{err}`");
+                String::from("error")
+            }
+        };
+        results.get().set_hostname(hostname[..].into());
+
         Promise::ok(())
     }
 }

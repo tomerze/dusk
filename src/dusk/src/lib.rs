@@ -13,8 +13,6 @@ mod prelude;
 use prelude::*;
 
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 
@@ -27,32 +25,34 @@ use futures::{AsyncRead, AsyncWrite};
 pub mod driver;
 pub mod namespace;
 pub mod server;
+mod tls;
 
 pub mod dusk_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/dusk_capnp.rs"));
 }
 
-#[embassy_executor::task]
+#[embassy_executor::task(pool_size = 16)]
 async fn rpc_system_wrapper(rpc_system: RpcSystem<rpc_twoparty_capnp::Side>) {
     if let Err(err) = rpc_system.await {
-        error!("an error occured in an rpc system: {err}");
+        error!("an error occured in an rpc system: `{err}`");
     }
 }
 
 #[embassy_executor::task]
 pub async fn session(
-    namespace: Arc<Mutex<CriticalSectionRawMutex, namespace::Namespace>>,
+    namespace: Arc<namespace::Namespace>,
     reader: Pin<Box<dyn AsyncRead>>,
     writer: Pin<Box<dyn AsyncWrite>>,
 ) {
-    info!("session started");
+    info!("session started with namespace `{}`", namespace.id);
 
+    let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer);
     let dusk_client: dusk_capnp::dusk::Client =
         capnp_rpc::new_client(server::DuskImpl::new(namespace));
 
     let network = twoparty::VatNetwork::new(
-        reader,
-        writer,
+        tls_reader,
+        tls_writer,
         rpc_twoparty_capnp::Side::Server,
         Default::default(),
     );
@@ -61,6 +61,6 @@ pub async fn session(
 
     let spawner = Spawner::for_current_executor().await;
     if let Err(err) = spawner.spawn(rpc_system_wrapper(rpc_system)) {
-        error!("an error occured in an rpc system task: {err:#?}");
+        error!("an error occured while spawning an rpc system task: {err:#?}");
     }
 }
