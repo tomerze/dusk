@@ -46,7 +46,7 @@ pub async fn session(
 ) {
     info!("session started with namespace `{}`", namespace.id);
 
-    let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer);
+    let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client: dusk_capnp::dusk::Client =
         capnp_rpc::new_client(server::DuskImpl::new(namespace));
 
