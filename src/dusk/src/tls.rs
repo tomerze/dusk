@@ -1,43 +1,59 @@
-use anyhow::Result;
+use alloc::vec::Vec;
 use core::pin::Pin;
-use embedded_io_async::{Read, Write};
-use embedded_tls::{Aes256GcmSha384, NoVerify, TlsConfig, TlsConnection, TlsContext};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 use futures::{AsyncRead, AsyncWrite};
-use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+use wolfssl::IOCallbackResult;
 
-struct AsyncReaderWriter {
-    pub reader: Pin<Box<dyn AsyncRead>>,
-    pub writer: Pin<Box<dyn AsyncWrite>>,
+const CHANNEL_MESSAGE_COUNT: usize = 1;
+
+struct IOChannels<'p> {
+    receiver: Receiver<'p, NoopRawMutex, Vec<u8>>,
+    sender: Sender<'p, NoopRawMutex, Vec<u8>>,
 }
 
-// impl Read for AsyncReaderWriter {}
-//
-// impl Write for AsyncReaderWriter {}
+impl<'p> IOChannels<'p> {
+    fn recv(&mut self, buf: &mut [u8]) -> IOCallbackResult<usize> {
+        match self.receiver.try_receive() {
+            Some(received_bytes) => {
+                buf.copy_from_slice(received_bytes);
+                IOCallbackResult::Ok(received_bytes.len())
+            }
+            None => IOCallbackResult::WouldBlock,
+        }
+    }
+
+    fn send(&mut self, buf: &[u8]) -> IOCallbackResult<usize> {
+        let send_bytes = match self.sender.try_send() {
+            Some(send_bytes) => send_bytes,
+            None => {
+                return IOCallbackResult::WouldBlock;
+            }
+        };
+        send_bytes.copy_from_slice(buf);
+        self.sender.send_done();
+        IOCallbackResult::Ok(send_bytes.len())
+    }
+}
 
 pub async fn wrap_with_tls(
     reader: Pin<Box<dyn AsyncRead>>,
     writer: Pin<Box<dyn AsyncWrite>>,
 ) -> (Pin<Box<dyn AsyncRead>>, Pin<Box<dyn AsyncWrite>>) {
+    let mut reader_messages = [[0; CHANNEL_MESSAGE_SIZE]; CHANNEL_MESSAGE_COUNT];
+    let mut writer_messages = [[0; CHANNEL_MESSAGE_SIZE]; CHANNEL_MESSAGE_COUNT];
+    let mut reader_channel =
+        Channel::<NoopRawMutex, [u8; CHANNEL_MESSAGE_SIZE]>::new(&mut reader_messages);
+    let mut writer_channel =
+        Channel::<NoopRawMutex, [u8; CHANNEL_MESSAGE_SIZE]>::new(&mut writer_messages);
+
+    let (reader_channel_sender, reader_channel_receiver) = reader_channel.split();
+    let (writer_channel_sender, writer_channel_receiver) = writer_channel.split();
+
+    let io_channels = IOChannels {
+        receiver: reader_channel_receiver,
+        sender: writer_channel_sender,
+    };
+
     (reader, writer)
 }
-//     // Buffers need to be 16k to support full size tls frames
-//     let mut read_record_buffer = [0; 16384];
-//     let mut write_record_buffer = [0; 16384];
-//
-//     // TODO: Provide a real rng seed
-//     // Note seed has to be 256 bit to be crypto secure
-//     let mut rng = ChaChaRng::from_seed([0; 32]);
-//
-//     let config = TlsConfig::new();
-//
-//     let mut tls: TlsConnection<AsyncReaderWriter, Aes256GcmSha384> = TlsConnection::new(
-//         AsyncReaderWriter { reader, writer },
-//         &mut read_record_buffer,
-//         &mut write_record_buffer,
-//     );
-//
-//     tls.open::<ChaChaRng, NoVerify>(TlsContext::new(&config, &mut rng))
-//         .await?;
-//
-//     tls
-// }

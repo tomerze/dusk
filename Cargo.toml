@@ -5,3 +5,7 @@ members = [
   "src/dusk_linux",
   "src/dusk_cli"
 ]
+
+[profile.release]
+opt-level = "z"  
+lto = true
