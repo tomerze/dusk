@@ -3,9 +3,6 @@ resolver = "2"
 members = [
   "src/dusk",
   "src/dusk_linux",
-  "src/dusk_cli"
+  "src/dusk_shell"
 ]
 
-[profile.release]
-opt-level = "z"  
-lto = true

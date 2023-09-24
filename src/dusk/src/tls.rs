@@ -1,58 +1,62 @@
-use alloc::vec::Vec;
 use core::pin::Pin;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
+use embassy_sync::pipe::{Pipe, Reader, TryReadError, TryWriteError, Writer};
 use futures::{AsyncRead, AsyncWrite};
 use wolfssl::IOCallbackResult;
+/*
+* The plan is as follows:
+* Each time wolfssl asks for bytes first check the pipe, if the pipe has bytes use all that you can.
+* If you can fill the buffer with more bytes use `now_or_never` on the reader future
+* directly.
+*
+* If and only if you have no bytes at all for wolfssl, return WouldBlock which would in turn
+* trigger wolfssl to return PendingWouldBlock which would make us `await` for further bytes and put
+* them in the pipe.
+*
+* This essentially means that when there is continues traffic we become zero-copy (apart from the
+* wolfssl code), but when there isn't continues traffic we power-efficiently await for bytes.
+*/
 
-const CHANNEL_MESSAGE_COUNT: usize = 1;
+const PIPE_BUFFER_SIZE: usize = 2048;
 
-struct IOChannels<'p> {
-    receiver: Receiver<'p, NoopRawMutex, Vec<u8>>,
-    sender: Sender<'p, NoopRawMutex, Vec<u8>>,
+struct WolfsslCallbacks<'a, 'p> {
+    reader: &'a mut Pin<Box<dyn AsyncRead>>,
+    writer: &'a mut Pin<Box<dyn AsyncWrite>>,
+    reader_pipe_reader: Reader<'p, NoopRawMutex, PIPE_BUFFER_SIZE>,
+    writer_pipe_writer: Writer<'p, NoopRawMutex, PIPE_BUFFER_SIZE>,
 }
 
-impl<'p> IOChannels<'p> {
+impl<'a, 'p> WolfsslCallbacks<'a, 'p> {
     fn recv(&mut self, buf: &mut [u8]) -> IOCallbackResult<usize> {
-        match self.receiver.try_receive() {
-            Some(received_bytes) => {
-                buf.copy_from_slice(received_bytes);
-                IOCallbackResult::Ok(received_bytes.len())
-            }
-            None => IOCallbackResult::WouldBlock,
+        match self.reader_pipe_reader.try_read(buf) {
+            Ok(read_bytes) => IOCallbackResult::Ok(read_bytes),
+            Err(TryReadError::Empty) => IOCallbackResult::WouldBlock,
         }
     }
 
     fn send(&mut self, buf: &[u8]) -> IOCallbackResult<usize> {
-        let send_bytes = match self.sender.try_send() {
-            Some(send_bytes) => send_bytes,
-            None => {
-                return IOCallbackResult::WouldBlock;
-            }
-        };
-        send_bytes.copy_from_slice(buf);
-        self.sender.send_done();
-        IOCallbackResult::Ok(send_bytes.len())
+        match self.writer_pipe_writer.try_write(buf) {
+            Ok(sent_bytes) => IOCallbackResult::Ok(sent_bytes),
+            Err(TryWriteError::Full) => IOCallbackResult::WouldBlock,
+        }
     }
 }
 
 pub async fn wrap_with_tls(
-    reader: Pin<Box<dyn AsyncRead>>,
-    writer: Pin<Box<dyn AsyncWrite>>,
+    mut reader: Pin<Box<dyn AsyncRead>>,
+    mut writer: Pin<Box<dyn AsyncWrite>>,
 ) -> (Pin<Box<dyn AsyncRead>>, Pin<Box<dyn AsyncWrite>>) {
-    let mut reader_messages = [[0; CHANNEL_MESSAGE_SIZE]; CHANNEL_MESSAGE_COUNT];
-    let mut writer_messages = [[0; CHANNEL_MESSAGE_SIZE]; CHANNEL_MESSAGE_COUNT];
-    let mut reader_channel =
-        Channel::<NoopRawMutex, [u8; CHANNEL_MESSAGE_SIZE]>::new(&mut reader_messages);
-    let mut writer_channel =
-        Channel::<NoopRawMutex, [u8; CHANNEL_MESSAGE_SIZE]>::new(&mut writer_messages);
+    let mut reader_pipe = Pipe::<NoopRawMutex, PIPE_BUFFER_SIZE>::new();
+    let mut writer_pipe = Pipe::<NoopRawMutex, PIPE_BUFFER_SIZE>::new();
 
-    let (reader_channel_sender, reader_channel_receiver) = reader_channel.split();
-    let (writer_channel_sender, writer_channel_receiver) = writer_channel.split();
+    let (reader_pipe_reader, reader_pipe_writer) = reader_pipe.split();
+    let (writer_pipe_reader, writer_pipe_writer) = writer_pipe.split();
 
-    let io_channels = IOChannels {
-        receiver: reader_channel_receiver,
-        sender: writer_channel_sender,
+    let wolfssl_callbacks = WolfsslCallbacks {
+        reader: &mut reader,
+        writer: &mut writer,
+        reader_pipe_reader,
+        writer_pipe_writer,
     };
 
     (reader, writer)
