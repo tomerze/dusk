@@ -11,31 +11,38 @@ use pretty_duration::pretty_duration;
 use reedline::{
     default_vi_insert_keybindings, default_vi_normal_keybindings, ColumnarMenu, DefaultCompleter,
     DefaultHinter, DefaultValidator, EditCommand, ExampleHighlighter, Keybindings, ListMenu,
-    Prompt, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
-    ReedlineEvent, ReedlineMenu, Vi,
+    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
+    ReedlineMenu, Vi,
 };
 use tracing::warn;
 
 use reedline::CursorConfig;
 
+use crossterm::{event::DisableBracketedPaste, execute};
+use reedline::Signal;
+use std::io::stdout;
+use tracing::info;
+
+use crate::shell::Shell;
+
 #[derive(Clone)]
-pub struct DuskPrompt<'s> {
-    pub left_prompt: Cow<'s, str>,
-    pub right_prompt: Cell<Duration>,
+struct ReedlinePrompt<'s> {
+    left_prompt: Cow<'s, str>,
+    right_prompt: Cell<Duration>,
 }
 
-impl<'s> DuskPrompt<'s> {
+impl<'s> ReedlinePrompt<'s> {
     pub fn new(prompt_name: &'s str) -> Self {
-        DuskPrompt {
+        ReedlinePrompt {
             left_prompt: Cow::Owned(format!("[{}]", prompt_name)),
             right_prompt: Cell::new(Duration::zero()),
         }
     }
 }
 
-pub static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
+static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
-impl<'s> Prompt for DuskPrompt<'s> {
+impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     fn render_prompt_left(&self) -> Cow<str> {
         {
             Cow::Owned(self.left_prompt.to_string())
@@ -80,7 +87,7 @@ impl<'s> Prompt for DuskPrompt<'s> {
     }
 }
 
-pub fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
+fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
     let history = Box::new(
         reedline::SqliteBackedHistory::with_file("history.sqlite3".into())
             .map_err(|_err| anyhow!("failed to open history db"))?,
@@ -179,4 +186,79 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
         KeyCode::Enter,
         ReedlineEvent::Edit(vec![EditCommand::InsertNewline]),
     );
+}
+
+pub struct Prompt {
+    shell: Shell,
+}
+
+impl Prompt {
+    pub async fn new(shell: Shell) -> Result<Self> {
+        Ok(Prompt { shell })
+    }
+
+    /// Handles a executing a shell command but also knows how to deal with the prompt itself.
+    /// That is mainly being able to clear the prompt.
+    ///
+    /// Return true when prompt should exit.
+    async fn process_line(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
+        match line {
+            "exit" => return Ok(true),
+            "clear" => {
+                line_editor.clear_screen()?;
+            }
+            command => {
+                self.shell.process_command(command).await;
+            }
+        };
+
+        Ok(false)
+    }
+
+    pub async fn run(mut self) -> Result<()> {
+        let mut line_editor = get_line_editor(self.shell.available_programs.clone())?;
+
+        let hostname_clone = self.shell.hostname.clone();
+        let prompt = ReedlinePrompt::new(&hostname_clone);
+
+        loop {
+            let sig = line_editor.read_line(&prompt)?;
+            match sig {
+                Signal::Success(buffer) => {
+                    if !buffer.is_empty() {
+                        line_editor.update_last_command_context(
+                            &|mut history_item: reedline::HistoryItem| {
+                                history_item.start_timestamp = Some(chrono::Utc::now());
+                                history_item
+                            },
+                        )?;
+                    }
+                    let start_timestamp = std::time::Instant::now();
+
+                    let should_exit = self.process_line(&buffer, &mut line_editor).await?;
+                    if should_exit {
+                        return Ok(());
+                    }
+
+                    let duration = start_timestamp.elapsed();
+                    prompt.right_prompt.set(Duration::from_std(duration)?);
+                    if !buffer.is_empty() {
+                        line_editor.update_last_command_context(&|mut history_item| {
+                            history_item.duration = Some(duration);
+                            history_item.exit_status = Some(0);
+                            history_item
+                        })?;
+                    }
+                }
+                Signal::CtrlD | Signal::CtrlC => {
+                    info!("aborted");
+                    break;
+                }
+            }
+        }
+
+        execute!(stdout(), DisableBracketedPaste)?;
+
+        Ok(())
+    }
 }

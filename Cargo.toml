@@ -2,7 +2,5 @@
 resolver = "2"
 members = [
   "src/dusk",
-  "src/dusk_linux",
   "src/dusk_shell"
 ]
-

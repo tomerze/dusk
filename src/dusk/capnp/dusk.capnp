@@ -19,7 +19,7 @@ enum KillStatus {
 
 struct Process {
   pid @0 :UInt64;
-  program_args @1 :ProgramArgs;
+  programArgs @1 :ProgramArgs;
 }
 
 struct ProcessResult {
@@ -34,7 +34,7 @@ interface Server {
 }
 
 interface Dusk {
-    exec @0 (program_args: ProgramArgs) -> (result: ExecResult);
+    exec @0 (programArgs: ProgramArgs) -> (result: ExecResult);
     serve @1 (pid :UInt64) -> (server: Server);
     kill @2 (pid :UInt64) -> (status: KillStatus);
     ps @3 () -> (processes :List(Process));
