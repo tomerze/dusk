@@ -29,13 +29,13 @@ struct ProcessResult {
   }
 }
 
-interface Server {
+interface Portal {
   process @0 () -> (result: ProcessResult);
 }
 
 interface Dusk {
     exec @0 (programArgs: ProgramArgs) -> (result: ExecResult);
-    serve @1 (pid :UInt64) -> (server: Server);
+    portal @1 (pid :UInt64) -> (portal: Portal);
     kill @2 (pid :UInt64) -> (status: KillStatus);
     ps @3 () -> (processes :List(Process));
     hostname @4 () -> (hostname :Text);

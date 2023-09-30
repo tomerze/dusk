@@ -3,7 +3,9 @@ use dusk::dusk_capnp;
 use tracing::info;
 
 pub struct Shell {
-    client: dusk_capnp::dusk::Client,
+    // In the future this will be a client for the shell
+    // program and not dusk itself
+    shell_client: dusk_capnp::dusk::Client,
     pub hostname: String,
     pub available_programs: Vec<String>,
 }
@@ -14,11 +16,11 @@ impl Shell {
         let mut builtins = vec!["clear".into(), "exit".into()];
         available_programs.append(&mut builtins);
 
-        let reply = client.hostname_request().send().promise.await?;
-        let hostname = reply.get()?.get_hostname()?.to_str()?;
+        let hostname_reply = client.hostname_request().send().promise.await?;
+        let hostname = hostname_reply.get()?.get_hostname()?.to_str()?;
 
         Ok(Shell {
-            client,
+            shell_client: client,
             hostname: hostname.into(),
             available_programs,
         })
