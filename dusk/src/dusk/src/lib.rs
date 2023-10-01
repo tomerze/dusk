@@ -25,11 +25,9 @@ use futures::{AsyncRead, AsyncWrite};
 pub mod driver;
 pub mod namespace;
 pub mod server;
-mod tls;
+pub use dusk_capnp;
 
-pub mod dusk_capnp {
-    include!(concat!(env!("OUT_DIR"), "/capnp/dusk_capnp.rs"));
-}
+mod tls;
 
 #[embassy_executor::task(pool_size = 16)]
 async fn rpc_system_wrapper(rpc_system: RpcSystem<rpc_twoparty_capnp::Side>) {
@@ -47,7 +45,7 @@ pub async fn session(
     info!("session started with namespace `{}`", namespace.id);
 
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
-    let dusk_client: dusk_capnp::dusk::Client =
+    let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
         capnp_rpc::new_client(server::DuskImpl::new(namespace));
 
     let network = twoparty::VatNetwork::new(

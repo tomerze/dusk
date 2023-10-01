@@ -2,7 +2,20 @@
 
 # A simple marker interface used to validate at compile time 
 # that the type to pass to `exec` makes sense.
-interface ProgramArgs {}
+interface ProgramArgs {
+  struct ProgramId {
+    programId @0 :UInt64;
+  }
+}
+
+# interface LsArgs extends(ProgramArgs) {
+#   struct ProgramId {
+#     programId @0 :UInt64 = 5;
+#   }
+#   struct Args {
+#     filepath @0 :Text;
+#   }
+# }
 
 struct ExecResult {
   union {

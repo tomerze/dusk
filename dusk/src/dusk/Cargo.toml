@@ -13,8 +13,6 @@ capnp = { version = "0.18.0", default-features = false, features = ["alloc"] }
 capnp-rpc = { version = "0.18.0", default-features = false } 
 futures = { version = "0.3.28", default-features = false }
 anyhow = { version = "1.0.75", default-features = false }
-wolfssl = { path = "../../../../wolfssl/" }
-
-[build-dependencies]
-capnpc = { version = "0.18.0", default-features = false }
+# wolfssl = { path = "../../../../wolfssl/" }
+dusk_capnp = { path = "../dusk_capnp/" }
 

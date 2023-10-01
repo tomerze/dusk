@@ -4,5 +4,8 @@ members = [
   "dusk/src/dusk",
   "dusk/src/dusk_prompt",
   "dusk/src/dusk_cli",
-  "impls/linux"
+  "dusk/src/dusk_program",
+  "dusk/src/dusk_capnp",
+  "impls/linux",
+  "programs/sh",
 ]

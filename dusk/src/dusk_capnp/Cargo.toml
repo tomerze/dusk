@@ -1,0 +1,12 @@
+[package]
+name = "dusk_capnp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+capnp = { version = "0.18.0", default-features = false, features = ["alloc"] }
+capnp-rpc = { version = "0.18.0", default-features = false } 
+
+[build-dependencies]
+capnpc = { version = "0.18.0", default-features = false }
+

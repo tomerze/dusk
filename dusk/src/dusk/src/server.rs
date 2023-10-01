@@ -1,9 +1,9 @@
 use crate::driver;
-use crate::dusk_capnp::dusk;
 use crate::namespace::Namespace;
 use alloc::string::String;
 use alloc::sync::Arc;
 use capnp::capability::Promise;
+use dusk_capnp::dusk_capnp::dusk;
 use log::error;
 
 pub struct DuskImpl {
