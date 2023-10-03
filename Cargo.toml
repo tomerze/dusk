@@ -6,6 +6,6 @@ members = [
   "dusk/src/dusk_cli",
   "dusk/src/dusk_program",
   "dusk/src/dusk_capnp",
-  "impls/linux",
+  "impls/nix",
   "programs/sh",
 ]

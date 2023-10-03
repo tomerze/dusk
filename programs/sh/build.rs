@@ -11,25 +11,14 @@ fn main() {
     write!(
         File::create(capnp_dir.clone().join("dusk.capnp")).unwrap(),
         "{}",
-        dusk_capnp::SCHEMA
+        dusk_capnp::DUSK_SCHEMA
     )
     .unwrap();
-
-    std::fs::copy(
-        "/usr/local/include/capnp/stream.capnp",
-        capnp_dir.join("stream.capnp"),
-    )
-    .unwrap();
-
-    CompilerCommand::new()
-        .src_prefix(out_dir.clone())
-        .file(capnp_dir.join("stream.capnp"))
-        .run()
-        .unwrap();
 
     CompilerCommand::new()
         .import_path(out_dir)
-        .crate_provides("dusk_capnp", [0xace6963097d486d6])
+        .crate_provides("dusk_capnp", [0x86c366a91393f3f8]) // stream.capnp
+        .crate_provides("dusk_capnp", [0xace6963097d486d6]) // dusk.capnp
         .file("capnp/sh.capnp")
         .run()
         .unwrap();

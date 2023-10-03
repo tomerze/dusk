@@ -12,11 +12,7 @@ interface ShArgs extends(Dusk.ProgramArgs) {
 
 
 interface ShPortal extends(Dusk.Portal) {
-  interface Stream {
-    sendChunk @0 (chunk :Data) -> stream;
-    done @1 () -> ();
-  }
-  sh @0 (command :Text, output :Stream) -> (input :Stream);  
+  sh @0 (command :Text, output :Dusk.Stream) -> (input :Dusk.Stream);  
   getEnv @1 (key :Data) -> (value :AnyPointer);
   setEnv @2 (key :Data, value :AnyPointer) -> ();
 }

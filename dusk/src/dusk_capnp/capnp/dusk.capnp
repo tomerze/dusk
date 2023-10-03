@@ -1,5 +1,10 @@
 @0xace6963097d486d6;
 
+interface Stream {
+  sendChunk @0 (chunk :Data) -> stream;
+  done @1 () -> ();
+}
+
 # A simple marker interface used to validate at compile time 
 # that the type to pass to `exec` makes sense.
 interface ProgramArgs {
