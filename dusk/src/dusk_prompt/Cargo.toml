@@ -20,3 +20,4 @@ capnp =  "0.18.0"
 capnp-rpc = "0.18.0"
 futures = "0.3.28"
 dusk = { path = "../dusk" }
+dusk_capnp = { path = "../dusk_capnp" }

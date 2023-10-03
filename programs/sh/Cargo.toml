@@ -9,6 +9,8 @@ capnp = { version = "0.18.0", default-features = false, features = ["alloc"] }
 capnp-rpc = { version = "0.18.0", default-features = false } 
 anyhow = { version = "1.0.75", default-features = false }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
+dusk_program = { path = "../../dusk/src/dusk_program" }
+async-trait = "0.1.71"
 
 [build-dependencies]
 capnpc = { version = "0.18.0", default-features = false }
