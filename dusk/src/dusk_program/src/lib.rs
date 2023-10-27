@@ -10,7 +10,11 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait Process {
     async fn name(&self) -> String;
-    async fn main(&self /* Get channel of signals here */) -> Result<()>;
+    async fn main(&self /* Get channel of signals here */) -> Result<()> {
+        let future = futures::future::pending();
+        let () = future.await;
+        Ok(())
+    }
     async fn portal(&self) -> Result<Box<dyn dusk_capnp::dusk_capnp::portal::Server>>;
 }
 

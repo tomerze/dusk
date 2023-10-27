@@ -11,6 +11,8 @@ anyhow = { version = "1.0.75", default-features = false }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
 dusk_program = { path = "../../dusk/src/dusk_program" }
 async-trait = "0.1.71"
+slab = "0.4.9"
+futures = { version = "0.3.28", default-features = false }
 
 [build-dependencies]
 capnpc = { version = "0.18.0", default-features = false }
