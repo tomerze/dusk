@@ -16,3 +16,4 @@ anyhow = { version = "1.0.75", default-features = false }
 # wolfssl = { path = "../../../../wolfssl/" }
 dusk_capnp = { path = "../dusk_capnp/" }
 dusk_program = { path = "../dusk_program/" }
+lazy_static = { version = "1.4.0", features = ["spin_no_std"]}

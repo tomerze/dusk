@@ -22,29 +22,3 @@ pub trait Process<'a> {
 pub trait Launcher {
     async fn launch(&mut self) -> Result<Box<dyn Process>>;
 }
-
-#[async_trait]
-pub trait Initiator {
-    async fn init(&mut self, args: dusk_capnp::dusk_capnp::program_args::Client);
-}
-
-// struct LinuxInitiator {
-//     sh: ShLauncher,
-//     ls: LsLauncher,
-// }
-//
-// impl LinuxInitiator {
-//     async fn new() -> Result<Self> {
-//         sh = ShLauncher::new();
-//         ls = LsLauncher::new(sh_launcher);
-//
-//         Launchers { sh, ls }
-//     }
-// }
-//
-// impl Initiator for LinuxInitiator {
-//     async fn init(
-//         &mut self,
-//         args: dusk::dusk_capnp::program_args::Server,
-//     ) -> Result<Box<dyn Process>>;
-// }

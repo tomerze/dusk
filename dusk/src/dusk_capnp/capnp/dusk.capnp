@@ -24,7 +24,7 @@ struct ExecResult {
   union {
     pid @0 :UInt64;
     programNotFound @1 :Void;
-    programCreationFailed @2 :Void;
+    programLaunchFailed @2 :Void;
   }
 }
 

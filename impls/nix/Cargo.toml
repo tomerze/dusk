@@ -19,3 +19,4 @@ dusk = { path = "../../dusk/src/dusk/" }
 dusk_program_sh = { path = "../../programs/sh" }
 dusk_program = { path = "../../dusk/src/dusk_program" }
 async-trait = "0.1.71"
+lazy_static = { version = "1.4.0", features = ["spin_no_std"]}

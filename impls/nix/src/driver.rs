@@ -16,7 +16,7 @@ impl NixDriver {
     }
 }
 
-dusk::dusk_driver_impl!(static DRIVER: NixDriver = NixDriver::new());
+dusk::dusk_driver_impl!(static ref DRIVER: NixDriver = NixDriver::new());
 
 impl Driver for NixDriver {
     fn hostname(&self, _namespace: u64) -> Result<String> {
@@ -27,7 +27,7 @@ impl Driver for NixDriver {
     fn exec(
         &self,
         _namespace: u64,
-        program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
+        _program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> Result<Box<dyn Process>> {
         Err(anyhow!("why"))
     }

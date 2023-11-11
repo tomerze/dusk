@@ -14,8 +14,10 @@ pub trait Driver: Send + Sync + 'static {
 /// Set the dusk Driver implementation.
 #[macro_export]
 macro_rules! dusk_driver_impl {
-    (static $name:ident: $t: ty = $val:expr) => {
-        static $name: $t = $val;
+    (static ref $name:ident: $t: ty = $val:expr) => {
+        lazy_static::lazy_static! {
+            static ref $name: $t = $val;
+        }
 
         #[no_mangle]
         fn _dusk_hostname(namespace: u64) -> Result<String> {
