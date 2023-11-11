@@ -15,4 +15,4 @@ futures = { version = "0.3.28", default-features = false }
 anyhow = { version = "1.0.75", default-features = false }
 # wolfssl = { path = "../../../../wolfssl/" }
 dusk_capnp = { path = "../dusk_capnp/" }
-
+dusk_program = { path = "../dusk_program/" }

@@ -8,9 +8,7 @@ interface Stream {
 # A simple marker interface used to validate at compile time 
 # that the type to pass to `exec` makes sense.
 interface ProgramArgs {
-  struct ProgramId {
-    programId @0 :UInt64;
-  }
+  programId @0 () -> (program_id: UInt64);
 }
 
 # interface LsArgs extends(ProgramArgs) {

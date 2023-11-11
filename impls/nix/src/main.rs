@@ -10,6 +10,7 @@ use futures::io::AsyncReadExt;
 use log::error;
 use static_cell::StaticCell;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 mod driver;
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();

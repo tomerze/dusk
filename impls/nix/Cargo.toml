@@ -16,3 +16,6 @@ static_cell = "1.2.0"
 futures = "0.3.28"
 nix = { version = "0.27.1", features = ["hostname"] }
 dusk = { path = "../../dusk/src/dusk/" }
+dusk_program_sh = { path = "../../programs/sh" }
+dusk_program = { path = "../../dusk/src/dusk_program" }
+async-trait = "0.1.71"
