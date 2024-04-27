@@ -28,7 +28,7 @@ macro_rules! dusk_driver_impl {
         fn _dusk_exec<'a>(
             namespace: u64,
             program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
-        ) -> Result<Box<dyn Process<'a>>> {
+        ) -> Result<Box<dyn Process>> {
             <$t as $crate::driver::Driver>::exec(&$name, namespace, program_args)
         }
     };
@@ -40,16 +40,13 @@ extern "Rust" {
     fn _dusk_exec<'a>(
         namespace: u64,
         program_args: program_args::Client,
-    ) -> Result<Box<dyn Process<'a>>>;
+    ) -> Result<Box<dyn Process>>;
 }
 
 pub fn hostname(namespace: u64) -> Result<String> {
     unsafe { _dusk_hostname(namespace) }
 }
 
-pub fn exec<'a>(
-    namespace: u64,
-    program_args: program_args::Client,
-) -> Result<Box<dyn Process<'a>>> {
+pub fn exec<'a>(namespace: u64, program_args: program_args::Client) -> Result<Box<dyn Process>> {
     unsafe { _dusk_exec(namespace, program_args) }
 }

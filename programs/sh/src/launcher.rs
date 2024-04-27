@@ -27,7 +27,7 @@ impl ShLauncher {
 
 #[async_trait]
 impl Launcher for ShLauncher {
-    async fn launch(&mut self) -> Result<Box<dyn Process>> {
-        Ok(Box::new(ShProcess::new(self.matchers.clone())))
+    async fn launch(&mut self, pid: u64) -> Result<Box<dyn Process>> {
+        Ok(Box::new(ShProcess::new(pid, self.matchers.clone())))
     }
 }

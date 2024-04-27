@@ -29,14 +29,8 @@ impl dusk::Server for DuskImpl {
         let program_args = pry!(pry!(params.get()).get_program_args());
         let process = pry!(driver::exec(self.namespace.id, program_args)
             .map_err(|err| capnp::Error::failed(err.to_string())));
-        let portal_client: portal::Client =
-            capnp_rpc::new_client::<portal::Client, dyn portal::Server>(
-                pry!(process
-                    .portal()
-                    .map_err(|err| capnp::Error::failed(err.to_string())))
-                .into(),
-            );
-        results.get().init_result().set_pid(16);
+
+        results.get().init_result().set_pid(process.pid());
 
         Promise::ok(())
     }

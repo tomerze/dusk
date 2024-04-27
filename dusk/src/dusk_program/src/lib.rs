@@ -3,15 +3,13 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use alloc::string::String;
 use anyhow::Result;
 use async_trait::async_trait;
-use dusk_capnp::dusk_capnp::portal;
 
 #[async_trait]
-pub trait Process<'a> {
-    fn name(&self) -> String;
-    fn portal(&'a self) -> Result<&'a portal::Client>;
+pub trait Process {
+    fn pid(&self) -> u64;
+    fn program_id(&self) -> u64;
 
     async fn main(&self /* Get channel of signals here */) -> Result<()> {
         let future = futures::future::pending();
@@ -22,5 +20,5 @@ pub trait Process<'a> {
 
 #[async_trait]
 pub trait Launcher {
-    async fn launch(&mut self) -> Result<Box<dyn Process>>;
+    async fn launch(&mut self, pid: u64) -> Result<Box<dyn Process>>;
 }
