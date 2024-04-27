@@ -32,18 +32,19 @@ impl Shell {
             exec_result::Which::ProgramLaunchFailed(()) => {
                 Err(anyhow!("failed to launch the `sh` program"))
             }
-        }?;
+        }??;
 
         let mut portal_request = client.portal_request();
-        portal_request.get().set_process(process);
+        portal_request.get().set_process(process)?;
         let portal_reply = portal_request.send().promise.await?;
         let portal_result = portal_reply.get()?.get_result()?;
 
         let sh_portal = match portal_result.which()? {
             portal_result::Which::Portal(portal) => Ok(portal),
-            portal_result::Which::ProcessNotFound(()) => {
-                Err(anyhow!("sh process not found, pid `{pid}`"))
-            }
+            portal_result::Which::ProcessNotFound(()) => Err(anyhow!(
+                "sh process not found, pid `{0}`",
+                process.get_pid()
+            )),
         }??
         .cast_to::<sh_portal::Client>();
 
