@@ -13,7 +13,7 @@ interface ProgramArgs {
 
 struct ExecResult {
   union {
-    pid @0 :UInt64;
+    process @0 :Process;
     programNotFound @1 :Void;
     programLaunchFailed @2 :Void;
   }
@@ -42,8 +42,8 @@ interface Portal {
 
 interface Dusk {
     exec @0 (programArgs: ProgramArgs) -> (result: ExecResult);
-    portal @1 (pid :UInt64) -> (result: PortalResult);
-    kill @2 (pid :UInt64) -> (status: KillStatus);
+    portal @1 (process: Process) -> (result: PortalResult);
+    kill @2 (process: Process) -> (status: KillStatus);
     ps @3 () -> (processes :List(Process));
     hostname @4 () -> (hostname :Text);
 }

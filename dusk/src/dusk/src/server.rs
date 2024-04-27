@@ -1,9 +1,11 @@
+use core::borrow::Borrow;
+
 use crate::driver;
 use crate::namespace::Namespace;
 use alloc::string::String;
 use alloc::sync::Arc;
 use capnp::capability::Promise;
-use dusk_capnp::dusk_capnp::dusk;
+use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_capnp::pry;
 use log::error;
 
@@ -27,7 +29,10 @@ impl dusk::Server for DuskImpl {
         let process = pry!(driver::exec(self.namespace.id, program_args)
             .map_err(|err| capnp::Error::failed(err.to_string())));
 
-        results.get().init_result().set_pid(process.pid());
+        let mut process_builder = results.get().init_result().init_process();
+
+        process_builder.set_pid(process.pid());
+        process_builder.set_program_id(process.program_id());
 
         Promise::ok(())
     }

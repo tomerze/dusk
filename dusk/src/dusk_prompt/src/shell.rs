@@ -1,3 +1,5 @@
+use std::process;
+
 use anyhow::{anyhow, Result};
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::dusk;
@@ -22,8 +24,8 @@ impl Shell {
         let exec_reply = exec_request.send().promise.await?;
         let exec_result = exec_reply.get()?.get_result()?;
 
-        let pid = match exec_result.which()? {
-            exec_result::Which::Pid(pid) => Ok(pid),
+        let process = match exec_result.which()? {
+            exec_result::Which::Process(process) => Ok(process),
             exec_result::Which::ProgramNotFound(()) => {
                 Err(anyhow!("couldn't find the `sh` program"))
             }
@@ -33,7 +35,7 @@ impl Shell {
         }?;
 
         let mut portal_request = client.portal_request();
-        portal_request.get().set_pid(pid);
+        portal_request.get().set_process(process);
         let portal_reply = portal_request.send().promise.await?;
         let portal_result = portal_reply.get()?.get_result()?;
 
