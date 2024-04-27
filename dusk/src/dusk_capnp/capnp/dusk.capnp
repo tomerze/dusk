@@ -11,15 +11,6 @@ interface ProgramArgs {
   programId @0 () -> (program_id: UInt64);
 }
 
-# interface LsArgs extends(ProgramArgs) {
-#   struct ProgramId {
-#     programId @0 :UInt64 = 5;
-#   }
-#   struct Args {
-#     filepath @0 :Text;
-#   }
-# }
-
 struct ExecResult {
   union {
     pid @0 :UInt64;
@@ -35,23 +26,23 @@ enum KillStatus {
 
 struct Process {
   pid @0 :UInt64;
-  programArgs @1 :ProgramArgs;
+  programId @1 :UInt64;
 }
 
-struct ProcessResult {
+struct PortalResult {
   union {
-    process @0 :Process;
+    portal @0 :Portal;
     processNotFound @1 :Void;
   }
 }
 
 interface Portal {
-  process @0 () -> (result: ProcessResult);
+  process @0 () -> (result: Process);
 }
 
 interface Dusk {
     exec @0 (programArgs: ProgramArgs) -> (result: ExecResult);
-    portal @1 (pid :UInt64) -> (portal: Portal);
+    portal @1 (pid :UInt64) -> (result: PortalResult);
     kill @2 (pid :UInt64) -> (status: KillStatus);
     ps @3 () -> (processes :List(Process));
     hostname @4 () -> (hostname :Text);

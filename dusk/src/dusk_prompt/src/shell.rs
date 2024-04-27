@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::exec_result;
+use dusk_capnp::dusk_capnp::portal_result;
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::sh_capnp::sh_portal;
 use tracing::info;
@@ -33,13 +34,16 @@ impl Shell {
 
         let mut portal_request = client.portal_request();
         portal_request.get().set_pid(pid);
-        let sh_portal = portal_request
-            .send()
-            .promise
-            .await?
-            .get()?
-            .get_portal()?
-            .cast_to::<sh_portal::Client>();
+        let portal_reply = portal_request.send().promise.await?;
+        let portal_result = portal_reply.get()?.get_result()?;
+
+        let sh_portal = match portal_result.which()? {
+            portal_result::Which::Portal(portal) => Ok(portal),
+            portal_result::Which::ProcessNotFound(()) => {
+                Err(anyhow!("sh process not found, pid `{pid}`"))
+            }
+        }??
+        .cast_to::<sh_portal::Client>();
 
         Ok(sh_portal)
     }
