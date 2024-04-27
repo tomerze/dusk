@@ -1,7 +1,5 @@
 use crate::sh_capnp;
-use anyhow::Result;
 use async_trait::async_trait;
-use dusk_capnp::dusk_capnp::portal;
 use dusk_program::Process;
 use slab::Slab;
 

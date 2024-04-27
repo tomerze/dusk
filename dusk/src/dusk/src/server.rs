@@ -3,10 +3,7 @@ use crate::namespace::Namespace;
 use alloc::string::String;
 use alloc::sync::Arc;
 use capnp::capability::Promise;
-use capnp::traits::FromPointerBuilder;
-use dusk_capnp::dusk_capnp::dusk::{exec_results, ExecResults};
-use dusk_capnp::dusk_capnp::exec_result::Which::Pid;
-use dusk_capnp::dusk_capnp::{dusk, exec_result, portal};
+use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::pry;
 use log::error;
 

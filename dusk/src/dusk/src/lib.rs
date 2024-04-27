@@ -1,3 +1,4 @@
+#![allow(internal_features)]
 #![feature(type_alias_impl_trait)]
 #![feature(prelude_import)]
 #![no_std]

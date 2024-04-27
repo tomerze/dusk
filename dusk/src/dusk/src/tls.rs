@@ -1,6 +1,6 @@
 use core::pin::Pin;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::pipe::{Pipe, Reader, TryReadError, TryWriteError, Writer};
+use embassy_sync::pipe::{Pipe, Reader, Writer};
 use futures::{AsyncRead, AsyncWrite};
 // use wolfssl::IOCallbackResult;
 /*
@@ -20,10 +20,10 @@ use futures::{AsyncRead, AsyncWrite};
 const PIPE_BUFFER_SIZE: usize = 2048;
 
 struct WolfsslCallbacks<'a, 'p> {
-    reader: &'a mut Pin<Box<dyn AsyncRead>>,
-    writer: &'a mut Pin<Box<dyn AsyncWrite>>,
-    reader_pipe_reader: Reader<'p, NoopRawMutex, PIPE_BUFFER_SIZE>,
-    writer_pipe_writer: Writer<'p, NoopRawMutex, PIPE_BUFFER_SIZE>,
+    _reader: &'a mut Pin<Box<dyn AsyncRead>>,
+    _writer: &'a mut Pin<Box<dyn AsyncWrite>>,
+    _reader_pipe_reader: Reader<'p, NoopRawMutex, PIPE_BUFFER_SIZE>,
+    _writer_pipe_writer: Writer<'p, NoopRawMutex, PIPE_BUFFER_SIZE>,
 }
 
 impl<'a, 'p> WolfsslCallbacks<'a, 'p> {
@@ -49,14 +49,14 @@ pub async fn wrap_with_tls(
     let mut reader_pipe = Pipe::<NoopRawMutex, PIPE_BUFFER_SIZE>::new();
     let mut writer_pipe = Pipe::<NoopRawMutex, PIPE_BUFFER_SIZE>::new();
 
-    let (reader_pipe_reader, reader_pipe_writer) = reader_pipe.split();
-    let (writer_pipe_reader, writer_pipe_writer) = writer_pipe.split();
+    let (reader_pipe_reader, _reader_pipe_writer) = reader_pipe.split();
+    let (_writer_pipe_reader, writer_pipe_writer) = writer_pipe.split();
 
-    let wolfssl_callbacks = WolfsslCallbacks {
-        reader: &mut reader,
-        writer: &mut writer,
-        reader_pipe_reader,
-        writer_pipe_writer,
+    let _wolfssl_callbacks = WolfsslCallbacks {
+        _reader: &mut reader,
+        _writer: &mut writer,
+        _reader_pipe_reader: reader_pipe_reader,
+        _writer_pipe_writer: writer_pipe_writer,
     };
 
     (reader, writer)
