@@ -1,6 +1,7 @@
 use crate::portal::ShPortal;
 use anyhow::Result;
 use async_trait::async_trait;
+use dusk_capnp::dusk_capnp::portal;
 use dusk_program::Process;
 use slab::Slab;
 
@@ -16,11 +17,13 @@ impl ShProcess {
 
 #[async_trait]
 impl<'a> Process<'a> for ShProcess {
-    async fn name(&self) -> String {
+    fn name(&self) -> String {
         String::from("sh")
     }
 
-    async fn portal(&'a self) -> Result<Box<dyn dusk_capnp::dusk_capnp::portal::Server + 'a>> {
-        Ok(Box::new(ShPortal::new(self)))
+    fn portal(&'a self) -> Result<portal::Client> {
+        let x = ShPortal::new(&self);
+        let y = capnp_rpc::new_client(x);
+        Ok(y)
     }
 }

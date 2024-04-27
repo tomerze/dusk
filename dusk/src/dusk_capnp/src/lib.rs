@@ -8,3 +8,16 @@ pub mod dusk_capnp {
 
 pub static DUSK_SCHEMA: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/capnp/dusk.capnp"));
+
+/// Like capnp_rpc's `pry!()`, but supports `no_std`
+#[macro_export]
+macro_rules! pry {
+    ($expr:expr) => {
+        match $expr {
+            ::core::result::Result::Ok(val) => val,
+            ::core::result::Result::Err(err) => {
+                return ::capnp::capability::Promise::err(::core::convert::From::from(err))
+            }
+        }
+    };
+}

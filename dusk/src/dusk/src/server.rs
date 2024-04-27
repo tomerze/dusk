@@ -3,7 +3,11 @@ use crate::namespace::Namespace;
 use alloc::string::String;
 use alloc::sync::Arc;
 use capnp::capability::Promise;
-use dusk_capnp::dusk_capnp::dusk;
+use capnp::traits::FromPointerBuilder;
+use dusk_capnp::dusk_capnp::dusk::{exec_results, ExecResults};
+use dusk_capnp::dusk_capnp::exec_result::Which::Pid;
+use dusk_capnp::dusk_capnp::{dusk, exec_result, portal};
+use dusk_capnp::pry;
 use log::error;
 
 pub struct DuskImpl {
@@ -19,8 +23,28 @@ impl DuskImpl {
 impl dusk::Server for DuskImpl {
     fn exec(
         &mut self,
-        _params: dusk::ExecParams,
-        mut _results: dusk::ExecResults,
+        params: dusk::ExecParams,
+        mut results: dusk::ExecResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let program_args = pry!(pry!(params.get()).get_program_args());
+        let process = pry!(driver::exec(self.namespace.id, program_args)
+            .map_err(|err| capnp::Error::failed(err.to_string())));
+        let portal_client: portal::Client =
+            capnp_rpc::new_client::<portal::Client, dyn portal::Server>(
+                pry!(process
+                    .portal()
+                    .map_err(|err| capnp::Error::failed(err.to_string())))
+                .into(),
+            );
+        results.get().init_result().set_pid(16);
+
+        Promise::ok(())
+    }
+
+    fn portal(
+        &mut self,
+        _params: dusk::PortalParams,
+        mut _results: dusk::PortalResults,
     ) -> Promise<(), ::capnp::Error> {
         Promise::ok(())
     }
