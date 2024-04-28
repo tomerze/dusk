@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program_sh::args::ShArgs;

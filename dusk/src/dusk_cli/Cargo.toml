@@ -11,11 +11,11 @@ path = "src/main.rs"
 tokio = { version = "1.25.0", features = ["full", "tracing"] }
 anyhow = { version = "1.0", features = ["backtrace"] }
 tracing = "0.1.37"
-console-subscriber = "0.1.8"
-tracing-subscriber = "0.3.16"
+console-subscriber = "0.2.0"
+tracing-subscriber = "0.3.18"
 clap = { version = "4.1.6", features = ["derive"] }
 wild = "2.1.0"
-argfile = "0.1.5"
+argfile = "0.2.0"
 tokio-util = { version = "0.7.8", features = ["compat"]}
 dusk_prompt = { path = "../dusk_prompt/" }
 

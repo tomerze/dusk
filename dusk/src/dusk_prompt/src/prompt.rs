@@ -11,8 +11,8 @@ use pretty_duration::pretty_duration;
 use reedline::{
     default_vi_insert_keybindings, default_vi_normal_keybindings, ColumnarMenu, DefaultCompleter,
     DefaultHinter, DefaultValidator, EditCommand, ExampleHighlighter, Keybindings, ListMenu,
-    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
-    ReedlineMenu, Vi,
+    MenuBuilder, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
+    ReedlineEvent, ReedlineMenu, Vi,
 };
 use tracing::warn;
 
@@ -89,7 +89,7 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
 
 fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
     let history = Box::new(
-        reedline::SqliteBackedHistory::with_file("history.sqlite3".into())
+        reedline::SqliteBackedHistory::with_file("history.sqlite3".into(), None, None)
             .map_err(|_err| anyhow!("failed to open history db"))?,
     );
 
@@ -114,21 +114,14 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
             DefaultHinter::default().with_style(Style::new().fg(Color::DarkGray)),
         ))
         .with_validator(Box::new(DefaultValidator))
-        .with_ansi_colors(true);
-
-    let res = line_editor.enable_bracketed_paste();
-    let bracketed_paste_enabled = res.is_ok();
-    if !bracketed_paste_enabled {
-        warn!("failed to enable bracketed paste mode: {res:?}");
-    }
-
-    line_editor = line_editor
+        .with_ansi_colors(true)
         .with_menu(ReedlineMenu::EngineCompleter(Box::new(
             ColumnarMenu::default().with_name("completion_menu"),
         )))
         .with_menu(ReedlineMenu::HistoryMenu(Box::new(
             ListMenu::default().with_name("history_menu"),
-        )));
+        )))
+        .use_bracketed_paste(true);
 
     let mut normal_keybindings = default_vi_normal_keybindings();
     let mut insert_keybindings = default_vi_insert_keybindings();
@@ -142,7 +135,10 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
 
     line_editor = line_editor.with_edit_mode(Box::new(edit_mode));
 
-    line_editor = line_editor.with_buffer_editor("vi".into(), "sh".into());
+    line_editor = line_editor.with_buffer_editor(
+        std::process::Command::new("vi"),
+        std::env::temp_dir().join("tmp"),
+    );
 
     Ok(line_editor)
 }
