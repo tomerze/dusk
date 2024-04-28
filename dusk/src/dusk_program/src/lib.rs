@@ -5,6 +5,7 @@ extern crate alloc;
 use alloc::boxed::Box;
 use anyhow::Result;
 use async_trait::async_trait;
+use dusk_capnp::dusk_capnp::process;
 
 #[async_trait]
 pub trait Process {
@@ -17,6 +18,8 @@ pub trait Process {
         Ok(())
     }
 }
+
+impl process::Server for Box<dyn Process> {}
 
 #[async_trait]
 pub trait Launcher {

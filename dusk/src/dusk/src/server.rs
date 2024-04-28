@@ -28,11 +28,9 @@ impl dusk::Server for DuskImpl {
         let program_args = pry!(pry!(params.get()).get_program_args());
         let process = pry!(driver::exec(self.namespace.id, program_args)
             .map_err(|err| capnp::Error::failed(err.to_string())));
+        // TODO: actually run the process
 
-        let mut process_builder = results.get().init_result().init_process();
-
-        process_builder.set_pid(process.pid());
-        process_builder.set_program_id(process.program_id());
+        results.get().set_result(capnp_rpc::new_client(process));
 
         Promise::ok(())
     }
@@ -73,7 +71,7 @@ impl dusk::Server for DuskImpl {
                 String::from("error")
             }
         };
-        results.get().set_hostname(hostname[..].into());
+        results.get().set_result(hostname[..].into());
 
         Promise::ok(())
     }
