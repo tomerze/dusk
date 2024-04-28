@@ -24,6 +24,7 @@ impl Driver for NixDriver {
             |os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"),
         )?))
     }
+
     fn create_process(
         &self,
         _namespace: u64,
