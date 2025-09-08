@@ -1,16 +1,18 @@
 use anyhow::{anyhow, Ok, Result};
 use dusk::driver::Driver;
-use dusk_program::Process;
+use dusk_program::{Launcher, Process};
 use dusk_program_sh::launcher::ShLauncher;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 
 struct NixDriver {
-    sh: ShLauncher,
+    sh: Mutex<CriticalSectionRawMutex, ShLauncher>,
 }
 
 impl NixDriver {
     fn new() -> Self {
-        let sh = ShLauncher::new();
+        let sh = Mutex::<CriticalSectionRawMutex, ShLauncher>::new(ShLauncher::new());
 
         NixDriver { sh }
     }
@@ -26,11 +28,13 @@ impl Driver for NixDriver {
     }
 
     fn create_process(
-        &self,
-        _namespace: u64,
-        _program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
+        &mut self,
+        namespace: u64,
+        program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> Result<Box<dyn Process>> {
-        Err(anyhow!("why"))
+        let sh = self.sh.lock();
+
+        Ok(sh.launch())
     }
 
     fn now(&self) -> Result<embassy_time::Instant> {

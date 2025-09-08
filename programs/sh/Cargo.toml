@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 log = "0.4.0"
 capnp = { version = "0.19.3", default-features = false, features = ["alloc"] }
-capnp-rpc = { version = "0.19.0", default-features = false } 
+capnp-rpc = { version = "0.19.0", default-features = false }
 anyhow = { version = "1.0.82", default-features = false }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
 dusk_program = { path = "../../dusk/src/dusk_program" }

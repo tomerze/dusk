@@ -9,7 +9,6 @@ pub struct Namespace {
 
 impl Namespace {
     pub fn new(id: u64) -> Self {
-        let id = id;
         info!("namespace `{}` created", id);
         let processes = Mutex::<CriticalSectionRawMutex, ()>::new(());
         Namespace { id, processes }

@@ -1,6 +1,7 @@
 #![allow(internal_features)]
 #![feature(type_alias_impl_trait)]
 #![feature(prelude_import)]
+#![feature(impl_trait_in_assoc_type)]
 #![no_std]
 
 extern crate alloc;

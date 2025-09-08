@@ -9,7 +9,7 @@ pub trait Driver: Send + Sync + 'static {
     fn hostname(&self, namespace: u64) -> Result<String>;
 
     fn create_process(
-        &self,
+        &mut self,
         namespace: u64,
         program_args: program_args::Client,
     ) -> Result<Box<dyn Process>>;
@@ -35,7 +35,7 @@ macro_rules! dusk_driver_impl {
             namespace: u64,
             program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
         ) -> Result<Box<dyn Process>> {
-            <$t as $crate::driver::Driver>::create_process(&$name, namespace, program_args)
+            <$t as $crate::driver::Driver>::create_process(&mut $name, namespace, program_args)
         }
 
         #[no_mangle]
