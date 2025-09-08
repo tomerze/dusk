@@ -28,13 +28,13 @@ impl Driver for NixDriver {
     }
 
     fn create_process(
-        &mut self,
+        &self,
         namespace: u64,
         program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> Result<Box<dyn Process>> {
-        let sh = self.sh.lock();
+        let mut sh = embassy_futures::block_on(self.sh.lock());
 
-        Ok(sh.launch())
+        Ok(embassy_futures::block_on(sh.launch(0))?)
     }
 
     fn now(&self) -> Result<embassy_time::Instant> {

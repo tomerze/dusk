@@ -9,6 +9,12 @@ pub struct ShLauncher {
     matchers: Slab<fn(&str) -> bool>,
 }
 
+impl Default for ShLauncher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShLauncher {
     pub fn new() -> Self {
         ShLauncher {

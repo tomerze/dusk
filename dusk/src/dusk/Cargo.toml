@@ -4,17 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.71"
-embassy-executor = { version = "*", features = ["log", "nightly"] }
-embassy-sync = { version = "*", features = ["log"] }
-embassy-time = { version = "*", features = ["log"] }
-log = "0.4.21"
-static_cell = "2.1.0"
-capnp = { version = "0.19.3", default-features = false, features = ["alloc"] }
-capnp-rpc = { version = "0.19.0", default-features = false }
-futures = { version = "0.3.31", default-features = false }
-anyhow = { version = "1.0.95", default-features = false }
+async-trait = "0.1.89"
+
+embassy-executor = { version = "0.5.1", public = true }
+embassy-time = { version = "0.3.2", public = true }
+embassy-sync = { version = "0.5.0", public = true }
+
+log = "0.4.28"
+static_cell = "2.1.1"
+capnp = { version = "0.19.8", default-features = false, features = ["alloc"], public = true }
+capnp-rpc = { version = "0.19.5", default-features = false, public = true }
+futures = { version = "0.3.31", default-features = false, public = true}
+anyhow = { version = "1.0.99", default-features = false, public = true }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
 
-dusk_capnp = { path = "../dusk_capnp/" }
-dusk_program = { path = "../dusk_program/" }
+dusk_capnp = { path = "../dusk_capnp/", public = true}
+dusk_program = { path = "../dusk_program/", public = true}

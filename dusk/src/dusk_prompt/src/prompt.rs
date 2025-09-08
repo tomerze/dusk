@@ -14,7 +14,6 @@ use reedline::{
     MenuBuilder, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
     ReedlineEvent, ReedlineMenu, Vi,
 };
-use tracing::warn;
 
 use reedline::CursorConfig;
 
@@ -43,13 +42,13 @@ impl<'s> ReedlinePrompt<'s> {
 static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
 impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
-    fn render_prompt_left(&self) -> Cow<str> {
+    fn render_prompt_left(&self) -> Cow<'_, str> {
         {
             Cow::Owned(self.left_prompt.to_string())
         }
     }
 
-    fn render_prompt_right(&self) -> Cow<str> {
+    fn render_prompt_right(&self) -> Cow<'_, str> {
         match self.right_prompt.get().to_std() {
             Ok(duration) => {
                 let duration_str = pretty_duration(&duration, None);
@@ -59,18 +58,18 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
         }
     }
 
-    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<str> {
+    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
         Cow::Owned(" # ".to_string())
     }
 
-    fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
         Cow::Borrowed(DEFAULT_MULTILINE_INDICATOR)
     }
 
     fn render_prompt_history_search_indicator(
         &self,
         history_search: PromptHistorySearch,
-    ) -> Cow<str> {
+    ) -> Cow<'_, str> {
         let prefix = match history_search.status {
             PromptHistorySearchStatus::Passing => "",
             PromptHistorySearchStatus::Failing => "failing ",

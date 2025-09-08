@@ -4,19 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embassy-executor = { version = "0.5.0", features = ["arch-std", "executor-thread", "log", "nightly", "integrated-timers"] }
-embassy-time = { version = "0.3.0", features = ["std", "log"] }
-embassy-sync = { version = "0.5.0", features = ["log"] }
+embassy-executor = { version = "*", public = true, features = ["arch-std", "executor-thread", "log", "nightly", "integrated-timers"] }
+embassy-sync = { version = "*", public = true, features = ["log"] }
+embassy-time = { version = "*", public = true, features = ["std", "log"] }
+embassy-futures = { version = "*", public = true }
 
-anyhow = "1.0.82"
+anyhow = "1.0.99"
 async-net = "2.0.0"
-env_logger = "0.11.3"
-log = "0.4.21"
-static_cell = "2.1.0"
-futures = "0.3.30"
+env_logger = "0.11.8"
+log = "0.4.28"
+static_cell = "2.1.1"
+futures = "0.3.31"
 nix = { version = "0.28.0", features = ["hostname", "time"] }
 dusk = { path = "../../dusk/src/dusk/" }
 dusk_program_sh = { path = "../../programs/sh" }
 dusk_program = { path = "../../dusk/src/dusk_program" }
-async-trait = "0.1.71"
-lazy_static = { version = "1.4.0", features = ["spin_no_std"]}
+async-trait = "0.1.89"
+lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
