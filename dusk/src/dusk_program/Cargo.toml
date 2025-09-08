@@ -7,5 +7,5 @@ edition = "2021"
 anyhow = { version = "1.0.99", default-features = false }
 async-trait = "0.1.89"
 dusk_capnp = { path = "../dusk_capnp/", public = true }
-capnp = { version = "0.19.8", default-features = false, features = ["alloc"], public = true}
+capnp = { version = "0.21.5", default-features = false, features = ["alloc"], public = true}
 futures = { version = "0.3.31", default-features = false }

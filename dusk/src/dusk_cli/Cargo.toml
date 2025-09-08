@@ -11,7 +11,7 @@ path = "src/main.rs"
 tokio = { version = "1.47.1", features = ["full", "tracing"] }
 anyhow = { version = "1.0", features = ["backtrace"] }
 tracing = "0.1.41"
-console-subscriber = "0.2.0"
+console-subscriber = "0.4.1"
 tracing-subscriber = "0.3.20"
 clap = { version = "4.5.47", features = ["derive"] }
 wild = "2.2.1"

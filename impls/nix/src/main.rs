@@ -1,11 +1,13 @@
 #![feature(type_alias_impl_trait)]
+#![feature(impl_trait_in_assoc_type)]
 
 extern crate alloc;
 
 use anyhow::{anyhow, Result};
 use async_net::TcpListener;
 use dusk::namespace::Namespace;
-use embassy_executor::{Executor, Spawner};
+use embassy_executor::Executor;
+use embassy_executor::Spawner;
 use futures::io::AsyncReadExt;
 use log::error;
 use static_cell::StaticCell;
@@ -24,7 +26,7 @@ async fn init() -> Result<()> {
         stream.set_nodelay(true)?;
         let (reader, writer) = stream.split();
         let session_task = dusk::session(root.clone(), Box::pin(reader), Box::pin(writer));
-        let spawner = Spawner::for_current_executor().await;
+        let spawner = unsafe { Spawner::for_current_executor().await };
         spawner
             .spawn(session_task)
             .map_err(|err| anyhow!("failed to spawn session task {err:#?}"))?;

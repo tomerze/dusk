@@ -59,7 +59,7 @@ pub async fn session(
 
     let rpc_system = RpcSystem::new(Box::new(network), Some(dusk_client.clone().client));
 
-    let spawner = Spawner::for_current_executor().await;
+    let spawner = unsafe { Spawner::for_current_executor().await };
     if let Err(err) = spawner.spawn(rpc_system_wrapper(rpc_system)) {
         error!("an error occured while spawning an rpc system task: {err:#?}");
     }

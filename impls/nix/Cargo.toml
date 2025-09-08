@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embassy-executor = { version = "*", public = true, features = ["arch-std", "executor-thread", "log", "nightly", "integrated-timers"] }
+embassy-executor = { version = "0.9.1", public = true, features = ["arch-std", "log", "nightly", "executor-thread"]}
 embassy-sync = { version = "*", public = true, features = ["log"] }
 embassy-time = { version = "*", public = true, features = ["std", "log"] }
 embassy-futures = { version = "*", public = true }
@@ -15,9 +15,10 @@ env_logger = "0.11.8"
 log = "0.4.28"
 static_cell = "2.1.1"
 futures = "0.3.31"
-nix = { version = "0.28.0", features = ["hostname", "time"] }
+nix = { version = "0.30.1", features = ["hostname", "time"] }
 dusk = { path = "../../dusk/src/dusk/" }
 dusk_program_sh = { path = "../../programs/sh" }
 dusk_program = { path = "../../dusk/src/dusk_program" }
 async-trait = "0.1.89"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
+critical-section = { version = "1", features = ["std"] }
