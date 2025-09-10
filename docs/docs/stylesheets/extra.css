@@ -1,0 +1,103 @@
+:root {
+  --md-primary-fg-color: #aeaeae;
+  --md-primary-bg-color: #23272a;
+  --md-accent-fg-color: #1976d2;
+  --md-accent-bg-color: #ffd700;
+  --md-default-bg-color: #181818;
+  --md-default-fg-color: #e0e0e0;
+  --md-code-bg-color: #222;
+  --md-code-fg-color: #ffd700;
+  --md-shadow-color: rgba(25, 118, 210, 0.2);
+}
+
+body {
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+}
+
+.md-footer-meta {
+  display: none !important;
+}
+
+.md-header, .md-tabs {
+  background: var(--md-primary-bg-color);
+  color: var(--md-default-fg-color);
+  box-shadow: 0 2px 8px var(--md-shadow-color);
+}
+
+.md-header__button, .md-tabs__link {
+  color: var(--md-accent-fg-color);
+}
+
+.md-nav__link--active, .md-nav__link:hover {
+  color: var(--md-accent-bg-color);
+  background: var(--md-primary-bg-color);
+}
+
+.md-typeset a {
+  color: var(--md-accent-fg-color);
+  text-decoration: underline;
+}
+
+.md-typeset a:hover {
+  color: var(--md-accent-bg-color);
+  text-decoration: underline;
+}
+
+.md-typeset h1, .md-typeset h2, .md-typeset h3 {
+  color: var(--md-accent-bg-color);
+  font-weight: bold;
+}
+
+.md-typeset code, .md-typeset pre {
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.md-footer {
+  background: var(--md-primary-bg-color);
+  color: var(--md-default-fg-color);
+  border-top: 2px solid var(--md-accent-bg-color);
+}
+
+/* Beautiful button styling */
+.md-button {
+  background: linear-gradient(90deg, var(--md-accent-fg-color), var(--md-accent-bg-color));
+  color: #007bff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5em 1.5em;
+  font-weight: bold;
+  box-shadow: 0 2px 8px var(--md-shadow-color);
+  transition: background 0.3s, color 0.3s;
+}
+.md-button:hover {
+  background: linear-gradient(90deg, var(--md-accent-bg-color), var(--md-accent-fg-color));
+  color: #fff;
+}
+
+/* Gold highlight for important notes */
+.md-typeset .admonition.note {
+  border-left: 4px solid var(--md-accent-bg-color);
+  background: #222;
+  color: var(--md-accent-bg-color);
+}
+
+/* Blue highlight for tips */
+.md-typeset .admonition.tip {
+  border-left: 4px solid var(--md-accent-fg-color);
+  background: #222;
+  color: var(--md-accent-fg-color);
+}
+
+/* Card style for content blocks */
+.md-typeset .card {
+  background: #23272a;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px var(--md-shadow-color);
+  padding: 1em;
+  margin: 1em 0;
+  border: 1px solid var(--md-accent-bg-color);
+}

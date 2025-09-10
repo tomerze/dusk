@@ -1,0 +1,16 @@
+site_name: Dusk Documentation
+site_description: Documentation for the Dusk framework
+site_author: Dusk Team
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggestions
+    - toc.integrated
+nav:
+  - Home: index.md
+  - Crates: crates.md
+extra_css:
+  - stylesheets/extra.css
