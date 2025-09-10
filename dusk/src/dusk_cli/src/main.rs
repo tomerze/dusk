@@ -3,7 +3,7 @@ use clap::{command, Parser};
 use dusk_prompt::{connection::Connection, prompt::Prompt, shell::Shell};
 use std::net::SocketAddr;
 use tokio::signal;
-use tracing::{error, info, debug};
+use tracing::{debug, error, info};
 
 #[derive(Parser)]
 #[command(author, version, arg_required_else_help(true))]

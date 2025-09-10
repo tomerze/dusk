@@ -1,6 +1,5 @@
 [build]
 rustflags = ["--cfg", "tokio_unstable", "-Zmacro-backtrace"]
-target-dir = "build"
 
 [unstable]
 public-dependency = true

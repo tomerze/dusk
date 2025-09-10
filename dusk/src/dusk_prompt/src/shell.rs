@@ -3,7 +3,7 @@ use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::sh_capnp::sh_portal;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 pub struct Shell {
     _sh_portal: sh_portal::Client,

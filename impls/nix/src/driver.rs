@@ -23,9 +23,9 @@ dusk::dusk_driver_impl!(static ref DRIVER: NixDriver = NixDriver::new());
 
 impl Driver for NixDriver {
     fn hostname(&self, _namespace: u64) -> Result<String> {
-        Ok(gethostname()?.into_string().map_err(
-            |os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"),
-        )?)
+        Ok(gethostname()?
+            .into_string()
+            .map_err(|os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"))?)
     }
 
     fn process(

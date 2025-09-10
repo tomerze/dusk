@@ -1,7 +1,7 @@
 use crate::sh_capnp;
 use dusk_program::Process;
-use slab::Slab;
 use log::debug;
+use slab::Slab;
 
 pub struct ShProcess {
     pid: u64,

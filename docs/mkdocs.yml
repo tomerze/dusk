@@ -12,5 +12,6 @@ theme:
 nav:
   - Home: index.md
   - Crates: crates.md
+  - Development Setup: development.md
 extra_css:
   - stylesheets/extra.css

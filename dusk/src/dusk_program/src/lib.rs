@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::process;
 
-
 pub trait Process {
     fn pid(&self) -> u64;
     fn program_id(&self) -> u64;

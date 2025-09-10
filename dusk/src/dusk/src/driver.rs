@@ -60,10 +60,7 @@ pub fn hostname(namespace: u64) -> Result<String> {
     unsafe { _dusk_hostname(namespace) }
 }
 
-pub fn process(
-    namespace: u64,
-    program_args: program_args::Client,
-) -> Result<Box<dyn Process>> {
+pub fn process(namespace: u64, program_args: program_args::Client) -> Result<Box<dyn Process>> {
     unsafe { _dusk_process(namespace, program_args) }
 }
 
