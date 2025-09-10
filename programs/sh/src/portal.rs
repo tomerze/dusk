@@ -4,12 +4,12 @@ use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 
 pub struct ShPortal<'a> {
-    process: &'a ShProcess,
+    _process: &'a ShProcess,
 }
 
 impl<'a> ShPortal<'a> {
-    pub fn new(process: &'a ShProcess) -> Self {
-        ShPortal { process }
+    pub fn new(_process: &'a ShProcess) -> Self {
+        ShPortal { _process }
     }
 }
 

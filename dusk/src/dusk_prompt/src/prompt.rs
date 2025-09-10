@@ -91,8 +91,7 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
         reedline::SqliteBackedHistory::with_file("history.sqlite3".into(), None, None)
             .map_err(|_err| anyhow!("failed to open history db"))?,
     );
-
-    let commands = commands;
+ 
     let completer = Box::new(DefaultCompleter::new_with_wordlen(commands.clone(), 2));
 
     let cursor_config = CursorConfig {

@@ -24,7 +24,7 @@ impl dusk::Server for DuskServer {
         mut results: dusk::ProcessResults,
     ) -> Promise<(), ::capnp::Error> {
         let program_args = pry!(pry!(params.get()).get_program_args());
-        let process = pry!(driver::create_process(self.namespace.id, program_args)
+        let process = pry!(driver::process(self.namespace.id, program_args)
             .map_err(|err| capnp::Error::failed(err.to_string())));
         results.get().set_result(capnp_rpc::new_client(process));
         Promise::ok(())
@@ -32,7 +32,7 @@ impl dusk::Server for DuskServer {
 
     fn run(
         &mut self,
-        params: dusk::RunParams,
+        _params: dusk::RunParams,
         mut _results: dusk::RunResults,
     ) -> Promise<(), ::capnp::Error> {
         // TODO: actually run the process
@@ -42,7 +42,7 @@ impl dusk::Server for DuskServer {
     fn portal(
         &mut self,
         params: dusk::PortalParams,
-        results: dusk::PortalResults,
+        _results: dusk::PortalResults,
     ) -> Promise<(), ::capnp::Error> {
         let _pid = pry!(params.get()).get_pid();
         // TODO: lookup process by pid and return portal
@@ -69,7 +69,7 @@ impl dusk::Server for DuskServer {
         mut results: dusk::PsResults,
     ) -> Promise<(), ::capnp::Error> {
         // TODO: get process list
-        let process_entries = results.get().init_process_entries(0);
+        let _process_entries = results.get().init_process_entries(0);
         // Fill process_entries as needed
         Promise::ok(())
     }

@@ -7,11 +7,11 @@ edition = "2021"
 log = "0.4.28"
 capnp = { version = "0.21.5", default-features = false, features = ["alloc"], public = true}
 capnp-rpc = { version = "0.21.0", default-features = false, public = true }
-anyhow = { version = "1.0.99", default-features = false }
+anyhow = { version = "1.0.99", default-features = false, public = true }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 async-trait = "0.1.89"
-slab = "0.4.11"
+slab = { version = "0.4.11", public = true }
 futures = { version = "0.3.31", default-features = false }
 
 [build-dependencies]

@@ -1,7 +1,7 @@
 use core::pin::Pin;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::pipe::{Pipe, Reader, Writer};
-use futures::{AsyncRead, AsyncWrite};
+use futures_io::{AsyncRead, AsyncWrite};
 // use wolfssl::IOCallbackResult;
 /*
 * The plan is as follows:

@@ -22,7 +22,7 @@ use alloc::sync::Arc;
 use log::{error, info};
 
 use core::pin::Pin;
-use futures::{AsyncRead, AsyncWrite};
+use futures_io::{AsyncRead, AsyncWrite};
 
 pub mod driver;
 pub mod namespace;

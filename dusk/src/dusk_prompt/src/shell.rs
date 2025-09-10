@@ -6,7 +6,7 @@ use dusk_program_sh::sh_capnp::sh_portal;
 use tracing::{info, debug};
 
 pub struct Shell {
-    sh_portal: sh_portal::Client,
+    _sh_portal: sh_portal::Client,
     pub hostname: String,
     pub available_programs: Vec<String>,
 }
@@ -42,9 +42,9 @@ impl Shell {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
-        let sh_portal = Self::get_sh_portal(client).await?;
+        let _sh_portal = Self::get_sh_portal(client).await?;
         Ok(Shell {
-            sh_portal,
+            _sh_portal,
             hostname: hostname.into(),
             available_programs,
         })

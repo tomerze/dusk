@@ -5,13 +5,13 @@ use log::debug;
 
 pub struct ShProcess {
     pid: u64,
-    matchers: Slab<fn(&str) -> bool>,
+    _matchers: Slab<fn(&str) -> bool>,
 }
 
 impl ShProcess {
-    pub fn new(pid: u64, matchers: Slab<fn(&str) -> bool>) -> ShProcess {
+    pub fn new(pid: u64, _matchers: Slab<fn(&str) -> bool>) -> ShProcess {
         debug!("sh process created with pid {}", pid);
-        ShProcess { pid, matchers }
+        ShProcess { pid, _matchers }
     }
 }
 
