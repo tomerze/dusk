@@ -3,7 +3,7 @@ use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::sh_capnp::sh_portal;
-use tracing::info;
+use tracing::{info, debug};
 
 pub struct Shell {
     sh_portal: sh_portal::Client,
@@ -13,15 +13,19 @@ pub struct Shell {
 
 impl Shell {
     async fn get_sh_portal(client: dusk::Client) -> Result<sh_portal::Client> {
-        let mut exec_request = client.exec_request();
-        exec_request
+        let mut process_request = client.process_request();
+        process_request
             .get()
             .set_program_args(capnp_rpc::new_client(ShArgs {}));
-        let exec_reply = exec_request.send().promise.await?;
-        let process = exec_reply.get()?.get_result()?;
+        let process_reply = process_request.send().promise.await?;
+        let process = process_reply.get()?.get_result()?;
+
+        let pid_reply = process.pid_request().send().promise.await?;
+        let pid: u64 = pid_reply.get()?.get_result();
+        debug!("sh started with pid {}", pid);
 
         let mut portal_request = client.portal_request();
-        portal_request.get().set_process(process);
+        portal_request.get().set_pid(pid);
         let portal_reply = portal_request.send().promise.await?;
 
         Ok(portal_reply
@@ -38,8 +42,9 @@ impl Shell {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
+        let sh_portal = Self::get_sh_portal(client).await?;
         Ok(Shell {
-            sh_portal: Self::get_sh_portal(client).await?,
+            sh_portal,
             hostname: hostname.into(),
             available_programs,
         })

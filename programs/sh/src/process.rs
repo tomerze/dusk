@@ -1,7 +1,7 @@
 use crate::sh_capnp;
-use async_trait::async_trait;
 use dusk_program::Process;
 use slab::Slab;
+use log::debug;
 
 pub struct ShProcess {
     pid: u64,
@@ -10,16 +10,27 @@ pub struct ShProcess {
 
 impl ShProcess {
     pub fn new(pid: u64, matchers: Slab<fn(&str) -> bool>) -> ShProcess {
+        debug!("sh process created with pid {}", pid);
         ShProcess { pid, matchers }
     }
 }
 
-#[async_trait]
+impl Drop for ShProcess {
+    fn drop(&mut self) {
+        debug!("sh process with pid {} dropped", self.pid);
+    }
+}
+
 impl Process for ShProcess {
     fn pid(&self) -> u64 {
         self.pid
     }
     fn program_id(&self) -> u64 {
         sh_capnp::PROGRAM_ID
+    }
+
+    fn main(&self) -> capnp::capability::Promise<(), capnp::Error> {
+        debug!("sh process with pid {} main called", self.pid);
+        capnp::capability::Promise::ok(())
     }
 }

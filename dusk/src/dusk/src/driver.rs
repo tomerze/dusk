@@ -8,7 +8,7 @@ use dusk_program::Process;
 pub trait Driver: Send + Sync + 'static {
     fn hostname(&self, namespace: u64) -> Result<String>;
 
-    fn create_process(
+    fn process(
         &self,
         namespace: u64,
         program_args: program_args::Client,
@@ -31,11 +31,11 @@ macro_rules! dusk_driver_impl {
         }
 
         #[no_mangle]
-        fn _dusk_create_process<'a>(
+        fn _dusk_process<'a>(
             namespace: u64,
             program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
         ) -> Result<Box<dyn Process>> {
-            <$t as $crate::driver::Driver>::create_process(&$name, namespace, program_args)
+            <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
         }
 
         #[no_mangle]
@@ -48,7 +48,7 @@ macro_rules! dusk_driver_impl {
 extern "Rust" {
     fn _dusk_hostname(namespace: u64) -> Result<String>;
 
-    fn _dusk_create_process<'a>(
+    fn _dusk_process<'a>(
         namespace: u64,
         program_args: program_args::Client,
     ) -> Result<Box<dyn Process>>;
@@ -64,7 +64,7 @@ pub fn create_process<'a>(
     namespace: u64,
     program_args: program_args::Client,
 ) -> Result<Box<dyn Process>> {
-    unsafe { _dusk_create_process(namespace, program_args) }
+    unsafe { _dusk_process(namespace, program_args) }
 }
 
 pub fn now() -> Result<embassy_time::Instant> {

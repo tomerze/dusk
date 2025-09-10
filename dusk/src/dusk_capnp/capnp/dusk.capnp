@@ -14,17 +14,23 @@ interface ProgramArgs {
 interface Process {
   pid @0 () -> (result :UInt64);
   programId @1 () -> (result :UInt64);
+  run @2 () -> ();
 }
 
 interface Portal {
   process @0 () -> (result: Process);
 }
 
-interface Dusk {
-    exec @0 (programArgs: ProgramArgs) -> (result: Process);
-    portal @1 (process: Process) -> (result: Portal);
-    kill @2 (process: Process) -> ();
-    ps @3 () -> (processes :List(Process));
-    hostname @4 () -> (result :Text);
+struct ProcessEntry {
+  pid @0 :UInt64;
+  programId @1 :UInt64;
 }
 
+interface Dusk {
+    process @0 (programArgs: ProgramArgs) -> (result: Process);
+    run @1 (programArgs: ProgramArgs) -> ();
+    portal @2 (pid: UInt64) -> (result: Portal);
+    kill @3 (pid: UInt64) -> ();
+    ps @4 () -> (process_entries :List(ProcessEntry));
+    hostname @5 () -> (result :Text);
+}

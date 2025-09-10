@@ -5,6 +5,7 @@ use dusk_program_sh::launcher::ShLauncher;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
+use rand::Rng;
 
 struct NixDriver {
     sh: Mutex<CriticalSectionRawMutex, ShLauncher>,
@@ -27,14 +28,15 @@ impl Driver for NixDriver {
         )?))
     }
 
-    fn create_process(
+    fn process(
         &self,
         namespace: u64,
         program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> Result<Box<dyn Process>> {
         let mut sh = embassy_futures::block_on(self.sh.lock());
-
-        Ok(embassy_futures::block_on(sh.launch(0))?)
+        let mut rng = rand::thread_rng();
+        let pid: u64 = rng.gen();
+        Ok(embassy_futures::block_on(sh.launch(pid))?)
     }
 
     fn now(&self) -> Result<embassy_time::Instant> {

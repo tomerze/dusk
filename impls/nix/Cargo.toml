@@ -22,3 +22,4 @@ dusk_program = { path = "../../dusk/src/dusk_program" }
 async-trait = "0.1.89"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
 critical-section = { version = "1", features = ["std"] }
+rand = "0.8.5"

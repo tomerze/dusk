@@ -7,53 +7,70 @@ use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::pry;
 use log::error;
 
-pub struct DuskImpl {
+pub struct DuskServer {
     namespace: Arc<Namespace>,
 }
 
-impl DuskImpl {
+impl DuskServer {
     pub fn new(namespace: Arc<Namespace>) -> Self {
-        DuskImpl { namespace }
+        DuskServer { namespace }
     }
 }
 
-impl dusk::Server for DuskImpl {
-    fn exec(
+impl dusk::Server for DuskServer {
+    fn process(
         &mut self,
-        params: dusk::ExecParams,
-        mut results: dusk::ExecResults,
+        params: dusk::ProcessParams,
+        mut results: dusk::ProcessResults,
     ) -> Promise<(), ::capnp::Error> {
         let program_args = pry!(pry!(params.get()).get_program_args());
         let process = pry!(driver::create_process(self.namespace.id, program_args)
             .map_err(|err| capnp::Error::failed(err.to_string())));
-        // TODO: actually run the process
-
         results.get().set_result(capnp_rpc::new_client(process));
+        Promise::ok(())
+    }
 
+    fn run(
+        &mut self,
+        params: dusk::RunParams,
+        mut _results: dusk::RunResults,
+    ) -> Promise<(), ::capnp::Error> {
+        // TODO: actually run the process
         Promise::ok(())
     }
 
     fn portal(
         &mut self,
-        _params: dusk::PortalParams,
-        mut _results: dusk::PortalResults,
+        params: dusk::PortalParams,
+        results: dusk::PortalResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _pid = pry!(params.get()).get_pid();
+        // TODO: lookup process by pid and return portal
+        // Placeholder: return an empty portal
+
+        //results.get().set_result(capnp_rpc::new_client(portal));
+
         Promise::ok(())
     }
 
     fn kill(
         &mut self,
-        _params: dusk::KillParams,
+        params: dusk::KillParams,
         mut _results: dusk::KillResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _pid = pry!(params.get()).get_pid();
+        // TODO: kill process by pid
         Promise::ok(())
     }
 
     fn ps(
         &mut self,
         _params: dusk::PsParams,
-        mut _results: dusk::PsResults,
+        mut results: dusk::PsResults,
     ) -> Promise<(), ::capnp::Error> {
+        // TODO: get process list
+        let process_entries = results.get().init_process_entries(0);
+        // Fill process_entries as needed
         Promise::ok(())
     }
 
@@ -70,7 +87,6 @@ impl dusk::Server for DuskImpl {
             }
         };
         results.get().set_result(&hostname[..]);
-
         Promise::ok(())
     }
 }

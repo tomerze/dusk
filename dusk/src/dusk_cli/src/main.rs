@@ -3,7 +3,7 @@ use clap::{command, Parser};
 use dusk_prompt::{connection::Connection, prompt::Prompt, shell::Shell};
 use std::net::SocketAddr;
 use tokio::signal;
-use tracing::{error, info};
+use tracing::{error, info, debug};
 
 #[derive(Parser)]
 #[command(author, version, arg_required_else_help(true))]
@@ -16,6 +16,7 @@ async fn run(address: SocketAddr) {
     async fn inner(address: SocketAddr) -> Result<()> {
         info!("connecting to {}", address);
         let client = Connection::connect(address).await?.client().await;
+        debug!("connected to {}", address);
 
         Prompt::new(Shell::new(client).await?).await?.run().await?;
 

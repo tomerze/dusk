@@ -48,7 +48,7 @@ pub async fn session(
 
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
-        capnp_rpc::new_client(server::DuskImpl::new(namespace));
+        capnp_rpc::new_client(server::DuskServer::new(namespace));
 
     let network = twoparty::VatNetwork::new(
         tls_reader,
