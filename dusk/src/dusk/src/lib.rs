@@ -46,9 +46,10 @@ pub async fn session(
 ) {
     info!("session started with namespace `{}`", namespace.id);
 
+    let spawner = unsafe { Spawner::for_current_executor().await };
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
-        capnp_rpc::new_client(server::DuskServer::new(namespace));
+        capnp_rpc::new_client(server::DuskServer::new(namespace, spawner.clone()));
 
     let network = twoparty::VatNetwork::new(
         tls_reader,
@@ -59,7 +60,6 @@ pub async fn session(
 
     let rpc_system = RpcSystem::new(Box::new(network), Some(dusk_client.clone().client));
 
-    let spawner = unsafe { Spawner::for_current_executor().await };
     if let Err(err) = spawner.spawn(rpc_system_wrapper(rpc_system)) {
         error!("an error occured while spawning an rpc system task: {err:#?}");
     }

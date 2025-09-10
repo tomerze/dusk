@@ -22,6 +22,11 @@ impl Shell {
 
         let pid_reply = process.pid_request().send().promise.await?;
         let pid: u64 = pid_reply.get()?.get_result();
+
+        let mut run_request = client.run_request();
+        run_request.get().set_process(process);
+        let _run_reply = run_request.send().promise.await?;
+
         debug!("sh started with pid {}", pid);
 
         let mut portal_request = client.portal_request();

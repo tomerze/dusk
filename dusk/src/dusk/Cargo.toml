@@ -9,6 +9,7 @@ async-trait = "0.1.89"
 embassy-executor = { version = "0.9.1", public = true }
 embassy-time = { version = "0.5.0", public = true }
 embassy-sync = { version = "0.7.2", public = true }
+embassy-futures = { version = "0.1.2", public = true }
 
 log = "0.4.28"
 static_cell = "2.1.1"

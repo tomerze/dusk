@@ -28,7 +28,7 @@ struct ProcessEntry {
 
 interface Dusk {
     process @0 (programArgs: ProgramArgs) -> (result: Process);
-    run @1 (programArgs: ProgramArgs) -> ();
+    run @1 (process: Process) -> ();
     portal @2 (pid: UInt64) -> (result: Portal);
     kill @3 (pid: UInt64) -> ();
     ps @4 () -> (process_entries :List(ProcessEntry));

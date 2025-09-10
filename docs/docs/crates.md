@@ -16,7 +16,7 @@ A library providing a command line prompt, and a shell which connects to a dusk 
 
 # `dusk_{impl name}`
 
-An OS/Hardware specific implentation of both a `dusk server` and a `dusk driver` used to run `dusk programs`
+An OS/Hardware specific implementation of both a `dusk server` and a `dusk driver` used to run `dusk programs`
 
 # `dusk_program`
 

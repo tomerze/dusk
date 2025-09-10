@@ -29,8 +29,17 @@ impl Process for ShProcess {
         sh_capnp::PROGRAM_ID
     }
 
+    fn clone_box(&self) -> Box<dyn Process> {
+        Box::new(ShProcess {
+            pid: self.pid,
+            _matchers: self._matchers.clone(),
+        })
+    }
+
     fn main(&self) -> capnp::capability::Promise<(), capnp::Error> {
         debug!("sh process with pid {} main called", self.pid);
+
+        std::thread::sleep(std::time::Duration::from_secs(5));
         capnp::capability::Promise::ok(())
     }
 }

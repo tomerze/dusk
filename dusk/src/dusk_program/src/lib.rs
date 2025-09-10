@@ -11,6 +11,7 @@ use dusk_capnp::dusk_capnp::process;
 pub trait Process {
     fn pid(&self) -> u64;
     fn program_id(&self) -> u64;
+    fn clone_box(&self) -> Box<dyn Process>;
 
     fn main(&self) -> Promise<(), ::capnp::Error> {
         Promise::ok(())
