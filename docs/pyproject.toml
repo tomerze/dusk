@@ -2,7 +2,6 @@
 name = "dusk-docs"
 version = "0.1.0"
 description = "Dusk's Documentation"
-readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "mkdocs>=1.6.1",
