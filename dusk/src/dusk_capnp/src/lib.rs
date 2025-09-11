@@ -1,8 +1,12 @@
+#[allow(clippy::all)]
+
 pub mod stream_capnp {
+
     include!(concat!(env!("OUT_DIR"), "/capnp/stream_capnp.rs"));
 }
 
 pub mod dusk_capnp {
+
     include!(concat!(env!("OUT_DIR"), "/capnp/dusk_capnp.rs"));
 }
 

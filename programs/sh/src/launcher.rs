@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use dusk_program::{Launcher, Process};
+use dusk_program::{launcher::Launcher, process::Process};
+
 use slab::Slab;
 
 use crate::process::ShProcess;

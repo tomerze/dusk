@@ -18,14 +18,13 @@ use embassy_executor::Spawner;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 
-use alloc::sync::Arc;
+use alloc::rc::Rc;
 use log::{error, info};
 
 use core::pin::Pin;
 use futures_io::{AsyncRead, AsyncWrite};
 
 pub mod driver;
-pub mod namespace;
 pub mod server;
 pub use dusk_capnp;
 
@@ -40,7 +39,7 @@ async fn rpc_system_wrapper(rpc_system: RpcSystem<rpc_twoparty_capnp::Side>) {
 
 #[embassy_executor::task]
 pub async fn session(
-    namespace: Arc<namespace::Namespace>,
+    namespace: Rc<dusk_program::namespace::Namespace>,
     reader: Pin<Box<dyn AsyncRead>>,
     writer: Pin<Box<dyn AsyncWrite>>,
 ) {
@@ -49,7 +48,7 @@ pub async fn session(
     let spawner = unsafe { Spawner::for_current_executor().await };
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
-        capnp_rpc::new_client(server::DuskServer::new(namespace, spawner.clone()));
+        capnp_rpc::new_client(server::DuskServer::new(namespace, spawner));
 
     let network = twoparty::VatNetwork::new(
         tls_reader,

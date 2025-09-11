@@ -1,5 +1,5 @@
 use crate::sh_capnp;
-use dusk_program::Process;
+use dusk_program::process::Process;
 use log::debug;
 use slab::Slab;
 

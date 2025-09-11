@@ -1,28 +1,28 @@
 use crate::driver;
-use crate::namespace::Namespace;
+use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::sync::Arc;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::pry;
-use dusk_program::Process;
+use dusk_program::namespace::Namespace;
+use dusk_program::process::Process;
 use embassy_executor::Spawner;
 use log::{debug, error};
 
 pub struct DuskServer {
-    namespace: Arc<Namespace>,
+    namespace: Rc<Namespace>,
     spawner: Spawner,
 }
 
 impl DuskServer {
-    pub fn new(namespace: Arc<Namespace>, spawner: Spawner) -> Self {
+    pub fn new(namespace: Rc<Namespace>, spawner: Spawner) -> Self {
         DuskServer { namespace, spawner }
     }
 
     async fn async_run(
         process_client: process::Client,
-        namespace: Arc<Namespace>,
+        namespace: Rc<Namespace>,
         spawner: Spawner,
     ) -> Result<(), capnp::Error> {
         let processes = namespace.processes.lock().await;
@@ -44,7 +44,7 @@ impl DuskServer {
 
     async fn new_process_client(
         process: Box<dyn Process>,
-        namespace: Arc<Namespace>,
+        namespace: Rc<Namespace>,
     ) -> Result<process::Client, capnp::Error> {
         let mut processes = namespace.processes.lock().await;
         let client = processes.new_client(process);

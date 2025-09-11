@@ -3,6 +3,7 @@ pub mod launcher;
 pub mod portal;
 pub mod process;
 
+#[allow(clippy::all)]
 pub mod sh_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/sh_capnp.rs"));
 }

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Ok, Result};
 use dusk::driver::Driver;
-use dusk_program::{Launcher, Process};
+use dusk_program::{launcher::Launcher, process::Process};
 use dusk_program_sh::launcher::ShLauncher;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;

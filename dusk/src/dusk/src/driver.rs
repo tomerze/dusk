@@ -1,7 +1,7 @@
 use alloc::string::String;
 use anyhow::Result;
 use dusk_capnp::dusk_capnp::program_args;
-use dusk_program::Process;
+use dusk_program::process::Process;
 
 /// Dusk driver
 #[async_trait::async_trait]
