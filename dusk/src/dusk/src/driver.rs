@@ -1,7 +1,11 @@
+use core::{future::Future, pin::Pin};
+
 use alloc::{rc::Rc, string::String};
 use anyhow::Result;
 use dusk_capnp::dusk_capnp::program_args;
 use dusk_program::{namespace::Namespace, process::Process};
+
+pub type FutureProcessResult = Pin<Box<dyn Future<Output = Result<Box<dyn Process>>>>>;
 
 /// Dusk driver
 #[async_trait::async_trait]
@@ -12,7 +16,7 @@ pub trait Driver: Send + Sync + 'static {
         &self,
         namespace: Rc<Namespace>,
         program_args: program_args::Client,
-    ) -> Result<Box<dyn Process>>;
+    ) -> FutureProcessResult;
 
     fn now(&self) -> Result<embassy_time::Instant>;
 }
@@ -34,7 +38,7 @@ macro_rules! dusk_driver_impl {
         fn _dusk_process<'a>(
             namespace: Rc<Namespace>,
             program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
-        ) -> Result<Box<dyn Process>> {
+        ) -> FutureProcessResult {
             <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
         }
 
@@ -51,7 +55,7 @@ extern "Rust" {
     fn _dusk_process<'a>(
         namespace: Rc<Namespace>,
         program_args: program_args::Client,
-    ) -> Result<Box<dyn Process>>;
+    ) -> FutureProcessResult;
 
     fn _dusk_now() -> Result<embassy_time::Instant>;
 }
@@ -63,7 +67,7 @@ pub fn hostname() -> Result<String> {
 pub fn process(
     namespace: Rc<Namespace>,
     program_args: program_args::Client,
-) -> Result<Box<dyn Process>> {
+) -> FutureProcessResult {
     unsafe { _dusk_process(namespace, program_args) }
 }
 

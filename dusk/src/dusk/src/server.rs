@@ -72,11 +72,13 @@ impl dusk::Server for DuskServer {
         mut results: dusk::ProcessResults,
     ) -> Promise<(), ::capnp::Error> {
         let program_args = pry!(pry!(params.get()).get_program_args());
-        let process = pry!(driver::process(self.namespace.clone(), program_args)
-            .map_err(|err| capnp::Error::failed(err.to_string())));
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
+            let process = driver::process(namespace.clone(), program_args)
+                .await
+                .map_err(|e| capnp::Error::failed(e.to_string()))?;
+
             let process_client = Self::new_process_client(process, namespace).await?;
 
             results.get().set_result(process_client);

@@ -4,27 +4,7 @@ use dusk_capnp::dusk_capnp::portal;
 
 pub struct ShPortal {}
 
-impl ShPortal {
-    pub fn new() -> Self {
-        ShPortal {}
-    }
-}
-
-impl Default for ShPortal {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl portal::Server for ShPortal {
-    fn process(
-        &mut self,
-        _: portal::ProcessParams,
-        _: portal::ProcessResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        Promise::ok(())
-    }
-}
+impl portal::Server for ShPortal {}
 
 impl sh_portal::Server for ShPortal {
     fn set_env(

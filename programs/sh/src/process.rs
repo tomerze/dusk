@@ -4,26 +4,11 @@ use anyhow::Result;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_program::{namespace::Namespace, process::Process};
 use embassy_time::Timer;
-use slab::Slab;
 
 pub struct ShProcess {
-    pid: u64,
-    namespace: Rc<Namespace>,
-    _matchers: Slab<fn(&str) -> bool>,
-}
-
-impl ShProcess {
-    pub fn new(pid: u64, namespace: Rc<Namespace>, _matchers: Slab<fn(&str) -> bool>) -> ShProcess {
-        ShProcess {
-            pid,
-            namespace,
-            _matchers,
-        }
-    }
-}
-
-impl Drop for ShProcess {
-    fn drop(&mut self) {}
+    pub pid: u64,
+    pub namespace: Rc<Namespace>,
+    pub program_args: sh_capnp::sh_args::Client,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -38,13 +23,13 @@ impl Process for ShProcess {
         self.namespace.clone()
     }
     fn portal(&self) -> portal::Client {
-        capnp_rpc::new_client(ShPortal::new())
+        capnp_rpc::new_client(ShPortal {})
     }
     fn clone_box(&self) -> Box<dyn Process> {
         Box::new(ShProcess {
             pid: self.pid,
             namespace: self.namespace.clone(),
-            _matchers: self._matchers.clone(),
+            program_args: self.program_args.clone(),
         })
     }
 

@@ -7,9 +7,10 @@ pub struct ShArgs {}
 impl program_args::Server for ShArgs {
     fn program_id(
         &mut self,
-        _: program_args::ProgramIdParams,
-        _: program_args::ProgramIdResults,
+        _params: program_args::ProgramIdParams,
+        mut results: program_args::ProgramIdResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
+        results.get().set_program_id(crate::sh_capnp::PROGRAM_ID);
         Promise::ok(())
     }
 }

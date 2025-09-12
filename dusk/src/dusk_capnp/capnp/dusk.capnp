@@ -19,9 +19,7 @@ interface Process {
   kill @4 (signal: UInt64) -> ();
 }
 
-interface Portal {
-  process @0 () -> (result: Process);
-}
+interface Portal {}
 
 interface Dusk {
     process @0 (programArgs: ProgramArgs) -> (result: Process);

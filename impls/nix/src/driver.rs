@@ -1,23 +1,24 @@
 use alloc::rc::Rc;
 
 use anyhow::{anyhow, Ok, Result};
-use dusk::driver::Driver;
-use dusk_program::{launcher::Launcher, namespace::Namespace, process::Process};
+use core::future::Future;
+use core::pin::Pin;
+use dusk::driver::{Driver, FutureProcessResult};
+use dusk_program::launcher_set::LauncherSet;
+use dusk_program::{namespace::Namespace, process::Process};
 use dusk_program_sh::launcher::ShLauncher;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
 
 struct NixDriver {
-    sh: Mutex<CriticalSectionRawMutex, ShLauncher>,
+    launchers: LauncherSet,
 }
 
 impl NixDriver {
     fn new() -> Self {
-        let sh = Mutex::<CriticalSectionRawMutex, ShLauncher>::new(ShLauncher::new());
-
-        NixDriver { sh }
+        let launchers = LauncherSet::new();
+        launchers.add(Box::new(ShLauncher {}));
+        NixDriver { launchers }
     }
 }
 
@@ -33,12 +34,16 @@ impl Driver for NixDriver {
     fn process(
         &self,
         namespace: Rc<Namespace>,
-        _program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
-    ) -> Result<Box<dyn Process>> {
-        let mut sh = embassy_futures::block_on(self.sh.lock());
-        let mut rng = rand::thread_rng();
-        let pid: u64 = rng.gen();
-        Ok(sh.launch(pid, namespace)?)
+        program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
+    ) -> FutureProcessResult {
+        let launchers = self.launchers.clone();
+        let fut = async move {
+            let mut rng = rand::thread_rng();
+            let pid: u64 = rng.gen();
+            launchers.launch(pid, namespace, program_args).await
+        };
+        Box::pin(fut)
+            as Pin<Box<dyn Future<Output = Result<Box<dyn Process>, anyhow::Error>> + 'static>>
     }
 
     fn now(&self) -> Result<embassy_time::Instant> {
