@@ -1,6 +1,8 @@
+use alloc::rc::Rc;
+
 use anyhow::{anyhow, Ok, Result};
 use dusk::driver::Driver;
-use dusk_program::{launcher::Launcher, process::Process};
+use dusk_program::{launcher::Launcher, namespace::Namespace, process::Process};
 use dusk_program_sh::launcher::ShLauncher;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -22,7 +24,7 @@ impl NixDriver {
 dusk::dusk_driver_impl!(static ref DRIVER: NixDriver = NixDriver::new());
 
 impl Driver for NixDriver {
-    fn hostname(&self, _namespace: u64) -> Result<String> {
+    fn hostname(&self) -> Result<String> {
         Ok(gethostname()?
             .into_string()
             .map_err(|os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"))?)
@@ -30,13 +32,13 @@ impl Driver for NixDriver {
 
     fn process(
         &self,
-        _namespace: u64,
+        namespace: Rc<Namespace>,
         _program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> Result<Box<dyn Process>> {
         let mut sh = embassy_futures::block_on(self.sh.lock());
         let mut rng = rand::thread_rng();
         let pid: u64 = rng.gen();
-        Ok(embassy_futures::block_on(sh.launch(pid))?)
+        Ok(sh.launch(pid, namespace)?)
     }
 
     fn now(&self) -> Result<embassy_time::Instant> {

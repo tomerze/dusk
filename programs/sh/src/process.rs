@@ -1,26 +1,31 @@
 use crate::sh_capnp;
-use dusk_program::process::Process;
-use log::debug;
+use alloc::rc::Rc;
+use anyhow::Result;
+use dusk_program::{namespace::Namespace, process::Process};
+use embassy_time::Timer;
 use slab::Slab;
 
 pub struct ShProcess {
     pid: u64,
+    namespace: Rc<Namespace>,
     _matchers: Slab<fn(&str) -> bool>,
 }
 
 impl ShProcess {
-    pub fn new(pid: u64, _matchers: Slab<fn(&str) -> bool>) -> ShProcess {
-        debug!("sh process created with pid {}", pid);
-        ShProcess { pid, _matchers }
+    pub fn new(pid: u64, namespace: Rc<Namespace>, _matchers: Slab<fn(&str) -> bool>) -> ShProcess {
+        ShProcess {
+            pid,
+            namespace,
+            _matchers,
+        }
     }
 }
 
 impl Drop for ShProcess {
-    fn drop(&mut self) {
-        debug!("sh process with pid {} dropped", self.pid);
-    }
+    fn drop(&mut self) {}
 }
 
+#[async_trait::async_trait(?Send)]
 impl Process for ShProcess {
     fn pid(&self) -> u64 {
         self.pid
@@ -29,17 +34,20 @@ impl Process for ShProcess {
         sh_capnp::PROGRAM_ID
     }
 
+    fn namespace(&self) -> Rc<Namespace> {
+        self.namespace.clone()
+    }
+
     fn clone_box(&self) -> Box<dyn Process> {
         Box::new(ShProcess {
             pid: self.pid,
+            namespace: self.namespace.clone(),
             _matchers: self._matchers.clone(),
         })
     }
 
-    fn main(&self) -> capnp::capability::Promise<(), capnp::Error> {
-        debug!("sh process with pid {} main called", self.pid);
-
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        capnp::capability::Promise::ok(())
+    async fn main(&self) -> Result<()> {
+        Timer::after_secs(5).await;
+        Ok(())
     }
 }

@@ -1,9 +1,7 @@
-use crate::process::Process;
-use alloc::boxed::Box;
+use crate::{namespace::Namespace, process::Process};
+use alloc::{boxed::Box, rc::Rc};
 use anyhow::Result;
-use async_trait::async_trait;
 
-#[async_trait]
 pub trait Launcher {
-    async fn launch(&mut self, pid: u64) -> Result<Box<dyn Process>>;
+    fn launch(&mut self, pid: u64, namespace: Rc<Namespace>) -> Result<Box<dyn Process>>;
 }

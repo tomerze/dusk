@@ -20,14 +20,14 @@ impl DuskServer {
         DuskServer { namespace, spawner }
     }
 
-    async fn async_run(
+    async fn run_inside_task(
         process_client: process::Client,
         namespace: Rc<Namespace>,
         spawner: Spawner,
     ) -> Result<(), capnp::Error> {
-        let processes = namespace.processes.lock().await;
+        let ps_server_set = namespace.ps_server_set.lock().await;
 
-        if let Some(process_server) = processes.get_local_server(&process_client).await {
+        if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
             let process = process_server.borrow().server.clone_box();
             let pid = process.pid();
             match spawner.spawn(process_task(process)) {
@@ -46,15 +46,17 @@ impl DuskServer {
         process: Box<dyn Process>,
         namespace: Rc<Namespace>,
     ) -> Result<process::Client, capnp::Error> {
-        let mut processes = namespace.processes.lock().await;
-        let client = processes.new_client(process);
+        let mut ps_server_set = namespace.ps_server_set.lock().await;
+        // Creates a new client from the server and append the server to the set
+        let client = ps_server_set.new_client(process);
         Ok(client)
     }
 }
 
 #[embassy_executor::task]
 async fn process_task(process: Box<dyn Process>) {
-    if let Err(err) = process.main().await {
+    embassy_futures::yield_now().await; // Yield to other tasks and move this task to the back of the queue
+    if let Err(err) = process.bootstrap().await {
         error!(
             "Process with pid {} exited with error: {}",
             process.pid(),
@@ -70,7 +72,7 @@ impl dusk::Server for DuskServer {
         mut results: dusk::ProcessResults,
     ) -> Promise<(), ::capnp::Error> {
         let program_args = pry!(pry!(params.get()).get_program_args());
-        let process = pry!(driver::process(self.namespace.id, program_args)
+        let process = pry!(driver::process(self.namespace.clone(), program_args)
             .map_err(|err| capnp::Error::failed(err.to_string())));
 
         let namespace = self.namespace.clone();
@@ -89,7 +91,7 @@ impl dusk::Server for DuskServer {
     ) -> Promise<(), ::capnp::Error> {
         let process = pry!(pry!(params.get()).get_process());
 
-        Promise::from_future(Self::async_run(
+        Promise::from_future(Self::run_inside_task(
             process,
             self.namespace.clone(),
             self.spawner,
@@ -136,7 +138,7 @@ impl dusk::Server for DuskServer {
         _params: dusk::HostnameParams,
         mut results: dusk::HostnameResults,
     ) -> Promise<(), ::capnp::Error> {
-        let hostname = match driver::hostname(self.namespace.id) {
+        let hostname = match driver::hostname() {
             Ok(id) => id,
             Err(err) => {
                 error!("failed to receive hostname from driver: `{err}`");

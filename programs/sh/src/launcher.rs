@@ -1,6 +1,6 @@
+use alloc::rc::Rc;
 use anyhow::Result;
-use async_trait::async_trait;
-use dusk_program::{launcher::Launcher, process::Process};
+use dusk_program::{launcher::Launcher, namespace::Namespace, process::Process};
 
 use slab::Slab;
 
@@ -32,9 +32,12 @@ impl ShLauncher {
     }
 }
 
-#[async_trait]
 impl Launcher for ShLauncher {
-    async fn launch(&mut self, pid: u64) -> Result<Box<dyn Process>> {
-        Ok(Box::new(ShProcess::new(pid, self.matchers.clone())))
+    fn launch(&mut self, pid: u64, namespace: Rc<Namespace>) -> Result<Box<dyn Process>> {
+        Ok(Box::new(ShProcess::new(
+            pid,
+            namespace.clone(),
+            self.matchers.clone(),
+        )))
     }
 }

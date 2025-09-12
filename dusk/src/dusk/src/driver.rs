@@ -1,16 +1,16 @@
-use alloc::string::String;
+use alloc::{rc::Rc, string::String};
 use anyhow::Result;
 use dusk_capnp::dusk_capnp::program_args;
-use dusk_program::process::Process;
+use dusk_program::{namespace::Namespace, process::Process};
 
 /// Dusk driver
 #[async_trait::async_trait]
 pub trait Driver: Send + Sync + 'static {
-    fn hostname(&self, namespace: u64) -> Result<String>;
+    fn hostname(&self) -> Result<String>;
 
     fn process(
         &self,
-        namespace: u64,
+        namespace: Rc<Namespace>,
         program_args: program_args::Client,
     ) -> Result<Box<dyn Process>>;
 
@@ -26,13 +26,13 @@ macro_rules! dusk_driver_impl {
         }
 
         #[no_mangle]
-        fn _dusk_hostname(namespace: u64) -> Result<String> {
-            <$t as $crate::driver::Driver>::hostname(&$name, namespace)
+        fn _dusk_hostname() -> Result<String> {
+            <$t as $crate::driver::Driver>::hostname(&$name)
         }
 
         #[no_mangle]
         fn _dusk_process<'a>(
-            namespace: u64,
+            namespace: Rc<Namespace>,
             program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
         ) -> Result<Box<dyn Process>> {
             <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
@@ -46,21 +46,24 @@ macro_rules! dusk_driver_impl {
 }
 
 extern "Rust" {
-    fn _dusk_hostname(namespace: u64) -> Result<String>;
+    fn _dusk_hostname() -> Result<String>;
 
     fn _dusk_process<'a>(
-        namespace: u64,
+        namespace: Rc<Namespace>,
         program_args: program_args::Client,
     ) -> Result<Box<dyn Process>>;
 
     fn _dusk_now() -> Result<embassy_time::Instant>;
 }
 
-pub fn hostname(namespace: u64) -> Result<String> {
-    unsafe { _dusk_hostname(namespace) }
+pub fn hostname() -> Result<String> {
+    unsafe { _dusk_hostname() }
 }
 
-pub fn process(namespace: u64, program_args: program_args::Client) -> Result<Box<dyn Process>> {
+pub fn process(
+    namespace: Rc<Namespace>,
+    program_args: program_args::Client,
+) -> Result<Box<dyn Process>> {
     unsafe { _dusk_process(namespace, program_args) }
 }
 
