@@ -1,6 +1,7 @@
-use crate::sh_capnp;
+use crate::{portal::ShPortal, sh_capnp};
 use alloc::rc::Rc;
 use anyhow::Result;
+use dusk_capnp::dusk_capnp::portal;
 use dusk_program::{namespace::Namespace, process::Process};
 use embassy_time::Timer;
 use slab::Slab;
@@ -33,11 +34,12 @@ impl Process for ShProcess {
     fn program_id(&self) -> u64 {
         sh_capnp::PROGRAM_ID
     }
-
     fn namespace(&self) -> Rc<Namespace> {
         self.namespace.clone()
     }
-
+    fn portal(&self) -> portal::Client {
+        capnp_rpc::new_client(ShPortal::new())
+    }
     fn clone_box(&self) -> Box<dyn Process> {
         Box::new(ShProcess {
             pid: self.pid,

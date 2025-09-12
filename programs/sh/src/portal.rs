@@ -1,19 +1,22 @@
-use crate::process::ShProcess;
 use crate::sh_capnp::sh_portal;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 
-pub struct ShPortal<'a> {
-    _process: &'a ShProcess,
-}
+pub struct ShPortal {}
 
-impl<'a> ShPortal<'a> {
-    pub fn new(_process: &'a ShProcess) -> Self {
-        ShPortal { _process }
+impl ShPortal {
+    pub fn new() -> Self {
+        ShPortal {}
     }
 }
 
-impl<'a> portal::Server for ShPortal<'a> {
+impl Default for ShPortal {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl portal::Server for ShPortal {
     fn process(
         &mut self,
         _: portal::ProcessParams,
@@ -23,7 +26,7 @@ impl<'a> portal::Server for ShPortal<'a> {
     }
 }
 
-impl<'a> sh_portal::Server for ShPortal<'a> {
+impl sh_portal::Server for ShPortal {
     fn set_env(
         &mut self,
         _: sh_portal::SetEnvParams,

@@ -55,7 +55,7 @@ impl DuskServer {
 
 #[embassy_executor::task]
 async fn process_task(process: Box<dyn Process>) {
-    embassy_futures::yield_now().await; // Yield to other tasks and move this task to the back of the queue
+    embassy_futures::yield_now().await;
     if let Err(err) = process.bootstrap().await {
         error!(
             "Process with pid {} exited with error: {}",
@@ -96,30 +96,6 @@ impl dusk::Server for DuskServer {
             self.namespace.clone(),
             self.spawner,
         ))
-    }
-
-    fn portal(
-        &mut self,
-        params: dusk::PortalParams,
-        _results: dusk::PortalResults,
-    ) -> Promise<(), ::capnp::Error> {
-        let _pid = pry!(params.get()).get_pid();
-        // TODO: lookup process by pid and return portal
-        // Placeholder: return an empty portal
-
-        //results.get().set_result(capnp_rpc::new_client(portal));
-
-        Promise::ok(())
-    }
-
-    fn kill(
-        &mut self,
-        params: dusk::KillParams,
-        mut _results: dusk::KillResults,
-    ) -> Promise<(), ::capnp::Error> {
-        let _pid = pry!(params.get()).get_pid();
-        // TODO: kill process by pid
-        Promise::ok(())
     }
 
     fn ps(
