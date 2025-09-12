@@ -15,6 +15,12 @@ use crate::namespace::Namespace;
 // 1. Run in task flow: DuskServer.run -> DuskServer.run_inside_task -> process_task -> Process.bootstrap -> Process.main
 // 2. Run in session flow: Process.run -> Process.bootstrap -> Process.main
 //
+// And how does one get a process?
+// Dusk.process -> Driver.process ->
+// LauncherSet.launch <- program_args.get_program_id (dusk server back to dusk client RPC)
+// -> Launcher.launch -> Process
+// Cool right?
+//
 // Note: Never run process.main directly, always use process.bootstrap.
 
 #[async_trait::async_trait(?Send)]
