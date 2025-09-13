@@ -6,7 +6,7 @@ use core::pin::Pin;
 use dusk::driver::{Driver, FutureProcessResult};
 use dusk_program::launcher_set::LauncherSet;
 use dusk_program::{namespace::Namespace, process::Process};
-use dusk_program_sh::launcher::ShLauncher;
+use dusk_program_sh::ShLauncher;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
 

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::dusk;
-use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::sh_capnp::sh_portal;
+use dusk_program_sh::ShArgs;
 use tracing::{debug, info};
 
 pub struct Shell {

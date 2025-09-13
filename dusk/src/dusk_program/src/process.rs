@@ -36,30 +36,34 @@ pub trait Process {
     }
 
     async fn main(&self) -> Result<()> {
-        core::future::pending().await
+        core::future::pending::<()>().await;
+        Ok(())
     }
 }
 
 impl dyn Process {
     pub async fn bootstrap(&self) -> Result<()> {
         let namespace = self.namespace();
-        let mut ps_map = namespace.ps_map.lock().await;
+        {
+            let mut ps_map = namespace.ps_map.lock().await;
 
-        if ps_map.contains_key(&self.pid()) {
-            return Err(anyhow::anyhow!(
-                "pid {} is already in use in namespace {}",
-                self.pid(),
-                namespace.id
-            ));
+            if ps_map.contains_key(&self.pid()) {
+                return Err(anyhow::anyhow!(
+                    "pid {} is already in use in namespace {}",
+                    self.pid(),
+                    namespace.id
+                ));
+            }
+
+            ps_map.insert(self.pid(), self.clone_box());
         }
-
-        ps_map.insert(self.pid(), self.clone_box());
         debug!(
             "Process with pid {} registered in namespace {}",
             self.pid(),
             namespace.id
         );
         let result = self.main().await;
+        let mut ps_map = namespace.ps_map.lock().await;
         ps_map.remove(&self.pid());
         debug!(
             "Process with pid {} unregistered from namespace {}",
@@ -120,14 +124,14 @@ impl process::Server for dyn Process {
     ) -> Promise<(), ::capnp::Error> {
         let namespace = self.namespace();
         let pid = <Self as Process>::pid(self);
-        let is_process_running_fut = async move {
-            let ps_map = namespace.ps_map.lock().await;
-            ps_map.contains_key(&pid)
-        };
 
         let process = self.clone_box();
         Promise::from_future(async move {
-            if is_process_running_fut.await {
+            let is_process_running = {
+                let ps_map = namespace.ps_map.lock().await;
+                ps_map.contains_key(&pid)
+            };
+            if is_process_running {
                 let portal = <Self as Process>::portal(&*process);
                 results.get().set_result(portal);
                 Ok(())
@@ -194,4 +198,57 @@ impl process::Server for Box<dyn Process> {
     ) -> Promise<(), ::capnp::Error> {
         <dyn Process as process::Server>::run(&mut **self, params, results)
     }
+}
+
+#[macro_export]
+macro_rules! basic_process {
+    (
+        $process_type:ident,
+        $program_id:expr,
+        $portal_type:path,
+        $arg_type:path
+    ) => {
+        pub struct $process_type {
+            pub pid: u64,
+            pub namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
+            pub program_args: $arg_type,
+        }
+
+        impl $process_type {
+            pub fn new(
+                pid: u64,
+                namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
+                program_args: $arg_type,
+            ) -> Self {
+                $process_type {
+                    pid,
+                    namespace,
+                    program_args,
+                }
+            }
+        }
+
+        #[async_trait::async_trait(?Send)]
+        impl dusk_program::process::Process for $process_type {
+            fn pid(&self) -> u64 {
+                self.pid
+            }
+            fn program_id(&self) -> u64 {
+                $program_id
+            }
+            fn namespace(&self) -> alloc::rc::Rc<dusk_program::namespace::Namespace> {
+                self.namespace.clone()
+            }
+            fn clone_box(&self) -> Box<dyn dusk_program::process::Process> {
+                Box::new($process_type {
+                    pid: self.pid,
+                    namespace: self.namespace.clone(),
+                    program_args: self.program_args.clone(),
+                })
+            }
+            fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
+                capnp_rpc::new_client(<$portal_type>::default())
+            }
+        }
+    };
 }
