@@ -1,7 +1,25 @@
 @0xace6963097d486d6;
 
+struct Field {
+  key @0 :Text;
+  value @1 :Value;
+}
+
+struct Value {
+  union {
+    null @0 :Void;
+    int @1 :Int64;
+    uint @2 :UInt64;
+    text @3 :Text;
+    bytes @4 :Data;
+    bool @5 :Bool;
+    fields @6 :List(Field);
+    list @7 :List(Value);
+  }
+}
+
 interface Stream {
-  sendChunk @0 (chunk :Data) -> stream;
+  send @0 (value :Value) -> stream;
   done @1 () -> ();
 }
 
@@ -19,7 +37,10 @@ interface Process {
   kill @4 (signal: UInt64) -> ();
 }
 
-interface Portal {}
+interface Portal {
+  input @0 () -> (stream :Stream);
+  output @1 (stream :Stream) -> ();
+}
 
 interface Dusk {
     process @0 (programArgs: ProgramArgs) -> (result: Process);

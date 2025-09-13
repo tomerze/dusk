@@ -44,6 +44,15 @@ impl dyn Process {
     pub async fn bootstrap(&self) -> Result<()> {
         let namespace = self.namespace();
         let mut ps_map = namespace.ps_map.lock().await;
+
+        if ps_map.contains_key(&self.pid()) {
+            return Err(anyhow::anyhow!(
+                "pid {} is already in use in namespace {}",
+                self.pid(),
+                namespace.id
+            ));
+        }
+
         ps_map.insert(self.pid(), self.clone_box());
         debug!(
             "Process with pid {} registered in namespace {}",
@@ -109,9 +118,25 @@ impl process::Server for dyn Process {
         _params: process::PortalParams,
         mut results: process::PortalResults,
     ) -> Promise<(), ::capnp::Error> {
-        let portal = <Self as Process>::portal(self);
-        results.get().set_result(portal);
-        Promise::ok(())
+        let namespace = self.namespace();
+        let pid = <Self as Process>::pid(self);
+        let is_process_running_fut = async move {
+            let ps_map = namespace.ps_map.lock().await;
+            ps_map.contains_key(&pid)
+        };
+
+        let process = self.clone_box();
+        Promise::from_future(async move {
+            if is_process_running_fut.await {
+                let portal = <Self as Process>::portal(&*process);
+                results.get().set_result(portal);
+                Ok(())
+            } else {
+                Err(capnp::Error::failed(
+                    "process is not running, cannot get portal".to_string(),
+                ))
+            }
+        })
     }
 
     fn run(
