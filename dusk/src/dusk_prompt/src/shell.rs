@@ -1,18 +1,19 @@
 use anyhow::Result;
 use capnp::capability::FromClientHook;
-use dusk_capnp::dusk_capnp::dusk;
+use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::sh_capnp::sh_portal;
 use dusk_program_sh::ShArgs;
-use tracing::{debug, info};
+use tracing::debug;
 
 pub struct Shell {
-    _sh_portal: sh_portal::Client,
+    pub client: dusk::Client,
+    pub sh_process: process::Client,
     pub hostname: String,
     pub available_programs: Vec<String>,
 }
 
 impl Shell {
-    async fn get_sh_portal(client: dusk::Client) -> Result<sh_portal::Client> {
+    async fn get_sh_process(client: dusk::Client) -> Result<process::Client> {
         let mut process_request = client.process_request();
         process_request
             .get()
@@ -28,14 +29,7 @@ impl Shell {
         let _run_reply = run_request.send().promise.await?;
 
         debug!("sh started with pid {}", pid);
-
-        let portal_request = process.portal_request();
-        let portal_reply = portal_request.send().promise.await?;
-
-        Ok(portal_reply
-            .get()?
-            .get_result()?
-            .cast_to::<sh_portal::Client>())
+        Ok(process)
     }
 
     pub async fn new(client: dusk::Client) -> Result<Self> {
@@ -46,15 +40,36 @@ impl Shell {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
-        let _sh_portal = Self::get_sh_portal(client).await?;
+        let sh_process = Self::get_sh_process(client.clone()).await?;
         Ok(Shell {
-            _sh_portal,
+            client,
+            sh_process,
             hostname: hostname.into(),
             available_programs,
         })
     }
 
-    pub async fn process_command(&mut self, _command: &str) {
-        info!("run");
+    pub async fn process_command(&mut self, _command: &str) -> Result<()> {
+        let portal_request = self.sh_process.portal_request();
+        let portal_reply = portal_request.send().promise.await?;
+
+        let _sh_portal = portal_reply
+            .get()?
+            .get_result()?
+            .cast_to::<sh_portal::Client>();
+
+        Ok(())
+    }
+
+    pub async fn kill(self) -> Result<()> {
+        let client = self.client.clone();
+        let sh_process = self.sh_process.clone();
+        let mut kill_request = client.kill_request();
+        kill_request.get().set_process(sh_process.clone());
+        kill_request.get().set_signal(15); // SIGTERM
+
+        let _ = kill_request.send().promise.await?;
+
+        Ok(())
     }
 }

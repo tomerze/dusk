@@ -1,12 +1,15 @@
-use crate::signal::Signal;
 use alloc::{boxed::Box, rc::Rc, string::ToString};
 use anyhow::Result;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
+use embassy_sync::channel::DynamicReceiver;
 use log::debug;
 
 use crate::namespace::Namespace;
+use crate::namespace::SignalChannel;
+use crate::signal;
+use crate::signal::Signal;
 
 // You are probably wondering how processes are run.
 // There are two ways, inside a task of their own or inside the session task.
@@ -31,13 +34,17 @@ pub trait Process {
     fn clone_box(&self) -> Box<dyn Process>;
     fn portal(&self) -> portal::Client;
 
-    async fn signal(&self, _signal: Signal) -> Result<()> {
-        Ok(())
-    }
-
-    async fn main(&self) -> Result<()> {
-        core::future::pending::<()>().await;
-        Ok(())
+    async fn main(
+        &self,
+        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+    ) -> Result<()> {
+        loop {
+            let signal = signal_receiver.receive().await;
+            match signal {
+                Signal::Terminate => return Ok(()),
+                Signal::Unknown(_signal) => {}
+            }
+        }
     }
 }
 
@@ -57,14 +64,26 @@ impl dyn Process {
 
             ps_map.insert(self.pid(), self.clone_box());
         }
+        let channel = Rc::new(SignalChannel::new());
+        let signal_receiver = channel.dyn_receiver();
+        {
+            let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
+            ps_signal_channel_map.insert(self.pid(), channel.clone());
+        }
         debug!(
             "Process with pid {} registered in namespace {}",
             self.pid(),
             namespace.id
         );
-        let result = self.main().await;
-        let mut ps_map = namespace.ps_map.lock().await;
-        ps_map.remove(&self.pid());
+        let result = self.main(signal_receiver).await;
+        {
+            let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
+            ps_signal_channel_map.remove(&self.pid());
+        }
+        {
+            let mut ps_map = namespace.ps_map.lock().await;
+            ps_map.remove(&self.pid());
+        }
         debug!(
             "Process with pid {} unregistered from namespace {}",
             self.pid(),
@@ -93,28 +112,6 @@ impl process::Server for dyn Process {
         results.get().set_result(Process::program_id(self));
 
         Promise::ok(())
-    }
-
-    /// Kill can be used to send a signal to the process.
-    /// If the `Signal::Kill`` is sent, the process is force to terminate the next time the future of main yields.
-    /// If the `Signal::Terminate` is sent, the process is allowed to clean up before exiting.
-    fn kill(
-        &mut self,
-        params: process::KillParams,
-        mut _results: process::KillResults,
-    ) -> Promise<(), ::capnp::Error> {
-        let signal = match params.get() {
-            Ok(p) => p.get_signal(),
-            Err(e) => return Promise::err(capnp::Error::failed(e.to_string())),
-        };
-
-        let process = self.clone_box();
-        Promise::from_future(async move {
-            (*process)
-                .signal(signal.into())
-                .await
-                .map_err(|e| capnp::Error::failed(e.to_string()))
-        })
     }
 
     fn portal(
@@ -181,14 +178,6 @@ impl process::Server for Box<dyn Process> {
         results: process::PortalResults,
     ) -> Promise<(), ::capnp::Error> {
         <dyn Process as process::Server>::portal(&mut **self, params, results)
-    }
-
-    fn kill(
-        &mut self,
-        params: process::KillParams,
-        results: process::KillResults,
-    ) -> Promise<(), ::capnp::Error> {
-        <dyn Process as process::Server>::kill(&mut **self, params, results)
     }
 
     fn run(

@@ -13,22 +13,32 @@ struct Cli {
 }
 
 async fn run(address: SocketAddr) {
-    async fn inner(address: SocketAddr) -> Result<()> {
-        info!("connecting to {}", address);
-        let client = Connection::connect(address).await?.client().await;
-        debug!("connected to {}", address);
-
-        Prompt::new(Shell::new(client).await?).await?.run().await?;
+    async fn inner(connection: &Connection) -> Result<()> {
+        let client = connection.client().await;
+        let shell = Shell::new(client).await?;
+        let prompt = Prompt::new(shell).await?;
+        prompt.run().await?;
 
         Ok(())
     }
-    tokio::task::LocalSet::new()
+    let local_set = tokio::task::LocalSet::new();
+
+    if let Err(err) = local_set
         .run_until(async move {
-            if let Err(err) = inner(address).await {
+            info!("connecting to {}", address);
+            let connection = Connection::connect(address).await?;
+            debug!("connected to {}", address);
+            if let Err(err) = inner(&connection).await {
                 error!("interactive prompt failed: `{err}`");
             }
+            connection.disconnect().await?;
+            Ok::<(), anyhow::Error>(())
         })
-        .await;
+        .await
+    {
+        error!("connection error: {}", err);
+    }
+    local_set.await;
 }
 
 #[tokio::main]

@@ -1,12 +1,13 @@
 use anyhow::Result;
-use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
+use capnp_rpc::{rpc_twoparty_capnp, twoparty, Disconnector, RpcSystem};
 use dusk_capnp::dusk_capnp::dusk::Client;
 use futures::io::AsyncReadExt;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 pub struct Connection {
-    stream: TcpStream,
+    disconnector: Disconnector<rpc_twoparty_capnp::Side>,
+    client: Client,
 }
 
 impl Connection {
@@ -14,12 +15,7 @@ impl Connection {
         let stream = TcpStream::connect(addr).await?;
         stream.set_nodelay(true)?;
 
-        Ok(Self { stream })
-    }
-
-    pub async fn client(self) -> Client {
-        let (reader, writer) =
-            tokio_util::compat::TokioAsyncReadCompatExt::compat(self.stream).split();
+        let (reader, writer) = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream).split();
         let rpc_network = Box::new(twoparty::VatNetwork::new(
             reader,
             writer,
@@ -27,9 +23,21 @@ impl Connection {
             Default::default(),
         ));
         let mut rpc_system = RpcSystem::new(rpc_network, None);
-        let dusk_client: Client = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
+        let disconnector = rpc_system.get_disconnector();
+        let client: Client = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
         tokio::task::spawn_local(rpc_system);
 
-        dusk_client
+        Ok(Self {
+            disconnector,
+            client,
+        })
+    }
+
+    pub async fn client(&self) -> Client {
+        self.client.clone()
+    }
+
+    pub async fn disconnect(self) -> Result<()> {
+        self.disconnector.await.map_err(anyhow::Error::from)
     }
 }

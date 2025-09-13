@@ -111,6 +111,41 @@ impl dusk::Server for DuskServer {
         Promise::ok(())
     }
 
+    fn kill(
+        &mut self,
+        params: dusk::KillParams,
+        mut _results: dusk::KillResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let process = pry!(pry!(params.get()).get_process());
+        let signal = pry!(params.get()).get_signal();
+
+        let namespace = self.namespace.clone();
+        Promise::from_future(async move {
+            let pid = process
+                .pid_request()
+                .send()
+                .promise
+                .await?
+                .get()?
+                .get_result();
+
+            let channel = {
+                let ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
+                ps_signal_channel_map.get(&pid).cloned()
+            };
+
+            match channel {
+                Some(channel) => {
+                    channel.sender().send(signal.into()).await;
+                    Ok(())
+                }
+                None => Err(capnp::Error::failed(
+                    "failed to find signal channel for process".to_string(),
+                )),
+            }
+        })
+    }
+
     fn hostname(
         &mut self,
         _params: dusk::HostnameParams,

@@ -34,7 +34,6 @@ interface Process {
   programId @1 () -> (result :UInt64);
   run @2 () -> ();
   portal @3 () -> (result :Portal);
-  kill @4 (signal: UInt64) -> ();
 }
 
 interface Portal {
@@ -46,5 +45,6 @@ interface Dusk {
     process @0 (programArgs: ProgramArgs) -> (result: Process);
     run @1 (process: Process) -> ();
     ps @2 () -> (process_entries :List(Process));
+    kill @4 (process: Process, signal: UInt64) -> ();
     hostname @3 () -> (result :Text);
 }

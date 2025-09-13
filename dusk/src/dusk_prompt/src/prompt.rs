@@ -202,7 +202,7 @@ impl Prompt {
                 line_editor.clear_screen()?;
             }
             command => {
-                self.shell.process_command(command).await;
+                self.shell.process_command(command).await?;
             }
         };
 
@@ -210,6 +210,12 @@ impl Prompt {
     }
 
     pub async fn run(mut self) -> Result<()> {
+        self.run_inner().await?;
+        self.shell.kill().await?;
+        Ok(())
+    }
+
+    async fn run_inner(&mut self) -> Result<()> {
         let mut line_editor = get_line_editor(self.shell.available_programs.clone())?;
 
         let hostname_clone = self.shell.hostname.clone();
