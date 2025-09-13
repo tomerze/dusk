@@ -53,3 +53,5 @@ nav:
   - Home: index.md
   - Crates: crates.md
   - Development: development.md
+  - Concepts:
+      - Programs: concepts/programs.md
