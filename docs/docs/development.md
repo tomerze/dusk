@@ -5,7 +5,7 @@
 ### Install Rust
 
 This will automatically install the correct version of rust
-```
+```bash
 rustup show
 ```
 

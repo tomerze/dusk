@@ -2,7 +2,14 @@ site_name: Dusk Documentation
 site_description: Documentation for the Dusk framework
 repo_name: Dusk
 repo_url: https://github.com/tomerze/dusk
-
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      pygments_lang_class: true
+      linenums: false
+      auto_title: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
 theme:
   name: material
   custom_dir: docs/assets

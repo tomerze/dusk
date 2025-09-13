@@ -17,7 +17,7 @@ Programs are made out of 5 components:
 
 ### Program Id
 
-A `u64` representing the program, usually defined inside the capnp definition file. 
+A `#!rust u64` representing the program, usually defined inside the capnp definition file. 
 
 For example
 ```capnp
@@ -26,7 +26,7 @@ const programId :UInt64 = 0x8d0e0504ec994ea4;
 
 ### Program Args
 
-A capability extending `Dusk.ProgramArgs` for example
+A capability extending `#!capnp Dusk.ProgramArgs` for example
 ```capnp
 interface ShArgs extends(Dusk.ProgramArgs) {}
 ```
@@ -36,7 +36,7 @@ At the very fundamental level program args allow you to send arbitrary data to a
 
 ### Launcher
 
-A struct implementing the `dusk_program::launcher::Launcher` trait for example
+A struct implementing the `#!rust dusk_program::launcher::Launcher` trait for example
 ```rust
 pub struct ShLauncher {}
 
@@ -76,9 +76,9 @@ basic_launcher!(
 
 ### Process
 
-A struct implementing the `dusk_program::process::Process` trait.
+A struct implementing the `#!rust dusk_program::process::Process` trait.
 
-Note: This trait is defined with `#[async_trait::async_trait(?Send)]`
+Note: This trait is defined with `#!rust #[async_trait::async_trait(?Send)]`
 
 By overriding the `main` method of the trait you can provide a main method to your program.
 The default `main` method just runs forever (by awaiting a pending future).
@@ -92,7 +92,7 @@ portal to your process.
 
 Portals are the way to interact with processes.
 
-They are capabilities extending `Dusk.Portal` for example
+They are capabilities extending `#!capnp Dusk.Portal` for example
 ```capnp
 interface ShPortal extends(Dusk.Portal) {
   sh @0 (command :Text, output :Dusk.Stream) -> (input :Dusk.Stream);
@@ -101,6 +101,6 @@ interface ShPortal extends(Dusk.Portal) {
 A dusk client can obtain an instance of the capability by running the `portal` method on the process and downcast it to 
 the portal capability based on the program id of the process.
 
-The `Dusk.Portal` interface defines method to obtain an input stream and provide and output stream to the portal.
-Over these streams you can send `Dusk.Value`s which allow you to send arbitrary structured by schemaless data.
-This is equivalent to `stdin` and `stdout` on Unix, but with structured data.
+The `#!capnp Dusk.Portal` interface defines method to obtain an input stream and provide and output stream to the portal.
+Over these streams you can send `Dusk.Value`s which allow you to send arbitrary structured but schemaless data.
+This is effectively the `stdin` and `stdout` of your portal.
