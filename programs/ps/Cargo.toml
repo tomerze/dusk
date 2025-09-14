@@ -1,0 +1,22 @@
+[package]
+name = "dusk_program_ps"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embassy-sync = { version = "*", public = true}
+embassy-time = { version = "*", public = true}
+embassy-futures = { version = "*", public = true }
+log = "0.4.28"
+capnp = { version = "0.21.5", default-features = false, features = ["alloc"], public = true}
+capnp-rpc = { version = "0.21.0", default-features = false, public = true }
+anyhow = { version = "1.0.99", default-features = false, public = true }
+dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
+dusk_program = { path = "../../dusk/src/dusk_program", public = true }
+slab = { version = "0.4.11", public = true }
+futures = { version = "0.3.31", default-features = false }
+async-trait = "0.1.89"
+
+[build-dependencies]
+capnpc = { version = "0.21.4", default-features = false }
+dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}

@@ -8,4 +8,5 @@ members = [
   "dusk/src/dusk_capnp",
   "impls/nix",
   "programs/sh",
+  "programs/ps",
 ]
