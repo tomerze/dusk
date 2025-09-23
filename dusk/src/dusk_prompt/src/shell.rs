@@ -4,6 +4,7 @@ use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::program_args_builder::{StaticProgramArgsBuilder, TopLevelProgramArgsBuilder};
 use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
+use std::hint::black_box;
 use tracing::debug;
 
 pub struct Shell {
@@ -18,7 +19,6 @@ impl Shell {
         client: dusk::Client,
         static_program_args_builder: StaticProgramArgsBuilder,
     ) -> Result<process::Client> {
-        dusk_program_ps::program_args_builder_entry(); // ensure ps program args builder is registered
         let mut process_request = client.process_request();
         let program_args =
             capnp_rpc::new_client::<sh_args::Client, ShArgs<StaticProgramArgsBuilder>>(ShArgs::<
@@ -46,6 +46,10 @@ impl Shell {
     pub async fn new(client: dusk::Client) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
+
+        // Unfortunately we need to trick the linker into including all
+        // crates that register program args builders
+        black_box(dusk_program_ps::program_args_builder_entry);
 
         let static_program_args_builder = StaticProgramArgsBuilder::default();
         let available_program_names = static_program_args_builder
