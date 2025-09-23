@@ -16,6 +16,8 @@ dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 slab = { version = "0.4.11", public = true }
 futures = { version = "0.3.31", default-features = false }
 async-trait = "0.1.89"
+linkme = { version = "0.3", optional = true, public = true }
+dusk_program_sh = { path = "../sh", features = ["client"], public = true }
 
 [build-dependencies]
 capnpc = { version = "0.21.4", default-features = false }
@@ -23,4 +25,4 @@ dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}
 
 [features]
 
-client = [] 
+client = ["linkme"] 

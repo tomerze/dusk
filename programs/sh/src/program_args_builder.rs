@@ -1,3 +1,5 @@
+use std::vec::Vec;
+
 use capnp::capability::Promise;
 use dusk_capnp::pry;
 use linkme::distributed_slice;
@@ -20,7 +22,10 @@ pub trait ProgramArgsBuilder: sh_capnp::program_args_builder::Server + 'static {
 /// ```rust
 /// top_level_program_args_builder.build_from_string("kill -9 1243") // A `TopLevelProgramArgsBuilder`
 /// ```
-pub trait TopLevelProgramArgsBuilder: ProgramArgsBuilder {}
+///
+pub trait TopLevelProgramArgsBuilder: ProgramArgsBuilder {
+    fn get_available_program_names(&self) -> Result<Vec<&'static str>>;
+}
 
 impl<T: ProgramArgsBuilder> sh_capnp::program_args_builder::Server for T {
     fn build_from_string(
@@ -38,9 +43,9 @@ impl<T: ProgramArgsBuilder> sh_capnp::program_args_builder::Server for T {
 }
 
 pub struct StaticProgramArgsBuilderEntry {
-    program_id: u64,
-    name: &'static str,
-    builder: Box<dyn ProgramArgsBuilder>,
+    pub program_id: u64,
+    pub name: &'static str,
+    pub builder: Box<dyn ProgramArgsBuilder>,
 }
 
 #[distributed_slice]
@@ -76,4 +81,13 @@ impl ProgramArgsBuilder for StaticProgramArgsBuilder {
     }
 }
 
-impl crate::program_args_builder::TopLevelProgramArgsBuilder for StaticProgramArgsBuilder {}
+impl crate::program_args_builder::TopLevelProgramArgsBuilder for StaticProgramArgsBuilder {
+    fn get_available_program_names(&self) -> Result<Vec<&'static str>> {
+        let mut programs = vec![];
+        for entry in SH_PROGRAM_ARGS_BUILDERS {
+            let entry = entry();
+            programs.push(entry.name);
+        }
+        Ok(programs)
+    }
+}

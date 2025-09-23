@@ -11,6 +11,8 @@ use dusk_capnp::prelude::*;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
+use dusk_program_sh::program_args_builder::{ProgramArgsBuilder, StaticProgramArgsBuilderEntry};
+use linkme::distributed_slice;
 
 #[cfg(feature = "client")]
 use dusk_program::impl_program_args_server;
@@ -57,3 +59,24 @@ impl Portal for PsPortal {}
 impl portal::Server for PsPortal {}
 
 impl ps_capnp::ps_portal::Server for PsPortal {}
+
+struct PsProgramArgsBuilder {}
+
+impl ProgramArgsBuilder for PsProgramArgsBuilder {
+    fn build_from_string(
+        &self,
+        _s: &str,
+    ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
+        let client: ps_capnp::ps_args::Client = capnp_rpc::new_client(PsArgs {});
+        Ok(client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
+    }
+}
+
+#[distributed_slice(dusk_program_sh::program_args_builder::SH_PROGRAM_ARGS_BUILDERS)]
+pub fn program_args_builder_entry() -> StaticProgramArgsBuilderEntry {
+    StaticProgramArgsBuilderEntry {
+        program_id: ps_capnp::PROGRAM_ID,
+        name: "ps",
+        builder: Box::new(PsProgramArgsBuilder {}),
+    }
+}

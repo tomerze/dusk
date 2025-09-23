@@ -7,6 +7,8 @@ use crossterm::{
     event::{KeyCode, KeyModifiers},
 };
 use nu_ansi_term::{Color, Style};
+use nu_color_config::TextStyle;
+use nu_table::{NuRecordsValue, NuTable, TableTheme};
 use pretty_duration::pretty_duration;
 use reedline::{
     default_vi_insert_keybindings, default_vi_normal_keybindings, ColumnarMenu, DefaultCompleter,
@@ -184,11 +186,43 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
 
 pub struct Prompt {
     shell: Shell,
+    available_commands: Vec<String>,
 }
 
 impl Prompt {
+    const BUILTIN_COMMANDS: [&str; 3] = ["clear", "exit", "help"];
+
     pub async fn new(shell: Shell) -> Result<Self> {
-        Ok(Prompt { shell })
+        let mut available_commands: Vec<String> = Self::BUILTIN_COMMANDS
+            .to_vec()
+            .iter()
+            .map(|&s| s.to_string())
+            .collect();
+        let mut shell_available_program_names = shell.get_available_program_names();
+        available_commands.append(&mut shell_available_program_names);
+        Ok(Prompt {
+            shell,
+            available_commands,
+        })
+    }
+
+    fn get_available_commands_table(&self) -> NuTable {
+        let available_commands_count = self.available_commands.len();
+        let mut table = NuTable::new(available_commands_count + 1, 1);
+        let headers = vec![NuRecordsValue::new("Available Commands".into())];
+        table.set_row(0, headers);
+        for (i, command) in self.available_commands.iter().enumerate() {
+            let row = vec![NuRecordsValue::new(command.clone())];
+            table.set_row(i + 1, row);
+        }
+
+        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::Green)));
+        table.set_header_style(
+            TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
+        );
+        table.set_theme(TableTheme::rounded());
+        table.set_structure(false, true, false);
+        table
     }
 
     /// Handles a executing a shell command but also knows how to deal with the prompt itself.
@@ -200,6 +234,13 @@ impl Prompt {
             "exit" => return Ok(true),
             "clear" => {
                 line_editor.clear_screen()?;
+            }
+            "help" => {
+                let table = self.get_available_commands_table();
+                // get terminal width
+                let width = crossterm::terminal::size()?.0 as usize;
+                let table_str = table.draw(width).unwrap_or("[cannot fit]".to_string());
+                println!("{}", table_str);
             }
             command => {
                 if let Err(e) = self.shell.process_command(command).await {
@@ -218,7 +259,7 @@ impl Prompt {
     }
 
     async fn run_inner(&mut self) -> Result<()> {
-        let mut line_editor = get_line_editor(self.shell.available_programs.clone())?;
+        let mut line_editor = get_line_editor(self.available_commands.clone())?;
 
         let hostname_clone = self.shell.hostname.clone();
         let prompt = ReedlinePrompt::new(&hostname_clone);
