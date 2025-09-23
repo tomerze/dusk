@@ -1,3 +1,13 @@
+#![allow(internal_features)]
+#![feature(prelude_import)]
+#![cfg_attr(not(feature = "client"), no_std)]
+
+extern crate alloc;
+
+#[allow(unused)]
+#[prelude_import]
+use dusk_capnp::prelude::*;
+
 use capnp::capability::FromClientHook;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
@@ -5,8 +15,8 @@ use dusk_capnp::pry;
 use dusk_program::portal::Portal;
 use dusk_program::{basic_launcher, basic_process};
 
+#[cfg(feature = "client")]
 pub mod args;
-extern crate alloc;
 
 #[allow(clippy::all)]
 pub mod sh_capnp {

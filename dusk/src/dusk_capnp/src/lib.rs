@@ -1,4 +1,7 @@
 #[allow(clippy::all)]
+extern crate alloc;
+
+pub mod prelude;
 
 pub mod stream_capnp {
 
