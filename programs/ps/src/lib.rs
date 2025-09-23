@@ -10,8 +10,7 @@ use dusk_capnp::prelude::*;
 
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::portal;
-use dusk_program::portal::Portal;
-use dusk_program::{basic_launcher, basic_process};
+use dusk_program::{basic_launcher, basic_process, portal::Portal};
 
 #[cfg(feature = "client")]
 use dusk_program::impl_program_args_server;
