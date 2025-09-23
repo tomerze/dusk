@@ -2,7 +2,8 @@ use anyhow::Result;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
-use dusk_program_sh::{args::StaticProgramArgsBuilder, sh_capnp::sh_portal};
+use dusk_program_sh::program_args_builder::StaticProgramArgsBuilder;
+use dusk_program_sh::sh_capnp::sh_portal;
 use tracing::debug;
 
 pub struct Shell {

@@ -18,6 +18,9 @@ use dusk_program::{basic_launcher, basic_process};
 #[cfg(feature = "client")]
 pub mod args;
 
+#[cfg(feature = "client")]
+pub mod program_args_builder;
+
 #[allow(clippy::all)]
 pub mod sh_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/sh_capnp.rs"));
