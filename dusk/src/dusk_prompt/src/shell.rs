@@ -2,7 +2,9 @@ use anyhow::Result;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
-use dusk_program_sh::program_args_builder::{StaticProgramArgsBuilder, TopLevelProgramArgsBuilder};
+use dusk_program_sh::program_args_builder::{
+    ProgramInfo, StaticProgramArgsBuilder, TopLevelProgramArgsBuilder,
+};
 use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use std::hint::black_box;
 use tracing::debug;
@@ -11,7 +13,7 @@ pub struct Shell {
     pub client: dusk::Client,
     pub sh_process: process::Client,
     pub hostname: String,
-    pub available_program_names: Vec<String>,
+    pub available_programs_info: Vec<ProgramInfo>,
 }
 
 impl Shell {
@@ -52,22 +54,21 @@ impl Shell {
         black_box(dusk_program_ps::program_args_builder_entry);
 
         let static_program_args_builder = StaticProgramArgsBuilder::default();
-        let available_program_names = static_program_args_builder
-            .get_available_program_names()?
+        let available_programs_info = static_program_args_builder
+            .get_available_programs_info()?
             .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>();
+            .collect::<Vec<_>>();
         let sh_process = Self::get_sh_process(client.clone(), static_program_args_builder).await?;
         Ok(Shell {
             client,
             sh_process,
             hostname: hostname.into(),
-            available_program_names,
+            available_programs_info,
         })
     }
 
-    pub fn get_available_program_names(&self) -> Vec<String> {
-        self.available_program_names.clone()
+    pub fn get_available_programs_info(&self) -> Vec<ProgramInfo> {
+        self.available_programs_info.clone()
     }
 
     pub async fn process_command(&mut self, command: &str) -> Result<()> {

@@ -7,6 +7,15 @@ use linkme::distributed_slice;
 use crate::sh_capnp;
 use anyhow::Result;
 
+#[derive(Copy, Clone)]
+pub struct ProgramInfo {
+    pub program_id: Option<u64>,
+    pub name: &'static str,
+    pub short_description: &'static str,
+    pub long_description: &'static str,
+    pub version: &'static str,
+}
+
 pub trait ProgramArgsBuilder: sh_capnp::program_args_builder::Server + 'static {
     fn build_from_string(&self, s: &str) -> Result<dusk_capnp::dusk_capnp::program_args::Client>;
 }
@@ -24,7 +33,7 @@ pub trait ProgramArgsBuilder: sh_capnp::program_args_builder::Server + 'static {
 /// ```
 ///
 pub trait TopLevelProgramArgsBuilder: ProgramArgsBuilder {
-    fn get_available_program_names(&self) -> Result<Vec<&'static str>>;
+    fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>>;
 }
 
 impl<T: ProgramArgsBuilder> sh_capnp::program_args_builder::Server for T {
@@ -43,8 +52,7 @@ impl<T: ProgramArgsBuilder> sh_capnp::program_args_builder::Server for T {
 }
 
 pub struct StaticProgramArgsBuilderEntry {
-    pub program_id: u64,
-    pub name: &'static str,
+    pub info: ProgramInfo,
     pub builder: Box<dyn ProgramArgsBuilder>,
 }
 
@@ -64,11 +72,11 @@ impl ProgramArgsBuilder for StaticProgramArgsBuilder {
 
         for entry in SH_PROGRAM_ARGS_BUILDERS {
             let entry = entry();
-            if entry.name == program_name {
+            if entry.info.name == program_name {
                 log::debug!(
-                    "building args from builder for program `{}` id {}",
+                    "building args from builder for program `{}` id {:?}",
                     program_name,
-                    entry.program_id
+                    entry.info.program_id
                 );
                 return entry.builder.build_from_string(args);
             }
@@ -82,11 +90,11 @@ impl ProgramArgsBuilder for StaticProgramArgsBuilder {
 }
 
 impl crate::program_args_builder::TopLevelProgramArgsBuilder for StaticProgramArgsBuilder {
-    fn get_available_program_names(&self) -> Result<Vec<&'static str>> {
+    fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>> {
         let mut programs = vec![];
         for entry in SH_PROGRAM_ARGS_BUILDERS {
             let entry = entry();
-            programs.push(entry.name);
+            programs.push(entry.info);
         }
         Ok(programs)
     }

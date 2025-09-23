@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Duration;
+use dusk_program_sh::program_args_builder::ProgramInfo;
 use std::{borrow::Cow, cell::Cell};
 
 use crossterm::{
@@ -186,33 +187,58 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
 
 pub struct Prompt {
     shell: Shell,
-    available_commands: Vec<String>,
+    available_programs_info: Vec<ProgramInfo>,
 }
 
 impl Prompt {
-    const BUILTIN_COMMANDS: [&str; 3] = ["clear", "exit", "help"];
+    const BUILTIN_COMMANDS: [ProgramInfo; 3] = [
+        ProgramInfo {
+            name: "clear",
+            version: "builtin",
+            program_id: None,
+            short_description: "clear the screen",
+            long_description: "",
+        },
+        ProgramInfo {
+            name: "exit",
+            version: "builtin",
+            program_id: None,
+            short_description: "exit the shell",
+            long_description: "",
+        },
+        ProgramInfo {
+            name: "help",
+            version: "builtin",
+            program_id: None,
+            short_description: "this table",
+            long_description: "",
+        },
+    ];
 
     pub async fn new(shell: Shell) -> Result<Self> {
-        let mut available_commands: Vec<String> = Self::BUILTIN_COMMANDS
-            .to_vec()
-            .iter()
-            .map(|&s| s.to_string())
-            .collect();
-        let mut shell_available_program_names = shell.get_available_program_names();
-        available_commands.append(&mut shell_available_program_names);
+        let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
+        let shell_available_programs_info = shell.get_available_programs_info();
+        available_programs_info.extend(shell_available_programs_info);
         Ok(Prompt {
             shell,
-            available_commands,
+            available_programs_info,
         })
     }
 
     fn get_available_commands_table(&self) -> NuTable {
-        let available_commands_count = self.available_commands.len();
-        let mut table = NuTable::new(available_commands_count + 1, 1);
-        let headers = vec![NuRecordsValue::new("Available Commands".into())];
+        let mut table = NuTable::new(self.available_programs_info.len() + 1, 3);
+        let headers = vec![
+            NuRecordsValue::new("Command".into()),
+            NuRecordsValue::new("Description".into()),
+            NuRecordsValue::new("Local Version".into()),
+        ];
         table.set_row(0, headers);
-        for (i, command) in self.available_commands.iter().enumerate() {
-            let row = vec![NuRecordsValue::new(command.clone())];
+        for (i, command) in self.available_programs_info.iter().enumerate() {
+            let row = vec![
+                NuRecordsValue::new(command.name.to_string()),
+                NuRecordsValue::new(command.short_description.to_string()),
+                NuRecordsValue::new(command.version.to_string()),
+            ];
             table.set_row(i + 1, row);
         }
 
@@ -225,19 +251,79 @@ impl Prompt {
         table
     }
 
+    fn get_program_info_table(&self, program_name: &str) -> NuTable {
+        let program_info = self
+            .available_programs_info
+            .iter()
+            .find(|p| p.name == program_name);
+        let mut table = NuTable::new(4, 1);
+
+        if let Some(program_info) = program_info {
+            table.set_row(0, vec![NuRecordsValue::new(program_info.name.to_string())]);
+
+            table.set_row(
+                1,
+                vec![NuRecordsValue::new(format!(
+                    "Version: {}",
+                    program_info.version
+                ))],
+            );
+
+            table.set_row(
+                2,
+                vec![NuRecordsValue::new(format!(
+                    "Program ID: {}",
+                    program_info.program_id.unwrap_or(0)
+                ))],
+            );
+
+            table.set_row(
+                3,
+                vec![NuRecordsValue::new(format!(
+                    r#"Description: {} {}"#,
+                    program_info.short_description, program_info.long_description
+                ))],
+            );
+        } else {
+            table.set_row(
+                0,
+                vec![
+                    NuRecordsValue::new("Error".into()),
+                    NuRecordsValue::new(format!("Program '{}' not found.", program_name)),
+                ],
+            );
+        }
+        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::Green)));
+        table.set_header_style(
+            TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
+        );
+        table.set_border_header(false);
+        table.set_theme(TableTheme::rounded());
+        table.set_structure(false, true, false);
+        table
+    }
+
     /// Handles a executing a shell command but also knows how to deal with the prompt itself.
     /// That is mainly being able to clear the prompt.
     ///
     /// Return true when prompt should exit.
     async fn process_line(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
-        match line {
+        let first_word = match line.split_whitespace().next() {
+            Some(word) => word,
+            None => return Ok(false),
+        };
+        match first_word {
             "exit" => return Ok(true),
             "clear" => {
                 line_editor.clear_screen()?;
             }
             "help" => {
-                let table = self.get_available_commands_table();
-                // get terminal width
+                let command = line.split_whitespace().nth(1);
+                let table = if let Some(command) = command {
+                    self.get_program_info_table(command)
+                } else {
+                    self.get_available_commands_table()
+                };
                 let width = crossterm::terminal::size()?.0 as usize;
                 let table_str = table.draw(width).unwrap_or("[cannot fit]".to_string());
                 println!("{}", table_str);
@@ -259,7 +345,12 @@ impl Prompt {
     }
 
     async fn run_inner(&mut self) -> Result<()> {
-        let mut line_editor = get_line_editor(self.available_commands.clone())?;
+        let mut line_editor = get_line_editor(
+            self.available_programs_info
+                .iter()
+                .map(|p| p.name.to_string())
+                .collect(),
+        )?;
 
         let hostname_clone = self.shell.hostname.clone();
         let prompt = ReedlinePrompt::new(&hostname_clone);
