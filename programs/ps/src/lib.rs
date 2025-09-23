@@ -43,8 +43,15 @@ impl_program_args_server!(PsArgs, crate::ps_capnp::PROGRAM_ID);
 #[cfg(feature = "client")]
 impl ps_capnp::ps_args::Server for PsArgs {}
 
-#[derive(Default)]
-pub struct PsPortal {}
+pub struct PsPortal {
+    _program_args: ps_capnp::ps_args::Client,
+}
+
+impl PsPortal {
+    pub fn new(_program_args: ps_capnp::ps_args::Client) -> Self {
+        PsPortal { _program_args }
+    }
+}
 
 impl Portal for PsPortal {}
 impl portal::Server for PsPortal {}

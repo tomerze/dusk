@@ -237,7 +237,8 @@ macro_rules! basic_process {
                 })
             }
             fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
-                let client: $portal_client_type = capnp_rpc::new_client(<$portal_type>::default());
+                let client: $portal_client_type =
+                    capnp_rpc::new_client(<$portal_type>::new(self.program_args.clone()));
                 client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
             }
         }
