@@ -3,7 +3,7 @@ use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::program_args_builder::StaticProgramArgsBuilder;
-use dusk_program_sh::sh_capnp::sh_portal;
+use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use tracing::debug;
 
 pub struct Shell {
@@ -16,11 +16,14 @@ pub struct Shell {
 impl Shell {
     async fn get_sh_process(client: dusk::Client) -> Result<process::Client> {
         let mut process_request = client.process_request();
-        process_request
-            .get()
-            .set_program_args(capnp_rpc::new_client(
-                ShArgs::<StaticProgramArgsBuilder>::default(),
+        let program_args =
+            capnp_rpc::new_client::<sh_args::Client, ShArgs<StaticProgramArgsBuilder>>(ShArgs::<
+                StaticProgramArgsBuilder,
+            >::default(
             ));
+        process_request.get().set_program_args(
+            program_args.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
+        );
         let process_reply = process_request.send().promise.await?;
         let process = process_reply.get()?.get_result()?;
 
