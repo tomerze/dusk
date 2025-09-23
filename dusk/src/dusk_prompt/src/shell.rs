@@ -1,8 +1,8 @@
 use anyhow::Result;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::{dusk, process};
-use dusk_program_sh::sh_capnp::sh_portal;
-use dusk_program_sh::ShArgs;
+use dusk_program_sh::args::ShArgs;
+use dusk_program_sh::{args::StaticProgramArgsBuilder, sh_capnp::sh_portal};
 use tracing::debug;
 
 pub struct Shell {
@@ -17,7 +17,9 @@ impl Shell {
         let mut process_request = client.process_request();
         process_request
             .get()
-            .set_program_args(capnp_rpc::new_client(ShArgs {}));
+            .set_program_args(capnp_rpc::new_client(
+                ShArgs::<StaticProgramArgsBuilder>::default(),
+            ));
         let process_reply = process_request.send().promise.await?;
         let process = process_reply.get()?.get_result()?;
 
@@ -49,14 +51,18 @@ impl Shell {
         })
     }
 
-    pub async fn process_command(&mut self, _command: &str) -> Result<()> {
+    pub async fn process_command(&mut self, command: &str) -> Result<()> {
         let portal_request = self.sh_process.portal_request();
         let portal_reply = portal_request.send().promise.await?;
 
-        let _sh_portal = portal_reply
+        let sh_portal = portal_reply
             .get()?
             .get_result()?
             .cast_to::<sh_portal::Client>();
+
+        let mut sh_request = sh_portal.sh_request();
+        sh_request.get().set_command(command);
+        let _sh_reply = sh_request.send().promise.await?;
 
         Ok(())
     }

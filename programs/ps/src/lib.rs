@@ -1,3 +1,4 @@
+use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_program::portal::Portal;
 use dusk_program::{basic_launcher, basic_process, impl_program_args_server};
@@ -19,6 +20,7 @@ basic_process!(
     PsProcess,
     ps_capnp::PROGRAM_ID,
     PsPortal,
+    ps_capnp::ps_portal::Client,
     ps_capnp::ps_args::Client
 );
 

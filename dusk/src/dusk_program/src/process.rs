@@ -195,6 +195,7 @@ macro_rules! basic_process {
         $process_type:ident,
         $program_id:expr,
         $portal_type:path,
+        $portal_client_type:path,
         $arg_type:path
     ) => {
         pub struct $process_type {
@@ -236,7 +237,8 @@ macro_rules! basic_process {
                 })
             }
             fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
-                capnp_rpc::new_client(<$portal_type>::default())
+                let client: $portal_client_type = capnp_rpc::new_client(<$portal_type>::default());
+                client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
             }
         }
     };
