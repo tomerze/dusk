@@ -68,7 +68,6 @@ impl ProgramArgsBuilder for StaticProgramArgsBuilder {
                 return entry.builder.build_from_string(args);
             }
         }
-        log::debug!("no builder found for program `{}`", program_name);
 
         Err(anyhow::anyhow!(
             "no program args builder found for string `{}`",

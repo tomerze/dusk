@@ -202,7 +202,9 @@ impl Prompt {
                 line_editor.clear_screen()?;
             }
             command => {
-                self.shell.process_command(command).await?;
+                if let Err(e) = self.shell.process_command(command).await {
+                    tracing::error!("{:?}: {}", command, e);
+                }
             }
         };
 
