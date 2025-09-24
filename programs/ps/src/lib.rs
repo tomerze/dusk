@@ -48,12 +48,12 @@ impl_program_args_server!(PsArgs, crate::ps_capnp::PROGRAM_ID);
 impl ps_capnp::ps_args::Server for PsArgs {}
 
 pub struct PsPortal {
-    _program_args: ps_capnp::ps_args::Client,
+    _process: PsProcess,
 }
 
 impl PsPortal {
-    pub fn new(_program_args: ps_capnp::ps_args::Client) -> Self {
-        PsPortal { _program_args }
+    pub fn new(_process: PsProcess) -> Self {
+        PsPortal { _process }
     }
 }
 

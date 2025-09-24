@@ -198,6 +198,7 @@ macro_rules! basic_process {
         $portal_client_type:path,
         $arg_type:path
     ) => {
+        #[derive(Clone)]
         pub struct $process_type {
             pub pid: u64,
             pub namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
@@ -238,7 +239,7 @@ macro_rules! basic_process {
             }
             fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
                 let client: $portal_client_type =
-                    capnp_rpc::new_client(<$portal_type>::new(self.program_args.clone()));
+                    capnp_rpc::new_client(<$portal_type>::new(self.clone()));
                 client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
             }
         }

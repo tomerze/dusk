@@ -42,12 +42,12 @@ basic_process!(
 );
 
 pub struct ShPortal {
-    program_args: sh_capnp::sh_args::Client,
+    process: ShProcess,
 }
 
 impl ShPortal {
-    pub fn new(program_args: sh_capnp::sh_args::Client) -> Self {
-        ShPortal { program_args }
+    pub fn new(process: ShProcess) -> Self {
+        ShPortal { process }
     }
 
     async fn command_string_to_program_args(
@@ -67,6 +67,21 @@ impl ShPortal {
         let result = build_from_string_reply.get()?.get_result()?;
         Ok(result)
     }
+
+    async fn execute_program_args(
+        _namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
+        _program_args: dusk_capnp::dusk_capnp::program_args::Client,
+    ) -> Result<()> {
+        // log::debug!("wow i got so far");
+        // let spawner = unsafe { Spawner::for_current_executor().await };
+        //  log::debug!("wow i got so far0");
+        // let _dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
+        //     capnp_rpc::new_client(dusk::server::DuskServer::new(namespace, spawner));
+
+        // log::debug!("wow i got so far00");
+
+        Ok(())
+    }
 }
 
 impl Portal for ShPortal {}
@@ -82,12 +97,15 @@ impl sh_capnp::sh_portal::Server for ShPortal {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_string());
         log::info!("Executing shell command: {}", &command);
 
-        let program_args = self.program_args.clone();
+        let program_args = self.process.program_args.clone();
+        let namespace = self.process.namespace.clone();
         Promise::from_future(async move {
-            let _args = Self::command_string_to_program_args(program_args.clone(), &command)
+            let args = Self::command_string_to_program_args(program_args.clone(), &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
-            // TODO: actually run the args
+            Self::execute_program_args(namespace, args)
+                .await
+                .map_err(|e| capnp::Error::failed(e.to_string()))?;
             Ok(())
         })
     }
