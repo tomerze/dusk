@@ -22,11 +22,13 @@ impl Shell {
         static_program_args_builder: StaticProgramArgsBuilder,
     ) -> Result<process::Client> {
         let mut process_request = client.process_request();
+        // TODO add reconnect here by ps and dusk client (dusk client already has reconnect)
         let program_args =
             capnp_rpc::new_client::<sh_args::Client, ShArgs<StaticProgramArgsBuilder>>(ShArgs::<
                 StaticProgramArgsBuilder,
             > {
                 program_args_builder: static_program_args_builder,
+                client: client.clone(),
             });
         process_request.get().set_program_args(
             program_args.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),

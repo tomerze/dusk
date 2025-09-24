@@ -344,7 +344,7 @@ Program ID: `{program_id}`
             }
             command => {
                 if let Err(e) = self.shell.process_command(command).await {
-                    tracing::error!("{:?}: {}", command, e);
+                    tracing::error!("{:?}: {:?}", command, e);
                 }
             }
         };

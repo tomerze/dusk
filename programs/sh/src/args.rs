@@ -1,20 +1,10 @@
 // All of the code here actually runs on the client side, it's magic! (gated by the "client" feature)
 
-use crate::{
-    program_args_builder::{StaticProgramArgsBuilder, TopLevelProgramArgsBuilder},
-    sh_capnp,
-};
+use crate::{program_args_builder::TopLevelProgramArgsBuilder, sh_capnp};
 
 pub struct ShArgs<P: TopLevelProgramArgsBuilder> {
     pub program_args_builder: P,
-}
-
-impl Default for ShArgs<StaticProgramArgsBuilder> {
-    fn default() -> Self {
-        ShArgs::<StaticProgramArgsBuilder> {
-            program_args_builder: StaticProgramArgsBuilder::default(),
-        }
-    }
+    pub client: dusk_capnp::dusk_capnp::dusk::Client,
 }
 
 impl<P: TopLevelProgramArgsBuilder + Clone> dusk_capnp::dusk_capnp::program_args::Server
@@ -31,14 +21,16 @@ impl<P: TopLevelProgramArgsBuilder + Clone> dusk_capnp::dusk_capnp::program_args
 }
 
 impl<P: TopLevelProgramArgsBuilder + Clone> sh_capnp::sh_args::Server for ShArgs<P> {
-    fn program_args_builder(
+    fn get(
         &mut self,
-        _params: sh_capnp::sh_args::ProgramArgsBuilderParams,
-        mut results: sh_capnp::sh_args::ProgramArgsBuilderResults,
+        _params: sh_capnp::sh_args::GetParams,
+        mut results: sh_capnp::sh_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let builder = self.program_args_builder.clone();
         let client = capnp_rpc::new_client(builder);
-        results.get().set_result(client);
+        results.get().set_program_args_builder(client);
+        results.get().set_client(self.client.clone());
+
         capnp::capability::Promise::ok(())
     }
 }

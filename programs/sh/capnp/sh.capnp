@@ -9,7 +9,7 @@ interface ProgramArgsBuilder {
 }
 
 interface ShArgs extends(Dusk.ProgramArgs) {
-  programArgsBuilder @0 () -> (result :ProgramArgsBuilder);
+  get @0 () -> (program_args_builder :ProgramArgsBuilder, client :Dusk.Dusk);
 }
 
 interface ShPortal extends(Dusk.Portal) {
