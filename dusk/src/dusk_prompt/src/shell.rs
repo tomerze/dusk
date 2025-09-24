@@ -88,14 +88,18 @@ impl Shell {
     }
 
     pub async fn process_command(&mut self, command: &str) -> Result<()> {
-        let portal_request = self.sh_process.portal_request();
-        let portal_reply = portal_request.send().promise.await?;
+        let sh_process = self.sh_process.clone();
 
-        let sh_portal = portal_reply
-            .get()?
-            .get_result()?
-            .cast_to::<sh_portal::Client>();
+        let sh_portal = capnp_rpc::new_future_client(async move {
+            let portal_request = sh_process.portal_request();
+            let portal_reply = portal_request.send().promise.await?;
+            Ok(portal_reply
+                .get()?
+                .get_result()?
+                .cast_to::<sh_portal::Client>())
+        });
 
+        // TODO: actually print the output of the command
         let mut sh_request = sh_portal.sh_request();
         sh_request.get().set_command(command);
         let _sh_reply = sh_request.send().promise.await?;
