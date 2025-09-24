@@ -109,6 +109,7 @@ impl Shell {
             capnp_rpc::new_client(display_stream);
         sh_request.get().set_output(display_stream);
         let _sh_reply = sh_request.send().promise.await?;
+        // sh returns immediately, but the shell command is running until done is called on the output stream.
         done_receiver.await?;
         Ok(())
     }
