@@ -3,7 +3,6 @@ use anyhow::Result;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
-use dusk_capnp::pry;
 use embassy_sync::channel::DynamicReceiver;
 use log::debug;
 
@@ -144,10 +143,9 @@ impl process::Server for dyn Process {
     fn run(
         &mut self,
         _params: process::RunParams,
-        mut results: process::RunResults,
+        mut _results: process::RunResults,
     ) -> Promise<(), ::capnp::Error> {
         let process = self.clone_box();
-        pry!(results.set_pipeline());
         Promise::from_future(async move {
             process
                 .bootstrap()

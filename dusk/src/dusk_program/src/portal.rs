@@ -1,8 +1,5 @@
-use alloc::boxed::Box;
 use capnp::capability::Promise;
-use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::stream;
-use dusk_capnp::pry;
 
 struct NoopStream {}
 
@@ -21,49 +18,44 @@ impl stream::Server for NoopStream {
 }
 
 pub trait Portal {
-    fn get_input_stream(&self) -> stream::Client {
-        capnp_rpc::new_client(NoopStream {})
-    }
-    fn set_output_stream(&self, _stream: stream::Client) {}
-}
-
-impl portal::Server for dyn Portal {
-    fn input(
-        &mut self,
-        _params: portal::InputParams,
-        mut results: portal::InputResults,
-    ) -> Promise<(), ::capnp::Error> {
-        results
-            .get()
-            .set_stream(<Self as Portal>::get_input_stream(self));
+    fn get_input_stream(&self, stream: &mut Option<stream::Client>) -> Promise<(), ::capnp::Error> {
+        *stream = Some(capnp_rpc::new_client(NoopStream {}));
         Promise::ok(())
     }
-
-    fn output(
-        &mut self,
-        params: portal::OutputParams,
-        _results: portal::OutputResults,
-    ) -> Promise<(), ::capnp::Error> {
-        let stream = pry!(pry!(params.get()).get_stream());
-        <Self as Portal>::set_output_stream(self, stream);
-        Promise::ok(())
+    fn set_output_stream(&self, stream: stream::Client) -> Promise<(), ::capnp::Error> {
+        Promise::from_future(async move {
+            stream.done_request().send().promise.await?;
+            Ok(())
+        })
     }
 }
 
-impl portal::Server for Box<dyn Portal> {
-    fn input(
-        &mut self,
-        _params: portal::InputParams,
-        results: portal::InputResults,
-    ) -> Promise<(), ::capnp::Error> {
-        <dyn Portal as portal::Server>::input(&mut **self, _params, results)
-    }
+#[macro_export]
+macro_rules! impl_default_io_portal_server {
+    ($t:ty) => {
+        impl dusk_capnp::dusk_capnp::portal::Server for $t {
+            fn input(
+                &mut self,
+                _params: dusk_capnp::dusk_capnp::portal::InputParams,
+                mut results: dusk_capnp::dusk_capnp::portal::InputResults,
+            ) -> capnp::capability::Promise<(), ::capnp::Error> {
+                let mut stream: Option<dusk_capnp::dusk_capnp::stream::Client> = None;
+                let promise = <Self as Portal>::get_input_stream(self, &mut stream);
+                if let Some(stream) = stream {
+                    results.get().set_stream(stream);
+                }
+                promise
+            }
 
-    fn output(
-        &mut self,
-        params: portal::OutputParams,
-        _results: portal::OutputResults,
-    ) -> Promise<(), ::capnp::Error> {
-        <dyn Portal as portal::Server>::output(&mut **self, params, _results)
-    }
+            fn output(
+                &mut self,
+                params: dusk_capnp::dusk_capnp::portal::OutputParams,
+                mut results: dusk_capnp::dusk_capnp::portal::OutputResults,
+            ) -> capnp::capability::Promise<(), ::capnp::Error> {
+                dusk_capnp::pry!(results.set_pipeline());
+                let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
+                <Self as Portal>::set_output_stream(self, stream)
+            }
+        }
+    };
 }

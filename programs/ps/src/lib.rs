@@ -9,11 +9,11 @@ extern crate alloc;
 use dusk_capnp::prelude::*;
 
 use capnp::capability::FromClientHook;
-use dusk_capnp::dusk_capnp::portal;
-use dusk_program::{basic_launcher, basic_process, portal::Portal};
+use dusk_program::{basic_launcher, basic_process, impl_default_io_portal_server, portal::Portal};
 use dusk_program_sh::program_args_builder::{
     ProgramArgsBuilder, ProgramInfo, StaticProgramArgsBuilderEntry,
 };
+
 use linkme::distributed_slice;
 
 #[cfg(feature = "client")]
@@ -58,7 +58,8 @@ impl PsPortal {
 }
 
 impl Portal for PsPortal {}
-impl portal::Server for PsPortal {}
+
+impl_default_io_portal_server!(PsPortal);
 
 impl ps_capnp::ps_portal::Server for PsPortal {}
 

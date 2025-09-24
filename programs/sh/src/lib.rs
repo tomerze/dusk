@@ -28,6 +28,8 @@ pub mod sh_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/sh_capnp.rs"));
 }
 
+mod undone_stream;
+
 basic_launcher!(
     ShLauncher,
     sh_capnp::PROGRAM_ID,
@@ -71,24 +73,36 @@ impl ShPortal {
         let process = capnp_rpc::new_future_client(async move {
             let process_reply = process_request.send().promise.await?;
             let process = process_reply.get()?.get_result()?;
-            let _result = process.run_request().send().promise.await?;
+            let mut run_request = client.run_request();
+            run_request.get().set_process(process.clone());
+            let _run_reply = run_request.send().promise.await?;
             Ok(process)
         });
 
         Ok(process)
     }
 
-    async fn portal_and_pipe(
+    // TODO change this to pipe io and support input as well
+    async fn portal_and_pipe_output(
         process: process::Client,
-        _output: dusk_capnp::dusk_capnp::stream::Client,
+        output: dusk_capnp::dusk_capnp::stream::Client,
     ) -> Result<()> {
-        let _portal = capnp_rpc::new_future_client(async move {
+        let portal = capnp_rpc::new_future_client(async move {
             let portal_request = process.portal_request();
             let portal_reply = portal_request.send().promise.await?;
             portal_reply.get()?.get_result()
         });
 
-        // TODO: actually pipe the output into the output stream
+        let (undone_stream, done_receiver) =
+            undone_stream::UndoneStream::new_with_done_receiver(output);
+
+        let mut output_request = portal.output_request();
+        output_request
+            .get()
+            .set_stream(capnp_rpc::new_client(undone_stream));
+        let _output_reply = output_request.send().promise.await?;
+        done_receiver.await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
         Ok(())
     }
 }
@@ -120,7 +134,7 @@ impl sh_capnp::sh_portal::Server for ShPortal {
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
 
-            Self::portal_and_pipe(process, output.clone())
+            Self::portal_and_pipe_output(process, output.clone())
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
 
