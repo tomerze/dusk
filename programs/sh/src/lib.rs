@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+use dusk_capnp::dusk_capnp::process;
 #[allow(unused)]
 #[prelude_import]
 use dusk_capnp::prelude::*;
@@ -64,13 +65,30 @@ impl ShPortal {
     async fn execute_program_args(
         client: dusk_capnp::dusk_capnp::dusk::Client,
         program_args: dusk_capnp::dusk_capnp::program_args::Client,
-    ) -> Result<()> {
+    ) -> Result<process::Client> {
         let mut process_request = client.process_request();
         process_request.get().set_program_args(program_args);
-        let process_reply = process_request.send().promise.await?;
-        let process = process_reply.get()?.get_result()?;
-        let _result = process.run_request().send().promise.await?;
-        // TODO portal and stream!
+        let process = capnp_rpc::new_future_client(async move {
+            let process_reply = process_request.send().promise.await?;
+            let process = process_reply.get()?.get_result()?;
+            let _result = process.run_request().send().promise.await?;
+            Ok(process)
+        });
+
+        Ok(process)
+    }
+
+    async fn portal_and_pipe(
+        process: process::Client,
+        _output: dusk_capnp::dusk_capnp::stream::Client,
+    ) -> Result<()> {
+        let _portal = capnp_rpc::new_future_client(async move {
+            let portal_request = process.portal_request();
+            let portal_reply = portal_request.send().promise.await?;
+            portal_reply.get()?.get_result()
+        });
+
+        // TODO: actually pipe the output into the output stream
         Ok(())
     }
 }
@@ -86,6 +104,7 @@ impl sh_capnp::sh_portal::Server for ShPortal {
         _results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_string());
+        let output = pry!(pry!(params.get()).get_output());
         log::info!("Executing shell command: {}", &command);
 
         let program_args = self.process.program_args.clone();
@@ -97,9 +116,15 @@ impl sh_capnp::sh_portal::Server for ShPortal {
             let args = Self::command_string_to_program_args(program_args_builder, &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
-            Self::execute_program_args(client, args)
+            let process = Self::execute_program_args(client, args)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
+
+            Self::portal_and_pipe(process, output.clone())
+                .await
+                .map_err(|e| capnp::Error::failed(e.to_string()))?;
+
+            output.done_request().send().promise.await?;
             Ok(())
         })
     }

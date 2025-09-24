@@ -9,6 +9,8 @@ use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use std::hint::black_box;
 use tracing::debug;
 
+use crate::display_stream;
+
 pub struct Shell {
     pub client: dusk::Client,
     pub sh_process: process::Client,
@@ -75,6 +77,7 @@ impl Shell {
             .into_iter()
             .collect::<Vec<_>>();
         let sh_process = Self::get_sh_process(client.clone(), static_program_args_builder).await?;
+
         Ok(Shell {
             client,
             sh_process,
@@ -99,11 +102,14 @@ impl Shell {
                 .cast_to::<sh_portal::Client>())
         });
 
-        // TODO: actually print the output of the command
         let mut sh_request = sh_portal.sh_request();
         sh_request.get().set_command(command);
+        let (display_stream, done_receiver) = display_stream::DisplayStream::new_with_receiver();
+        let display_stream: dusk_capnp::dusk_capnp::stream::Client =
+            capnp_rpc::new_client(display_stream);
+        sh_request.get().set_output(display_stream);
         let _sh_reply = sh_request.send().promise.await?;
-
+        done_receiver.await?;
         Ok(())
     }
 

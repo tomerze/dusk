@@ -6,6 +6,7 @@ use core::pin::Pin;
 use dusk::driver::{Driver, FutureProcessResult};
 use dusk_program::launcher_set::LauncherSet;
 use dusk_program::{namespace::Namespace, process::Process};
+use dusk_program_ps::PsLauncher;
 use dusk_program_sh::ShLauncher;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
@@ -18,6 +19,7 @@ impl NixDriver {
     fn new() -> Self {
         let launchers = LauncherSet::new();
         launchers.add(Box::new(ShLauncher {}));
+        launchers.add(Box::new(PsLauncher {}));
         NixDriver { launchers }
     }
 }

@@ -18,6 +18,7 @@ futures = "0.3.31"
 nix = { version = "0.30.1", features = ["hostname", "time"] }
 dusk = { path = "../../dusk/src/dusk/" }
 dusk_program_sh = { path = "../../programs/sh" }
+dusk_program_ps = { path = "../../programs/ps"}
 dusk_program = { path = "../../dusk/src/dusk_program" }
 async-trait = "0.1.89"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
