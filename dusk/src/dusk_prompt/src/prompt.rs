@@ -188,6 +188,7 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
 pub struct Prompt {
     shell: Shell,
     available_programs_info: Vec<ProgramInfo>,
+    markdown_skin: termimad::MadSkin,
 }
 
 impl Prompt {
@@ -197,21 +198,27 @@ impl Prompt {
             version: "builtin",
             program_id: None,
             short_description: "clear the screen",
-            long_description: "",
+            long_description: r#"Example,
+`clear`"#,
         },
         ProgramInfo {
             name: "exit",
             version: "builtin",
             program_id: None,
             short_description: "exit the shell",
-            long_description: "",
+            long_description: r#"Example,
+`exit`"#,
         },
         ProgramInfo {
             name: "help",
             version: "builtin",
             program_id: None,
-            short_description: "this table",
-            long_description: "",
+            short_description: "help, try `help help`",
+            long_description: r#"
+The `help` command displays information about available commands.
+* Use `help` to list all available commands.
+* Use `help <command>` to get more information about a specific command.
+"#,
         },
     ];
 
@@ -219,13 +226,25 @@ impl Prompt {
         let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
         let shell_available_programs_info = shell.get_available_programs_info();
         available_programs_info.extend(shell_available_programs_info);
+
+        let mut markdown_skin = termimad::MadSkin::default();
+        use termimad::crossterm::style::Color;
+        markdown_skin.paragraph.set_fg(termimad::rgb(30, 30, 40));
+        markdown_skin.bold.set_fg(Color::Grey);
+        markdown_skin.headers[1].set_fg(Color::Yellow);
+        markdown_skin.bullet.set_char('○');
+        markdown_skin.bullet.set_fg(Color::DarkYellow);
+        markdown_skin.inline_code.set_fg(Color::Cyan);
+        markdown_skin.code_block.set_fg(Color::Cyan);
+
         Ok(Prompt {
             shell,
             available_programs_info,
+            markdown_skin,
         })
     }
 
-    fn get_available_commands_table(&self) -> NuTable {
+    fn get_available_commands_table(&self) -> Result<String> {
         let mut table = NuTable::new(self.available_programs_info.len() + 1, 3);
         let headers = vec![
             NuRecordsValue::new("Command".into()),
@@ -235,72 +254,68 @@ impl Prompt {
         table.set_row(0, headers);
         for (i, command) in self.available_programs_info.iter().enumerate() {
             let row = vec![
-                NuRecordsValue::new(command.name.to_string()),
-                NuRecordsValue::new(command.short_description.to_string()),
-                NuRecordsValue::new(command.version.to_string()),
+                NuRecordsValue::new(
+                    self.markdown_skin
+                        .inline(format!("**{}**", command.name).as_str())
+                        .to_string(),
+                ),
+                NuRecordsValue::new(
+                    self.markdown_skin
+                        .inline(command.short_description)
+                        .to_string(),
+                ),
+                NuRecordsValue::new(
+                    self.markdown_skin
+                        .inline(format!("`{}`", command.version).as_str())
+                        .to_string(),
+                ),
             ];
             table.set_row(i + 1, row);
         }
 
-        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::Green)));
+        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::DarkGray)));
         table.set_header_style(
             TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
         );
         table.set_theme(TableTheme::rounded());
         table.set_structure(false, true, false);
-        table
+        let width = crossterm::terminal::size()?.0 as usize;
+        let table_str = table.draw(width).unwrap_or("[cannot fit]".to_string());
+        Ok(table_str)
     }
 
-    fn get_program_info_table(&self, program_name: &str) -> NuTable {
+    fn get_program_info_markdown(&self, program_name: &str) -> Result<String> {
         let program_info = self
             .available_programs_info
             .iter()
             .find(|p| p.name == program_name);
-        let mut table = NuTable::new(4, 1);
 
-        if let Some(program_info) = program_info {
-            table.set_row(0, vec![NuRecordsValue::new(program_info.name.to_string())]);
-
-            table.set_row(
-                1,
-                vec![NuRecordsValue::new(format!(
-                    "Version: {}",
-                    program_info.version
-                ))],
+        let markdown = r#"# {name}
+## Info:
+Local version: `{version}`
+Program ID: `{program_id}`
+## Description:
+**{short_description}**{long_description}
+```"#;
+        let program_info = program_info.ok_or(anyhow::anyhow!("Program not found"))?;
+        let program_id = program_info
+            .program_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "N/A".to_string());
+        let formatted_markdown = markdown
+            .replace("{name}", program_info.name)
+            .replace("{version}", program_info.version)
+            .replace("{program_id}", &program_id)
+            .replace("{short_description}", program_info.short_description)
+            .replace(
+                "{long_description}",
+                format!("\n{}", program_info.long_description).as_str(),
             );
 
-            table.set_row(
-                2,
-                vec![NuRecordsValue::new(format!(
-                    "Program ID: {}",
-                    program_info.program_id.unwrap_or(0)
-                ))],
-            );
-
-            table.set_row(
-                3,
-                vec![NuRecordsValue::new(format!(
-                    r#"Description: {} {}"#,
-                    program_info.short_description, program_info.long_description
-                ))],
-            );
-        } else {
-            table.set_row(
-                0,
-                vec![
-                    NuRecordsValue::new("Error".into()),
-                    NuRecordsValue::new(format!("Program '{}' not found.", program_name)),
-                ],
-            );
-        }
-        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::Green)));
-        table.set_header_style(
-            TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
-        );
-        table.set_border_header(false);
-        table.set_theme(TableTheme::rounded());
-        table.set_structure(false, true, false);
-        table
+        Ok(self
+            .markdown_skin
+            .term_text(formatted_markdown.as_str())
+            .to_string())
     }
 
     /// Handles a executing a shell command but also knows how to deal with the prompt itself.
@@ -319,14 +334,13 @@ impl Prompt {
             }
             "help" => {
                 let command = line.split_whitespace().nth(1);
-                let table = if let Some(command) = command {
-                    self.get_program_info_table(command)
+                let draw = if let Some(command) = command {
+                    self.get_program_info_markdown(command)?
                 } else {
-                    self.get_available_commands_table()
+                    self.get_available_commands_table()?
                 };
-                let width = crossterm::terminal::size()?.0 as usize;
-                let table_str = table.draw(width).unwrap_or("[cannot fit]".to_string());
-                println!("{}", table_str);
+
+                println!("{}", draw);
             }
             command => {
                 if let Err(e) = self.shell.process_command(command).await {

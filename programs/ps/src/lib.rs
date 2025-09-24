@@ -81,7 +81,11 @@ pub fn program_args_builder_entry() -> StaticProgramArgsBuilderEntry {
             program_id: Some(ps_capnp::PROGRAM_ID),
             name: "ps",
             short_description: "list processes",
-            long_description: "",
+            long_description: r#"
+The `ps` command is used to display information about the currently running processes.
+* Use `ps` to list all currently running processes.
+* Use `ps <pid>` to get more information about a specific process.
+"#,
             version: env!("CARGO_PKG_VERSION"),
         },
         builder: Box::new(PsProgramArgsBuilder {}),
