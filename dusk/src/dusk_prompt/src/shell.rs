@@ -17,12 +17,10 @@ pub struct Shell {
 }
 
 impl Shell {
-    async fn get_sh_process(
+    async fn get_sh_process_reconnect_callback(
         client: dusk::Client,
         static_program_args_builder: StaticProgramArgsBuilder,
-    ) -> Result<process::Client> {
-        let mut process_request = client.process_request();
-        // TODO add reconnect here by ps and dusk client (dusk client already has reconnect)
+    ) -> capnp::Result<process::Client> {
         let program_args =
             capnp_rpc::new_client::<sh_args::Client, ShArgs<StaticProgramArgsBuilder>>(ShArgs::<
                 StaticProgramArgsBuilder,
@@ -30,18 +28,34 @@ impl Shell {
                 program_args_builder: static_program_args_builder,
                 client: client.clone(),
             });
+        let mut process_request = client.process_request();
         process_request.get().set_program_args(
             program_args.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
         );
         let process_reply = process_request.send().promise.await?;
         let process = process_reply.get()?.get_result()?;
 
-        let pid_reply = process.pid_request().send().promise.await?;
-        let pid: u64 = pid_reply.get()?.get_result();
-
         let mut run_request = client.run_request();
         run_request.get().set_process(process.clone());
         let _run_reply = run_request.send().promise.await?;
+        Ok(process)
+    }
+
+    async fn get_sh_process(
+        client: dusk::Client,
+        static_program_args_builder: StaticProgramArgsBuilder,
+    ) -> Result<process::Client> {
+        let (process, _) = capnp_rpc::auto_reconnect(move || {
+            Ok(capnp_rpc::new_future_client(
+                Self::get_sh_process_reconnect_callback(
+                    client.clone(),
+                    static_program_args_builder.clone(),
+                ),
+            ))
+        })?;
+
+        let pid_reply = process.pid_request().send().promise.await?;
+        let pid: u64 = pid_reply.get()?.get_result();
 
         debug!("sh started with pid {}", pid);
         Ok(process)
