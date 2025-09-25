@@ -7,3 +7,5 @@
 /history.sqlite3
 /build
 /docs/site
+history.sqlite3-shm
+history.sqlite3-wal
