@@ -1,5 +1,7 @@
 use anyhow::Result;
+use base64::prelude::*;
 use capnp::capability::Promise;
+use crossterm::style::Stylize;
 use dusk_capnp::dusk_capnp::value;
 use dusk_capnp::{dusk_capnp::stream::Server, pry};
 use tokio::sync::oneshot;
@@ -27,20 +29,28 @@ impl DisplayStream {
     ) -> Result<String> {
         // TODO: fix this
         let which_value = value.which()?;
-        let s = match which_value {
-            value::Text(Ok(reader)) => reader
-                .to_string()
-                .map_err(|e| anyhow::format_err!("failed to parse utf8 string: {}", e)),
-            value::Int(i) => Ok(i.to_string()),
-            value::Uint(u) => Ok(u.to_string()),
-            value::Bool(b) => Ok(b.to_string()),
+        let term_width = crossterm::terminal::size()?.0 as usize;
+        match which_value {
+            value::Text(Ok(reader)) => {
+                let text = reader
+                    .to_string()
+                    .map_err(|e| anyhow::format_err!("failed to parse utf8 string: {}", e))?;
+                Ok(markdown_skin.text(&text, Some(term_width)).to_string())
+            }
+            value::Int(i) => Ok(i.to_string().cyan().bold().to_string()),
+            value::Uint(u) => Ok(u.to_string().cyan().bold().to_string()),
+            value::Bool(b) => Ok(b.to_string().cyan().bold().to_string()),
+            value::Bytes(Ok(b)) => Ok(markdown_skin
+                .text(
+                    &format!("`{}`", BASE64_STANDARD.encode(b)),
+                    Some(term_width),
+                )
+                .to_string()),
+            value::Null(()) => Ok("".to_string()),
             value::List(_) => Ok("[list]".to_string()),
-            value::Bytes(_) => Ok("[bytes]".to_string()),
             value::Fields(_) => Ok("[fields]".to_string()),
-            value::Null(()) => Ok("null".to_string()),
             _ => Err(anyhow::anyhow!("Couldn't display value")),
-        }?;
-        Ok(markdown_skin.text(&s, None).to_string())
+        }
     }
 }
 

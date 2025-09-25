@@ -127,14 +127,17 @@ impl sh_capnp::sh_portal::Server for ShPortal {
             let args = Self::command_string_to_program_args(program_args_builder, &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
-            let process = Self::execute_program_args(client, args)
+            let process = Self::execute_program_args(client.clone(), args)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
 
-            Self::portal_and_pipe_output(process, output.clone())
+            Self::portal_and_pipe_output(process.clone(), output.clone())
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
 
+            let mut kill_request = client.kill_request();
+            kill_request.get().set_process(process);
+            kill_request.get().set_signal(15); // SIGTERM
             output.done_request().send().promise.await?;
             Ok(())
         })

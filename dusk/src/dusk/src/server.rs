@@ -53,7 +53,7 @@ impl DuskServer {
     }
 }
 
-#[embassy_executor::task(pool_size = 4)]
+#[embassy_executor::task(pool_size = 8)]
 async fn process_task(process: Box<dyn Process>) {
     embassy_futures::yield_now().await;
     if let Err(err) = process.bootstrap().await {

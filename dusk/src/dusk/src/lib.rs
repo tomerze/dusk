@@ -28,14 +28,7 @@ pub use dusk_capnp;
 
 mod tls;
 
-#[embassy_executor::task(pool_size = 16)]
-async fn rpc_system_wrapper(rpc_system: RpcSystem<rpc_twoparty_capnp::Side>) {
-    if let Err(err) = rpc_system.await {
-        error!("an error occured in an rpc system: `{err}`");
-    }
-}
-
-#[embassy_executor::task]
+#[embassy_executor::task(pool_size = 8)]
 pub async fn session(
     namespace: Rc<dusk_program::namespace::Namespace>,
     reader: Pin<Box<dyn AsyncRead>>,
@@ -47,7 +40,6 @@ pub async fn session(
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
         capnp_rpc::new_client(server::DuskServer::new(namespace, spawner));
-
     let network = twoparty::VatNetwork::new(
         tls_reader,
         tls_writer,
@@ -57,7 +49,7 @@ pub async fn session(
 
     let rpc_system = RpcSystem::new(Box::new(network), Some(dusk_client.clone().client));
 
-    if let Err(err) = spawner.spawn(rpc_system_wrapper(rpc_system)) {
-        error!("an error occured while spawning an rpc system task: {err:#?}");
+    if let Err(err) = rpc_system.await {
+        error!("an error occured in an rpc system: `{err}`");
     }
 }

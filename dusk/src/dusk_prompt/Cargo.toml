@@ -27,3 +27,4 @@ dusk_program_sh = { path = "../../../programs/sh", features = ["client"], public
 dusk_program_ps = { path = "../../../programs/ps", features = ["client"], public = true }
 nu-color-config = "0.107.0"
 termimad = { version = "0.20", public = true}
+base64 = "0.22.1"
