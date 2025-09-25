@@ -1,6 +1,9 @@
+use core::num::TryFromIntError;
+
 use crate::driver;
 use alloc::rc::Rc;
 use alloc::string::String;
+use alloc::vec::Vec;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::process;
@@ -105,10 +108,33 @@ impl dusk::Server for DuskServer {
         _params: dusk::PsParams,
         mut results: dusk::PsResults,
     ) -> Promise<(), ::capnp::Error> {
-        // TODO: get process list
-        let _process_entries = results.get().init_process_entries(0);
-        // Fill process_entries as needed
-        Promise::ok(())
+        let namespace = self.namespace.clone();
+        Promise::from_future(async move {
+            let ps_vec: Vec<(u64, process::Client)> = {
+                let ps_map_guard = namespace.ps_map.lock().await;
+                ps_map_guard
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            *k,
+                            capnp_rpc::new_client::<process::Client, Box<dyn Process>>(
+                                v.clone_box(),
+                            ),
+                        )
+                    })
+                    .collect()
+            };
+            let mut process_entries = results.get().init_process_entries(ps_vec.len() as u32);
+            for (i, (pid, process)) in ps_vec.into_iter().enumerate() {
+                let mut entry = process_entries.reborrow().get(
+                    i.try_into()
+                        .map_err(|e: TryFromIntError| capnp::Error::failed(e.to_string()))?,
+                );
+                entry.set_pid(pid);
+                entry.set_process(process);
+            }
+            Ok(())
+        })
     }
 
     fn kill(

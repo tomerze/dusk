@@ -41,10 +41,15 @@ interface Portal {
   output @1 (stream :Stream) -> ();
 }
 
+struct ProcessEntry {
+  pid @0 :UInt64;
+  process @1 :Process; 
+}
+
 interface Dusk {
     process @0 (programArgs: ProgramArgs) -> (result: Process);
     run @1 (process: Process) -> ();
-    ps @2 () -> (process_entries :List(Process));
+    ps @2 () -> (process_entries :List(ProcessEntry));
     kill @4 (process: Process, signal: UInt64) -> ();
     hostname @3 () -> (result :Text);
 }

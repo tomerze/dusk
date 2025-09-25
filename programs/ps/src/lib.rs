@@ -80,10 +80,14 @@ impl portal::Server for PsPortal {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         let mut send_request = stream.send_request();
-        send_request.get().init_value().set_text("hi");
+        send_request.get().init_value().set_text("## hi");
+
+        let mut send_request2 = stream.send_request();
+        send_request2.get().init_value().set_bool(false);
 
         Promise::from_future(async move {
             send_request.send().await?;
+            send_request2.send().await?;
             stream.done_request().send().promise.await?;
             Ok(())
         })

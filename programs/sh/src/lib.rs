@@ -121,6 +121,7 @@ impl sh_capnp::sh_portal::Server for ShPortal {
         let program_args = self.process.program_args.clone();
 
         Promise::from_future(async move {
+            // TODO actually parse the command and make it work like a shell
             let get_request_result = program_args.get_request().send().promise.await?;
             let program_args_builder = get_request_result.get()?.get_program_args_builder()?;
             let client = get_request_result.get()?.get_client()?;
