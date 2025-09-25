@@ -9,9 +9,9 @@ macro_rules! impl_portal_server {
                 _params: dusk_capnp::dusk_capnp::portal::InputParams,
                 mut results: dusk_capnp::dusk_capnp::portal::InputResults,
             ) -> capnp::capability::Promise<(), ::capnp::Error> {
-                results
-                    .get()
-                    .set_stream(capnp_rpc::new_client(NoopStream::default()));
+                results.get().set_stream(capnp_rpc::new_client(
+                    dusk_program::stream::NoopStream::default(),
+                ));
                 Promise::ok(())
             }
 

@@ -12,8 +12,8 @@ use dusk_capnp::prelude::*;
 use anyhow::Result;
 use capnp::capability::FromClientHook;
 use capnp::capability::Promise;
-use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::pry;
+use dusk_program::impl_portal_server;
 use dusk_program::portal::Portal;
 use dusk_program::stream::UndoneStream;
 use dusk_program::{basic_launcher, basic_process};
@@ -107,7 +107,7 @@ impl ShPortal {
 
 impl Portal for ShPortal {}
 
-impl portal::Server for ShPortal {}
+impl_portal_server!(ShPortal);
 
 impl sh_capnp::sh_portal::Server for ShPortal {
     fn sh(
@@ -117,7 +117,6 @@ impl sh_capnp::sh_portal::Server for ShPortal {
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_string());
         let output = pry!(pry!(params.get()).get_output());
-        log::info!("Executing shell command: {}", &command);
 
         let program_args = self.process.program_args.clone();
 

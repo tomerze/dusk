@@ -1,35 +1,46 @@
+use anyhow::Result;
 use capnp::capability::Promise;
+use dusk_capnp::dusk_capnp::value;
 use dusk_capnp::{dusk_capnp::stream::Server, pry};
 use tokio::sync::oneshot;
 
 pub struct DisplayStream {
+    pub markdown_skin: termimad::MadSkin,
     pub done_sender: Option<oneshot::Sender<()>>,
 }
 
 impl DisplayStream {
-    pub fn new_with_receiver() -> (Self, oneshot::Receiver<()>) {
+    pub fn new_with_receiver(markdown_skin: &termimad::MadSkin) -> (Self, oneshot::Receiver<()>) {
         let (done_sender, done_receiver) = oneshot::channel();
         (
             DisplayStream {
+                markdown_skin: markdown_skin.clone(),
                 done_sender: Some(done_sender),
             },
             done_receiver,
         )
     }
 
-    fn value_to_string(value: dusk_capnp::dusk_capnp::value::Reader<'_>) -> String {
+    fn value_to_string(
+        markdown_skin: &termimad::MadSkin,
+        value: value::Reader<'_>,
+    ) -> Result<String> {
         // TODO: fix this
-        match value.which() {
-            Ok(dusk_capnp::dusk_capnp::value::Text(_s)) => "".to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::Int(i)) => i.to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::Uint(u)) => u.to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::Bool(b)) => b.to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::List(_)) => "[list]".to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::Bytes(_)) => "[bytes]".to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::Fields(_)) => "[fields]".to_string(),
-            Ok(dusk_capnp::dusk_capnp::value::Null(())) => "null".to_string(),
-            Err(_) => "[error]".to_string(),
-        }
+        let which_value = value.which()?;
+        let s = match which_value {
+            value::Text(Ok(reader)) => reader
+                .to_string()
+                .map_err(|e| anyhow::format_err!("failed to parse utf8 string: {}", e)),
+            value::Int(i) => Ok(i.to_string()),
+            value::Uint(u) => Ok(u.to_string()),
+            value::Bool(b) => Ok(b.to_string()),
+            value::List(_) => Ok("[list]".to_string()),
+            value::Bytes(_) => Ok("[bytes]".to_string()),
+            value::Fields(_) => Ok("[fields]".to_string()),
+            value::Null(()) => Ok("null".to_string()),
+            _ => Err(anyhow::anyhow!("Couldn't display value")),
+        }?;
+        Ok(markdown_skin.text(&s, None).to_string())
     }
 }
 
@@ -39,7 +50,11 @@ impl Server for DisplayStream {
         params: dusk_capnp::dusk_capnp::stream::SendParams,
     ) -> Promise<(), capnp::Error> {
         let value = pry!(pry!(params.get()).get_value());
-        print!("{}", Self::value_to_string(value));
+        print!(
+            "{}",
+            pry!(Self::value_to_string(&self.markdown_skin, value)
+                .map_err(|e| capnp::Error::failed(e.to_string())))
+        );
         Promise::ok(())
     }
 

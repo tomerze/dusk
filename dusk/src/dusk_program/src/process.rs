@@ -4,7 +4,6 @@ use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
 use embassy_sync::channel::DynamicReceiver;
-use log::debug;
 
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
@@ -70,11 +69,6 @@ impl dyn Process {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
             ps_signal_channel_map.insert(self.pid(), channel.clone());
         }
-        debug!(
-            "Process with pid {} registered in namespace {}",
-            self.pid(),
-            namespace.id
-        );
         let result = self.main(signal_receiver).await;
         {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
@@ -84,11 +78,6 @@ impl dyn Process {
             let mut ps_map = namespace.ps_map.lock().await;
             ps_map.remove(&self.pid());
         }
-        debug!(
-            "Process with pid {} unregistered from namespace {}",
-            self.pid(),
-            namespace.id
-        );
         result
     }
 }

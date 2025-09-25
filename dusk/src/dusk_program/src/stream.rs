@@ -48,7 +48,7 @@ impl UndoneStream {
 
 impl stream::Server for UndoneStream {
     fn send(&mut self, params: stream::SendParams) -> capnp::capability::Promise<(), capnp::Error> {
-        let value = pry!(params.get().and_then(|p| p.get_value()));
+        let value = pry!(pry!(params.get()).get_value());
         let mut send_request = self.stream.send_request();
         pry!(send_request.get().set_value(value));
         Promise::from_future(async move { send_request.send().await })

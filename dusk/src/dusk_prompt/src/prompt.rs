@@ -25,7 +25,7 @@ use reedline::Signal;
 use std::io::stdout;
 use tracing::info;
 
-use crate::shell::Shell;
+use crate::{display_stream, shell::Shell};
 
 #[derive(Clone)]
 struct ReedlinePrompt<'s> {
@@ -343,7 +343,15 @@ Program ID: `{program_id}`
                 println!("{}", draw);
             }
             command => {
-                if let Err(e) = self.shell.process_command(command).await {
+                let (display_stream, done_receiver) =
+                    display_stream::DisplayStream::new_with_receiver(&self.markdown_skin);
+                let display_stream: dusk_capnp::dusk_capnp::stream::Client =
+                    capnp_rpc::new_client(display_stream);
+                if let Err(e) = self
+                    .shell
+                    .process_command(command, display_stream, done_receiver)
+                    .await
+                {
                     tracing::error!("{:?}: {:?}", command, e);
                 }
             }

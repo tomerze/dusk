@@ -1,5 +1,6 @@
 use anyhow::Result;
 use capnp::capability::FromClientHook;
+use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::program_args_builder::{
@@ -7,9 +8,8 @@ use dusk_program_sh::program_args_builder::{
 };
 use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use std::hint::black_box;
+use tokio::sync::oneshot;
 use tracing::debug;
-
-use crate::display_stream;
 
 pub struct Shell {
     pub client: dusk::Client,
@@ -90,7 +90,12 @@ impl Shell {
         self.available_programs_info.clone()
     }
 
-    pub async fn process_command(&mut self, command: &str) -> Result<()> {
+    pub async fn process_command(
+        &mut self,
+        command: &str,
+        stream: stream::Client,
+        done_receiver: oneshot::Receiver<()>,
+    ) -> Result<()> {
         let sh_process = self.sh_process.clone();
 
         let sh_portal = capnp_rpc::new_future_client(async move {
@@ -104,10 +109,7 @@ impl Shell {
 
         let mut sh_request = sh_portal.sh_request();
         sh_request.get().set_command(command);
-        let (display_stream, done_receiver) = display_stream::DisplayStream::new_with_receiver();
-        let display_stream: dusk_capnp::dusk_capnp::stream::Client =
-            capnp_rpc::new_client(display_stream);
-        sh_request.get().set_output(display_stream);
+        sh_request.get().set_output(stream);
         let _sh_reply = sh_request.send().promise.await?;
         // sh returns immediately, but the shell command is running until done is called on the output stream.
         done_receiver.await?;

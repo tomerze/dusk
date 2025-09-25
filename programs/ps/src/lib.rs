@@ -9,9 +9,8 @@ extern crate alloc;
 use dusk_capnp::prelude::*;
 
 use capnp::capability::{FromClientHook, Promise};
-use dusk_program::{
-    basic_launcher, basic_process, impl_portal_server, portal::Portal, stream::NoopStream,
-};
+use dusk_capnp::dusk_capnp::portal;
+use dusk_program::{basic_launcher, basic_process, portal::Portal};
 use dusk_program_sh::program_args_builder::{
     ProgramArgsBuilder, ProgramInfo, StaticProgramArgsBuilderEntry,
 };
@@ -61,7 +60,38 @@ impl PsPortal {
 
 impl Portal for PsPortal {}
 
-impl_portal_server!(PsPortal);
+impl portal::Server for PsPortal {
+    fn input(
+        &mut self,
+        _params: portal::InputParams,
+        mut results: portal::InputResults,
+    ) -> Promise<(), ::capnp::Error> {
+        results.get().set_stream(capnp_rpc::new_client(
+            dusk_program::stream::NoopStream::default(),
+        ));
+        Promise::ok(())
+    }
+
+    fn output(
+        &mut self,
+        params: portal::OutputParams,
+        mut results: portal::OutputResults,
+    ) -> Promise<(), ::capnp::Error> {
+        dusk_capnp::pry!(results.set_pipeline());
+        let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
+        let mut send_request = stream.send_request();
+        send_request
+            .get()
+            .init_value()
+            .set_text("hello from the other side");
+
+        Promise::from_future(async move {
+            send_request.send().await?;
+            stream.done_request().send().promise.await?;
+            Ok(())
+        })
+    }
+}
 
 impl ps_capnp::ps_portal::Server for PsPortal {}
 

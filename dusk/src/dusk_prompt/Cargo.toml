@@ -26,4 +26,4 @@ linkme = { version = "0.3", optional = true, public = true }
 dusk_program_sh = { path = "../../../programs/sh", features = ["client"], public = true }
 dusk_program_ps = { path = "../../../programs/ps", features = ["client"], public = true }
 nu-color-config = "0.107.0"
-termimad = "0.20"
+termimad = { version = "0.20", public = true}
