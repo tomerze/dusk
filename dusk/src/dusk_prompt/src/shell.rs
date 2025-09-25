@@ -3,9 +3,7 @@ use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
-use dusk_program_sh::program_args_builder::{
-    ProgramInfo, StaticProgramArgsBuilder, TopLevelProgramArgsBuilder,
-};
+use dusk_program_sh::program_args_builder::{ProgramInfo, TopLevelProgramArgsBuilder};
 use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use std::hint::black_box;
 use tokio::sync::oneshot;
@@ -19,17 +17,14 @@ pub struct Shell {
 }
 
 impl Shell {
-    async fn get_sh_process_reconnect_callback(
+    async fn get_sh_process_reconnect_callback<T: TopLevelProgramArgsBuilder + Clone>(
         client: dusk::Client,
-        static_program_args_builder: StaticProgramArgsBuilder,
+        program_args_builder: T,
     ) -> capnp::Result<process::Client> {
-        let program_args =
-            capnp_rpc::new_client::<sh_args::Client, ShArgs<StaticProgramArgsBuilder>>(ShArgs::<
-                StaticProgramArgsBuilder,
-            > {
-                program_args_builder: static_program_args_builder,
-                client: client.clone(),
-            });
+        let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs<T>>(ShArgs::<T> {
+            program_args_builder,
+            client: client.clone(),
+        });
         let mut process_request = client.process_request();
         process_request.get().set_program_args(
             program_args.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
@@ -45,13 +40,13 @@ impl Shell {
 
     async fn get_sh_process(
         client: dusk::Client,
-        static_program_args_builder: StaticProgramArgsBuilder,
+        program_args_builder: impl TopLevelProgramArgsBuilder + Clone,
     ) -> Result<process::Client> {
         let (process, _) = capnp_rpc::auto_reconnect(move || {
             Ok(capnp_rpc::new_future_client(
                 Self::get_sh_process_reconnect_callback(
                     client.clone(),
-                    static_program_args_builder.clone(),
+                    program_args_builder.clone(),
                 ),
             ))
         })?;
@@ -63,7 +58,10 @@ impl Shell {
         Ok(process)
     }
 
-    pub async fn new(client: dusk::Client) -> Result<Self> {
+    pub async fn new(
+        client: dusk::Client,
+        program_args_builder: impl TopLevelProgramArgsBuilder + Clone,
+    ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
@@ -71,12 +69,11 @@ impl Shell {
         // crates that register program args builders
         black_box(dusk_program_ps::program_args_builder_entry);
 
-        let static_program_args_builder = StaticProgramArgsBuilder::default();
-        let available_programs_info = static_program_args_builder
+        let available_programs_info = program_args_builder
             .get_available_programs_info()?
             .into_iter()
             .collect::<Vec<_>>();
-        let sh_process = Self::get_sh_process(client.clone(), static_program_args_builder).await?;
+        let sh_process = Self::get_sh_process(client.clone(), program_args_builder).await?;
 
         Ok(Shell {
             client,

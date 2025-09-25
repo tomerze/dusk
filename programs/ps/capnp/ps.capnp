@@ -10,7 +10,7 @@ struct PsOptions {
 }
 
 interface PsArgs extends(Dusk.ProgramArgs) {
-  getOptions @0 () -> (options :PsOptions);
+  get @0 () -> (client: Dusk.Dusk, options :PsOptions);
 }
 
 interface PsPortal extends(Dusk.Portal) {

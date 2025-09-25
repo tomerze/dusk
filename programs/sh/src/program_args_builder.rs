@@ -1,6 +1,8 @@
 use std::vec::Vec;
 
 use capnp::capability::Promise;
+use dusk_capnp::dusk_capnp::dusk;
+use dusk_capnp::dusk_capnp::program_args;
 use dusk_capnp::pry;
 use linkme::distributed_slice;
 
@@ -16,35 +18,26 @@ pub struct ProgramInfo {
     pub version: &'static str,
 }
 
-pub trait ProgramArgsBuilder: sh_capnp::program_args_builder::Server + 'static {
-    fn build_from_string(&self, s: &str) -> Result<dusk_capnp::dusk_capnp::program_args::Client>;
+pub trait ProgramArgsBuilder {
+    fn build(&self, client: dusk::Client, args: &str) -> Result<program_args::Client>;
 }
 
-/// While a normal `ProgramArgsBuilder` expects to build args for a specific program,
-/// a `TopLevelProgramArgsBuilder` expects the program ID to be communicated as well.
-///
-/// Example:
-/// ```rust
-/// kill_program_args_builder.build_from_string("-9 1243") // A `ProgramArgsBuilder`
-/// ```
-/// vs
-/// ```rust
-/// top_level_program_args_builder.build_from_string("kill -9 1243") // A `TopLevelProgramArgsBuilder`
-/// ```
-///
-pub trait TopLevelProgramArgsBuilder: ProgramArgsBuilder {
+pub trait TopLevelProgramArgsBuilder: sh_capnp::program_args_builder::Server + 'static {
+    fn build_from_string(&self, s: &str) -> Result<program_args::Client>;
     fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>>;
 }
 
-impl<T: ProgramArgsBuilder> sh_capnp::program_args_builder::Server for T {
+impl<T: TopLevelProgramArgsBuilder> sh_capnp::program_args_builder::Server for T {
     fn build_from_string(
         &mut self,
         params: sh_capnp::program_args_builder::BuildFromStringParams,
         mut results: sh_capnp::program_args_builder::BuildFromStringResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let s = pry!(pry!(pry!(params.get()).get_string()).to_str());
-        let client = pry!(<Self as ProgramArgsBuilder>::build_from_string(self, s)
-            .map_err(|e| { capnp::Error::failed(e.to_string()) }));
+        let client = pry!(
+            <Self as TopLevelProgramArgsBuilder>::build_from_string(self, s)
+                .map_err(|e| { capnp::Error::failed(e.to_string()) })
+        );
 
         results.get().set_result(client);
         Promise::ok(())
@@ -59,10 +52,18 @@ pub struct StaticProgramArgsBuilderEntry {
 #[distributed_slice]
 pub static SH_PROGRAM_ARGS_BUILDERS: [fn() -> StaticProgramArgsBuilderEntry] = [..];
 
-#[derive(Clone, Default)]
-pub struct StaticProgramArgsBuilder {}
+#[derive(Clone)]
+pub struct StaticProgramArgsBuilder {
+    client: dusk::Client,
+}
 
-impl ProgramArgsBuilder for StaticProgramArgsBuilder {
+impl StaticProgramArgsBuilder {
+    pub fn new(client: dusk::Client) -> Self {
+        Self { client }
+    }
+}
+
+impl TopLevelProgramArgsBuilder for StaticProgramArgsBuilder {
     fn build_from_string(
         &self,
         s: &str,
@@ -78,7 +79,7 @@ impl ProgramArgsBuilder for StaticProgramArgsBuilder {
                     program_name,
                     entry.info.program_id
                 );
-                return entry.builder.build_from_string(args);
+                return entry.builder.build(self.client.clone(), args);
             }
         }
 
@@ -87,9 +88,7 @@ impl ProgramArgsBuilder for StaticProgramArgsBuilder {
             s
         ))
     }
-}
 
-impl crate::program_args_builder::TopLevelProgramArgsBuilder for StaticProgramArgsBuilder {
     fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>> {
         let mut programs = vec![];
         for entry in SH_PROGRAM_ARGS_BUILDERS {

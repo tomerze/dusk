@@ -8,8 +8,9 @@ extern crate alloc;
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
+use alloc::format;
 use capnp::capability::{FromClientHook, Promise};
-use dusk_capnp::dusk_capnp::portal;
+use dusk_capnp::dusk_capnp::{dusk, portal};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
 use dusk_program_sh::program_args_builder::{
     ProgramArgsBuilder, ProgramInfo, StaticProgramArgsBuilderEntry,
@@ -40,21 +41,34 @@ basic_process!(
 );
 
 #[cfg(feature = "client")]
-pub struct PsArgs {}
+pub struct PsArgs {
+    pub client: dusk::Client,
+}
 
 #[cfg(feature = "client")]
 impl_program_args_server!(PsArgs, crate::ps_capnp::PROGRAM_ID);
 
 #[cfg(feature = "client")]
-impl ps_capnp::ps_args::Server for PsArgs {}
+impl ps_capnp::ps_args::Server for PsArgs {
+    fn get(
+        &mut self,
+        _params: ps_capnp::ps_args::GetParams,
+        mut results: ps_capnp::ps_args::GetResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        results.get().set_client(self.client.clone());
+        // TODO set options for real
+        results.get().init_options();
+        Promise::ok(())
+    }
+}
 
 pub struct PsPortal {
-    _process: PsProcess,
+    process: PsProcess,
 }
 
 impl PsPortal {
-    pub fn new(_process: PsProcess) -> Self {
-        PsPortal { _process }
+    pub fn new(process: PsProcess) -> Self {
+        PsPortal { process }
     }
 }
 
@@ -79,15 +93,27 @@ impl portal::Server for PsPortal {
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-        let mut send_request = stream.send_request();
-        send_request.get().init_value().set_text("## hi");
-
-        let mut send_request2 = stream.send_request();
-        send_request2.get().init_value().set_bool(false);
-
+        let program_args = self.process.program_args.clone();
         Promise::from_future(async move {
-            send_request.send().await?;
-            send_request2.send().await?;
+            let get_reply = program_args.get_request().send().promise.await?;
+            let client = get_reply.get()?.get_client()?;
+            let _options = get_reply.get()?.get_options()?;
+            let ps_reply = client.ps_request().send().promise.await?;
+            let process_entries = ps_reply.get()?.get_process_entries()?;
+
+            for entry in process_entries.iter() {
+                // TODO make this a table with value fields
+                let pid = entry.get_pid();
+                let process_client = entry.get_process()?;
+                let program_id_reply = process_client.program_id_request().send().promise.await?;
+                let program_id = program_id_reply.get()?.get_result();
+                let line = format!("pid: `{pid}`, program_id: `{program_id}`");
+
+                let mut send_request = stream.send_request();
+                send_request.get().init_value().set_text(&line);
+                send_request.send().await?;
+            }
+
             stream.done_request().send().promise.await?;
             Ok(())
         })
@@ -99,11 +125,12 @@ impl ps_capnp::ps_portal::Server for PsPortal {}
 struct PsProgramArgsBuilder {}
 
 impl ProgramArgsBuilder for PsProgramArgsBuilder {
-    fn build_from_string(
+    fn build(
         &self,
-        _s: &str,
+        client: dusk::Client,
+        _args: &str,
     ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
-        let client: ps_capnp::ps_args::Client = capnp_rpc::new_client(PsArgs {});
+        let client: ps_capnp::ps_args::Client = capnp_rpc::new_client(PsArgs { client });
         Ok(client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
     }
 }

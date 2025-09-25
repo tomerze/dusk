@@ -18,4 +18,4 @@ wild = "2.2.1"
 argfile = "0.2.1"
 tokio-util = { version = "0.7.16", features = ["compat"]}
 dusk_prompt = { path = "../dusk_prompt/" }
-
+dusk_program_sh = { path = "../../../programs/sh", features = ["client"], public = true }

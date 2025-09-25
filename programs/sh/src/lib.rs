@@ -125,6 +125,7 @@ impl sh_capnp::sh_portal::Server for ShPortal {
             let get_request_result = program_args.get_request().send().promise.await?;
             let program_args_builder = get_request_result.get()?.get_program_args_builder()?;
             let client = get_request_result.get()?.get_client()?;
+            // TODO command_string_to_program_args_and_output - controllers?
             let args = Self::command_string_to_program_args(program_args_builder, &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
@@ -136,6 +137,7 @@ impl sh_capnp::sh_portal::Server for ShPortal {
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
 
+            // TODO find out why this kill doesn't work
             let mut kill_request = client.kill_request();
             kill_request.get().set_process(process);
             kill_request.get().set_signal(15); // SIGTERM
