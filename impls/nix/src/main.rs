@@ -21,7 +21,7 @@ async fn init() -> Result<()> {
     let root = alloc::rc::Rc::new(Namespace::new(0));
     loop {
         let listener =
-            TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 8080)).await?;
+            TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 9090)).await?;
         let (stream, _) = listener.accept().await?;
         stream.set_nodelay(true)?;
         let (reader, writer) = stream.split();

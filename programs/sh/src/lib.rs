@@ -15,6 +15,7 @@ use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::pry;
 use dusk_program::portal::Portal;
+use dusk_program::stream::UndoneStream;
 use dusk_program::{basic_launcher, basic_process};
 
 #[cfg(feature = "client")]
@@ -27,8 +28,6 @@ pub mod program_args_builder;
 pub mod sh_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/sh_capnp.rs"));
 }
-
-mod undone_stream;
 
 basic_launcher!(
     ShLauncher,
@@ -93,8 +92,7 @@ impl ShPortal {
             portal_reply.get()?.get_result()
         });
 
-        let (undone_stream, done_receiver) =
-            undone_stream::UndoneStream::new_with_done_receiver(output);
+        let (undone_stream, done_receiver) = UndoneStream::new_with_done_receiver(output);
 
         let mut output_request = portal.output_request();
         output_request
