@@ -9,3 +9,4 @@ pub mod portal;
 pub mod process;
 pub mod program_args;
 pub mod signal;
+pub mod stream;

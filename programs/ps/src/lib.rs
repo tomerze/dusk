@@ -8,8 +8,10 @@ extern crate alloc;
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
-use capnp::capability::FromClientHook;
-use dusk_program::{basic_launcher, basic_process, impl_default_io_portal_server, portal::Portal};
+use capnp::capability::{FromClientHook, Promise};
+use dusk_program::{
+    basic_launcher, basic_process, impl_portal_server, portal::Portal, stream::NoopStream,
+};
 use dusk_program_sh::program_args_builder::{
     ProgramArgsBuilder, ProgramInfo, StaticProgramArgsBuilderEntry,
 };
@@ -59,7 +61,7 @@ impl PsPortal {
 
 impl Portal for PsPortal {}
 
-impl_default_io_portal_server!(PsPortal);
+impl_portal_server!(PsPortal);
 
 impl ps_capnp::ps_portal::Server for PsPortal {}
 
