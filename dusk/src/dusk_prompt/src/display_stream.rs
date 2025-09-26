@@ -4,13 +4,17 @@ use capnp::capability::Promise;
 use crossterm::style::Stylize;
 use dusk_capnp::value::Value;
 use dusk_capnp::{dusk_capnp::stream::Server, pry};
-use nu_color_config::StyleComputer;
+use nu_ansi_term::Color;
+use nu_color_config::{ComputableStyle, StyleComputer};
 use nu_protocol::engine::{EngineState, Stack};
 use nu_protocol::{Config, Record as NuRecord, Signals, Span, TableMode, Value as NuValue};
 use nu_table::{JustTable, TableOpts};
 use std::collections::HashMap;
 use tokio::sync::oneshot;
 
+// It's not a pretty job to convert Dusk values to beautiful terminal representations
+// this struct gets that job done.
+// And it does so by using Nushell's private API.
 pub struct DisplayStream {
     pub markdown_skin: termimad::MadSkin,
     pub done_sender: Option<oneshot::Sender<()>>,
@@ -99,6 +103,11 @@ impl DisplayStream {
                 Ok(table.unwrap_or_default())
             }
             Value::Fields(fields) => {
+                if let Some(rows) = self.fields_to_rows(&fields)? {
+                    let table = JustTable::table(rows, self.table_opts(span, term_width))
+                        .map_err(|err| anyhow!(err.to_string()))?;
+                    return Ok(table.unwrap_or_default());
+                }
                 let nu_record = self.convert_fields_to_nu_record(fields)?;
                 let table = JustTable::kv_table(nu_record, self.table_opts(span, term_width))
                     .map_err(|err| anyhow!(err.to_string()))?;
@@ -108,8 +117,16 @@ impl DisplayStream {
     }
 
     fn table_opts(&self, span: Span, width: usize) -> TableOpts<'_> {
-        let style =
-            StyleComputer::new(&self.engine_state, &self.stack, HashMap::<String, _>::new());
+        let mut overrides: HashMap<String, ComputableStyle> = HashMap::new();
+        overrides.insert(
+            "header".into(),
+            ComputableStyle::Static(Color::Yellow.bold()),
+        );
+        overrides.insert(
+            "row_index".into(),
+            ComputableStyle::Static(Color::Cyan.bold()),
+        );
+        let style = StyleComputer::new(&self.engine_state, &self.stack, overrides);
         TableOpts::new(
             &self.config,
             style,
@@ -120,6 +137,52 @@ impl DisplayStream {
             0,
             false,
         )
+    }
+
+    fn fields_to_rows(&self, fields: &[dusk_capnp::value::Field]) -> Result<Option<Vec<NuValue>>> {
+        if fields.is_empty() {
+            return Ok(None);
+        }
+
+        // Ensure all fields are lists check all rows are the same length and get that length
+        let expected_len: usize = {
+            let lengths_opt: Option<Vec<usize>> = fields
+                .iter()
+                .map(|f| match &f.value {
+                    Value::List(l) => Some(l.len()),
+                    _ => None,
+                })
+                .collect();
+
+            let lengths = match lengths_opt {
+                Some(l) => l,
+                None => return Ok(None),
+            };
+
+            if !lengths.windows(2).all(|w| w[0] == w[1]) {
+                return Ok(None);
+            }
+
+            lengths[0]
+        };
+
+        let row_count = expected_len;
+        let mut rows = Vec::with_capacity(row_count);
+        for index in 0..row_count {
+            let mut record = NuRecord::with_capacity(fields.len());
+            for field in fields {
+                let list = match &field.value {
+                    Value::List(list) => list,
+                    _ => unreachable!(),
+                };
+                let cell = list.get(index).cloned().unwrap_or(Value::Null);
+                let value = self.convert_value(cell)?;
+                record.push(field.key.clone(), value);
+            }
+            rows.push(NuValue::record(record, Span::unknown()));
+        }
+
+        Ok(Some(rows))
     }
 }
 
