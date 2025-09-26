@@ -4,6 +4,8 @@
 
 extern crate alloc;
 
+use std::rc::Rc;
+
 #[allow(unused)]
 #[prelude_import]
 use dusk_capnp::prelude::*;
@@ -12,9 +14,7 @@ use alloc::format;
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::{dusk, portal};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
-use dusk_program_sh::program_args_builder::{
-    ProgramArgsBuilder, ProgramInfo, StaticProgramArgsBuilderEntry,
-};
+use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 
 use linkme::distributed_slice;
 
@@ -135,9 +135,9 @@ impl ProgramArgsBuilder for PsProgramArgsBuilder {
     }
 }
 
-#[distributed_slice(dusk_program_sh::program_args_builder::SH_PROGRAM_ARGS_BUILDERS)]
-pub fn program_args_builder_entry() -> StaticProgramArgsBuilderEntry {
-    StaticProgramArgsBuilderEntry {
+#[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
+pub fn program_args_builder_entry() -> ShEntry {
+    ShEntry {
         info: ProgramInfo {
             program_id: Some(ps_capnp::PROGRAM_ID),
             name: "ps",
@@ -149,6 +149,6 @@ The `ps` command is used to display information about the currently running proc
 "#,
             version: env!("CARGO_PKG_VERSION"),
         },
-        builder: Box::new(PsProgramArgsBuilder {}),
+        program_args_builder: Rc::new(PsProgramArgsBuilder {}),
     }
 }

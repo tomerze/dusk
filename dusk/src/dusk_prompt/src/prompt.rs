@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Duration;
-use dusk_program_sh::program_args_builder::ProgramInfo;
+use dusk_program_sh::entry::ProgramInfo;
 use std::{borrow::Cow, cell::Cell};
 
 use crossterm::{

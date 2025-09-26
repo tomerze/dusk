@@ -1,15 +1,13 @@
 // All of the code here actually runs on the client side, it's magic! (gated by the "client" feature)
 
-use crate::{program_args_builder::TopLevelProgramArgsBuilder, sh_capnp};
+use crate::entry::ShEntriesBuilder;
+use crate::{engine::ShEngine, sh_capnp};
 
-pub struct ShArgs<P: TopLevelProgramArgsBuilder> {
-    pub program_args_builder: P,
-    pub client: dusk_capnp::dusk_capnp::dusk::Client,
+pub struct ShArgs<S: ShEntriesBuilder> {
+    pub engine: ShEngine<S>,
 }
 
-impl<P: TopLevelProgramArgsBuilder + Clone> dusk_capnp::dusk_capnp::program_args::Server
-    for ShArgs<P>
-{
+impl<S: ShEntriesBuilder> dusk_capnp::dusk_capnp::program_args::Server for ShArgs<S> {
     fn program_id(
         &mut self,
         _params: dusk_capnp::dusk_capnp::program_args::ProgramIdParams,
@@ -20,16 +18,15 @@ impl<P: TopLevelProgramArgsBuilder + Clone> dusk_capnp::dusk_capnp::program_args
     }
 }
 
-impl<P: TopLevelProgramArgsBuilder + Clone> sh_capnp::sh_args::Server for ShArgs<P> {
+impl<S: ShEntriesBuilder> sh_capnp::sh_args::Server for ShArgs<S> {
     fn get(
         &mut self,
         _params: sh_capnp::sh_args::GetParams,
         mut results: sh_capnp::sh_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let builder = self.program_args_builder.clone();
-        let client = capnp_rpc::new_client(builder);
-        results.get().set_program_args_builder(client);
-        results.get().set_client(self.client.clone());
+        let engine = capnp_rpc::new_client(self.engine.clone());
+        results.get().set_engine(engine);
+        results.get().set_client(self.engine.client.clone());
 
         capnp::capability::Promise::ok(())
     }

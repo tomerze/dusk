@@ -22,7 +22,10 @@ use dusk_program::{basic_launcher, basic_process};
 pub mod args;
 
 #[cfg(feature = "client")]
-pub mod program_args_builder;
+pub mod entry;
+
+#[cfg(feature = "client")]
+pub mod engine;
 
 #[allow(clippy::all)]
 pub mod sh_capnp {
@@ -53,13 +56,13 @@ impl ShPortal {
     }
 
     async fn command_string_to_program_args(
-        program_args_builder: sh_capnp::program_args_builder::Client,
+        engine: sh_capnp::engine::Client,
         command: &str,
     ) -> Result<dusk_capnp::dusk_capnp::program_args::Client> {
-        let mut build_from_string_request = program_args_builder.build_from_string_request();
+        let mut build_from_string_request = engine.build_program_args_from_string_request();
         build_from_string_request.get().set_string(command);
         let build_from_string_reply = build_from_string_request.send().promise.await?;
-        let result = build_from_string_reply.get()?.get_result()?;
+        let result = build_from_string_reply.get()?.get_program_args()?;
         Ok(result)
     }
 
@@ -123,10 +126,10 @@ impl sh_capnp::sh_portal::Server for ShPortal {
         Promise::from_future(async move {
             // TODO actually parse the command and make it work like a shell
             let get_request_result = program_args.get_request().send().promise.await?;
-            let program_args_builder = get_request_result.get()?.get_program_args_builder()?;
+            let engine = get_request_result.get()?.get_engine()?;
             let client = get_request_result.get()?.get_client()?;
-            // TODO command_string_to_program_args_and_output - controllers?
-            let args = Self::command_string_to_program_args(program_args_builder, &command)
+            // TODO make the output be run through dissect output in the engine
+            let args = Self::command_string_to_program_args(engine, &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
             let process = Self::execute_program_args(client.clone(), args)

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{command, Parser};
-use dusk_program_sh::program_args_builder::StaticProgramArgsBuilder;
+use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_prompt::{connection::Connection, prompt::Prompt, shell::Shell};
 use std::net::SocketAddr;
 use tokio::signal;
@@ -16,7 +16,7 @@ struct Cli {
 async fn run(address: SocketAddr) {
     async fn inner(connection: &Connection) -> Result<()> {
         let client = connection.client().await;
-        let program_args_builder = StaticProgramArgsBuilder::new(client.clone());
+        let program_args_builder = StaticShEntriesBuilder {};
         let shell = Shell::new(client, program_args_builder).await?;
         let prompt = Prompt::new(shell).await?;
         prompt.run().await?;

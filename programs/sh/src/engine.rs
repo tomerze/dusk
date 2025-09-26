@@ -1,0 +1,56 @@
+use crate::entry::ShEntriesBuilder;
+use capnp::capability::Promise;
+use dusk_capnp::dusk_capnp::dusk;
+use dusk_capnp::pry;
+
+use crate::sh_capnp;
+
+#[derive(Clone)]
+pub struct ShEngine<S: ShEntriesBuilder> {
+    pub client: dusk::Client,
+    sh_entries_builder: S,
+}
+
+impl<S: ShEntriesBuilder> ShEngine<S> {
+    pub fn new(client: dusk::Client, sh_entries_builder: S) -> Self {
+        Self {
+            client,
+            sh_entries_builder,
+        }
+    }
+}
+
+impl<S: ShEntriesBuilder> sh_capnp::engine::Server for ShEngine<S> {
+    /// Takes a string like `ps 1234` and returns a ProgramArgs ready to run.
+    fn build_program_args_from_string(
+        &mut self,
+        params: sh_capnp::engine::BuildProgramArgsFromStringParams,
+        mut results: sh_capnp::engine::BuildProgramArgsFromStringResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let s = pry!(pry!(pry!(params.get()).get_string()).to_str());
+        // split the string by the first space
+        let (program_name, args) = s.split_once(' ').unwrap_or((s, ""));
+        let sh_entries = self.sh_entries_builder.get_entries();
+
+        for entry in sh_entries {
+            if entry.info.name == program_name {
+                log::debug!(
+                    "building args from program_args_builder for program `{}` id {:?}",
+                    program_name,
+                    entry.info.program_id
+                );
+                let client = pry!(entry
+                    .program_args_builder
+                    .build(self.client.clone(), args)
+                    .map_err(|e| { capnp::Error::failed(e.to_string()) }));
+
+                results.get().set_program_args(client);
+                return Promise::ok(());
+            }
+        }
+        Promise::err(capnp::Error::failed(format!(
+            "no program args program_args_builder found for string `{}`",
+            s
+        )))
+    }
+}
