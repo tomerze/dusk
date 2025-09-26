@@ -37,7 +37,6 @@ impl DisplayStream {
                     .map_err(|e| anyhow::format_err!("failed to parse utf8 string: {}", e))?;
                 Ok(markdown_skin.text(&text, Some(term_width)).to_string())
             }
-            value::Int(i) => Ok(i.to_string().cyan().bold().to_string()),
             value::Uint(u) => Ok(u.to_string().cyan().bold().to_string()),
             value::Bool(b) => Ok(b.to_string().cyan().bold().to_string()),
             value::Bytes(Ok(b)) => Ok(markdown_skin
@@ -48,7 +47,7 @@ impl DisplayStream {
                 .to_string()),
             value::Null(()) => Ok("".to_string()),
             value::List(_) => Ok("[list]".to_string()),
-            value::Fields(_) => Ok("[fields]".to_string()),
+            value::Fields(_) => Ok(dusk_capnp::value::Value::from_reader(value)?.to_json_string()?),
             _ => Err(anyhow::anyhow!("Couldn't display value")),
         }
     }

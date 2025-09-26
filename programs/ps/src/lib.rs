@@ -5,14 +5,16 @@
 extern crate alloc;
 
 use std::rc::Rc;
+use std::vec;
 
 #[allow(unused)]
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
-use alloc::format;
+use alloc::vec::Vec;
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::{dusk, portal};
+use dusk_capnp::value::{Field, Value};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
 use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 
@@ -70,6 +72,29 @@ impl PsPortal {
     pub fn new(process: PsProcess) -> Self {
         PsPortal { process }
     }
+
+    async fn inner_ps(process: &PsProcess) -> capnp::Result<(Vec<u64>, Vec<u64>)> {
+        let program_args = process.program_args.clone();
+
+        let get_reply = program_args.get_request().send().promise.await?;
+        let client = get_reply.get()?.get_client()?;
+        let _options = get_reply.get()?.get_options()?;
+        let ps_reply = client.ps_request().send().promise.await?;
+        let process_entries = ps_reply.get()?.get_process_entries()?;
+
+        let mut pids = vec![];
+        let mut program_ids = vec![];
+
+        for entry in process_entries.iter() {
+            pids.push(entry.get_pid());
+
+            let process = entry.get_process()?;
+            let program_id_reply = process.program_id_request().send().promise.await?;
+            program_ids.push(program_id_reply.get()?.get_result());
+        }
+
+        Ok((pids, program_ids))
+    }
 }
 
 impl Portal for PsPortal {}
@@ -93,27 +118,27 @@ impl portal::Server for PsPortal {
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-        let program_args = self.process.program_args.clone();
+
+        let process = self.process.clone();
         Promise::from_future(async move {
-            let get_reply = program_args.get_request().send().promise.await?;
-            let client = get_reply.get()?.get_client()?;
-            let _options = get_reply.get()?.get_options()?;
-            let ps_reply = client.ps_request().send().promise.await?;
-            let process_entries = ps_reply.get()?.get_process_entries()?;
+            let (pids, program_ids) = Self::inner_ps(&process).await?;
 
-            for entry in process_entries.iter() {
-                // TODO make this a table with value fields
-                let pid = entry.get_pid();
-                let process_client = entry.get_process()?;
-                let program_id_reply = process_client.program_id_request().send().promise.await?;
-                let program_id = program_id_reply.get()?.get_result();
-                let line = format!("pid: `{pid}`, program_id: `{program_id}`");
+            let mut send_request = stream.send_request();
 
-                let mut send_request = stream.send_request();
-                send_request.get().init_value().set_text(&line);
-                send_request.send().await?;
-            }
+            let value_builder = send_request.get().init_value();
+            Value::Fields(vec![
+                Field {
+                    key: "pid".to_string(),
+                    value: Value::List(pids.iter().map(|pid| Value::Uint(*pid)).collect()),
+                },
+                Field {
+                    key: "program_id".to_string(),
+                    value: Value::List(program_ids.iter().map(|id| Value::Uint(*id)).collect()),
+                },
+            ])
+            .write_to_builder(value_builder)?;
 
+            send_request.send().await?;
             stream.done_request().send().promise.await?;
             Ok(())
         })

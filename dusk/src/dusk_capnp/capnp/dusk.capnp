@@ -1,5 +1,9 @@
 @0xace6963097d486d6;
 
+# This trick makes our schema backwards compatible with older versions of capnp.
+# Capnp implementations treat it like the `stream` keyword introduced in newer capnp versions.
+using StreamResult = import "/capnp/stream.capnp".StreamResult;
+
 struct Field {
   key @0 :Text;
   value @1 :Value;
@@ -8,18 +12,17 @@ struct Field {
 struct Value {
   union {
     null @0 :Void;
-    int @1 :Int64;
-    uint @2 :UInt64;
-    text @3 :Text;
-    bytes @4 :Data;
-    bool @5 :Bool;
-    fields @6 :List(Field);
-    list @7 :List(Value);
+    uint @1 :UInt64; # for signed integers cast
+    text @2 :Text;
+    bytes @3 :Data;
+    bool @4 :Bool;
+    fields @5 :List(Field);
+    list @6 :List(Value);
   }
 }
 
 interface Stream {
-  send @0 (value :Value) -> stream;
+  send @0 (value :Value) -> StreamResult;
   done @1 () -> ();
 }
 
