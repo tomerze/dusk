@@ -18,7 +18,7 @@ pub struct Shell {
 }
 
 impl Shell {
-    async fn get_sh_process_reconnect_callback<S: ShEntriesBuilder + Clone>(
+    async fn get_sh_process_reconnect_callback<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
     ) -> capnp::Result<process::Client> {
