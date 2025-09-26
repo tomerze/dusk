@@ -6,8 +6,7 @@ const programId :UInt64 = 0x8d0e0504ec994ea4;
 
 interface Engine {
   buildProgramArgsFromString @0 (string :Text) -> (program_args: Dusk.ProgramArgs);
-  dissectOutput @1 (program_args: Dusk.ProgramArgs, output :Dusk.Stream) -> (output :Dusk.ProgramArgs);
-  client @2 () -> (client :Dusk.Dusk);
+  client @1 () -> (client :Dusk.Dusk);
 }
 
 interface ShArgs extends(Dusk.ProgramArgs) {

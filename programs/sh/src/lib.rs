@@ -136,8 +136,6 @@ impl sh_capnp::sh_portal::Server for ShPortal {
                 client_request.get()?.get_client()
             });
 
-            // TODO make the output be run through dissect output in the engine
-
             let args = Self::command_string_to_program_args(engine, &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
