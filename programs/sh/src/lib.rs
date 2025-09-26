@@ -149,11 +149,12 @@ impl sh_capnp::sh_portal::Server for ShPortal {
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
 
-            // TODO find out why this kill doesn't work
             let mut kill_request = client.kill_request();
             kill_request.get().set_process(process);
             kill_request.get().set_signal(15); // SIGTERM
+            kill_request.send().promise.await?;
             output.done_request().send().promise.await?;
+
             Ok(())
         })
     }
