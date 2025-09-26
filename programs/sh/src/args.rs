@@ -1,13 +1,13 @@
 // All of the code here actually runs on the client side, it's magic! (gated by the "client" feature)
 
-use crate::entry::ShEntriesBuilder;
-use crate::{engine::ShEngine, sh_capnp};
+use crate::sh_capnp;
+use crate::sh_capnp::engine;
 
-pub struct ShArgs<S: ShEntriesBuilder> {
-    pub engine: ShEngine<S>,
+pub struct ShArgs {
+    pub engine: engine::Client,
 }
 
-impl<S: ShEntriesBuilder> dusk_capnp::dusk_capnp::program_args::Server for ShArgs<S> {
+impl dusk_capnp::dusk_capnp::program_args::Server for ShArgs {
     fn program_id(
         &mut self,
         _params: dusk_capnp::dusk_capnp::program_args::ProgramIdParams,
@@ -18,15 +18,13 @@ impl<S: ShEntriesBuilder> dusk_capnp::dusk_capnp::program_args::Server for ShArg
     }
 }
 
-impl<S: ShEntriesBuilder> sh_capnp::sh_args::Server for ShArgs<S> {
+impl sh_capnp::sh_args::Server for ShArgs {
     fn get(
         &mut self,
         _params: sh_capnp::sh_args::GetParams,
         mut results: sh_capnp::sh_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let engine = capnp_rpc::new_client(self.engine.clone());
-        results.get().set_engine(engine);
-        results.get().set_client(self.engine.client.clone());
+        results.get().set_engine(self.engine.clone());
 
         capnp::capability::Promise::ok(())
     }

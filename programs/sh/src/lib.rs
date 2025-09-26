@@ -125,10 +125,19 @@ impl sh_capnp::sh_portal::Server for ShPortal {
 
         Promise::from_future(async move {
             // TODO actually parse the command and make it work like a shell
-            let get_request_result = program_args.get_request().send().promise.await?;
-            let engine = get_request_result.get()?.get_engine()?;
-            let client = get_request_result.get()?.get_client()?;
+
+            let engine = capnp_rpc::new_future_client(async move {
+                let get_request_result = program_args.get_request().send().promise.await?;
+                get_request_result.get()?.get_engine()
+            });
+            let engine_clone = engine.clone();
+            let client = capnp_rpc::new_future_client(async move {
+                let client_request = engine_clone.client_request().send().promise.await?;
+                client_request.get()?.get_client()
+            });
+
             // TODO make the output be run through dissect output in the engine
+
             let args = Self::command_string_to_program_args(engine, &command)
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;

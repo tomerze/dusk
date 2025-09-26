@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Duration;
-use dusk_program_sh::entry::ProgramInfo;
+use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
 use std::{borrow::Cow, cell::Cell};
 
 use crossterm::{
@@ -222,10 +222,13 @@ The `help` command displays information about available commands.
         },
     ];
 
-    pub async fn new(shell: Shell) -> Result<Self> {
+    pub async fn new(
+        shell: Shell,
+        get_available_programs_info: impl GetAvailableProgramsInfo,
+    ) -> Result<Self> {
         let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
-        let shell_available_programs_info = shell.get_available_programs_info();
-        available_programs_info.extend(shell_available_programs_info);
+
+        available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 
         let mut markdown_skin = termimad::MadSkin::default();
         use termimad::crossterm::style::Color;

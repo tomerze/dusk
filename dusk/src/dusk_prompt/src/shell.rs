@@ -3,27 +3,24 @@ use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
-use dusk_program_sh::engine::ShEngine;
-use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo, ShEntriesBuilder};
-use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
+use dusk_program_sh::sh_capnp::{engine, sh_args, sh_portal};
 use std::hint::black_box;
 use tokio::sync::oneshot;
 use tracing::debug;
 
 pub struct Shell {
-    pub client: dusk::Client,
-    pub sh_process: process::Client,
+    client: dusk::Client,
+    sh_process: process::Client,
     pub hostname: String,
-    pub available_programs_info: Vec<ProgramInfo>,
 }
 
 impl Shell {
-    async fn get_sh_process_reconnect_callback<S: ShEntriesBuilder>(
+    async fn create_sh_process_reconnect_callback(
         client: dusk::Client,
-        sh_entries_builder: S,
+        engine: engine::Client,
     ) -> capnp::Result<process::Client> {
-        let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs<S>>(ShArgs::<S> {
-            engine: ShEngine::new(client.clone(), sh_entries_builder),
+        let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs>(ShArgs {
+            engine: engine.clone(),
         });
         let mut process_request = client.process_request();
         process_request.get().set_program_args(
@@ -38,13 +35,13 @@ impl Shell {
         Ok(process)
     }
 
-    async fn get_sh_process(
+    async fn create_sh_process(
         client: dusk::Client,
-        sh_entries_builder: impl ShEntriesBuilder,
+        engine: engine::Client,
     ) -> Result<process::Client> {
         let (process, _) = capnp_rpc::auto_reconnect(move || {
             Ok(capnp_rpc::new_future_client(
-                Self::get_sh_process_reconnect_callback(client.clone(), sh_entries_builder.clone()),
+                Self::create_sh_process_reconnect_callback(client.clone(), engine.clone()),
             ))
         })?;
 
@@ -55,10 +52,11 @@ impl Shell {
         Ok(process)
     }
 
-    pub async fn new(
-        client: dusk::Client,
-        sh_entries_builder: impl ShEntriesBuilder + GetAvailableProgramsInfo,
-    ) -> Result<Self> {
+    pub async fn new(engine: impl engine::Server + 'static) -> Result<Self> {
+        let engine: engine::Client = capnp_rpc::new_client(engine);
+        let client_reply = engine.client_request().send().promise.await?;
+        let client = client_reply.get()?.get_client()?;
+
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
@@ -66,22 +64,13 @@ impl Shell {
         // crates that register program args builders
         black_box(dusk_program_ps::program_args_builder_entry);
 
-        let available_programs_info = sh_entries_builder
-            .get_available_programs_info()?
-            .into_iter()
-            .collect::<Vec<_>>();
-        let sh_process = Self::get_sh_process(client.clone(), sh_entries_builder).await?;
+        let sh_process = Self::create_sh_process(client.clone(), engine).await?;
 
         Ok(Shell {
             client,
             sh_process,
             hostname: hostname.into(),
-            available_programs_info,
         })
-    }
-
-    pub fn get_available_programs_info(&self) -> Vec<ProgramInfo> {
-        self.available_programs_info.clone()
     }
 
     pub async fn process_command(

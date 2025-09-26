@@ -3,11 +3,11 @@ use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::pry;
 
-use crate::sh_capnp;
+use crate::sh_capnp::engine;
 
 #[derive(Clone)]
 pub struct ShEngine<S: ShEntriesBuilder> {
-    pub client: dusk::Client,
+    client: dusk::Client,
     sh_entries_builder: S,
 }
 
@@ -20,12 +20,12 @@ impl<S: ShEntriesBuilder> ShEngine<S> {
     }
 }
 
-impl<S: ShEntriesBuilder> sh_capnp::engine::Server for ShEngine<S> {
+impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
     /// Takes a string like `ps 1234` and returns a ProgramArgs ready to run.
     fn build_program_args_from_string(
         &mut self,
-        params: sh_capnp::engine::BuildProgramArgsFromStringParams,
-        mut results: sh_capnp::engine::BuildProgramArgsFromStringResults,
+        params: engine::BuildProgramArgsFromStringParams,
+        mut results: engine::BuildProgramArgsFromStringResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let s = pry!(pry!(pry!(params.get()).get_string()).to_str());
         // split the string by the first space
@@ -52,5 +52,14 @@ impl<S: ShEntriesBuilder> sh_capnp::engine::Server for ShEngine<S> {
             "no program args program_args_builder found for string `{}`",
             s
         )))
+    }
+
+    fn client(
+        &mut self,
+        _params: engine::ClientParams,
+        mut results: engine::ClientResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        results.get().set_client(self.client.clone());
+        Promise::ok(())
     }
 }

@@ -36,7 +36,7 @@ pub trait GetAvailableProgramsInfo {
     fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct StaticShEntriesBuilder {}
 
 impl ShEntriesBuilder for StaticShEntriesBuilder {
