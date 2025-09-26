@@ -11,7 +11,7 @@ use dusk_capnp::pry;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
 use embassy_executor::Spawner;
-use log::{debug, error};
+use log::error;
 
 pub struct DuskServer {
     namespace: Rc<Namespace>,
@@ -32,12 +32,8 @@ impl DuskServer {
 
         if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
             let process = process_server.borrow().server.clone_box();
-            let pid = process.pid();
             match spawner.spawn(process_task(process)) {
-                Ok(()) => {
-                    debug!("Spawned process task for pid {}", pid);
-                    Ok(())
-                }
+                Ok(()) => Ok(()),
                 Err(e) => Err(capnp::Error::failed(e.to_string())),
             }
         } else {

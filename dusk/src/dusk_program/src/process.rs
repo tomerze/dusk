@@ -69,6 +69,11 @@ impl dyn Process {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
             ps_signal_channel_map.insert(self.pid(), channel.clone());
         }
+        log::debug!(
+            "starting process with pid {}, program id {}",
+            self.pid(),
+            self.program_id()
+        );
         let result = self.main(signal_receiver).await;
         {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
