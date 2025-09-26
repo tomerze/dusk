@@ -23,7 +23,6 @@ use reedline::CursorConfig;
 use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
-use tracing::info;
 
 use crate::{display_stream, shell::Shell};
 
@@ -410,7 +409,6 @@ Program ID: `{program_id}`
                     }
                 }
                 Signal::CtrlD | Signal::CtrlC => {
-                    info!("aborted");
                     break;
                 }
             }

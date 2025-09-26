@@ -4,7 +4,7 @@ use dusk_program_sh::{engine::ShEngine, entry::StaticShEntriesBuilder};
 use dusk_prompt::{connection::Connection, prompt::Prompt, shell::Shell};
 use std::net::SocketAddr;
 use tokio::signal;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 #[derive(Parser)]
 #[command(author, version, arg_required_else_help(true))]
@@ -13,34 +13,33 @@ struct Cli {
     address: SocketAddr,
 }
 
-async fn run(address: SocketAddr) {
-    async fn inner(connection: &Connection) -> Result<()> {
-        let client = connection.client().await;
-        let sh_entries_builder = StaticShEntriesBuilder::default();
-        let shell = Shell::new(ShEngine::new(client, sh_entries_builder.clone())).await?;
-        let prompt = Prompt::new(shell, sh_entries_builder).await?;
-        prompt.run().await?;
-
-        Ok(())
-    }
+async fn run(address: &SocketAddr) {
     let local_set = tokio::task::LocalSet::new();
 
     if let Err(err) = local_set
         .run_until(async move {
-            info!("connecting to {}", address);
-            let connection = Connection::connect(address).await?;
-            debug!("connected to {}", address);
-            if let Err(err) = inner(&connection).await {
-                error!("interactive prompt failed: `{err}`");
-            }
+            let connection = Connection::connect(*address).await?;
+            tokio::select! {
+                _ = async {
+                    let client = connection.client().await;
+                    let sh_entries_builder = StaticShEntriesBuilder::default();
+                    let shell = Shell::new(ShEngine::new(client, sh_entries_builder.clone())).await?;
+                    let prompt = Prompt::new(shell, sh_entries_builder).await?;
+                    prompt.run().await?;
+                    Ok::<(), anyhow::Error>(())
+                } => {
+                    info!("exiting");
+                }
+                _ = signal::ctrl_c() => {
+                    error!("existing due to signal not caught by prompt");
+                }
+            };
             connection.disconnect().await?;
             Ok::<(), anyhow::Error>(())
-        })
-        .await
+        }).await
     {
-        error!("connection error: {}", err);
+        error!("critical error: {}", err);
     }
-    local_set.await;
 }
 
 #[tokio::main]
@@ -53,14 +52,8 @@ async fn main() -> Result<()> {
         argfile::PREFIX,
     )?);
 
-    tokio::select! {
-        _ = run(cli.address) => {
-            info!("exiting");
-        }
-        _ = signal::ctrl_c() => {
-            error!("existing due to signal");
-        }
-    };
+    info!("connecting to {}", cli.address);
+    run(&cli.address).await;
 
     Ok(())
 }
