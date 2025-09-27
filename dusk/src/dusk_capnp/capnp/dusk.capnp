@@ -4,15 +4,8 @@
 # Capnp implementations treat it like the `stream` keyword introduced in newer capnp versions.
 using StreamResult = import "/capnp/stream.capnp".StreamResult;
 
-# How to generate ids for keyId and typeId for Value:
-# 1. Take the bytes of the key or type name without a null terminator.
-# 2. Hash them using RapidHash V3 Nano with AVALANCHE = true, PROTECTED = true with the below seed.
-# 3. Done!
-# There is a const function `dusk_program::value::gen_id` which generates ids according to the above.
-const idSeed :UInt64 = 0xbcfcb5e7ea7fb6f3;
-
 struct Field { 
-  keyId @0 :UInt64; # hash of the field name, used as the key in maps.
+  key @0 :Data;
   value @1 :Value;
 }
 

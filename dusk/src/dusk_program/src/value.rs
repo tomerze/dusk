@@ -3,6 +3,7 @@
 extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
+use core::u8;
 use core::{convert::TryFrom, fmt};
 
 use capnp::Error;
@@ -11,20 +12,12 @@ use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use dusk_capnp::dusk_capnp::{field, value};
-use nohash_hasher::BuildNoHashHasher;
-
-pub const fn gen_id(data: &[u8]) -> u64 {
-    const SEED: rapidhash::v3::RapidSecrets =
-        rapidhash::v3::RapidSecrets::seed(dusk_capnp::dusk_capnp::ID_SEED);
-    rapidhash::v3::rapidhash_v3_nano_inline::<true, true>(data, &SEED)
-}
+use rapidhash::fast::SeedableState;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fields {
-    // generated using `dusk_program::value::gen_id`
     pub type_id: u64,
-    // keys are generated using `dusk_program::value::gen_id`
-    pub map: hashbrown::HashMap<u64, Value, BuildNoHashHasher<u64>>,
+    pub map: hashbrown::HashMap<Vec<u8>, Value, SeedableState<'static>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
