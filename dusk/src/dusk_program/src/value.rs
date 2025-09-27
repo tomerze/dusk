@@ -22,14 +22,17 @@ use dusk_capnp::dusk_capnp::value;
 use rapidhash::fast::SeedableState;
 
 pub fn key_bytes_to_string(bytes: Vec<u8>) -> String {
-    bytes.iter().map(|&b| {
-        if b.is_ascii_graphic() || b == b' ' {
-            (b as char).to_string()
-        } else {
-            // Show hex escape for non-printable
-            format!("\\x{:02x}", b)
-        }
-    }).collect::<String>()
+    bytes
+        .iter()
+        .map(|&b| {
+            if b.is_ascii_graphic() || b == b' ' {
+                (b as char).to_string()
+            } else {
+                // Show hex escape for non-printable
+                format!("\\x{:02x}", b)
+            }
+        })
+        .collect::<String>()
 }
 
 pub fn key_string_to_bytes(s: &str) -> Vec<u8> {
@@ -50,8 +53,12 @@ pub fn key_string_to_bytes(s: &str) -> Vec<u8> {
                 }
                 // malformed escape → push raw bytes
                 bytes.extend_from_slice(b"\\x");
-                if let Some(h) = hi { bytes.push(h as u8) }
-                if let Some(l) = lo { bytes.push(l as u8) }
+                if let Some(h) = hi {
+                    bytes.push(h as u8)
+                }
+                if let Some(l) = lo {
+                    bytes.push(l as u8)
+                }
                 continue;
             }
         }
@@ -221,7 +228,9 @@ impl Serialize for Value {
         match self {
             Value::Null => serializer.serialize_unit(),
             Value::Uint(v) => serializer.serialize_u64(*v),
-            Value::Text(string) | Value::String(string ) => serializer.serialize_str(string.as_str()),
+            Value::Text(string) | Value::String(string) => {
+                serializer.serialize_str(string.as_str())
+            }
             Value::Bytes(bytes) => serializer.serialize_bytes(bytes.as_slice()),
             Value::Bool(b) => serializer.serialize_bool(*b),
             Value::Fields(fields) => fields.serialize(serializer),
@@ -414,7 +423,7 @@ impl Value {
             }
             Value::Text(text) => {
                 builder.set_text(text.as_str());
-            },
+            }
             Value::String(string) => {
                 builder.set_string(string.as_str());
             }

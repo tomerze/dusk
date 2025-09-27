@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use crossterm::style::Stylize;
+use dusk_program::value::key_bytes_to_string;
 use dusk_program::value::{Fields, Value};
 use nu_ansi_term::Color;
 use nu_color_config::{ComputableStyle, StyleComputer};
 use nu_protocol::engine::{EngineState, Stack};
 use nu_protocol::{Config, Record as NuRecord, Signals, Span, TableMode, Value as NuValue};
 use nu_table::{JustTable, TableOpts};
-use dusk_program::value::key_bytes_to_string;
 
 /// It's not a pretty job to convert Dusk values to beautiful terminal representations
 /// this struct gets that job done.
@@ -80,10 +80,7 @@ impl DefaultDisplayEngine {
             .collect()
     }
 
-    fn convert_fields_to_nu_record(
-        &self,
-        fields: Fields,
-    ) -> Result<NuRecord> {
+    fn convert_fields_to_nu_record(&self, fields: Fields) -> Result<NuRecord> {
         let mut record = NuRecord::with_capacity(fields.map.len());
         for (key, value) in fields.map.iter() {
             let value = self.convert_value(value.clone())?;
@@ -96,9 +93,11 @@ impl DefaultDisplayEngine {
         let span = Span::unknown();
         match value {
             Value::Null => Ok(NuValue::nothing(span)),
-            Value::Uint(_) | Value::Text(_) | Value::Bytes(_) | Value::Bool(_) | Value::String(_) => {
-                Ok(NuValue::string(self.value_to_string(value)?, span))
-            }
+            Value::Uint(_)
+            | Value::Text(_)
+            | Value::Bytes(_)
+            | Value::Bool(_)
+            | Value::String(_) => Ok(NuValue::string(self.value_to_string(value)?, span)),
             Value::Fields(fields) => {
                 let record = self.convert_fields_to_nu_record(fields)?;
                 Ok(NuValue::record(record, span))
@@ -177,9 +176,10 @@ impl DefaultDisplayEngine {
 
         // Ensure all fields are lists check all rows are the same length and get that length
         let expected_len: usize = {
-            let lengths_opt: Option<Vec<usize>> = fields.map
+            let lengths_opt: Option<Vec<usize>> = fields
+                .map
                 .iter()
-                .map(|(key, value)| match &value {
+                .map(|(_key, value)| match &value {
                     Value::List(l) => Some(l.len()),
                     _ => None,
                 })

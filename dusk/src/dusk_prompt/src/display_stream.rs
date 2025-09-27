@@ -1,7 +1,7 @@
 use capnp::capability::Promise;
 
-use dusk_program::value::Value;
 use dusk_capnp::{dusk_capnp::stream::Server, pry};
+use dusk_program::value::Value;
 
 use tokio::sync::oneshot;
 
