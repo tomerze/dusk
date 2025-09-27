@@ -15,5 +15,8 @@ futures = { version = "0.3.31", default-features = false }
 hashbrown = { version = "0.16", default-features = false, public = true }
 oneshot = { version = "0.1.11", default-features = false, features = ["async"], public = true}
 nohash-hasher = { version = "0.2", public = true }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"], public = true }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"], public = true }
+rapidhash = { version = "4.1.0", default-features = false, public = true }
 async-trait = "0.1.89"
 log = "0.4.28"

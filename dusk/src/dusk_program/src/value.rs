@@ -10,12 +10,21 @@ use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::dusk_capnp::{field, value};
+use dusk_capnp::dusk_capnp::{field, value};
+use nohash_hasher::BuildNoHashHasher;
+
+pub const fn gen_id(data: &[u8]) -> u64 {
+    const SEED: rapidhash::v3::RapidSecrets =
+        rapidhash::v3::RapidSecrets::seed(dusk_capnp::dusk_capnp::ID_SEED);
+    rapidhash::v3::rapidhash_v3_nano_inline::<true, true>(data, &SEED)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Field {
-    pub key: String,
-    pub value: Value,
+pub struct Fields {
+    // generated using `dusk_program::value::gen_id`
+    pub type_id: u64,
+    // keys are generated using `dusk_program::value::gen_id`
+    pub map: hashbrown::HashMap<u64, Value, BuildNoHashHasher<u64>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,7 +34,7 @@ pub enum Value {
     Text(String),
     Bytes(Vec<u8>),
     Bool(bool),
-    Fields(Vec<Field>),
+    Fields(Fields),
     List(Vec<Value>),
 }
 
@@ -256,11 +265,13 @@ impl Value {
                 builder.set_bool(*b);
             }
             Value::Fields(fields) => {
-                let mut fields_builder = builder.reborrow().init_fields(fields.len() as u32);
-                for (index, field) in fields.iter().enumerate() {
-                    let field_builder = fields_builder.reborrow().get(index as u32);
-                    field.write_to_builder(field_builder)?;
-                }
+                // let mut fields_builder = builder.reborrow().init_fields(fields.len() as u32);
+                // for (index, field) in fields.iter().enumerate() {
+                //     let field_builder = fields_builder.reborrow().get(index as u32);
+                //     field.write_to_builder(field_builder)?;
+                // }
+                let fields_builder = builder.reborrow().init_fields();
+                fields_builder.set_type_id(value);
             }
             Value::List(values) => {
                 let mut list_builder = builder.reborrow().init_list(values.len() as u32);
