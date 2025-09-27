@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{command, Parser};
 use dusk_program_sh::{engine::ShEngine, entry::StaticShEntriesBuilder};
 use dusk_prompt::{
-    connection::Connection, display_engine::DisplayEngineImpl, prompt::Prompt, shell::Shell,
+    connection::Connection, display_engine::DefaultDisplayEngine, prompt::Prompt, shell::Shell,
 };
 use std::net::SocketAddr;
 use tokio::signal;
@@ -33,7 +33,7 @@ async fn run(address: &SocketAddr) {
                             )
                         ).await?,
                         sh_entries_builder,
-                        DisplayEngineImpl::default()
+                        DefaultDisplayEngine::default()
                     ).await?;
                     prompt.run().await?;
                     Ok::<(), anyhow::Error>(())

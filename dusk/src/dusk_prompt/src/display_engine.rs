@@ -14,7 +14,7 @@ use nu_table::{JustTable, TableOpts};
 /// this struct gets that job done.
 /// And it does so by using Nushell's private API.
 #[derive(Clone)]
-pub struct DisplayEngineImpl {
+pub struct DefaultDisplayEngine {
     markdown_skin: termimad::MadSkin,
     config: Config,
     signals: Signals,
@@ -27,7 +27,7 @@ pub trait DisplayEngine {
     fn render_markdown(&self, markdown: &str) -> String;
 }
 
-impl DisplayEngine for DisplayEngineImpl {
+impl DisplayEngine for DefaultDisplayEngine {
     fn render_value(&self, value: Value) -> Result<String> {
         self.value_to_string(value)
     }
@@ -41,7 +41,7 @@ impl DisplayEngine for DisplayEngineImpl {
     }
 }
 
-impl Default for DisplayEngineImpl {
+impl Default for DefaultDisplayEngine {
     fn default() -> Self {
         let mut markdown_skin = termimad::MadSkin::default();
         use termimad::crossterm::style::Color;
@@ -57,14 +57,14 @@ impl Default for DisplayEngineImpl {
     }
 }
 
-impl DisplayEngineImpl {
+impl DefaultDisplayEngine {
     pub fn new(markdown_skin: termimad::MadSkin) -> Self {
         let config = Config::default();
         let signals = Signals::empty();
         let engine_state = EngineState::new();
         let stack = Stack::new();
 
-        DisplayEngineImpl {
+        DefaultDisplayEngine {
             markdown_skin,
             config,
             signals,
