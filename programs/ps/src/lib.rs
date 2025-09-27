@@ -14,7 +14,7 @@ use dusk_capnp::prelude::*;
 use alloc::vec::Vec;
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::{dusk, portal};
-use dusk_capnp::value::{Field, Value};
+use dusk_program::value::{Fields, Value};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
 use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 
@@ -125,18 +125,18 @@ impl portal::Server for PsPortal {
 
             let mut send_request = stream.send_request();
 
+            let pid_values = pids.iter().copied().map(Value::Uint).collect();
+            let program_values = program_ids.iter().copied().map(Value::Uint).collect();
+            let fields = Fields::with_entries(
+                ps_capnp::PROGRAM_ID,
+                [
+                    (b"pid".to_vec(), Value::List(pid_values)),
+                    (b"program_id".to_vec(), Value::List(program_values)),
+                ],
+            );
+
             let value_builder = send_request.get().init_value();
-            Value::Fields(vec![
-                Field {
-                    key: "pid".to_string(),
-                    value: Value::List(pids.iter().map(|pid| Value::Uint(*pid)).collect()),
-                },
-                Field {
-                    key: "program_id".to_string(),
-                    value: Value::List(program_ids.iter().map(|id| Value::Uint(*id)).collect()),
-                },
-            ])
-            .write_to_builder(value_builder)?;
+            Value::Fields(fields).write_to_builder(value_builder)?;
 
             send_request.send().await?;
             stream.done_request().send().promise.await?;

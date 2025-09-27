@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use crossterm::style::Stylize;
-use dusk_capnp::value::Value;
+use dusk_program::value::{Fields, Value};
 use nu_ansi_term::Color;
 use nu_color_config::{ComputableStyle, StyleComputer};
 use nu_protocol::engine::{EngineState, Stack};
 use nu_protocol::{Config, Record as NuRecord, Signals, Span, TableMode, Value as NuValue};
 use nu_table::{JustTable, TableOpts};
+use dusk_program::value::key_bytes_to_string;
 
 /// It's not a pretty job to convert Dusk values to beautiful terminal representations
 /// this struct gets that job done.
@@ -73,7 +74,7 @@ impl DefaultDisplayEngine {
         }
     }
 
-    fn convert_list_to_nu_list(&self, list: Vec<dusk_capnp::value::Value>) -> Result<Vec<NuValue>> {
+    fn convert_list_to_nu_list(&self, list: Vec<Value>) -> Result<Vec<NuValue>> {
         list.into_iter()
             .map(|value| self.convert_value(value))
             .collect()
@@ -81,21 +82,21 @@ impl DefaultDisplayEngine {
 
     fn convert_fields_to_nu_record(
         &self,
-        fields: Vec<dusk_capnp::value::Field>,
+        fields: Fields,
     ) -> Result<NuRecord> {
-        let mut record = NuRecord::with_capacity(fields.len());
-        for field in fields {
-            let value = self.convert_value(field.value)?;
-            record.push(field.key, value);
+        let mut record = NuRecord::with_capacity(fields.map.len());
+        for (key, value) in fields.map.iter() {
+            let value = self.convert_value(value.clone())?;
+            record.push(key_bytes_to_string(key.clone()), value);
         }
         Ok(record)
     }
 
-    fn convert_value(&self, value: dusk_capnp::value::Value) -> Result<NuValue> {
+    fn convert_value(&self, value: Value) -> Result<NuValue> {
         let span = Span::unknown();
         match value {
             Value::Null => Ok(NuValue::nothing(span)),
-            Value::Uint(_) | Value::Text(_) | Value::Bytes(_) | Value::Bool(_) => {
+            Value::Uint(_) | Value::Text(_) | Value::Bytes(_) | Value::Bool(_) | Value::String(_) => {
                 Ok(NuValue::string(self.value_to_string(value)?, span))
             }
             Value::Fields(fields) => {
@@ -117,7 +118,8 @@ impl DefaultDisplayEngine {
             Value::Null => Ok("".to_string()),
             Value::Bool(b) => Ok(b.to_string().cyan().bold().to_string()),
             Value::Uint(u) => Ok(u.to_string().cyan().bold().to_string()),
-            Value::Text(s) => Ok(self.markdown_skin.text(&s, Some(term_width)).to_string()),
+            Value::String(s) => Ok(s),
+            Value::Text(s) => Ok(self.render_markdown(&s)),
             Value::Bytes(b) => Ok(self
                 .markdown_skin
                 .text(
@@ -168,16 +170,16 @@ impl DefaultDisplayEngine {
         )
     }
 
-    fn fields_to_rows(&self, fields: &[dusk_capnp::value::Field]) -> Result<Option<Vec<NuValue>>> {
-        if fields.is_empty() {
+    fn fields_to_rows(&self, fields: &Fields) -> Result<Option<Vec<NuValue>>> {
+        if fields.map.is_empty() {
             return Ok(None);
         }
 
         // Ensure all fields are lists check all rows are the same length and get that length
         let expected_len: usize = {
-            let lengths_opt: Option<Vec<usize>> = fields
+            let lengths_opt: Option<Vec<usize>> = fields.map
                 .iter()
-                .map(|f| match &f.value {
+                .map(|(key, value)| match &value {
                     Value::List(l) => Some(l.len()),
                     _ => None,
                 })
@@ -198,15 +200,15 @@ impl DefaultDisplayEngine {
         let row_count = expected_len;
         let mut rows = Vec::with_capacity(row_count);
         for index in 0..row_count {
-            let mut record = NuRecord::with_capacity(fields.len());
-            for field in fields {
-                let list = match &field.value {
+            let mut record = NuRecord::with_capacity(fields.map.len());
+            for (key, value) in fields.map.iter() {
+                let list = match &value {
                     Value::List(list) => list,
                     _ => unreachable!(),
                 };
                 let cell = list.get(index).cloned().unwrap_or(Value::Null);
                 let value = self.convert_value(cell)?;
-                record.push(field.key.clone(), value);
+                record.push(key_bytes_to_string(key.clone()), value);
             }
             rows.push(NuValue::record(record, Span::unknown()));
         }
