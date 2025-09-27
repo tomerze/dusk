@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::{command, Parser};
 use dusk_program_sh::{engine::ShEngine, entry::StaticShEntriesBuilder};
-use dusk_prompt::{connection::Connection, prompt::Prompt, shell::Shell};
+use dusk_prompt::{
+    connection::Connection, display_engine::DisplayEngineImpl, prompt::Prompt, shell::Shell,
+};
 use std::net::SocketAddr;
 use tokio::signal;
 use tracing::{error, info};
@@ -23,8 +25,16 @@ async fn run(address: &SocketAddr) {
                 _ = async {
                     let client = connection.client().await;
                     let sh_entries_builder = StaticShEntriesBuilder::default();
-                    let shell = Shell::new(ShEngine::new(client, sh_entries_builder.clone())).await?;
-                    let prompt = Prompt::new(shell, sh_entries_builder).await?;
+                    let prompt = Prompt::new(
+                        Shell::new(
+                            ShEngine::new(
+                                client,
+                                sh_entries_builder.clone()
+                            )
+                        ).await?,
+                        sh_entries_builder,
+                        DisplayEngineImpl::default()
+                    ).await?;
                     prompt.run().await?;
                     Ok::<(), anyhow::Error>(())
                 } => {
@@ -36,7 +46,8 @@ async fn run(address: &SocketAddr) {
             };
             connection.disconnect().await?;
             Ok::<(), anyhow::Error>(())
-        }).await
+        })
+        .await
     {
         error!("critical error: {}", err);
     }

@@ -24,7 +24,7 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
-use crate::{display_stream, shell::Shell};
+use crate::{display_engine::DisplayEngine, display_stream, shell::Shell};
 
 #[derive(Clone)]
 struct ReedlinePrompt<'s> {
@@ -184,13 +184,13 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
     );
 }
 
-pub struct Prompt {
+pub struct Prompt<D: DisplayEngine + Clone + 'static> {
     shell: Shell,
     available_programs_info: Vec<ProgramInfo>,
-    markdown_skin: termimad::MadSkin,
+    display_engine: D,
 }
 
-impl Prompt {
+impl<D: DisplayEngine + Clone + 'static> Prompt<D> {
     const BUILTIN_COMMANDS: [ProgramInfo; 3] = [
         ProgramInfo {
             name: "clear",
@@ -224,25 +224,16 @@ The `help` command displays information about available commands.
     pub async fn new(
         shell: Shell,
         get_available_programs_info: impl GetAvailableProgramsInfo,
+        display_engine: D,
     ) -> Result<Self> {
         let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
 
         available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 
-        let mut markdown_skin = termimad::MadSkin::default();
-        use termimad::crossterm::style::Color;
-        markdown_skin.paragraph.set_fg(termimad::rgb(30, 30, 40));
-        markdown_skin.bold.set_fg(Color::Grey);
-        markdown_skin.headers[1].set_fg(Color::Yellow);
-        markdown_skin.bullet.set_char('○');
-        markdown_skin.bullet.set_fg(Color::DarkYellow);
-        markdown_skin.inline_code.set_fg(Color::Cyan);
-        markdown_skin.code_block.set_fg(Color::Cyan);
-
         Ok(Prompt {
             shell,
             available_programs_info,
-            markdown_skin,
+            display_engine,
         })
     }
 
@@ -257,19 +248,16 @@ The `help` command displays information about available commands.
         for (i, command) in self.available_programs_info.iter().enumerate() {
             let row = vec![
                 NuRecordsValue::new(
-                    self.markdown_skin
-                        .inline(format!("**{}**", command.name).as_str())
-                        .to_string(),
+                    self.display_engine
+                        .render_markdown(format!("**{}**", command.name).as_str()),
                 ),
                 NuRecordsValue::new(
-                    self.markdown_skin
-                        .inline(command.short_description)
-                        .to_string(),
+                    self.display_engine
+                        .render_markdown(command.short_description),
                 ),
                 NuRecordsValue::new(
-                    self.markdown_skin
-                        .inline(format!("`{}`", command.version).as_str())
-                        .to_string(),
+                    self.display_engine
+                        .render_markdown(format!("`{}`", command.version).as_str()),
                 ),
             ];
             table.set_row(i + 1, row);
@@ -315,9 +303,8 @@ Program ID: `{program_id}`
             );
 
         Ok(self
-            .markdown_skin
-            .term_text(formatted_markdown.as_str())
-            .to_string())
+            .display_engine
+            .render_markdown(formatted_markdown.as_str()))
     }
 
     /// Handles a executing a shell command but also knows how to deal with the prompt itself.
@@ -345,8 +332,9 @@ Program ID: `{program_id}`
                 println!("{}", draw);
             }
             command => {
+                let display_engine_clone = self.display_engine.clone();
                 let (display_stream, done_receiver) =
-                    display_stream::DisplayStream::new_with_receiver(&self.markdown_skin);
+                    display_stream::DisplayStream::new_with_receiver(display_engine_clone);
                 let display_stream: dusk_capnp::dusk_capnp::stream::Client =
                     capnp_rpc::new_client(display_stream);
                 if let Err(e) = self
