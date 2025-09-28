@@ -4,17 +4,15 @@
 # Capnp implementations treat it like the `stream` keyword introduced in newer capnp versions.
 using StreamResult = import "/capnp/stream.capnp".StreamResult;
 
-struct Field { 
-  key @0 :Data;
-  value @1 :Value;
-}
-
-struct Record {
-  typeId @0 :UInt64;  # distinguishes struct types, schemaless but typed.
-  fields @1 :List(Field);
-}
-
 struct Value {
+  struct Record {
+    struct Field { 
+      key @0 :Data;
+      value @1 :Value;
+    }
+    typeId @0 :UInt64;  # distinguishes struct types, schemaless but typed.
+    fields @1 :List(Field);
+  }
   union {
     null @0 :Void;
     uint @1 :UInt64; # for signed integers, cast
