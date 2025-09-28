@@ -39,9 +39,10 @@ interface ProgramArgs {
 interface Process {
   pid @0 () -> (result :UInt64);
   programId @1 () -> (result :UInt64);
-  version @2 () -> (result: Text);
-  run @3 () -> ();
-  portal @4 () -> (result :Portal);
+  name @2 () -> (result: Text);
+  version @3 () -> (result: Text);
+  run @4 () -> ();
+  portal @5 () -> (result :Portal);
 }
 
 interface Portal {

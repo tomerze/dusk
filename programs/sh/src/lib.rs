@@ -41,6 +41,7 @@ basic_launcher!(
 basic_process!(
     ShProcess,
     sh_capnp::PROGRAM_ID,
+    "sh",
     env!("CARGO_PKG_VERSION"),
     ShPortal,
     sh_capnp::sh_portal::Client,

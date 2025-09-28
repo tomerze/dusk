@@ -38,6 +38,7 @@ basic_launcher!(
 basic_process!(
     PsProcess,
     ps_capnp::PROGRAM_ID,
+    "ps",
     env!("CARGO_PKG_VERSION"),
     PsPortal,
     ps_capnp::ps_portal::Client,
@@ -75,7 +76,9 @@ impl PsPortal {
         PsPortal { process }
     }
 
-    async fn inner_ps(process: &PsProcess) -> capnp::Result<(Vec<u64>, Vec<u64>, Vec<String>)> {
+    async fn inner_ps(
+        process: &PsProcess,
+    ) -> capnp::Result<(Vec<u64>, Vec<u64>, Vec<String>, Vec<String>)> {
         let program_args = process.program_args.clone();
 
         let get_reply = program_args.get_request().send().promise.await?;
@@ -86,6 +89,7 @@ impl PsPortal {
 
         let mut pids = vec![];
         let mut program_ids = vec![];
+        let mut process_names = vec![];
         let mut program_versions = vec![];
 
         for entry in process_entries.iter() {
@@ -95,11 +99,14 @@ impl PsPortal {
             let program_id_reply = process.program_id_request().send().promise.await?;
             program_ids.push(program_id_reply.get()?.get_result());
 
+            let name_reply = process.name_request().send().promise.await?;
+            process_names.push(name_reply.get()?.get_result()?.to_string()?);
+
             let program_version_reply = process.version_request().send().promise.await?;
             program_versions.push(program_version_reply.get()?.get_result()?.to_string()?);
         }
 
-        Ok((pids, program_ids, program_versions))
+        Ok((pids, program_ids, process_names, program_versions))
     }
 }
 
@@ -127,19 +134,21 @@ impl portal::Server for PsPortal {
 
         let process = self.process.clone();
         Promise::from_future(async move {
-            let (pids, program_ids, versions) = Self::inner_ps(&process).await?;
+            let (pids, program_ids, names, versions) = Self::inner_ps(&process).await?;
 
             let mut send_request = stream.send_request();
 
             let pid_values = pids.iter().copied().map(Value::Uint).collect();
             let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
+            let name_values = names.iter().cloned().map(Value::String).collect();
             let version_values = versions.iter().cloned().map(Value::String).collect();
             let fields = Record::with_fields(
                 ps_capnp::PROGRAM_ID,
                 [
+                    (b"name".to_vec(), Value::List(name_values)),
+                    (b"version".to_vec(), Value::List(version_values)),
                     (b"pid".to_vec(), Value::List(pid_values)),
                     (b"program_id".to_vec(), Value::List(program_id_values)),
-                    (b"version".to_vec(), Value::List(version_values)),
                 ],
             );
 

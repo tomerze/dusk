@@ -29,6 +29,7 @@ use crate::signal::Signal;
 pub trait Process {
     fn pid(&self) -> u64;
     fn program_id(&self) -> u64;
+    fn name(&self) -> alloc::string::String;
     fn version(&self) -> alloc::string::String;
     fn namespace(&self) -> Rc<Namespace>;
     fn clone_box(&self) -> Box<dyn Process>;
@@ -109,6 +110,16 @@ impl process::Server for dyn Process {
         Promise::ok(())
     }
 
+    fn name(
+        &mut self,
+        _params: process::NameParams,
+        mut results: process::NameResults,
+    ) -> Promise<(), ::capnp::Error> {
+        results.get().set_result(Process::name(self));
+
+        Promise::ok(())
+    }
+
     fn version(
         &mut self,
         _params: process::VersionParams,
@@ -177,6 +188,14 @@ impl process::Server for Box<dyn Process> {
         <dyn Process as process::Server>::program_id(&mut **self, params, results)
     }
 
+    fn name(
+        &mut self,
+        params: process::NameParams,
+        results: process::NameResults,
+    ) -> Promise<(), ::capnp::Error> {
+        <dyn Process as process::Server>::name(&mut **self, params, results)
+    }
+
     fn version(
         &mut self,
         params: process::VersionParams,
@@ -207,6 +226,7 @@ macro_rules! basic_process {
     (
         $process_type:ident,
         $program_id:expr,
+        $name:expr,
         $version:expr,
         $portal_type:path,
         $portal_client_type:path,
@@ -240,6 +260,9 @@ macro_rules! basic_process {
             }
             fn program_id(&self) -> u64 {
                 $program_id
+            }
+            fn name(&self) -> alloc::string::String {
+                alloc::string::String::from($name)
             }
             fn version(&self) -> alloc::string::String {
                 alloc::string::String::from($version)
