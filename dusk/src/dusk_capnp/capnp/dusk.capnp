@@ -8,6 +8,7 @@ struct Field {
   key @0 :Data;
   value @1 :Value;
 }
+
 struct Record {
   typeId @0 :UInt64;  # distinguishes struct types, schemaless but typed.
   fields @1 :List(Field);
