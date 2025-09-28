@@ -29,4 +29,5 @@ dusk_program = { path = "../dusk_program/", public = true}
 dusk_program_sh = { path = "../../../programs/sh", features = ["client"], public = true }
 dusk_program_ps = { path = "../../../programs/ps", features = ["client"], public = true }
 termimad = { version = "0.20", public = true}
+colored_json = "5.0.0"
 base64 = "0.22.1"

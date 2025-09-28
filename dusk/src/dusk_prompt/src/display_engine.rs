@@ -25,6 +25,7 @@ pub struct DefaultDisplayEngine {
 
 pub trait DisplayEngine {
     fn render_value(&self, value: Value) -> Result<String>;
+    fn render_markdown_inline(&self, markdown: &str) -> String;
     fn render_markdown(&self, markdown: &str) -> String;
 }
 
@@ -32,8 +33,16 @@ impl DisplayEngine for DefaultDisplayEngine {
     fn render_value(&self, value: Value) -> Result<String> {
         self.value_to_string(value)
     }
-    fn render_markdown(&self, markdown: &str) -> String {
+    fn render_markdown_inline(&self, markdown: &str) -> String {
         self.markdown_skin.inline(markdown).to_string()
+    }
+    fn render_markdown(&self, markdown: &str) -> String {
+        let term_width = crossterm::terminal::size()
+            .map(|(w, _)| w as usize)
+            .unwrap_or(80);
+        self.markdown_skin
+            .text(markdown, Some(term_width))
+            .to_string()
     }
 }
 
@@ -113,7 +122,7 @@ impl DefaultDisplayEngine {
             Value::Bool(b) => Ok(b.to_string().cyan().bold().to_string()),
             Value::Uint(u) => Ok(u.to_string().cyan().bold().to_string()),
             Value::String(s) => Ok(s),
-            Value::Text(s) => Ok(self.render_markdown(&s)),
+            Value::Text(s) => Ok(self.render_markdown_inline(&s)),
             Value::Bytes(b) => Ok(self
                 .markdown_skin
                 .text(

@@ -137,9 +137,9 @@ impl portal::Server for PsPortal {
             let fields = Record::with_fields(
                 ps_capnp::PROGRAM_ID,
                 [
-                    (b"version".to_vec(), Value::List(version_values)),
                     (b"pid".to_vec(), Value::List(pid_values)),
                     (b"program_id".to_vec(), Value::List(program_id_values)),
+                    (b"version".to_vec(), Value::List(version_values)),
                 ],
             );
 

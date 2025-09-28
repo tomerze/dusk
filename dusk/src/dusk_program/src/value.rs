@@ -13,7 +13,7 @@ use alloc::{
 use core::{convert::TryFrom, fmt, str};
 
 use capnp::Error;
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 use serde::de::{self, value::MapAccessDeserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -68,7 +68,7 @@ pub fn key_string_to_bytes(s: &str) -> Vec<u8> {
     bytes
 }
 
-pub type FieldsMap = HashMap<Vec<u8>, Value, SeedableState<'static>>;
+pub type FieldsMap = IndexMap<Vec<u8>, Value, SeedableState<'static>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Record {
@@ -94,7 +94,7 @@ impl Record {
     where
         I: IntoIterator<Item = (Vec<u8>, Value)>,
     {
-        let mut fields_map: FieldsMap = HashMap::with_hasher(SeedableState::default());
+        let mut fields_map: FieldsMap = IndexMap::with_hasher(SeedableState::default());
         for (key, value) in fields {
             fields_map.insert(key, value);
         }
@@ -157,7 +157,7 @@ impl<'de> Visitor<'de> for FieldsMapVisitor {
     where
         M: MapAccess<'de>,
     {
-        let mut fields_map: FieldsMap = HashMap::with_hasher(SeedableState::default());
+        let mut fields_map: FieldsMap = IndexMap::with_hasher(SeedableState::default());
         while let Some((key, value)) = fields.next_entry::<String, Value>()? {
             let decoded_key = key_string_to_bytes(&key);
             fields_map.insert(decoded_key, value);
@@ -208,7 +208,7 @@ impl<'de> Visitor<'de> for RecordVisitor {
         }
 
         let type_id = type_id.ok_or_else(|| de::Error::custom("Fields JSON missing type id"))?;
-        let fields = fields_map.unwrap_or_else(|| HashMap::with_hasher(SeedableState::default()));
+        let fields = fields_map.unwrap_or_else(|| IndexMap::with_hasher(SeedableState::default()));
 
         Ok(Record { type_id, fields })
     }
@@ -395,7 +395,7 @@ impl Value {
                 let fields_reader = fields_reader?;
                 let type_id = fields_reader.get_type_id();
                 let fields_reader = fields_reader.get_fields()?;
-                let mut fields = HashMap::with_capacity_and_hasher(
+                let mut fields = IndexMap::with_capacity_and_hasher(
                     fields_reader.len() as usize,
                     SeedableState::default(),
                 );

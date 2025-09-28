@@ -24,7 +24,9 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
-use crate::{display_engine::DisplayEngine, display_stream, shell::Shell};
+use crate::{
+    display_engine::DisplayEngine, shell::Shell, stream::display_stream, stream::json_stream,
+};
 
 #[derive(Clone)]
 struct ReedlinePrompt<'s> {
@@ -184,13 +186,13 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
     );
 }
 
-pub struct Prompt<D: DisplayEngine + Clone + 'static> {
-    shell: Shell,
+pub struct Prompt<'a, D: DisplayEngine + Clone + 'static> {
+    shell: &'a mut Shell,
     available_programs_info: Vec<ProgramInfo>,
     display_engine: D,
 }
 
-impl<D: DisplayEngine + Clone + 'static> Prompt<D> {
+impl<'a, D: DisplayEngine + Clone + 'static> Prompt<'a, D> {
     const BUILTIN_COMMANDS: [ProgramInfo; 3] = [
         ProgramInfo {
             name: "clear",
@@ -222,7 +224,7 @@ The `help` command displays information about available commands.
     ];
 
     pub async fn new(
-        shell: Shell,
+        shell: &'a mut Shell,
         get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
     ) -> Result<Self> {
@@ -249,15 +251,15 @@ The `help` command displays information about available commands.
             let row = vec![
                 NuRecordsValue::new(
                     self.display_engine
-                        .render_markdown(format!("**{}**", command.name).as_str()),
+                        .render_markdown_inline(format!("**{}**", command.name).as_str()),
                 ),
                 NuRecordsValue::new(
                     self.display_engine
-                        .render_markdown(command.short_description),
+                        .render_markdown_inline(command.short_description),
                 ),
                 NuRecordsValue::new(
                     self.display_engine
-                        .render_markdown(format!("`{}`", command.version).as_str()),
+                        .render_markdown_inline(format!("`{}`", command.version).as_str()),
                 ),
             ];
             table.set_row(i + 1, row);
@@ -274,7 +276,7 @@ The `help` command displays information about available commands.
         Ok(table_str)
     }
 
-    fn get_program_info_markdown(&self, program_name: &str) -> Result<String> {
+    fn get_program_info_markdown(&self, program_name: &str) -> Result<Option<String>> {
         let program_info = self
             .available_programs_info
             .iter()
@@ -287,7 +289,12 @@ Program ID: `{program_id}`
 ## Description:
 **{short_description}**{long_description}
 ```"#;
-        let program_info = program_info.ok_or(anyhow::anyhow!("Program not found"))?;
+
+        let program_info = if let Some(program_info) = program_info {
+            program_info
+        } else {
+            return Ok(None);
+        };
         let program_id = program_info
             .program_id
             .map(|id| id.to_string())
@@ -302,16 +309,56 @@ Program ID: `{program_id}`
                 format!("\n{}", program_info.long_description).as_str(),
             );
 
-        Ok(self
-            .display_engine
-            .render_markdown(formatted_markdown.as_str()))
+        Ok(Some(
+            self.display_engine
+                .render_markdown(formatted_markdown.as_str()),
+        ))
+    }
+
+    fn help(&self, line: &str) -> Result<()> {
+        let command = line.split_whitespace().nth(1);
+        let draw = if let Some(command) = command {
+            if let Some(markdown) = self.get_program_info_markdown(command)? {
+                markdown
+            } else {
+                format!("No help found for command: {}", command)
+            }
+        } else {
+            self.get_available_commands_table()?
+        };
+
+        println!("{}", draw);
+
+        Ok(())
+    }
+
+    fn get_stream(
+        &self,
+        is_raw: bool,
+    ) -> (
+        dusk_capnp::dusk_capnp::stream::Client,
+        tokio::sync::oneshot::Receiver<()>,
+    ) {
+        if is_raw {
+            let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(true);
+            let json_stream: dusk_capnp::dusk_capnp::stream::Client =
+                capnp_rpc::new_client(json_stream);
+            (json_stream, done_receiver)
+        } else {
+            let display_engine_clone = self.display_engine.clone();
+            let (display_stream, done_receiver) =
+                display_stream::DisplayStream::new_with_receiver(display_engine_clone);
+            let display_stream: dusk_capnp::dusk_capnp::stream::Client =
+                capnp_rpc::new_client(display_stream);
+            (display_stream, done_receiver)
+        }
     }
 
     /// Handles a executing a shell command but also knows how to deal with the prompt itself.
     /// That is mainly being able to clear the prompt.
     ///
     /// Return true when prompt should exit.
-    async fn process_line(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
+    async fn process_line(&mut self, mut line: &str, line_editor: &mut Reedline) -> Result<bool> {
         let first_word = match line.split_whitespace().next() {
             Some(word) => word,
             None => return Ok(false),
@@ -322,27 +369,25 @@ Program ID: `{program_id}`
                 line_editor.clear_screen()?;
             }
             "help" => {
-                let command = line.split_whitespace().nth(1);
-                let draw = if let Some(command) = command {
-                    self.get_program_info_markdown(command)?
-                } else {
-                    self.get_available_commands_table()?
-                };
-
-                println!("{}", draw);
+                self.help(line)?;
             }
-            command => {
-                let display_engine_clone = self.display_engine.clone();
-                let (display_stream, done_receiver) =
-                    display_stream::DisplayStream::new_with_receiver(display_engine_clone);
-                let display_stream: dusk_capnp::dusk_capnp::stream::Client =
-                    capnp_rpc::new_client(display_stream);
+            _sh_entry_name => {
+                // get last word of line
+                let last_word = line.split_whitespace().last().unwrap_or("");
+                let mut is_raw = false; // displays in json
+                if last_word == "?" {
+                    // remove last word from line
+                    line = line[..line.rfind('?').unwrap_or(0)].trim_end();
+                    is_raw = true;
+                }
+
+                let (stream, done_receiver) = self.get_stream(is_raw);
                 if let Err(e) = self
                     .shell
-                    .process_command(command, display_stream, done_receiver)
+                    .process_command(line, stream, done_receiver)
                     .await
                 {
-                    tracing::error!("{:?}: {:?}", command, e);
+                    tracing::error!("{:?}: {:?}", first_word, e);
                 }
             }
         };
@@ -352,7 +397,6 @@ Program ID: `{program_id}`
 
     pub async fn run(mut self) -> Result<()> {
         self.run_inner().await?;
-        self.shell.kill().await?;
         Ok(())
     }
 

@@ -1,6 +1,9 @@
 use anyhow::Result;
 use clap::{command, Parser};
-use dusk_program_sh::{engine::ShEngine, entry::StaticShEntriesBuilder};
+use dusk_program_sh::{
+    engine::ShEngine,
+    entry::{ShEntriesBuilder, StaticShEntriesBuilder},
+};
 use dusk_prompt::{
     connection::Connection, display_engine::DefaultDisplayEngine, prompt::Prompt, shell::Shell,
 };
@@ -13,31 +16,65 @@ use tracing::{error, info};
 struct Cli {
     #[clap(help = "address of dusk server")]
     address: SocketAddr,
+    #[clap(help = "shell command to run, empty for prompt")]
+    command: Option<String>,
 }
 
-async fn run(address: &SocketAddr) {
+async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
+    // Check if we are running in a terminal
+    let colored = atty::is(atty::Stream::Stdout);
+    let (json_stream, done_receiver) =
+        dusk_prompt::stream::json_stream::JsonStream::new_with_receiver(colored);
+    shell
+        .process_command(
+            command.as_str(),
+            capnp_rpc::new_client(json_stream),
+            done_receiver,
+        )
+        .await?;
+    Ok(())
+}
+
+async fn interactive_prompt(
+    shell: &mut Shell,
+    sh_entries_builder: impl ShEntriesBuilder,
+) -> Result<()> {
+    let prompt = Prompt::new(shell, sh_entries_builder, DefaultDisplayEngine::default()).await?;
+    prompt.run().await?;
+    Ok(())
+}
+
+async fn run(cli: Cli) {
     let local_set = tokio::task::LocalSet::new();
 
     if let Err(err) = local_set
         .run_until(async move {
-            let connection = Connection::connect(*address).await?;
+            let connection = Connection::connect(cli.address).await?;
             tokio::select! {
-                _ = async {
+                result = async {
                     let client = connection.client().await;
                     let sh_entries_builder = StaticShEntriesBuilder::default();
-                    let prompt = Prompt::new(
-                        Shell::new(
+                    let mut shell = Shell::new(
                             ShEngine::new(
                                 client,
                                 sh_entries_builder.clone()
                             )
-                        ).await?,
-                        sh_entries_builder,
-                        DefaultDisplayEngine::default()
-                    ).await?;
-                    prompt.run().await?;
+                        ).await?;
+                    let session_result = match cli.command {
+                        Some(command) => single_command(&mut shell, command).await,
+                        None => interactive_prompt(&mut shell, sh_entries_builder).await,
+                    };
+                    let shell_kill_result = shell.kill().await;
+                    // Print both shell kill errors and command errors
+                    if let Err(err) = shell_kill_result {
+                        error!("error killing shell: {}", err);
+                    }
+                    if let Err(err) = session_result {
+                        error!("{}", err);
+                    }
                     Ok::<(), anyhow::Error>(())
                 } => {
+                    result?;
                     info!("exiting");
                 }
                 _ = signal::ctrl_c() => {
@@ -64,7 +101,7 @@ async fn main() -> Result<()> {
     )?);
 
     info!("connecting to {}", cli.address);
-    run(&cli.address).await;
+    run(cli).await;
 
     Ok(())
 }

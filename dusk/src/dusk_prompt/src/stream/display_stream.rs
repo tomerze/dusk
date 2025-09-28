@@ -1,6 +1,6 @@
 use capnp::capability::Promise;
 
-use dusk_capnp::{dusk_capnp::stream::Server, pry};
+use dusk_capnp::{dusk_capnp::stream, pry};
 use dusk_program::value::Value;
 
 use tokio::sync::oneshot;
@@ -25,7 +25,7 @@ impl<D: DisplayEngine> DisplayStream<D> {
     }
 }
 
-impl<D: DisplayEngine> Server for DisplayStream<D> {
+impl<D: DisplayEngine> stream::Server for DisplayStream<D> {
     fn send(
         &mut self,
         params: dusk_capnp::dusk_capnp::stream::SendParams,
