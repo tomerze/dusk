@@ -69,10 +69,11 @@ pub fn key_string_to_bytes(s: &str) -> Vec<u8> {
 }
 
 pub type FieldsMap = HashMap<Vec<u8>, Value, SeedableState<'static>>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Fields {
+pub struct Record {
     pub type_id: u64,
-    pub map: FieldsMap,
+    pub fields: FieldsMap,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,35 +84,38 @@ pub enum Value {
     String(String),
     Bytes(Vec<u8>),
     Bool(bool),
-    Fields(Fields),
+    Record(Record),
     List(Vec<Value>),
 }
 
-impl Fields {
+impl Record {
     #[must_use]
-    pub fn with_entries<I>(type_id: u64, entries: I) -> Self
+    pub fn with_fields<I>(type_id: u64, fields: I) -> Self
     where
         I: IntoIterator<Item = (Vec<u8>, Value)>,
     {
-        let mut map = HashMap::with_hasher(SeedableState::default());
-        for (key, value) in entries {
-            map.insert(key, value);
+        let mut fields_map: FieldsMap = HashMap::with_hasher(SeedableState::default());
+        for (key, value) in fields {
+            fields_map.insert(key, value);
         }
-        Self { type_id, map }
+        Self {
+            type_id,
+            fields: fields_map,
+        }
     }
 }
 
-struct FieldsEntriesSerializer<'a> {
-    map: &'a FieldsMap,
+struct FieldsMapSerializer<'a> {
+    fields: &'a FieldsMap,
 }
 
-impl Serialize for FieldsEntriesSerializer<'_> {
+impl Serialize for FieldsMapSerializer<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut inner = serializer.serialize_map(Some(self.map.len()))?;
-        for (key, value) in self.map.iter() {
+        let mut inner = serializer.serialize_map(Some(self.fields.len()))?;
+        for (key, value) in self.fields.iter() {
             inner.serialize_entry(&key_bytes_to_string(key.to_vec()), value)?;
         }
         inner.end()
@@ -119,74 +123,75 @@ impl Serialize for FieldsEntriesSerializer<'_> {
 }
 
 #[allow(exported_private_dependencies)]
-impl Serialize for Fields {
+impl Serialize for Record {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut outer = serializer.serialize_map(Some(1))?;
         let type_id = format!("0x{:016x}", self.type_id);
-        outer.serialize_entry(&type_id, &FieldsEntriesSerializer { map: &self.map })?;
+        outer.serialize_entry(
+            &type_id,
+            &FieldsMapSerializer {
+                fields: &self.fields,
+            },
+        )?;
         outer.end()
     }
 }
 
-struct FieldsEntries(HashMap<Vec<u8>, Value, SeedableState<'static>>);
-
-impl FieldsEntries {
-    fn into_map(self) -> HashMap<Vec<u8>, Value, SeedableState<'static>> {
-        self.0
-    }
+struct FieldsMapDeserializer {
+    fields: FieldsMap,
 }
 
-struct FieldsEntriesVisitor;
+struct FieldsMapVisitor;
 
-impl<'de> Visitor<'de> for FieldsEntriesVisitor {
-    type Value = FieldsEntries;
+impl<'de> Visitor<'de> for FieldsMapVisitor {
+    type Value = FieldsMapDeserializer;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a map whose keys are UTF-8 strings or :hex:-prefixed hex data")
+        formatter.write_str("a fields map whose keys are [u8]")
     }
 
-    fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+    fn visit_map<M>(self, mut fields: M) -> Result<Self::Value, M::Error>
     where
         M: MapAccess<'de>,
     {
-        let mut entries = HashMap::with_hasher(SeedableState::default());
-        while let Some((key, value)) = map.next_entry::<String, Value>()? {
+        let mut fields_map: FieldsMap = HashMap::with_hasher(SeedableState::default());
+        while let Some((key, value)) = fields.next_entry::<String, Value>()? {
             let decoded_key = key_string_to_bytes(&key);
-            entries.insert(decoded_key, value);
+            fields_map.insert(decoded_key, value);
         }
-        Ok(FieldsEntries(entries))
+        Ok(FieldsMapDeserializer { fields: fields_map })
     }
 }
 
-impl<'de> Deserialize<'de> for FieldsEntries {
+impl<'de> Deserialize<'de> for FieldsMapDeserializer {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(FieldsEntriesVisitor)
+        deserializer.deserialize_map(FieldsMapVisitor)
     }
 }
 
-struct FieldsVisitor;
+struct RecordVisitor;
 
-impl<'de> Visitor<'de> for FieldsVisitor {
-    type Value = Fields;
+impl<'de> Visitor<'de> for RecordVisitor {
+    type Value = Record;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("an object mapping a hex-encoded type id to its field entries")
+        formatter.write_str("an object mapping a hex-encoded type id to its fields map")
     }
 
-    fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+    fn visit_map<M>(self, mut fields: M) -> Result<Self::Value, M::Error>
     where
         M: MapAccess<'de>,
     {
         let mut type_id: Option<u64> = None;
-        let mut entries: Option<HashMap<Vec<u8>, Value, SeedableState<'static>>> = None;
+        let mut fields_map: Option<FieldsMap> = None;
 
-        while let Some((key, value)) = map.next_entry::<String, FieldsEntries>()? {
+        while let Some((key, value)) = fields.next_entry::<String, FieldsMapDeserializer>()? {
             if type_id.is_some() {
                 return Err(de::Error::custom(
                     "Fields JSON must contain exactly one type id entry",
@@ -199,23 +204,23 @@ impl<'de> Visitor<'de> for FieldsVisitor {
             let decoded_type = u64::from_str_radix(trimmed, 16)
                 .map_err(|err| de::Error::custom(err.to_string()))?;
             type_id = Some(decoded_type);
-            entries = Some(value.into_map());
+            fields_map = Some(value.fields);
         }
 
         let type_id = type_id.ok_or_else(|| de::Error::custom("Fields JSON missing type id"))?;
-        let map = entries.unwrap_or_else(|| HashMap::with_hasher(SeedableState::default()));
+        let fields = fields_map.unwrap_or_else(|| HashMap::with_hasher(SeedableState::default()));
 
-        Ok(Fields { type_id, map })
+        Ok(Record { type_id, fields })
     }
 }
 
 #[allow(exported_private_dependencies)]
-impl<'de> Deserialize<'de> for Fields {
+impl<'de> Deserialize<'de> for Record {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(FieldsVisitor)
+        deserializer.deserialize_map(RecordVisitor)
     }
 }
 
@@ -233,7 +238,7 @@ impl Serialize for Value {
             }
             Value::Bytes(bytes) => serializer.serialize_bytes(bytes.as_slice()),
             Value::Bool(b) => serializer.serialize_bool(*b),
-            Value::Fields(fields) => fields.serialize(serializer),
+            Value::Record(record) => record.serialize(serializer),
             Value::List(values) => {
                 let mut seq = serializer.serialize_seq(Some(values.len()))?;
                 for value in values {
@@ -314,14 +319,14 @@ impl<'de> Deserialize<'de> for Value {
             where
                 E: de::Error,
             {
-                Ok(Value::Text(value.to_owned()))
+                Ok(Value::String(value.to_owned()))
             }
 
             fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
-                Ok(Value::Text(value))
+                Ok(Value::String(value))
             }
 
             fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
@@ -353,8 +358,8 @@ impl<'de> Deserialize<'de> for Value {
             where
                 M: MapAccess<'de>,
             {
-                let fields = Fields::deserialize(MapAccessDeserializer::new(map))?;
-                Ok(Value::Fields(fields))
+                let record = Record::deserialize(MapAccessDeserializer::new(map))?;
+                Ok(Value::Record(record))
             }
         }
 
@@ -386,20 +391,20 @@ impl Value {
             }
             Which::Bytes(data_reader) => Ok(Value::Bytes(data_reader?.to_vec())),
             Which::Bool(b) => Ok(Value::Bool(b)),
-            Which::Fields(fields_reader) => {
+            Which::Record(fields_reader) => {
                 let fields_reader = fields_reader?;
                 let type_id = fields_reader.get_type_id();
-                let entries_reader = fields_reader.get_entries()?;
-                let mut map = HashMap::with_capacity_and_hasher(
-                    entries_reader.len() as usize,
+                let fields_reader = fields_reader.get_fields()?;
+                let mut fields = HashMap::with_capacity_and_hasher(
+                    fields_reader.len() as usize,
                     SeedableState::default(),
                 );
-                for entry_reader in entries_reader.iter() {
+                for entry_reader in fields_reader.iter() {
                     let key = entry_reader.get_key()?.to_vec();
                     let value = Value::from_reader(entry_reader.get_value()?)?;
-                    map.insert(key, value);
+                    fields.insert(key, value);
                 }
-                Ok(Value::Fields(Fields { type_id, map }))
+                Ok(Value::Record(Record { type_id, fields }))
             }
             Which::List(list_reader) => {
                 let list_reader = list_reader?;
@@ -433,15 +438,15 @@ impl Value {
             Value::Bool(b) => {
                 builder.set_bool(*b);
             }
-            Value::Fields(fields) => {
-                let mut fields_builder = builder.reborrow().init_fields();
-                fields_builder.set_type_id(fields.type_id);
-                let entry_len = fields.map.len();
-                let mut entries_builder = fields_builder.reborrow().init_entries(entry_len as u32);
-                for (index, (key, value)) in fields.map.iter().enumerate() {
-                    let mut entry_builder = entries_builder.reborrow().get(index as u32);
-                    entry_builder.set_key(key);
-                    let value_builder = entry_builder.reborrow().init_value();
+            Value::Record(record) => {
+                let mut record_builder = builder.reborrow().init_record();
+                record_builder.set_type_id(record.type_id);
+                let entry_len = record.fields.len();
+                let mut fields_builder = record_builder.reborrow().init_fields(entry_len as u32);
+                for (index, (key, value)) in record.fields.iter().enumerate() {
+                    let mut field_builder = fields_builder.reborrow().get(index as u32);
+                    field_builder.set_key(key);
+                    let value_builder = field_builder.reborrow().init_value();
                     value.write_to_builder(value_builder)?;
                 }
             }

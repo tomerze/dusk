@@ -10,9 +10,9 @@ struct Field {
 }
 
 struct Value {
-  struct Fields {
+  struct Record {
     typeId @0 :UInt64;  # distinguishes struct types, schemaless but typed.
-    entries @1 :List(Field);
+    fields @1 :List(Field);
   }
   union {
     null @0 :Void;
@@ -21,7 +21,7 @@ struct Value {
     string @7 :Text; # UTF-8 string
     bytes @3 :Data;
     bool @4 :Bool;
-    fields @5 :Fields;
+    record @5 :Record;
     list @6 :List(Value);
   }
 }
@@ -40,8 +40,9 @@ interface ProgramArgs {
 interface Process {
   pid @0 () -> (result :UInt64);
   programId @1 () -> (result :UInt64);
-  run @2 () -> ();
-  portal @3 () -> (result :Portal);
+  version @2 () -> (result: Text);
+  run @3 () -> ();
+  portal @4 () -> (result :Portal);
 }
 
 interface Portal {

@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use crossterm::style::Stylize;
 use dusk_program::value::key_bytes_to_string;
-use dusk_program::value::{Fields, Value};
+use dusk_program::value::{Record, Value};
 use nu_ansi_term::Color;
 use nu_color_config::{ComputableStyle, StyleComputer};
 use nu_protocol::engine::{EngineState, Stack};
@@ -33,12 +33,7 @@ impl DisplayEngine for DefaultDisplayEngine {
         self.value_to_string(value)
     }
     fn render_markdown(&self, markdown: &str) -> String {
-        let term_width = crossterm::terminal::size()
-            .map(|(w, _)| w as usize)
-            .unwrap_or(80);
-        self.markdown_skin
-            .text(markdown, Some(term_width))
-            .to_string()
+        self.markdown_skin.inline(markdown).to_string()
     }
 }
 
@@ -80,9 +75,9 @@ impl DefaultDisplayEngine {
             .collect()
     }
 
-    fn convert_fields_to_nu_record(&self, fields: Fields) -> Result<NuRecord> {
-        let mut record = NuRecord::with_capacity(fields.map.len());
-        for (key, value) in fields.map.iter() {
+    fn convert_fields_to_nu_record(&self, fields: Record) -> Result<NuRecord> {
+        let mut record = NuRecord::with_capacity(fields.fields.len());
+        for (key, value) in fields.fields.iter() {
             let value = self.convert_value(value.clone())?;
             record.push(key_bytes_to_string(key.clone()), value);
         }
@@ -98,7 +93,7 @@ impl DefaultDisplayEngine {
             | Value::Bytes(_)
             | Value::Bool(_)
             | Value::String(_) => Ok(NuValue::string(self.value_to_string(value)?, span)),
-            Value::Fields(fields) => {
+            Value::Record(fields) => {
                 let record = self.convert_fields_to_nu_record(fields)?;
                 Ok(NuValue::record(record, span))
             }
@@ -132,7 +127,7 @@ impl DefaultDisplayEngine {
                     .map_err(|err| anyhow!(err.to_string()))?;
                 Ok(table.unwrap_or_default())
             }
-            Value::Fields(fields) => {
+            Value::Record(fields) => {
                 if let Some(rows) = self.fields_to_rows(&fields)? {
                     let table = JustTable::table(rows, self.table_opts(span, term_width))
                         .map_err(|err| anyhow!(err.to_string()))?;
@@ -169,15 +164,15 @@ impl DefaultDisplayEngine {
         )
     }
 
-    fn fields_to_rows(&self, fields: &Fields) -> Result<Option<Vec<NuValue>>> {
-        if fields.map.is_empty() {
+    fn fields_to_rows(&self, fields: &Record) -> Result<Option<Vec<NuValue>>> {
+        if fields.fields.is_empty() {
             return Ok(None);
         }
 
         // Ensure all fields are lists check all rows are the same length and get that length
         let expected_len: usize = {
             let lengths_opt: Option<Vec<usize>> = fields
-                .map
+                .fields
                 .iter()
                 .map(|(_key, value)| match &value {
                     Value::List(l) => Some(l.len()),
@@ -200,8 +195,8 @@ impl DefaultDisplayEngine {
         let row_count = expected_len;
         let mut rows = Vec::with_capacity(row_count);
         for index in 0..row_count {
-            let mut record = NuRecord::with_capacity(fields.map.len());
-            for (key, value) in fields.map.iter() {
+            let mut record = NuRecord::with_capacity(fields.fields.len());
+            for (key, value) in fields.fields.iter() {
                 let list = match &value {
                     Value::List(list) => list,
                     _ => unreachable!(),

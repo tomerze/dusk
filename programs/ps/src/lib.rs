@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+use alloc::string::String;
 use std::rc::Rc;
 use std::vec;
 
@@ -14,7 +15,7 @@ use dusk_capnp::prelude::*;
 use alloc::vec::Vec;
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::{dusk, portal};
-use dusk_program::value::{Fields, Value};
+use dusk_program::value::{Record, Value};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
 use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 
@@ -37,6 +38,7 @@ basic_launcher!(
 basic_process!(
     PsProcess,
     ps_capnp::PROGRAM_ID,
+    env!("CARGO_PKG_VERSION"),
     PsPortal,
     ps_capnp::ps_portal::Client,
     ps_capnp::ps_args::Client
@@ -73,7 +75,7 @@ impl PsPortal {
         PsPortal { process }
     }
 
-    async fn inner_ps(process: &PsProcess) -> capnp::Result<(Vec<u64>, Vec<u64>)> {
+    async fn inner_ps(process: &PsProcess) -> capnp::Result<(Vec<u64>, Vec<u64>, Vec<String>)> {
         let program_args = process.program_args.clone();
 
         let get_reply = program_args.get_request().send().promise.await?;
@@ -84,6 +86,7 @@ impl PsPortal {
 
         let mut pids = vec![];
         let mut program_ids = vec![];
+        let mut program_versions = vec![];
 
         for entry in process_entries.iter() {
             pids.push(entry.get_pid());
@@ -91,9 +94,12 @@ impl PsPortal {
             let process = entry.get_process()?;
             let program_id_reply = process.program_id_request().send().promise.await?;
             program_ids.push(program_id_reply.get()?.get_result());
+
+            let program_version_reply = process.version_request().send().promise.await?;
+            program_versions.push(program_version_reply.get()?.get_result()?.to_string()?);
         }
 
-        Ok((pids, program_ids))
+        Ok((pids, program_ids, program_versions))
     }
 }
 
@@ -121,22 +127,24 @@ impl portal::Server for PsPortal {
 
         let process = self.process.clone();
         Promise::from_future(async move {
-            let (pids, program_ids) = Self::inner_ps(&process).await?;
+            let (pids, program_ids, versions) = Self::inner_ps(&process).await?;
 
             let mut send_request = stream.send_request();
 
             let pid_values = pids.iter().copied().map(Value::Uint).collect();
-            let program_values = program_ids.iter().copied().map(Value::Uint).collect();
-            let fields = Fields::with_entries(
+            let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
+            let version_values = versions.iter().cloned().map(Value::String).collect();
+            let fields = Record::with_fields(
                 ps_capnp::PROGRAM_ID,
                 [
+                    (b"version".to_vec(), Value::List(version_values)),
                     (b"pid".to_vec(), Value::List(pid_values)),
-                    (b"program_id".to_vec(), Value::List(program_values)),
+                    (b"program_id".to_vec(), Value::List(program_id_values)),
                 ],
             );
 
             let value_builder = send_request.get().init_value();
-            Value::Fields(fields).write_to_builder(value_builder)?;
+            Value::Record(fields).write_to_builder(value_builder)?;
 
             send_request.send().await?;
             stream.done_request().send().promise.await?;
