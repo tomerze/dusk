@@ -1,0 +1,4 @@
+[submodule "vendor/capnproto"]
+	path = vendor/capnproto
+	url = https://github.com/capnproto/capnproto.git
+	branch = v1.2.0

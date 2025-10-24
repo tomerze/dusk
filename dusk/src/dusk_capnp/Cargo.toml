@@ -9,3 +9,4 @@ capnp-rpc = { version = "0.21.0", default-features = false, public = true}
 
 [build-dependencies]
 capnpc = { version = "0.21.4", default-features = false }
+num_cpus = "1.16"
