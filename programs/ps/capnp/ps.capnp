@@ -4,10 +4,9 @@ using Dusk = import "/capnp/dusk.capnp";
 
 const programId :UInt64 = 0xd111e8c31818511d;
 
-struct PsOptions {
-    pids @0 :List(UInt64);
-    programIds @1 :List(UInt64);
-}
+const resultTypeId :UInt64 = 0xcef2c7c974bf44ec;
+
+struct PsOptions {}
 
 interface PsArgs extends(Dusk.ProgramArgs) {
   get @0 () -> (client: Dusk.Dusk, options :PsOptions);

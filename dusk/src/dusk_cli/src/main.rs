@@ -5,7 +5,11 @@ use dusk_program_sh::{
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
 };
 use dusk_prompt::{
-    connection::Connection, display_engine::DefaultDisplayEngine, prompt::Prompt, shell::Shell,
+    connection::Connection,
+    display_engine::DefaultDisplayEngine,
+    prompt::{Prompt, StreamRequest},
+    shell::Shell,
+    stream::{display_stream, json_stream},
 };
 use std::net::SocketAddr;
 use tokio::signal;
@@ -39,7 +43,27 @@ async fn interactive_prompt(
     shell: &mut Shell,
     sh_entries_builder: impl ShEntriesBuilder,
 ) -> Result<()> {
-    let prompt = Prompt::new(shell, sh_entries_builder, DefaultDisplayEngine::default()).await?;
+    let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
+        StreamRequest::Raw => {
+            let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(true);
+            let json_stream = capnp_rpc::new_client(json_stream);
+            (json_stream, done_receiver)
+        }
+        StreamRequest::Display { display_engine } => {
+            let (display_stream, done_receiver) =
+                display_stream::DisplayStream::new_with_receiver(display_engine.clone());
+            let display_stream = capnp_rpc::new_client(display_stream);
+            (display_stream, done_receiver)
+        }
+    };
+
+    let prompt = Prompt::new(
+        shell,
+        sh_entries_builder,
+        DefaultDisplayEngine::default(),
+        stream_factory,
+    )
+    .await?;
     prompt.run().await?;
     Ok(())
 }

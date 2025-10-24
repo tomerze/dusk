@@ -24,9 +24,7 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
-use crate::{
-    display_engine::DisplayEngine, shell::Shell, stream::display_stream, stream::json_stream,
-};
+use crate::{display_engine::DisplayEngine, shell::Shell};
 
 #[derive(Clone)]
 struct ReedlinePrompt<'s> {
@@ -186,13 +184,32 @@ fn add_newline_keybinding(keybindings: &mut Keybindings) {
     );
 }
 
-pub struct Prompt<'a, D: DisplayEngine + Clone + 'static> {
+type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
+
+pub enum StreamRequest<'a, D>
+where
+    D: DisplayEngine + 'a,
+{
+    Raw,
+    Display { display_engine: &'a D },
+}
+
+pub struct Prompt<'a, D, F>
+where
+    D: DisplayEngine + Clone + 'static,
+    F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
+{
     shell: &'a mut Shell,
     available_programs_info: Vec<ProgramInfo>,
     display_engine: D,
+    stream_factory: F,
 }
 
-impl<'a, D: DisplayEngine + Clone + 'static> Prompt<'a, D> {
+impl<'a, D, F> Prompt<'a, D, F>
+where
+    D: DisplayEngine + Clone + 'static,
+    F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
+{
     const BUILTIN_COMMANDS: [ProgramInfo; 3] = [
         ProgramInfo {
             name: "clear",
@@ -227,6 +244,7 @@ The `help` command displays information about available commands.
         shell: &'a mut Shell,
         get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
+        stream_factory: F,
     ) -> Result<Self> {
         let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
 
@@ -236,6 +254,7 @@ The `help` command displays information about available commands.
             shell,
             available_programs_info,
             display_engine,
+            stream_factory,
         })
     }
 
@@ -332,25 +351,13 @@ Program ID: `{program_id}`
         Ok(())
     }
 
-    fn get_stream(
-        &self,
-        is_raw: bool,
-    ) -> (
-        dusk_capnp::dusk_capnp::stream::Client,
-        tokio::sync::oneshot::Receiver<()>,
-    ) {
+    fn get_stream(&self, is_raw: bool) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver) {
         if is_raw {
-            let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(true);
-            let json_stream: dusk_capnp::dusk_capnp::stream::Client =
-                capnp_rpc::new_client(json_stream);
-            (json_stream, done_receiver)
+            (self.stream_factory)(StreamRequest::Raw)
         } else {
-            let display_engine_clone = self.display_engine.clone();
-            let (display_stream, done_receiver) =
-                display_stream::DisplayStream::new_with_receiver(display_engine_clone);
-            let display_stream: dusk_capnp::dusk_capnp::stream::Client =
-                capnp_rpc::new_client(display_stream);
-            (display_stream, done_receiver)
+            (self.stream_factory)(StreamRequest::Display {
+                display_engine: &self.display_engine,
+            })
         }
     }
 

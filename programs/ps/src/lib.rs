@@ -143,7 +143,7 @@ impl portal::Server for PsPortal {
             let name_values = names.iter().cloned().map(Value::String).collect();
             let version_values = versions.iter().cloned().map(Value::String).collect();
             let fields = Record::with_fields(
-                ps_capnp::PROGRAM_ID,
+                ps_capnp::RESULT_TYPE_ID,
                 [
                     (b"name".to_vec(), Value::List(name_values)),
                     (b"version".to_vec(), Value::List(version_values)),
