@@ -26,7 +26,15 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
 
     if !capnp_root.join("c++").exists() {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let vendor_capnp = Path::new(&manifest_dir).parent().unwrap().parent().unwrap().parent().unwrap().join("vendor").join("capnproto");
+        let vendor_capnp = Path::new(&manifest_dir)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("vendor")
+            .join("capnproto");
 
         if !vendor_capnp.exists() {
             panic!(
@@ -69,7 +77,10 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
         .expect("Failed to configure Cap'n Proto. Are `cmake` and `autotools` installed?");
 
     if !output.status.success() {
-        eprintln!("Command failed: `{}`, exit status: {}", command, output.status);
+        eprintln!(
+            "Command failed: `{}`, exit status: {}",
+            command, output.status
+        );
         eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         panic!("Failed to configure Cap'n Proto build");
@@ -84,7 +95,10 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
         .expect("Failed to build capnproto. Is `make` installed?");
 
     if !output.status.success() {
-        eprintln!("Command failed: `make -j {}`, exit status: {}", jobs, output.status);
+        eprintln!(
+            "Command failed: `make -j {}`, exit status: {}",
+            jobs, output.status
+        );
         eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         panic!("Failed to build capnproto");
@@ -97,7 +111,10 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
         .expect("Failed to install capnproto");
 
     if !output.status.success() {
-        eprintln!("Command failed: `make install`, exit status: {}", output.status);
+        eprintln!(
+            "Command failed: `make install`, exit status: {}",
+            output.status
+        );
         eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         panic!("Failed to install capnproto");
@@ -116,8 +133,7 @@ fn main() {
     std::fs::create_dir_all(&capnp_dir).unwrap();
 
     let stream_capnp_path = capnp_dir.join("stream.capnp");
-    std::fs::copy("capnp/stream.capnp", &stream_capnp_path)
-        .expect("Failed to copy stream.capnp");
+    std::fs::copy("capnp/stream.capnp", &stream_capnp_path).expect("Failed to copy stream.capnp");
 
     CompilerCommand::new()
         .capnp_executable(&capnp_bin)

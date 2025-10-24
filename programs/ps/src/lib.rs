@@ -18,16 +18,15 @@ use dusk_program::value::{Record, Value};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
 
 #[cfg(feature = "client")]
-use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
-#[cfg(feature = "client")]
-use std::rc::Rc;
-#[cfg(feature = "client")]
 use dusk_capnp::dusk_capnp::dusk;
+#[cfg(feature = "client")]
+use dusk_program::impl_program_args_server;
+#[cfg(feature = "client")]
+use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 #[cfg(feature = "client")]
 use linkme::distributed_slice;
 #[cfg(feature = "client")]
-use dusk_program::impl_program_args_server;
-
+use std::rc::Rc;
 
 #[allow(clippy::all)]
 pub mod ps_capnp {
