@@ -17,6 +17,8 @@ uv run pre-commit install
 
 ## Trying things out
 
+Make sure you have `make` `cmake` and `autotools` installed.
+
 ### Run Dusk Nix
 
 ```bash

@@ -11,7 +11,7 @@ shellfish = { version = "0.9.0", features = ["app", "async", "rustyline"] }
 rustyline = "14.0.0"
 colored = "2.2.0"
 tokio-util = { version = "0.7.16", features = ["compat"]}
-reedline = { version = "0.31.0", features = ["sqlite"] }
+reedline = { version = "0.31.0", features = ["sqlite"], public = true}
 crossterm = "0.27.0"
 nu-ansi-term = "0.50.1"
 nu-table = "0.107.0"

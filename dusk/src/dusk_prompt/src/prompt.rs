@@ -13,9 +13,9 @@ use nu_table::{NuRecordsValue, NuTable, TableTheme};
 use pretty_duration::pretty_duration;
 use reedline::{
     default_vi_insert_keybindings, default_vi_normal_keybindings, ColumnarMenu, DefaultCompleter,
-    DefaultHinter, DefaultValidator, EditCommand, ExampleHighlighter, Keybindings, ListMenu,
-    MenuBuilder, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline,
-    ReedlineEvent, ReedlineMenu, Vi,
+    DefaultHinter, DefaultValidator, EditCommand, Keybindings, ListMenu, MenuBuilder,
+    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
+    ReedlineMenu, Vi,
 };
 
 use reedline::CursorConfig;
@@ -24,6 +24,7 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
+use crate::highlighter::CustomHighlighter;
 use crate::{display_engine::DisplayEngine, shell::Shell};
 
 #[derive(Clone)]
@@ -33,9 +34,9 @@ struct ReedlinePrompt<'s> {
 }
 
 impl<'s> ReedlinePrompt<'s> {
-    pub fn new(prompt_name: &'s str) -> Self {
+    pub fn new(prompt_str: &'s str) -> Self {
         ReedlinePrompt {
-            left_prompt: Cow::Owned(format!("[{}]", prompt_name)),
+            left_prompt: Cow::Owned(prompt_str.to_string()),
             right_prompt: Cell::new(Duration::zero()),
         }
     }
@@ -61,7 +62,7 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
-        Cow::Owned(" # ".to_string())
+        Cow::Owned(" ❱ ".to_string())
     }
 
     fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
@@ -101,6 +102,10 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
         vi_normal: Some(SetCursorStyle::SteadyBlock),
         emacs: None,
     };
+
+    let highlighter = CustomHighlighter {
+        external_commands: commands,
+    };
     let mut line_editor = Reedline::create()
         .with_history_session_id(None)
         .with_history(history)
@@ -109,7 +114,7 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
         .with_quick_completions(true)
         .with_partial_completions(true)
         .with_cursor_config(cursor_config)
-        .with_highlighter(Box::new(ExampleHighlighter::new(commands)))
+        .with_highlighter(Box::new(highlighter))
         .with_hinter(Box::new(
             DefaultHinter::default().with_style(Style::new().fg(Color::DarkGray)),
         ))
@@ -415,8 +420,18 @@ Program ID: `{program_id}`
                 .collect(),
         )?;
 
-        let hostname_clone = self.shell.hostname.clone();
-        let prompt = ReedlinePrompt::new(&hostname_clone);
+        let hostname = Style::new()
+            .fg(Color::Yellow)
+            .bold()
+            .paint(&self.shell.hostname)
+            .to_string();
+        let prompt_string = format!(
+            "{}{}{}",
+            Style::new().fg(Color::Cyan).paint("❮"),
+            hostname,
+            Style::new().fg(Color::Cyan).paint("❯")
+        );
+        let prompt = ReedlinePrompt::new(&prompt_string);
 
         loop {
             let sig = line_editor.read_line(&prompt)?;
