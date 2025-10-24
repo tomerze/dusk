@@ -15,8 +15,18 @@ fn main() {
     )
     .unwrap();
 
-    CompilerCommand::new()
-        .import_path(out_dir)
+    let capnp_path = Path::new(dusk_capnp::capnp_bin_path());
+    if !capnp_path.exists() {
+        panic!(
+            "Expected capnp compiler built by dusk_capnp at {}",
+            capnp_path.display()
+        );
+    }
+
+    let mut cmd = CompilerCommand::new();
+    cmd.capnp_executable(capnp_path);
+
+    cmd.import_path(out_dir)
         .crate_provides("dusk_capnp", [0x86c366a91393f3f8]) // stream.capnp
         .crate_provides("dusk_capnp", [0xace6963097d486d6]) // dusk.capnp
         .file("capnp/sh.capnp")

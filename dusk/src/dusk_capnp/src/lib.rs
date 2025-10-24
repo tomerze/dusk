@@ -15,6 +15,13 @@ pub mod dusk_capnp {
 pub static DUSK_SCHEMA: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/capnp/dusk.capnp"));
 
+pub const fn capnp_bin_path() -> &'static str {
+    match option_env!("DUSK_CAPNP_BIN_PATH") {
+        Some(path) => path,
+        None => panic!("DUSK_CAPNP_BIN_PATH is not set; ensure dusk_capnp's build script ran"),
+    }
+}
+
 /// Like capnp_rpc's `pry!()`, but supports `no_std`
 #[macro_export]
 macro_rules! pry {

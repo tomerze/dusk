@@ -5,8 +5,7 @@
 extern crate alloc;
 
 use alloc::string::String;
-use std::rc::Rc;
-use std::vec;
+use alloc::vec;
 
 #[allow(unused)]
 #[prelude_import]
@@ -14,15 +13,21 @@ use dusk_capnp::prelude::*;
 
 use alloc::vec::Vec;
 use capnp::capability::{FromClientHook, Promise};
-use dusk_capnp::dusk_capnp::{dusk, portal};
+use dusk_capnp::dusk_capnp::portal;
 use dusk_program::value::{Record, Value};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
-use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
-
-use linkme::distributed_slice;
 
 #[cfg(feature = "client")]
+use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
+#[cfg(feature = "client")]
+use std::rc::Rc;
+#[cfg(feature = "client")]
+use dusk_capnp::dusk_capnp::dusk;
+#[cfg(feature = "client")]
+use linkme::distributed_slice;
+#[cfg(feature = "client")]
 use dusk_program::impl_program_args_server;
+
 
 #[allow(clippy::all)]
 pub mod ps_capnp {
@@ -164,8 +169,10 @@ impl portal::Server for PsPortal {
 
 impl ps_capnp::ps_portal::Server for PsPortal {}
 
+#[cfg(feature = "client")]
 struct PsProgramArgsBuilder {}
 
+#[cfg(feature = "client")]
 impl ProgramArgsBuilder for PsProgramArgsBuilder {
     fn build(
         &self,
@@ -177,6 +184,7 @@ impl ProgramArgsBuilder for PsProgramArgsBuilder {
     }
 }
 
+#[cfg(feature = "client")]
 #[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
 pub fn program_args_builder_entry() -> ShEntry {
     ShEntry {
