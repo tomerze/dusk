@@ -99,6 +99,8 @@ impl Shell {
         Ok(())
     }
 
+    /// Kill the shell process, must be called to clean up resources.
+    /// Isn't in Drop to allow async cleanup.
     pub async fn kill(self) -> Result<()> {
         let client = self.client.clone();
         let sh_process = self.sh_process.clone();
