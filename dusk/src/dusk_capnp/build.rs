@@ -9,6 +9,43 @@ fn export_capnp_env(capnp_bin: &Path) {
     );
 }
 
+/// Copies vendor capnproto to the destination directory.
+fn copy_vendor_capnp(capnp_root: &Path) {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let vendor_capnp = Path::new(&manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("vendor")
+        .join("capnproto");
+
+    if !vendor_capnp.exists() {
+        panic!(
+            "Capnproto submodule not found at {}. Run 'git submodule update --init --recursive'",
+            vendor_capnp.display()
+        );
+    }
+
+    let vendor = vendor_capnp
+        .to_str()
+        .expect("vendor/capnproto path contains invalid UTF-8");
+    let dest = capnp_root
+        .to_str()
+        .expect("OUT_DIR path contains invalid UTF-8");
+
+    let status = Command::new("cp")
+        .args(["-r", vendor, dest])
+        .status()
+        .expect("Failed to copy capnproto from vendor directory");
+
+    if !status.success() {
+        panic!("Failed to copy capnproto from vendor directory");
+    }
+}
+
 /// Builds and installs local capnp compiler if not already present.
 fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
     let capnp_bin = capnp_root.join("bin").join("capnp");
@@ -24,41 +61,7 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
 
     println!("cargo:info=Building capnp compiler from source");
 
-    if !capnp_root.join("c++").exists() {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let vendor_capnp = Path::new(&manifest_dir)
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("vendor")
-            .join("capnproto");
-
-        if !vendor_capnp.exists() {
-            panic!(
-                "Capnproto submodule not found at {}. Run 'git submodule update --init --recursive'",
-                vendor_capnp.display()
-            );
-        }
-
-        let vendor = vendor_capnp
-            .to_str()
-            .expect("vendor/capnproto path contains invalid UTF-8");
-        let dest = capnp_root
-            .to_str()
-            .expect("OUT_DIR path contains invalid UTF-8");
-
-        let status = Command::new("cp")
-            .args(["-r", vendor, dest])
-            .status()
-            .expect("Failed to copy capnproto from vendor directory");
-
-        if !status.success() {
-            panic!("Failed to copy capnproto from vendor directory");
-        }
-    }
+    copy_vendor_capnp(capnp_root);
 
     let build_dir = capnp_root.join("c++");
     let prefix = capnp_root
