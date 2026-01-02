@@ -1,0 +1,13 @@
+[package]
+name = "dusk_py"
+version = "0.1.0"
+edition = "2021"
+
+
+[lib]
+name = "dusk"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "0.27.0"
+dusk_prompt = { path = "../dusk_prompt" }

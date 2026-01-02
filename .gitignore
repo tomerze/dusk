@@ -9,3 +9,5 @@
 /history.sqlite3-wal
 /build
 /docs/site
+/**/__pycache__
+/**/dusk*.so
