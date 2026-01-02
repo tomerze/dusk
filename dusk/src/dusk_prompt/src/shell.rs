@@ -73,7 +73,7 @@ impl Shell {
         })
     }
 
-    pub async fn process_command(
+    pub async fn sh(
         &mut self,
         command: &str,
         stream: stream::Client,

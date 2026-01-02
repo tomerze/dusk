@@ -30,7 +30,7 @@ async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
     let (json_stream, done_receiver) =
         dusk_prompt::stream::json_stream::JsonStream::new_with_receiver(colored);
     shell
-        .process_command(
+        .sh(
             command.as_str(),
             capnp_rpc::new_client(json_stream),
             done_receiver,
