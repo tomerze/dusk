@@ -5,12 +5,11 @@ use dusk_program_sh::{
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
 };
 use dusk_prompt::{
-    connection::Connection,
     display_engine::DefaultDisplayEngine,
     prompt::{Prompt, StreamRequest},
-    shell::Shell,
     stream::{display_stream, json_stream},
 };
+use dusk_shell::{connection::Connection, shell::Shell};
 use std::net::SocketAddr;
 use tokio::signal;
 use tracing::{error, info};

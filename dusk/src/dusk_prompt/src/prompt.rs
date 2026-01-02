@@ -24,8 +24,9 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
+use crate::display_engine::DisplayEngine;
 use crate::highlighter::CustomHighlighter;
-use crate::{display_engine::DisplayEngine, shell::Shell};
+use dusk_shell::shell::Shell;
 
 #[derive(Clone)]
 struct ReedlinePrompt<'s> {
