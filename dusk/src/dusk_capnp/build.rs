@@ -11,6 +11,11 @@ fn export_capnp_env(capnp_bin: &Path) {
 
 /// Copies vendor capnproto to the destination directory.
 fn copy_vendor_capnp(capnp_root: &Path) {
+    // Remove any existing build to ensure clean state
+    if capnp_root.exists() {
+        std::fs::remove_dir_all(capnp_root).expect("Failed to remove existing capnproto directory");
+    }
+
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let vendor_capnp = Path::new(&manifest_dir)
         .parent()

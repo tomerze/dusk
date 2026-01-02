@@ -49,8 +49,8 @@ impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
             }
         }
         Promise::err(capnp::Error::failed(format!(
-            "no program args program_args_builder found for string `{}`",
-            s
+            "no sh entry found for `{}`",
+            program_name
         )))
     }
 
