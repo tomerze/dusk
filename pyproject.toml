@@ -7,7 +7,6 @@ dependencies = [
     "maturin>=1.10.2",
     "pre-commit>=4.3.0",
 ]
-dynamic = ["version"]
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

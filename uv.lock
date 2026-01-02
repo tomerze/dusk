@@ -123,6 +123,7 @@ wheels = [
 
 [[package]]
 name = "dusk"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "maturin" },
