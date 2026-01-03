@@ -15,6 +15,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod driver;
 
+pub use driver::set_launchers;
+pub use dusk_program::launcher_set::LauncherSet;
+
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 async fn init() -> Result<()> {

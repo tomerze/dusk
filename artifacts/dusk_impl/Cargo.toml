@@ -9,3 +9,5 @@ path = "src/main.rs"
 
 [dependencies]
 dusk_nix = { path = "../../impls/nix" }
+dusk_program_sh = { path = "../../programs/sh" }
+dusk_program_ps = { path = "../../programs/ps" }

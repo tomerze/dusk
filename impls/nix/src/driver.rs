@@ -6,21 +6,33 @@ use core::pin::Pin;
 use dusk::driver::{Driver, FutureProcessResult};
 use dusk_program::launcher_set::LauncherSet;
 use dusk_program::{namespace::Namespace, process::Process};
-use dusk_program_ps::PsLauncher;
-use dusk_program_sh::ShLauncher;
+use lazy_static::lazy_static;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
+use std::sync::Mutex;
 
-struct NixDriver {
-    launchers: LauncherSet,
+lazy_static! {
+    static ref LAUNCHERS: Mutex<Option<LauncherSet>> = Mutex::new(None);
 }
+
+pub fn set_launchers(launchers: LauncherSet) {
+    *LAUNCHERS.lock().unwrap() = Some(launchers);
+}
+
+struct NixDriver;
 
 impl NixDriver {
     fn new() -> Self {
-        let launchers = LauncherSet::new();
-        launchers.add(Box::new(ShLauncher {}));
-        launchers.add(Box::new(PsLauncher {}));
-        NixDriver { launchers }
+        NixDriver
+    }
+
+    fn launchers(&self) -> LauncherSet {
+        LAUNCHERS
+            .lock()
+            .unwrap()
+            .as_ref()
+            .expect("Launchers not initialized - call set_launchers() before using driver")
+            .clone()
     }
 }
 
@@ -38,7 +50,7 @@ impl Driver for NixDriver {
         namespace: Rc<Namespace>,
         program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> FutureProcessResult {
-        let launchers = self.launchers.clone();
+        let launchers = self.launchers();
         let fut = async move {
             let mut rng = rand::thread_rng();
             let pid: u64 = rng.gen();
