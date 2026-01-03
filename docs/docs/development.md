@@ -19,7 +19,9 @@ uv run pre-commit install
 
 Make sure you have `make` `cmake` and `autotools` installed.
 
-### Run example Dusk impl (Dusk Nix impl) which listens on tcp port 9090
+### Run example Dusk Impl
+
+This is by default the Dusk Nix impl, which listens on tcp port 9090
 
 ```bash
 cargo run --bin dusk_impl
@@ -33,13 +35,16 @@ cargo run --bin dusk -- 127.0.0.1:9090
 
 ### Try out Dusk's Python API
 
-```py
+```bash
 uv run maturin develop
-uv run python -c "
+uv run python
+```
+
+```py
 import dusk
 d = dusk.Dusk('127.0.0.1', 9090)
+# get the currently running processes using the `ps` program and print them.
 print(list(d.sh('ps')))
-"
 ```
 
 ## Using the framework
@@ -56,11 +61,11 @@ The basic flow of using the Dusk framework is as follows:
 ### Build
 
 ```bash
-uv run mkdocs build
+cd docs && uv run mkdocs build
 ```
 
 ## Serve
 
 ```bash
-uv run mkdocs serve
+cd docs && uv run mkdocs serve
 ```
