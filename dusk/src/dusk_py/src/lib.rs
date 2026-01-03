@@ -1,3 +1,5 @@
+#![allow(exported_private_dependencies)]
+
 use anyhow::Result;
 use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_shell::connection::Connection;
@@ -7,20 +9,38 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use tokio::sync::mpsc;
 
+mod shell_output;
+use shell_output::{handle_sh, ShellOutput};
+
 // Provide a dummy __pender symbol for embassy linkage compatibility
 #[no_mangle]
 static __pender: () = ();
 
+/// Maximum number of items that can be buffered in the shell output channel.
+/// This provides backpressure to prevent unbounded memory growth if the Python
+/// consumer is slower than the Cap'n Proto stream producer.
+pub(crate) const SHELL_OUTPUT_BUFFER_SIZE: usize = 32;
+
 #[pymodule]
 mod dusk {
+    #[pymodule_export]
+    use super::shell_output::ShellOutput;
     #[pymodule_export]
     use super::Dusk;
 }
 
-enum Message {
+pub(crate) enum Message {
     Shutdown(mpsc::UnboundedSender<Result<()>>),
+    Sh(String, mpsc::Sender<Result<Vec<u8>>>),
 }
 
+// Since we need the capnp rpc runtime to run using tokio on a single thread the design of this
+// client is as follows:
+// * When a Dusk instance is created, a new thread is spawned
+// * This thread runs a tokio runtime with a local task set
+// * The connection to the Dusk server is established in this thread
+// * A mpsc channel is used to send messages to this thread for executing actions
+// * The thread listens for messages and processes them accordingly
 #[pyclass(unsendable)]
 struct Dusk {
     thread_handle: Arc<Mutex<Option<JoinHandle<Result<()>>>>>,
@@ -70,8 +90,16 @@ impl Dusk {
         self.disconnect_internal()
     }
 
-    fn sh(&mut self, _py: Python, _command: String) -> PyResult<()> {
-        Ok(())
+    fn sh(&mut self, _py: Python, command: String) -> PyResult<ShellOutput> {
+        let tx = self
+            .message_tx
+            .lock()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?
+            .clone();
+
+        ShellOutput::new(command, &tx).map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
     fn __del__(&mut self) {
@@ -91,12 +119,6 @@ impl Dusk {
         async fn init(addr: std::net::SocketAddr) -> Result<(Connection, Client)> {
             let connection = Connection::connect(addr).await?;
             let client = connection.client().await;
-            // let shell =
-            //     dusk_shell::shell::Shell::new(dusk_program_sh::engine::ShEngine::new(
-            //         client,
-            //         dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-            //     ))
-            //     .await?;
             Ok((connection, client))
         }
 
@@ -112,27 +134,38 @@ impl Dusk {
                 }
             };
 
-            // Wait for shutdown message or channel closure
-            // Keep the client alive here for future use
-            match message_rx.recv().await {
-                Some(Message::Shutdown(result_tx)) => {
-                    // Drop client before disconnecting
-                    drop(client);
-                    let result = async {
-                        connection.disconnect().await?;
-                        Ok(())
+            loop {
+                match message_rx.recv().await {
+                    Some(Message::Sh(command, output_tx)) => {
+                        handle_sh(client.clone(), command, output_tx);
                     }
-                    .await;
-                    let _ = result_tx.send(result);
-                }
-                None => {
-                    // Channel closed, clean up anyway
-                    drop(client);
-                    connection.disconnect().await?;
+                    Some(Message::Shutdown(result_tx)) => {
+                        Self::handle_shutdown(client, connection, result_tx).await;
+                        break;
+                    }
+                    None => {
+                        drop(client);
+                        let _ = connection.disconnect().await;
+                        break;
+                    }
                 }
             }
             Ok::<(), anyhow::Error>(())
         }))
+    }
+
+    async fn handle_shutdown(
+        client: Client,
+        connection: Connection,
+        result_tx: mpsc::UnboundedSender<Result<()>>,
+    ) {
+        let result = async {
+            drop(client);
+            connection.disconnect().await?;
+            Ok(())
+        }
+        .await;
+        let _ = result_tx.send(result);
     }
 
     // Disconnection flow

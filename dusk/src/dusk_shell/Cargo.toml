@@ -13,4 +13,3 @@ capnp-rpc = "0.21.0"
 futures = "0.3.31"
 dusk_capnp = { path = "../dusk_capnp", public = true }
 dusk_program_sh = { path = "../../../programs/sh", features = ["client"], public = true }
-dusk_program_ps = { path = "../../../programs/ps", features = ["client"] }

@@ -4,7 +4,6 @@ use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::args::ShArgs;
 use dusk_program_sh::sh_capnp::{engine, sh_args, sh_portal};
-use std::hint::black_box;
 use tokio::sync::oneshot;
 use tracing::debug;
 
@@ -59,10 +58,6 @@ impl Shell {
 
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
-
-        // Unfortunately we need to trick the linker into including all
-        // crates that register program args builders
-        black_box(dusk_program_ps::program_args_builder_entry);
 
         let sh_process = Self::create_sh_process(client.clone(), engine).await?;
 
