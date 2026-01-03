@@ -1,4 +1,6 @@
 use anyhow::Result;
+use dusk_capnp::dusk_capnp::dusk::Client;
+use dusk_shell::connection::Connection;
 use pyo3::prelude::*;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -19,7 +21,7 @@ enum Message {
     Shutdown(mpsc::UnboundedSender<Result<()>>),
 }
 
-#[pyclass]
+#[pyclass(unsendable)]
 struct Dusk {
     thread_handle: Arc<Mutex<Option<JoinHandle<Result<()>>>>>,
     message_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Message>>>>,
@@ -30,7 +32,7 @@ impl Dusk {
     /// Create a new Dusk client and connect to the server.
     ///
     /// Args:
-    ///     address: The IP address or hostname as a string
+    ///     address: The IP address
     ///     port: The port number
     ///
     /// Returns:
@@ -43,56 +45,11 @@ impl Dusk {
             port,
         ));
 
-        let (message_tx, mut message_rx) = mpsc::unbounded_channel::<Message>();
+        let (message_tx, message_rx) = mpsc::unbounded_channel::<Message>();
         let (init_tx, mut init_rx) = mpsc::unbounded_channel::<Result<()>>();
 
-        let thread_handle = std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new()?;
-            let local_set = tokio::task::LocalSet::new();
-
-            rt.block_on(local_set.run_until(async move {
-                let init_result = async {
-                    let connection = dusk_shell::connection::Connection::connect(addr).await?;
-                    let client = connection.client().await;
-                    let shell =
-                        dusk_shell::shell::Shell::new(dusk_program_sh::engine::ShEngine::new(
-                            client,
-                            dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-                        ))
-                        .await?;
-                    Ok::<_, anyhow::Error>((connection, shell))
-                }
-                .await;
-
-                match init_result {
-                    Ok((connection, shell)) => {
-                        let _ = init_tx.send(Ok(()));
-
-                        // Wait for shutdown message or channel closure
-                        match message_rx.recv().await {
-                            Some(Message::Shutdown(result_tx)) => {
-                                let result = async {
-                                    shell.kill().await?;
-                                    connection.disconnect().await?;
-                                    Ok(())
-                                }
-                                .await;
-                                let _ = result_tx.send(result);
-                            }
-                            None => {
-                                // Channel closed, clean up anyway
-                                let _ = shell.kill().await;
-                                let _ = connection.disconnect().await;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        let _ = init_tx.send(Err(e));
-                    }
-                }
-                Ok::<(), anyhow::Error>(())
-            }))
-        });
+        let thread_handle =
+            std::thread::spawn(move || Self::connection_thread(addr, message_rx, init_tx));
 
         // Wait for initialization to complete or fail
         match init_rx.blocking_recv() {
@@ -102,24 +59,87 @@ impl Dusk {
             }),
             Some(Err(e)) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
             None => Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Initialization failed",
+                "Initialization failed unexpectedly",
             )),
         }
     }
 
     /// Disconnect from the Dusk server.
     /// This should be called when you're done using the client.
-    fn disconnect(&self) -> PyResult<()> {
-        self.disconnect_impl()
+    fn disconnect(&mut self) -> PyResult<()> {
+        self.disconnect_internal()
+    }
+
+    fn sh(&mut self, _py: Python, _command: String) -> PyResult<()> {
+        Ok(())
     }
 
     fn __del__(&mut self) {
-        let _ = self.disconnect_impl();
+        let _ = self.disconnect_internal();
     }
 }
 
 impl Dusk {
-    fn disconnect_impl(&self) -> PyResult<()> {
+    fn connection_thread(
+        addr: std::net::SocketAddr,
+        mut message_rx: mpsc::UnboundedReceiver<Message>,
+        init_tx: mpsc::UnboundedSender<Result<()>>,
+    ) -> Result<()> {
+        let rt = tokio::runtime::Runtime::new()?;
+        let local_set = tokio::task::LocalSet::new();
+
+        async fn init(addr: std::net::SocketAddr) -> Result<(Connection, Client)> {
+            let connection = Connection::connect(addr).await?;
+            let client = connection.client().await;
+            // let shell =
+            //     dusk_shell::shell::Shell::new(dusk_program_sh::engine::ShEngine::new(
+            //         client,
+            //         dusk_program_sh::entry::StaticShEntriesBuilder::default(),
+            //     ))
+            //     .await?;
+            Ok((connection, client))
+        }
+
+        rt.block_on(local_set.run_until(async move {
+            let (connection, client) = match init(addr).await {
+                Ok((connection, client)) => {
+                    let _ = init_tx.send(Ok(()));
+                    (connection, client)
+                }
+                Err(e) => {
+                    let _ = init_tx.send(Err(e));
+                    return Ok(());
+                }
+            };
+
+            // Wait for shutdown message or channel closure
+            // Keep the client alive here for future use
+            match message_rx.recv().await {
+                Some(Message::Shutdown(result_tx)) => {
+                    // Drop client before disconnecting
+                    drop(client);
+                    let result = async {
+                        connection.disconnect().await?;
+                        Ok(())
+                    }
+                    .await;
+                    let _ = result_tx.send(result);
+                }
+                None => {
+                    // Channel closed, clean up anyway
+                    drop(client);
+                    connection.disconnect().await?;
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        }))
+    }
+
+    // Disconnection flow
+    // * User calls `disconnect()` which wraps this internal function
+    // * A shutdown message is sent to the connection thread
+    // * The thread calls `connection.disconnect()`
+    fn disconnect_internal(&mut self) -> PyResult<()> {
         // Take the sender if available
         let tx_opt = self
             .message_tx
