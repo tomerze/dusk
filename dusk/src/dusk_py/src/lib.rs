@@ -21,12 +21,12 @@ static __pender: () = ();
 /// consumer is slower than the Cap'n Proto stream producer.
 pub(crate) const SHELL_OUTPUT_BUFFER_SIZE: usize = 32;
 
-#[pymodule]
-mod dusk {
-    #[pymodule_export]
-    use super::shell_output::ShellOutput;
-    #[pymodule_export]
-    use super::Dusk;
+/// Register the dusk Python module.
+/// This function is called by the wrapper binary in bins/dusk_py.
+pub fn register_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<Dusk>()?;
+    module.add_class::<shell_output::ShellOutput>()?;
+    Ok(())
 }
 
 pub(crate) enum Message {

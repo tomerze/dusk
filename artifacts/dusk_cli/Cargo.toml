@@ -1,0 +1,13 @@
+[package]
+name = "dusk_cli_bin"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "dusk"
+path = "src/main.rs"
+
+[dependencies]
+dusk_cli = { path = "../../dusk/src/dusk_cli" }
+dusk_program_ps = { path = "../../programs/ps", features = ["client"] }
+anyhow = "1.0"

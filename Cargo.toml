@@ -10,5 +10,7 @@ members = [
   "impls/nix",
   "programs/sh",
   "programs/ps",
-  
+  "artifacts/dusk_cli",
+  "artifacts/dusk_py",
+  "artifacts/dusk_impl",
 ]

@@ -13,7 +13,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-manifest-path = "dusk/src/dusk_py/Cargo.toml"
+manifest-path = "artifacts/dusk_py/Cargo.toml"
 module-name = "dusk"
 python-source = "."
 include = ["dusk/__init__.py"]

@@ -10,7 +10,7 @@ use dusk_prompt::{
     stream::{display_stream, json_stream},
 };
 use dusk_shell::{connection::Connection, shell::Shell};
-use std::{hint::black_box, net::SocketAddr};
+use std::net::SocketAddr;
 use tokio::signal;
 use tracing::{error, info};
 
@@ -114,12 +114,8 @@ async fn run(cli: Cli) {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+pub async fn main() -> Result<()> {
     console_subscriber::init();
-
-    // Unfortunately we need to trick the linker into including all
-    // crates that register program args builders
-    black_box(dusk_program_ps::program_args_builder_entry);
 
     let cli = Cli::parse_from(argfile::expand_args_from(
         wild::args_os(),
