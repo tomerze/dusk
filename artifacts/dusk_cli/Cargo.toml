@@ -9,5 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 dusk_cli = { path = "../../dusk/src/dusk_cli" }
-dusk_program_ps = { path = "../../programs/ps", features = ["client"] }
 anyhow = "1.0"
+
+# Add dusk programs here as needed
+dusk_program_ps = { path = "../../programs/ps", features = ["client"] }

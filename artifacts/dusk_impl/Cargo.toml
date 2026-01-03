@@ -3,4 +3,9 @@ name = "dusk_impl"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "dusk_impl"
+path = "src/main.rs"
+
 [dependencies]
+dusk_nix = { path = "../../impls/nix" }

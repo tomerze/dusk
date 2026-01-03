@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    dusk_nix::main();
 }
