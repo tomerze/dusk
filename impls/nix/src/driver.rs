@@ -9,14 +9,19 @@ use dusk_program::{namespace::Namespace, process::Process};
 use lazy_static::lazy_static;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
+
+static LAUNCHERS_FACTORY: OnceLock<Box<dyn Fn() -> LauncherSet + Send + Sync>> = OnceLock::new();
 
 lazy_static! {
     static ref LAUNCHERS: Mutex<Option<LauncherSet>> = Mutex::new(None);
 }
 
-pub fn set_launchers(launchers: LauncherSet) {
-    *LAUNCHERS.lock().unwrap() = Some(launchers);
+pub fn set_launchers(launchers_factory: impl Fn() -> LauncherSet + Send + Sync + 'static) {
+    LAUNCHERS_FACTORY
+        .set(Box::new(launchers_factory))
+        .ok()
+        .expect("set_launchers called more than once");
 }
 
 struct NixDriver;
@@ -27,12 +32,19 @@ impl NixDriver {
     }
 
     fn launchers(&self) -> LauncherSet {
-        LAUNCHERS
-            .lock()
-            .unwrap()
-            .as_ref()
-            .expect("Launchers not initialized - call set_launchers() before using driver")
-            .clone()
+        let mut launchers = LAUNCHERS.lock().unwrap();
+
+        if let Some(ref launchers) = *launchers {
+            return launchers.clone();
+        }
+
+        let factory = LAUNCHERS_FACTORY
+            .get()
+            .expect("launchers not initialized - call set_launchers() before using driver");
+
+        let new_launchers = factory();
+        *launchers = Some(new_launchers.clone());
+        new_launchers
     }
 }
 
