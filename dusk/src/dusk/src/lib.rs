@@ -7,7 +7,7 @@
 extern crate alloc;
 
 // This allows us to essentially completely override rust's default prelude with our own.
-// We do this to bring in things captnc depends on, like `Box`.
+// We do this to bring in things capnp depends on, like `Box`.
 #[allow(unused)]
 #[prelude_import]
 use dusk_capnp::prelude::*;
