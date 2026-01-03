@@ -8,5 +8,5 @@ fn main() {
         launchers.add(Box::new(PsLauncher {}));
         launchers
     });
-    dusk_nix::main();
+    dusk_nix::run();
 }

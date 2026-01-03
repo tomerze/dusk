@@ -43,7 +43,7 @@ async fn init_wrapper() {
     }
 }
 
-pub fn main() {
+pub fn run() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .filter_module("async_io", log::LevelFilter::Info)
