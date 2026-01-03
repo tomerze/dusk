@@ -64,7 +64,7 @@ The basic flow of using the Dusk framework is as follows:
 cd docs && uv run mkdocs build
 ```
 
-## Serve
+### Serve
 
 ```bash
 cd docs && uv run mkdocs serve

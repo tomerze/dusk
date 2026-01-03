@@ -31,8 +31,8 @@ A capability extending `#!capnp Dusk.ProgramArgs` for example
 interface ShArgs extends(Dusk.ProgramArgs) {}
 ```
 
-This capability is provided by the dusk client is provided to the dusk launcher (more on launchers later).
-At the very fundamental level program args allow you to send arbitrary data to a process when it is created.
+This capability is provided by the dusk client to the dusk launcher (more on launchers later).
+At the very fundamental level program args allow you to send arbitrary data and client-side rpc function callbacks to a process when it is created.
 
 ### Launcher
 
