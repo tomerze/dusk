@@ -21,7 +21,7 @@ Make sure you have `make` `cmake` and `autotools` installed.
 
 ### Run example Dusk Impl
 
-This is by default the Dusk Nix impl, which listens on tcp port 9090
+This is by default the Dusk Nix impl, which listens on tcp port `9090`
 
 ```bash
 cargo run --bin dusk_impl
