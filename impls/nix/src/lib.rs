@@ -67,13 +67,15 @@ async fn init_wrapper() {
     }
 }
 
-pub fn run() {
+pub fn bootstrap() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .filter_module("async_io", log::LevelFilter::Info)
         .format_timestamp_nanos()
         .init();
+}
 
+pub fn run() {
     let executor = EXECUTOR.init(Executor::new());
 
     executor.run(|spawner| {
