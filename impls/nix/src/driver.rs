@@ -4,51 +4,42 @@ use anyhow::{anyhow, Ok, Result};
 use core::future::Future;
 use core::pin::Pin;
 use dusk::driver::{Driver, FutureProcessResult};
-use dusk_program::launcher_set::LauncherSet;
+use dusk_program::launcher_set::{LauncherSet, LauncherSetBuilder};
 use dusk_program::{namespace::Namespace, process::Process};
-use lazy_static::lazy_static;
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
-static LAUNCHERS_FACTORY: OnceLock<Box<dyn Fn() -> LauncherSet + Send + Sync>> = OnceLock::new();
-
-lazy_static! {
-    static ref LAUNCHERS: Mutex<Option<LauncherSet>> = Mutex::new(None);
+pub(crate) struct NixDriver {
+    launcher_set_builder: Mutex<Option<Box<dyn LauncherSetBuilder>>>,
 }
-
-pub fn set_launchers(launchers_factory: impl Fn() -> LauncherSet + Send + Sync + 'static) {
-    LAUNCHERS_FACTORY
-        .set(Box::new(launchers_factory))
-        .ok()
-        .expect("set_launchers called more than once");
-}
-
-struct NixDriver;
 
 impl NixDriver {
     fn new() -> Self {
-        NixDriver
+        NixDriver {
+            launcher_set_builder: Mutex::new(None),
+        }
     }
 
-    fn launchers(&self) -> LauncherSet {
-        let mut launchers = LAUNCHERS.lock().unwrap();
+    pub fn set_launcher_set_builder(&self, builder: impl LauncherSetBuilder + 'static) {
+        *self.launcher_set_builder.lock().unwrap() = Some(Box::new(builder));
+    }
 
-        if let Some(ref launchers) = *launchers {
-            return launchers.clone();
-        }
+    fn launchers(&self) -> Result<LauncherSet> {
+        let launcher_set_builder_guard = self.launcher_set_builder.lock().unwrap();
+        let launcher_set_builder = launcher_set_builder_guard
+            .as_ref()
+            .expect("launcher set builder not initialized - call set_launcher_set_builder() before using driver");
 
-        let factory = LAUNCHERS_FACTORY
-            .get()
-            .expect("launchers not initialized - call set_launchers() before using driver");
-
-        let new_launchers = factory();
-        *launchers = Some(new_launchers.clone());
-        new_launchers
+        launcher_set_builder.build()
     }
 }
 
 dusk::dusk_driver_impl!(static ref DRIVER: NixDriver = NixDriver::new());
+
+pub(crate) fn driver() -> &'static NixDriver {
+    &DRIVER
+}
 
 impl Driver for NixDriver {
     fn hostname(&self) -> Result<String> {
@@ -62,7 +53,10 @@ impl Driver for NixDriver {
         namespace: Rc<Namespace>,
         program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> FutureProcessResult {
-        let launchers = self.launchers();
+        let launchers = match self.launchers() {
+            core::result::Result::Ok(l) => l,
+            Err(e) => return Box::pin(async move { Err(e) }),
+        };
         let fut = async move {
             let mut rng = rand::thread_rng();
             let pid: u64 = rng.gen();

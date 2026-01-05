@@ -30,6 +30,13 @@ impl LauncherSet {
         LauncherSet { launchers }
     }
 
+    pub fn from_launchers(launchers: Vec<Box<dyn Launcher + Send>>) -> Self {
+        let launchers = Arc::new(Mutex::<CriticalSectionRawMutex, LauncherVec>::new(
+            launchers,
+        ));
+        LauncherSet { launchers }
+    }
+
     pub fn add(&self, launcher: Box<dyn Launcher + Send>) {
         embassy_futures::block_on(async {
             let mut launchers = self.launchers.lock().await;
@@ -57,5 +64,24 @@ impl LauncherSet {
             }
         }
         Err(anyhow!("no launcher found for program id {}", program_id))
+    }
+}
+
+pub trait LauncherSetBuilder: Send + Sync {
+    fn build(&self) -> Result<LauncherSet>;
+}
+
+pub struct StatelessLauncherSetBuilder {
+    launcher_set: LauncherSet,
+}
+
+impl StatelessLauncherSetBuilder {
+    pub fn new(launcher_set: LauncherSet) -> Self {
+        StatelessLauncherSetBuilder { launcher_set }
+    }
+}
+impl LauncherSetBuilder for StatelessLauncherSetBuilder {
+    fn build(&self) -> Result<LauncherSet> {
+        Ok(self.launcher_set.clone())
     }
 }
