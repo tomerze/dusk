@@ -10,14 +10,13 @@ embassy-time = { version = "*", public = true, features = ["std", "log"] }
 embassy-futures = { version = "*", public = true }
 
 anyhow = "1.0.99"
-async-net = "2.0.0"
 env_logger = "0.11.8"
 log = "0.4.28"
 static_cell = "2.1.1"
-futures = "0.3.31"
 nix = { version = "0.30.1", features = ["hostname", "time"] }
 dusk = { path = "../../dusk/src/dusk/" }
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
+capnp-rpc = { version = "0.21.0", default-features = false, public = true }
 async-trait = "0.1.89"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
 critical-section = { version = "1", features = ["std"] }

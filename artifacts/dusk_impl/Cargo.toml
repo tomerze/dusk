@@ -11,3 +11,4 @@ path = "src/main.rs"
 dusk_nix = { path = "../../impls/nix" }
 dusk_program_sh = { path = "../../programs/sh" }
 dusk_program_ps = { path = "../../programs/ps" }
+dusk_program_init = { path = "../../programs/init" }

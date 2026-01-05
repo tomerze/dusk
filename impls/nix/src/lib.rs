@@ -4,17 +4,13 @@
 extern crate alloc;
 
 use anyhow::{anyhow, Result};
-use async_net::TcpListener;
 use dusk::dusk_capnp::dusk_capnp::program_args;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use embassy_executor::Executor;
-use embassy_executor::Spawner;
-use futures::io::AsyncReadExt;
 use log::error;
 use static_cell::StaticCell;
 use std::cell::RefCell;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub use dusk_program::launcher_set::LauncherSet;
 pub use dusk_program::launcher_set::LauncherSetBuilder;
@@ -22,23 +18,22 @@ pub use dusk_program::launcher_set::StatelessLauncherSetBuilder;
 
 mod driver;
 
-pub fn set_launcher_set_builder(
-    launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
-) {
-    driver::driver().set_launcher_set_builder(launcher_set_builder);
-}
-
 thread_local! {
     static INIT_PROGRAM_ARGS: RefCell<Option<program_args::Client>> = const { RefCell::new(None) };
 }
 
-pub fn set_init_program_args(program_args: program_args::Client) {
+pub fn configure(
+    launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
+    init_program_args: impl program_args::Server + 'static,
+) {
+    driver::driver().set_launcher_set_builder(launcher_set_builder);
+
     INIT_PROGRAM_ARGS.with(|args| {
         let mut args_mut = args.borrow_mut();
         if args_mut.is_some() {
-            panic!("set_init_program_args called more than once");
+            panic!("configure called more than once");
         }
-        *args_mut = Some(program_args);
+        *args_mut = Some(capnp_rpc::new_client(init_program_args));
     });
 }
 
@@ -46,18 +41,16 @@ static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 async fn init() -> Result<()> {
     let root = alloc::rc::Rc::new(Namespace::new(0));
-    loop {
-        let listener =
-            TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 9090)).await?;
-        let (stream, _) = listener.accept().await?;
-        stream.set_nodelay(true)?;
-        let (reader, writer) = stream.split();
-        let session_task = dusk::session(root.clone(), Box::pin(reader), Box::pin(writer));
-        let spawner = unsafe { Spawner::for_current_executor().await };
-        spawner
-            .spawn(session_task)
-            .map_err(|err| anyhow!("failed to spawn session task {err:#?}"))?;
-    }
+    let init_program_args = INIT_PROGRAM_ARGS.with(|args| {
+        args.borrow().as_ref().cloned().ok_or_else(|| {
+            anyhow!("init program args not configured - call `configure` before `run`")
+        })
+    })?;
+    let process = dusk::driver::process(root.clone(), init_program_args).await?;
+
+    process.bootstrap().await?;
+
+    Ok(())
 }
 
 #[embassy_executor::task]
