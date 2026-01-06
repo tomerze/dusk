@@ -7,6 +7,7 @@ members = [
   "dusk/src/dusk_program",
   "dusk/src/dusk_capnp",
   "dusk/src/dusk_py",
+  "dusk/src/dusk_shell",
   "impls/nix",
   "programs/sh",
   "programs/ps",
@@ -14,4 +15,5 @@ members = [
   "artifacts/dusk_cli",
   "artifacts/dusk_py",
   "artifacts/dusk_impl",
+  "tests/cli",
 ]

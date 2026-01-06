@@ -36,7 +36,7 @@ async fn init_wrapper(init_program_args: program_args::Client) {
     }
 }
 
-pub fn bootstrap() {
+pub fn bootstrap_logging() {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .filter_module("async_io", log::LevelFilter::Info)
@@ -46,11 +46,9 @@ pub fn bootstrap() {
 
 pub fn run(
     launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
-    init_program_args: impl program_args::Server + 'static,
+    init_program_args: program_args::Client,
 ) {
     driver::driver().set_launcher_set_builder(launcher_set_builder);
-
-    let init_program_args: program_args::Client = capnp_rpc::new_client(init_program_args);
 
     let executor = EXECUTOR.init(Executor::new());
 

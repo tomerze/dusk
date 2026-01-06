@@ -8,7 +8,10 @@ name = "dusk_impl"
 path = "src/main.rs"
 
 [dependencies]
+capnp-rpc = { version = "0.21.0", default-features = false, public = true }
+capnp = { version = "0.21.5", default-features = false, features = ["alloc"], public = true}
 dusk_nix = { path = "../../impls/nix" }
+dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program_sh = { path = "../../programs/sh" }
 dusk_program_ps = { path = "../../programs/ps" }
 dusk_program_init = { path = "../../programs/init" }

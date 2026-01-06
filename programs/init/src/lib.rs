@@ -17,7 +17,7 @@ use embassy_executor::Spawner;
 use embassy_sync::channel::DynamicReceiver;
 use futures::io::AsyncReadExt;
 use futures::FutureExt;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::string::String;
 
 #[allow(clippy::all)]
 pub mod init_capnp {
@@ -47,16 +47,32 @@ impl_portal_server!(InitPortal);
 
 impl init_capnp::init_portal::Server for InitPortal {}
 
-#[derive(Default)]
-pub struct InitArgs {}
+pub struct InitArgs {
+    address: String,
+}
 
 impl InitArgs {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(address: &str) -> Self {
+        InitArgs {
+            address: address.to_string(),
+        }
     }
 }
 
 impl_program_args_server!(InitArgs, crate::init_capnp::PROGRAM_ID);
+
+impl init_capnp::init_args::Server for InitArgs {
+    fn get(
+        &mut self,
+        _params: init_capnp::init_args::GetParams,
+        mut results: init_capnp::init_args::GetResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let mut options = results.get().init_options();
+        options.set_address(&self.address);
+
+        Promise::ok(())
+    }
+}
 
 #[derive(Clone)]
 pub struct InitProcess {
@@ -114,8 +130,14 @@ impl dusk_program::process::Process for InitProcess {
         &self,
         signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
     ) -> Result<()> {
-        let listener =
-            TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 9090)).await?;
+        let program_args = self
+            .program_args
+            .clone()
+            .cast_to::<init_capnp::init_args::Client>();
+        let get_reply = program_args.get_request().send().promise.await?;
+        let options = get_reply.get()?.get_options()?;
+        let address = options.get_address()?;
+        let listener = TcpListener::bind(address.to_str()?).await?;
 
         loop {
             futures::select! {
