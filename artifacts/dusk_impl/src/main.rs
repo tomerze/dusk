@@ -11,7 +11,7 @@ fn main() {
             Box::new(ShLauncher {}),
             Box::new(PsLauncher {}),
         ])),
-        capnp_rpc::new_client::<init_args::Client, _>(InitArgs::new("0.0.0.0:9091"))
+        capnp_rpc::new_client::<init_args::Client, _>(InitArgs::new("0.0.0.0", 9090))
             .cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
     );
 }

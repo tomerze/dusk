@@ -49,12 +49,14 @@ impl init_capnp::init_portal::Server for InitPortal {}
 
 pub struct InitArgs {
     address: String,
+    port: u16,
 }
 
 impl InitArgs {
-    pub fn new(address: &str) -> Self {
+    pub fn new(address: &str, port: u16) -> Self {
         InitArgs {
             address: address.to_string(),
+            port,
         }
     }
 }
@@ -69,6 +71,7 @@ impl init_capnp::init_args::Server for InitArgs {
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let mut options = results.get().init_options();
         options.set_address(&self.address);
+        options.set_port(self.port);
 
         Promise::ok(())
     }
@@ -137,7 +140,8 @@ impl dusk_program::process::Process for InitProcess {
         let get_reply = program_args.get_request().send().promise.await?;
         let options = get_reply.get()?.get_options()?;
         let address = options.get_address()?;
-        let listener = TcpListener::bind(address.to_str()?).await?;
+        let port = options.get_port();
+        let listener = TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
 
         loop {
             futures::select! {

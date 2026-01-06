@@ -1,12 +1,9 @@
 [package]
-name = "dusk_cli_test"
+name = "dusk_cli_tests"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-
-dusk_cli = { path = "../../dusk/src/dusk_cli" }
-
-[dev-dependencies]
+dusk_tests = { path = "../common" }
 assert_cmd = "2.0"
 predicates = "3.0"

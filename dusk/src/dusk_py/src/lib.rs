@@ -1,4 +1,5 @@
 #![allow(exported_private_dependencies)]
+#![feature(linkage)]
 
 use anyhow::Result;
 use dusk_capnp::dusk_capnp::dusk::Client;
@@ -14,6 +15,7 @@ use shell_output::{handle_sh, ShellOutput};
 
 // Provide a dummy __pender symbol for embassy linkage compatibility
 #[no_mangle]
+#[linkage = "weak"]
 static __pender: () = ();
 
 /// Maximum number of items that can be buffered in the shell output channel.
