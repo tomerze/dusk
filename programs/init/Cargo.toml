@@ -20,5 +20,4 @@ async-net = "2.0.0"
 futures = "0.3.31"
 
 [build-dependencies]
-capnpc = { version = "0.21.4", default-features = false }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}
