@@ -183,7 +183,6 @@ fn test_multiple_servers_parallel_connections() {
         .iter()
         .enumerate()
         .map(|(i, (_server, port))| {
-            let bin_path = bin_path;
             let port = *port;
             thread::spawn(move || {
                 // Run ps command on each server
