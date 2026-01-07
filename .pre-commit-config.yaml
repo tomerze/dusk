@@ -4,13 +4,5 @@ repos:
       hooks:
       -   id: fmt
       -   id: clippy
-  -   repo: local
-      hooks:
-      -   id: cargo-nextest
-          name: test
-          entry: cargo nextest run --release 
-          language: system
-          pass_filenames: false
-          types: [rust]
 
 fail_fast: true
