@@ -21,6 +21,8 @@ struct Cli {
     address: SocketAddr,
     #[clap(help = "shell command to run, empty for prompt")]
     command: Option<String>,
+    #[clap(long, help = "enable tokio console debugging")]
+    debug_console: bool,
 }
 
 async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
@@ -117,13 +119,17 @@ async fn run(cli: Cli) {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    console_subscriber::init();
-
     let cli = Cli::parse_from(argfile::expand_args_from(
         wild::args_os(),
         argfile::parse_fromfile,
         argfile::PREFIX,
     )?);
+
+    if cli.debug_console {
+        console_subscriber::init();
+    } else {
+        tracing_subscriber::fmt::init();
+    }
 
     info!("connecting to {}", cli.address);
     run(cli).await;
