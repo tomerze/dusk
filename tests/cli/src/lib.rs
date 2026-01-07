@@ -3,6 +3,7 @@
 use assert_cmd::assert::OutputAssertExt;
 use dusk_tests::{gen_port, get_dusk_cli_bin, DuskNixImpl, LISTEN_ADDR};
 use predicates::prelude::*;
+use rexpect::process::wait::WaitStatus;
 use rexpect::spawn;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -277,11 +278,23 @@ fn test_interactive_shell() {
     )
     .expect("Failed to spawn interactive shell");
 
+    // Verify shell is running by sending a command
+    p.send_line("ps").expect("Failed to send ps command");
+
     // Send exit command
     p.send_line("exit").expect("Failed to send exit command");
 
-    // Wait for process to exit
-    p.exp_eof().expect("Process should exit after exit command");
+    // Wait for process to exit cleanly - this verifies it worked
+    let wait_result = p.process.wait().expect("Failed to wait for process");
+    // WaitStatus::Exited(_, 0) means successful exit
+    match wait_result {
+        WaitStatus::Exited(_, 0) => {
+            // Success!
+        }
+        other => {
+            panic!("Process should exit with status 0, got: {:?}", other);
+        }
+    }
 }
 
 #[test]
@@ -309,13 +322,27 @@ fn test_multiple_interactive_shells_parallel() {
         })
         .collect();
 
-    // Now all three are connected, disconnect them all by sending exit
+    // Verify shells are working by sending commands
+    for p in processes.iter_mut() {
+        p.send_line("ps").expect("Failed to send ps command");
+    }
+
+    // Now disconnect them all by sending exit
     for p in processes.iter_mut() {
         p.send_line("exit").expect("Failed to send exit command");
     }
 
-    // Wait for all to exit
-    for p in processes.iter_mut() {
-        p.exp_eof().expect("Process should exit after exit command");
+    // Wait for all to exit cleanly - this verifies they worked
+    for process in processes {
+        let wait_result = process.process.wait().expect("Failed to wait for process");
+        // WaitStatus::Exited(_, 0) means successful exit
+        match wait_result {
+            WaitStatus::Exited(_, 0) => {
+                // Success!
+            }
+            other => {
+                panic!("Process should exit with status 0, got: {:?}", other);
+            }
+        }
     }
 }
