@@ -8,28 +8,39 @@ use dusk_program::launcher_set::{LauncherSet, LauncherSetBuilder};
 use dusk_program::{namespace::Namespace, process::Process};
 use nix::{sys::time::TimeValLike, unistd::gethostname};
 use rand::Rng;
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 pub(crate) struct NixDriver {
-    launcher_set_builder: Mutex<Option<Box<dyn LauncherSetBuilder>>>,
+    launcher_set_builders: Mutex<HashMap<u64, Box<dyn LauncherSetBuilder>>>,
 }
 
 impl NixDriver {
     fn new() -> Self {
         NixDriver {
-            launcher_set_builder: Mutex::new(None),
+            launcher_set_builders: Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn set_launcher_set_builder(&self, builder: impl LauncherSetBuilder + 'static) {
-        *self.launcher_set_builder.lock().unwrap() = Some(Box::new(builder));
+    pub fn set_launcher_set_builder(
+        &self,
+        namespace_id: u64,
+        builder: impl LauncherSetBuilder + 'static,
+    ) {
+        self.launcher_set_builders
+            .lock()
+            .unwrap()
+            .insert(namespace_id, Box::new(builder));
     }
 
-    fn launchers(&self) -> Result<LauncherSet> {
-        let launcher_set_builder_guard = self.launcher_set_builder.lock().unwrap();
-        let launcher_set_builder = launcher_set_builder_guard
-            .as_ref()
-            .expect("launcher set builder not initialized - call set_launcher_set_builder() before using driver");
+    fn launchers(&self, namespace_id: u64) -> Result<LauncherSet> {
+        let launcher_set_builders = self.launcher_set_builders.lock().unwrap();
+        let launcher_set_builder = launcher_set_builders.get(&namespace_id).ok_or_else(|| {
+            anyhow!(
+                "launcher set builder not found for namespace {}",
+                namespace_id
+            )
+        })?;
 
         launcher_set_builder.build()
     }
@@ -53,7 +64,8 @@ impl Driver for NixDriver {
         namespace: Rc<Namespace>,
         program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> FutureProcessResult {
-        let launchers = match self.launchers() {
+        let namespace_id = namespace.id;
+        let launchers = match self.launchers(namespace_id) {
             core::result::Result::Ok(l) => l,
             Err(e) => return Box::pin(async move { Err(e) }),
         };

@@ -12,7 +12,6 @@ embassy-futures = { version = "*", public = true }
 anyhow = "1.0.99"
 env_logger = "0.11.8"
 log = "0.4.28"
-static_cell = "2.1.1"
 nix = { version = "0.30.1", features = ["hostname", "time"] }
 dusk = { path = "../../dusk/src/dusk/" }
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }

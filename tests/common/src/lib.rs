@@ -11,14 +11,14 @@ pub fn gen_port() -> u16 {
     rng.random_range(1001..=65535)
 }
 
-pub struct DuskNixImpl {
-    _join_handle: Option<std::thread::JoinHandle<()>>,
-}
+pub struct DuskNixImpl {}
 
 impl DuskNixImpl {
     pub fn new(address: &str, port: u16) -> Self {
         let address = address.to_string();
-        let join_handle = std::thread::spawn(move || {
+
+        // Spawn server thread - it runs forever so we don't store the handle
+        std::thread::spawn(move || {
             dusk_nix::run(
                 dusk_nix::StatelessLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(
                     vec![
@@ -32,15 +32,7 @@ impl DuskNixImpl {
             );
         });
 
-        Self {
-            _join_handle: Some(join_handle),
-        }
-    }
-}
-
-impl Drop for DuskNixImpl {
-    fn drop(&mut self) {
-        // TODO actually shutdown dusk
+        Self {}
     }
 }
 
