@@ -8,8 +8,10 @@ repos:
   -   repo: local
       hooks:
       -   id: cargo-nextest
-          name: cargo nextest
-          entry: cargo nextest run
+          name: test
+          entry: cargo nextest run --release 
           language: system
           pass_filenames: false
           types: [rust]
+
+fail_fast: true
