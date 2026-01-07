@@ -63,7 +63,7 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
-        Cow::Owned(" ❱ ".to_string())
+        Cow::Owned(" ❯❯ ".to_string())
     }
 
     fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
@@ -422,13 +422,7 @@ Program ID: `{program_id}`
             .bold()
             .paint(&self.shell.hostname)
             .to_string();
-        let prompt_string = format!(
-            "{}{}{}",
-            Style::new().fg(Color::Cyan).paint("❮"),
-            hostname,
-            Style::new().fg(Color::Cyan).paint("❯")
-        );
-        let prompt = ReedlinePrompt::new(&prompt_string);
+        let prompt = ReedlinePrompt::new(&hostname);
 
         loop {
             let sig = line_editor.read_line(&prompt)?;

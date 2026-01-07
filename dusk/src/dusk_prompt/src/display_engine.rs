@@ -50,7 +50,7 @@ impl Default for DefaultDisplayEngine {
     fn default() -> Self {
         let mut markdown_skin = termimad::MadSkin::default();
         use termimad::crossterm::style::Color;
-        markdown_skin.paragraph.set_fg(termimad::rgb(30, 30, 40));
+        markdown_skin.paragraph.set_fg(termimad::rgb(150, 150, 150));
         markdown_skin.bold.set_fg(Color::Grey);
         markdown_skin.headers[1].set_fg(Color::Yellow);
         markdown_skin.bullet.set_char('○');
