@@ -3,6 +3,7 @@ use dusk_program_init::{init_capnp::init_args, InitArgs, InitLauncher};
 use dusk_program_ps::PsLauncher;
 use dusk_program_sh::ShLauncher;
 use rand::Rng;
+use std::sync::OnceLock;
 
 pub const LISTEN_ADDR: &str = "127.0.0.1";
 
@@ -36,12 +37,21 @@ impl DuskNixImpl {
     }
 }
 
-pub fn get_dusk_cli_bin() -> std::path::PathBuf {
-    escargot::CargoBuild::new()
-        .bin("dusk")
-        .manifest_path("../../artifacts/dusk_cli/Cargo.toml")
-        .run()
-        .unwrap()
-        .path()
-        .to_owned()
+static DUSK_CLI_BIN: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+pub fn get_dusk_cli_bin() -> &'static std::path::Path {
+    DUSK_CLI_BIN.get_or_init(|| {
+        // Build once and cache the path. Escargot will only rebuild if needed.
+        // The key insight: use the cargo target directory which is shared across
+        // all test processes. Escargot will use cargo's lock file to ensure only
+        // one build happens at a time.
+        escargot::CargoBuild::new()
+            .bin("dusk")
+            .manifest_path("../../artifacts/dusk_cli/Cargo.toml")
+            .current_release()
+            .run()
+            .unwrap()
+            .path()
+            .to_owned()
+    })
 }

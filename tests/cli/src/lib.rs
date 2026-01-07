@@ -34,7 +34,7 @@ fn test_multiple_ps_calls() {
 
     // Run ps multiple times on the same server
     for i in 0..3 {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = Command::new(bin_path);
         let output = cmd
             .arg(format!("{}:{}", LISTEN_ADDR, port))
             .arg("ps")
@@ -78,7 +78,6 @@ fn test_concurrent_connections() {
     // Simulate multiple concurrent clients connecting
     let handles: Vec<_> = (0..3)
         .map(|_| {
-            let bin_path = bin_path.clone();
             thread::spawn(move || {
                 let mut cmd = Command::new(bin_path);
                 cmd.arg(format!("{}:{}", LISTEN_ADDR, port))
@@ -95,7 +94,7 @@ fn test_concurrent_connections() {
     }
 
     // After concurrent connections, verify state is still consistent
-    let mut cmd = Command::new(&bin_path);
+    let mut cmd = Command::new(bin_path);
     let output = cmd
         .arg(format!("{}:{}", LISTEN_ADDR, port))
         .arg("ps")
@@ -123,7 +122,7 @@ fn test_ps_output_structure() {
 
     let bin_path = get_dusk_cli_bin();
 
-    let mut cmd = Command::new(&bin_path);
+    let mut cmd = Command::new(bin_path);
     let output = cmd
         .arg(format!("{}:{}", LISTEN_ADDR, port))
         .arg("ps")
@@ -184,7 +183,7 @@ fn test_multiple_servers_parallel_connections() {
         .iter()
         .enumerate()
         .map(|(i, (_server, port))| {
-            let bin_path = bin_path.clone();
+            let bin_path = bin_path;
             let port = *port;
             thread::spawn(move || {
                 // Run ps command on each server
@@ -234,7 +233,6 @@ fn test_multiple_servers_parallel_connections() {
         .iter()
         .enumerate()
         .map(|(i, (_server, port))| {
-            let bin_path = bin_path.clone();
             let port = *port;
             thread::spawn(move || {
                 let mut cmd = Command::new(bin_path);
