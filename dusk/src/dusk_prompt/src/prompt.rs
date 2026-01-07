@@ -417,12 +417,11 @@ Program ID: `{program_id}`
                 .collect(),
         )?;
 
-        let hostname = Style::new()
+        let prompt_string = Style::new()
             .fg(Color::Yellow)
             .bold()
-            .paint(&self.shell.hostname)
+            .paint(format!("○ {}", self.shell.hostname))
             .to_string();
-        let prompt_string = format!("○ {}", hostname,);
         let prompt = ReedlinePrompt::new(&prompt_string);
 
         loop {
