@@ -298,6 +298,56 @@ fn test_interactive_shell() {
 }
 
 #[test]
+fn test_two_clients_same_server() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+
+    let bin_path = get_dusk_cli_bin();
+
+    // Spawn two clients connecting to the same server
+    let mut client1 = spawn(
+        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+        Some(5000),
+    )
+    .expect("Failed to spawn first client");
+
+    let mut client2 = spawn(
+        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+        Some(5000),
+    )
+    .expect("Failed to spawn second client");
+
+    // Verify both clients are working
+    client1
+        .send_line("ps")
+        .expect("Failed to send ps to client1");
+    client2
+        .send_line("ps")
+        .expect("Failed to send ps to client2");
+
+    // Exit both clients
+    client1
+        .send_line("exit")
+        .expect("Failed to send exit to client1");
+    client2
+        .send_line("exit")
+        .expect("Failed to send exit to client2");
+
+    // Verify both exited cleanly
+    let wait1 = client1.process.wait().expect("Failed to wait for client1");
+    match wait1 {
+        WaitStatus::Exited(_, 0) => {}
+        other => panic!("Client1 should exit with status 0, got: {:?}", other),
+    }
+
+    let wait2 = client2.process.wait().expect("Failed to wait for client2");
+    match wait2 {
+        WaitStatus::Exited(_, 0) => {}
+        other => panic!("Client2 should exit with status 0, got: {:?}", other),
+    }
+}
+
+#[test]
 fn test_multiple_interactive_shells_parallel() {
     // Create multiple servers
     let servers: Vec<_> = (0..3)

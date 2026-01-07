@@ -135,7 +135,6 @@ impl portal::Server for PsPortal {
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-
         let process = self.process.clone();
         Promise::from_future(async move {
             let (pids, program_ids, names, versions) = Self::inner_ps(&process).await?;
