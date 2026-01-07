@@ -110,6 +110,8 @@ async fn run(cli: Cli) {
         .await
     {
         error!("critical error: {}", err);
+        // Exit with error
+        std::process::exit(1);
     }
 }
 
