@@ -435,20 +435,18 @@ Program ID: `{program_id}`
                                 history_item
                             },
                         )?;
+                        // Immediately after Enter is pressed, go to start of line and replace circle
+                        execute!(
+                            stdout(),
+                            MoveUp(1),
+                            MoveToColumn(0),
+                            SetForegroundColor(CrosstermColor::Yellow),
+                            Print("●"),
+                            ResetColor,
+                            MoveDown(1),
+                            MoveToColumn(0)
+                        )?;
                     }
-
-                    // Immediately after Enter is pressed, go to start of line and replace circle
-                    execute!(
-                        stdout(),
-                        MoveUp(1),
-                        MoveToColumn(0),
-                        SetForegroundColor(CrosstermColor::Yellow),
-                        Print("●"),
-                        ResetColor,
-                        MoveDown(1),
-                        MoveToColumn(0)
-                    )?;
-
                     let start_timestamp = std::time::Instant::now();
 
                     let should_exit = self.process_line(&buffer, &mut line_editor).await?;
