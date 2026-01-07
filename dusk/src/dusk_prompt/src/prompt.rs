@@ -20,6 +20,8 @@ use reedline::{
 
 use reedline::CursorConfig;
 
+use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
+use crossterm::style::{Color as CrosstermColor, Print, ResetColor, SetForegroundColor};
 use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
@@ -47,9 +49,7 @@ static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
 impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     fn render_prompt_left(&self) -> Cow<'_, str> {
-        {
-            Cow::Owned(self.left_prompt.to_string())
-        }
+        Cow::Owned(self.left_prompt.to_string())
     }
 
     fn render_prompt_right(&self) -> Cow<'_, str> {
@@ -63,7 +63,7 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
-        Cow::Owned(" ❯❯ ".to_string())
+        Cow::Owned(" ❯ ".to_string())
     }
 
     fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
@@ -422,7 +422,8 @@ Program ID: `{program_id}`
             .bold()
             .paint(&self.shell.hostname)
             .to_string();
-        let prompt = ReedlinePrompt::new(&hostname);
+        let prompt_string = format!("○ {}", hostname,);
+        let prompt = ReedlinePrompt::new(&prompt_string);
 
         loop {
             let sig = line_editor.read_line(&prompt)?;
@@ -436,6 +437,19 @@ Program ID: `{program_id}`
                             },
                         )?;
                     }
+
+                    // Immediately after Enter is pressed, go to start of line and replace circle
+                    execute!(
+                        stdout(),
+                        MoveUp(1),
+                        MoveToColumn(0),
+                        SetForegroundColor(CrosstermColor::Yellow),
+                        Print("●"),
+                        ResetColor,
+                        MoveDown(1),
+                        MoveToColumn(0)
+                    )?;
+
                     let start_timestamp = std::time::Instant::now();
 
                     let should_exit = self.process_line(&buffer, &mut line_editor).await?;
@@ -445,6 +459,7 @@ Program ID: `{program_id}`
 
                     let duration = start_timestamp.elapsed();
                     prompt.right_prompt.set(Duration::from_std(duration)?);
+
                     if !buffer.is_empty() {
                         line_editor.update_last_command_context(&|mut history_item| {
                             history_item.duration = Some(duration);
