@@ -15,6 +15,19 @@ rustup show
 uv run pre-commit install
 ```
 
+### Install `nextest` 
+
+```bash
+cargo install cargo-nextest --locked
+```
+
+## Tests
+
+Run the tests
+```
+cargo nextest run
+```
+
 ## Trying things out
 
 Make sure you have `make` `cmake` and `autotools` installed.

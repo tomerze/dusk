@@ -3,7 +3,8 @@
 use assert_cmd::assert::OutputAssertExt;
 use dusk_tests::{gen_port, get_dusk_cli_bin, DuskNixImpl, LISTEN_ADDR};
 use predicates::prelude::*;
-use std::process::Command;
+use rexpect::spawn;
+use std::process::{Command, Stdio};
 use std::thread;
 
 #[test]
@@ -163,4 +164,161 @@ fn test_ps_output_structure() {
         "Expected at least 1 sh process, found {}",
         sh_count
     );
+}
+
+#[test]
+fn test_multiple_servers_parallel_connections() {
+    // Create multiple servers on different ports
+    let servers: Vec<_> = (0..3)
+        .map(|_| {
+            let port = gen_port();
+            let server = DuskNixImpl::new(LISTEN_ADDR, port);
+            (server, port)
+        })
+        .collect();
+
+    let bin_path = get_dusk_cli_bin();
+
+    // Connect to each server in parallel
+    let handles: Vec<_> = servers
+        .iter()
+        .enumerate()
+        .map(|(i, (_server, port))| {
+            let bin_path = bin_path.clone();
+            let port = *port;
+            thread::spawn(move || {
+                // Run ps command on each server
+                let mut cmd = Command::new(bin_path);
+                let output = cmd
+                    .arg(format!("{}:{}", LISTEN_ADDR, port))
+                    .arg("ps")
+                    .assert()
+                    .success()
+                    .get_output()
+                    .stdout
+                    .clone();
+
+                let output_str = String::from_utf8_lossy(&output);
+
+                // Verify we got ps output from this server
+                assert!(
+                    output_str.contains("program_id"),
+                    "Server {} should show program_id in ps output",
+                    i
+                );
+                assert!(
+                    output_str.contains("init"),
+                    "Server {} should have init process",
+                    i
+                );
+
+                // Each server should have exactly one init
+                let init_count = output_str.matches("init").count();
+                assert_eq!(
+                    init_count, 1,
+                    "Server {} should have exactly 1 init, found {}",
+                    i, init_count
+                );
+            })
+        })
+        .collect();
+
+    // Wait for all parallel connections to complete
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    // After parallel connections, verify each server is still functional
+    // by connecting to them all again in parallel
+    let handles: Vec<_> = servers
+        .iter()
+        .enumerate()
+        .map(|(i, (_server, port))| {
+            let bin_path = bin_path.clone();
+            let port = *port;
+            thread::spawn(move || {
+                let mut cmd = Command::new(bin_path);
+                let output = cmd
+                    .arg(format!("{}:{}", LISTEN_ADDR, port))
+                    .arg("ps")
+                    .assert()
+                    .success()
+                    .get_output()
+                    .stdout
+                    .clone();
+
+                let output_str = String::from_utf8_lossy(&output);
+
+                // Verify server still has exactly one init after multiple connections
+                let init_count = output_str.matches("init").count();
+                assert_eq!(
+                    init_count, 1,
+                    "Server {} should still have exactly 1 init after second connection, found {}",
+                    i, init_count
+                );
+            })
+        })
+        .collect();
+
+    // Wait for second round
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+
+#[test]
+fn test_interactive_shell() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+
+    let bin_path = get_dusk_cli_bin();
+
+    // Spawn interactive shell with PTY using rexpect
+    let mut p = spawn(
+        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+        Some(5000),
+    )
+    .expect("Failed to spawn interactive shell");
+
+    // Send exit command
+    p.send_line("exit").expect("Failed to send exit command");
+
+    // Wait for process to exit
+    p.exp_eof().expect("Process should exit after exit command");
+}
+
+#[test]
+fn test_multiple_interactive_shells_parallel() {
+    // Create multiple servers
+    let servers: Vec<_> = (0..3)
+        .map(|_| {
+            let port = gen_port();
+            let server = DuskNixImpl::new(LISTEN_ADDR, port);
+            (server, port)
+        })
+        .collect();
+
+    let bin_path = get_dusk_cli_bin();
+
+    // Spawn all interactive shells first (connect all three)
+    let mut processes: Vec<_> = servers
+        .iter()
+        .map(|(_server, port)| {
+            spawn(
+                &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+                Some(5000),
+            )
+            .expect("Failed to spawn interactive shell")
+        })
+        .collect();
+
+    // Now all three are connected, disconnect them all by sending exit
+    for p in processes.iter_mut() {
+        p.send_line("exit").expect("Failed to send exit command");
+    }
+
+    // Wait for all to exit
+    for p in processes.iter_mut() {
+        p.exp_eof().expect("Process should exit after exit command");
+    }
 }

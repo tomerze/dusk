@@ -7,3 +7,5 @@ edition = "2021"
 dusk_tests = { path = "../common" }
 assert_cmd = "2.0"
 predicates = "3.0"
+wait-timeout = "0.2"
+rexpect = "0.5"

@@ -5,3 +5,11 @@ repos:
       -   id: fmt
       -   id: cargo-check
       -   id: clippy
+  -   repo: local
+      hooks:
+      -   id: cargo-nextest
+          name: cargo nextest
+          entry: cargo nextest run
+          language: system
+          pass_filenames: false
+          types: [rust]
