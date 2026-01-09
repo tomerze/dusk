@@ -5,6 +5,9 @@
 extern crate alloc;
 extern crate capnp;
 
+#[cfg(feature = "client")]
+extern crate linkme;
+
 use alloc::string::String;
 use alloc::vec;
 

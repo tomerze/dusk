@@ -5,6 +5,10 @@
 extern crate alloc;
 extern crate capnp;
 
+// Re-export linkme for client-side program registration
+#[cfg(feature = "client")]
+pub use linkme;
+
 use dusk_capnp::dusk_capnp::process;
 #[allow(unused)]
 #[prelude_import]

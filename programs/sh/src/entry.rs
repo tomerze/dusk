@@ -1,10 +1,10 @@
 use std::rc::Rc;
 use std::vec::Vec;
 
+use crate::linkme::distributed_slice;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow;
-use linkme::distributed_slice;
 
 #[derive(Copy, Clone)]
 pub struct ProgramInfo {

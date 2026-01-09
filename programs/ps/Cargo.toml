@@ -8,12 +8,12 @@ log = "0.4.28"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 slab = { version = "0.4.11", public = true }
-linkme = { version = "0.3", optional = true, public = true }
 dusk_program_sh = { path = "../sh", features = ["client"], public = true }
 capnp = { version = "*", public = false }
+linkme = { version = "*", optional = true, public = false }
 
 [build-dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}
 
 [features]
-client = ["linkme"] 
+client = ["linkme", "dusk_program_sh/client"] 
