@@ -8,6 +8,8 @@
 /history.sqlite3-shm
 /history.sqlite3-wal
 /tests/cli/history.sqlite3
+/tests/cli/history.sqlite3-shm
+/tests/cli/history.sqlite3-wal
 /build
 /docs/site
 /**/__pycache__
