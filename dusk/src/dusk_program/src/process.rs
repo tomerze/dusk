@@ -1,6 +1,7 @@
 use alloc::{boxed::Box, rc::Rc, string::ToString};
 use anyhow::Result;
-use capnp::capability::Promise;
+use dusk_capnp::capnp;
+use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
 use embassy_sync::channel::DynamicReceiver;
@@ -99,7 +100,7 @@ impl process::Server for dyn Process {
         &mut self,
         _params: process::PidParams,
         mut results: process::PidResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         results.get().set_result(Process::pid(self));
 
         Promise::ok(())
@@ -109,7 +110,7 @@ impl process::Server for dyn Process {
         &mut self,
         _params: process::ProgramIdParams,
         mut results: process::ProgramIdResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         results.get().set_result(Process::program_id(self));
 
         Promise::ok(())
@@ -119,7 +120,7 @@ impl process::Server for dyn Process {
         &mut self,
         _params: process::NameParams,
         mut results: process::NameResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         results.get().set_result(Process::name(self));
 
         Promise::ok(())
@@ -129,7 +130,7 @@ impl process::Server for dyn Process {
         &mut self,
         _params: process::VersionParams,
         mut results: process::VersionResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         results.get().set_result(Process::version(self));
 
         Promise::ok(())
@@ -139,7 +140,7 @@ impl process::Server for dyn Process {
         &mut self,
         _params: process::PortalParams,
         mut results: process::PortalResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let namespace = self.namespace();
         let pid = <Self as Process>::pid(self);
 
@@ -165,7 +166,7 @@ impl process::Server for dyn Process {
         &mut self,
         _params: process::RunParams,
         mut _results: process::RunResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let process = self.clone_box();
         Promise::from_future(async move {
             process
@@ -181,7 +182,7 @@ impl process::Server for Box<dyn Process> {
         &mut self,
         params: process::PidParams,
         results: process::PidResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         <dyn Process as process::Server>::pid(&mut **self, params, results)
     }
 
@@ -189,7 +190,7 @@ impl process::Server for Box<dyn Process> {
         &mut self,
         params: process::ProgramIdParams,
         results: process::ProgramIdResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         <dyn Process as process::Server>::program_id(&mut **self, params, results)
     }
 
@@ -197,7 +198,7 @@ impl process::Server for Box<dyn Process> {
         &mut self,
         params: process::NameParams,
         results: process::NameResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         <dyn Process as process::Server>::name(&mut **self, params, results)
     }
 
@@ -205,7 +206,7 @@ impl process::Server for Box<dyn Process> {
         &mut self,
         params: process::VersionParams,
         results: process::VersionResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         <dyn Process as process::Server>::version(&mut **self, params, results)
     }
 
@@ -213,7 +214,7 @@ impl process::Server for Box<dyn Process> {
         &mut self,
         params: process::PortalParams,
         results: process::PortalResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         <dyn Process as process::Server>::portal(&mut **self, params, results)
     }
 
@@ -221,7 +222,7 @@ impl process::Server for Box<dyn Process> {
         &mut self,
         params: process::RunParams,
         results: process::RunResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         <dyn Process as process::Server>::run(&mut **self, params, results)
     }
 }

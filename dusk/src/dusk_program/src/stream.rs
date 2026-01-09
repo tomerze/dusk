@@ -1,5 +1,6 @@
 use alloc::string::ToString;
-use capnp::capability::Promise;
+use dusk_capnp::capnp;
+use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::pry;
 use oneshot::{Receiver, Sender};

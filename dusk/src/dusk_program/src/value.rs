@@ -12,7 +12,7 @@ use alloc::{
 };
 use core::{convert::TryFrom, fmt, str};
 
-use capnp::Error;
+use dusk_capnp::capnp::Error;
 use indexmap::IndexMap;
 use serde::de::{self, value::MapAccessDeserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};

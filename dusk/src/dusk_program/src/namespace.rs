@@ -2,7 +2,7 @@ use crate::process::Process;
 use crate::signal;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
-use capnp_rpc::CapabilityServerSet;
+use dusk_capnp::capnp_rpc::CapabilityServerSet;
 use dusk_capnp::dusk_capnp::process;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;

@@ -5,13 +5,11 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.28"
-anyhow = { version = "1.0.99", default-features = false }
-capnp = { version = "0.21.5", default-features = false, features = ["alloc"] }
-futures = "0.3.31"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk = { path = "../../dusk/src/dusk/" }
 async-net = "2.0.0"
+capnp = { version = "*", public = false }
 
 [build-dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}

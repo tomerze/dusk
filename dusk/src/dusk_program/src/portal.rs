@@ -8,7 +8,7 @@ macro_rules! impl_portal_server {
                 &mut self,
                 _params: dusk_capnp::dusk_capnp::portal::InputParams,
                 mut results: dusk_capnp::dusk_capnp::portal::InputResults,
-            ) -> capnp::capability::Promise<(), ::capnp::Error> {
+            ) -> capnp::capability::Promise<(), capnp::Error> {
                 results.get().set_stream(capnp_rpc::new_client(
                     dusk_program::stream::NoopStream::default(),
                 ));
@@ -19,7 +19,7 @@ macro_rules! impl_portal_server {
                 &mut self,
                 params: dusk_capnp::dusk_capnp::portal::OutputParams,
                 mut results: dusk_capnp::dusk_capnp::portal::OutputResults,
-            ) -> capnp::capability::Promise<(), ::capnp::Error> {
+            ) -> capnp::capability::Promise<(), capnp::Error> {
                 dusk_capnp::pry!(results.set_pipeline());
                 let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
                 Promise::from_future(async move {

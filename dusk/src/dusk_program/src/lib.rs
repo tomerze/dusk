@@ -2,11 +2,12 @@
 
 extern crate alloc;
 
+// Import capnp at the crate root for generated code that uses ::capnp:: paths
+extern crate dusk_capnp;
+
 // Re-export public dependencies for prelude
 pub extern crate anyhow;
 pub extern crate async_trait;
-pub extern crate capnp;
-pub extern crate capnp_rpc;
 pub extern crate embassy_executor;
 pub extern crate embassy_sync;
 pub extern crate futures; // Not pub extern because we selectively re-export parts

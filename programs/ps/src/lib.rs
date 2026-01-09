@@ -3,7 +3,7 @@
 #![cfg_attr(not(feature = "client"), no_std)]
 
 extern crate alloc;
-extern crate capnp; // Needed for ::capnp:: paths in macros
+extern crate capnp;
 
 use alloc::string::String;
 use alloc::vec;

@@ -1,5 +1,5 @@
 use crate::entry::ShEntriesBuilder;
-use capnp::capability::Promise;
+use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::pry;
 

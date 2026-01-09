@@ -1,9 +1,9 @@
 use std::rc::Rc;
 use std::vec::Vec;
 
-use anyhow::Result;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::program_args;
+use dusk_program::anyhow;
 use linkme::distributed_slice;
 
 #[derive(Copy, Clone)]
@@ -16,7 +16,7 @@ pub struct ProgramInfo {
 }
 
 pub trait ProgramArgsBuilder {
-    fn build(&self, client: dusk::Client, args: &str) -> Result<program_args::Client>;
+    fn build(&self, client: dusk::Client, args: &str) -> anyhow::Result<program_args::Client>;
 }
 
 #[derive(Clone)]
@@ -33,7 +33,7 @@ pub trait ShEntriesBuilder: Clone + 'static {
 }
 
 pub trait GetAvailableProgramsInfo {
-    fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>>;
+    fn get_available_programs_info(&self) -> anyhow::Result<Vec<ProgramInfo>>;
 }
 
 #[derive(Clone, Default)]
@@ -57,7 +57,7 @@ impl ShEntriesBuilder for DynamicShEntriesBuilder {
 }
 
 impl<T: ShEntriesBuilder> GetAvailableProgramsInfo for T {
-    fn get_available_programs_info(&self) -> Result<Vec<ProgramInfo>> {
+    fn get_available_programs_info(&self) -> anyhow::Result<Vec<ProgramInfo>> {
         Ok(self.get_entries().into_iter().map(|e| e.info).collect())
     }
 }

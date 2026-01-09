@@ -4,14 +4,14 @@
 // Re-export entire crates
 pub use anyhow;
 pub use async_trait;
-pub use capnp;
-pub use capnp_rpc;
+pub use dusk_capnp::capnp;
+pub use dusk_capnp::capnp_rpc;
 pub use embassy_executor;
 pub use embassy_sync;
 pub use futures;
 
 // Re-export commonly used types for convenience
-pub use capnp::capability::{FromClientHook, Promise};
+pub use dusk_capnp::capnp::capability::{FromClientHook, Promise};
 pub use embassy_executor::Spawner;
 pub use embassy_sync::channel::DynamicReceiver;
 

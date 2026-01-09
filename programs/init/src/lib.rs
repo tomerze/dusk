@@ -2,7 +2,8 @@
 #![feature(prelude_import)]
 
 extern crate alloc;
-extern crate capnp; // Needed for ::capnp:: paths in macros
+
+extern crate capnp;
 
 #[allow(unused)]
 #[prelude_import]

@@ -6,8 +6,10 @@ use std::path::Path;
 #[allow(clippy::all)]
 extern crate alloc;
 
-// Needed for ::capnp:: paths in macros
+// Re-export Cap'n Proto crates for all dependent crates
 pub extern crate capnp;
+pub extern crate capnp_rpc;
+pub extern crate capnpc;
 
 pub mod prelude;
 
@@ -37,7 +39,7 @@ macro_rules! pry {
         match $expr {
             ::core::result::Result::Ok(val) => val,
             ::core::result::Result::Err(err) => {
-                return ::capnp::capability::Promise::err(::core::convert::From::from(err))
+                return $crate::capnp::capability::Promise::err(::core::convert::From::from(err))
             }
         }
     };

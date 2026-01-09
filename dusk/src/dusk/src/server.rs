@@ -4,7 +4,9 @@ use crate::driver;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use capnp::capability::Promise;
+use dusk_capnp::capnp;
+use dusk_capnp::capnp::capability::Promise;
+use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::pry;
@@ -69,7 +71,7 @@ impl dusk::Server for DuskServer {
         &mut self,
         params: dusk::ProcessParams,
         mut results: dusk::ProcessResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let program_args = pry!(pry!(params.get()).get_program_args());
 
         let namespace = self.namespace.clone();
@@ -89,7 +91,7 @@ impl dusk::Server for DuskServer {
         &mut self,
         params: dusk::RunParams,
         mut _results: dusk::RunResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let process = pry!(pry!(params.get()).get_process());
 
         Promise::from_future(Self::run_inside_task(
@@ -103,7 +105,7 @@ impl dusk::Server for DuskServer {
         &mut self,
         _params: dusk::PsParams,
         mut results: dusk::PsResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
             let ps_vec: Vec<(u64, process::Client)> = {
@@ -137,7 +139,7 @@ impl dusk::Server for DuskServer {
         &mut self,
         params: dusk::KillParams,
         mut _results: dusk::KillResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let process = pry!(pry!(params.get()).get_process());
         let signal = pry!(params.get()).get_signal();
 
@@ -172,7 +174,7 @@ impl dusk::Server for DuskServer {
         &mut self,
         _params: dusk::HostnameParams,
         mut results: dusk::HostnameResults,
-    ) -> Promise<(), ::capnp::Error> {
+    ) -> Promise<(), capnp::Error> {
         let hostname = match driver::hostname() {
             Ok(id) => id,
             Err(err) => {
