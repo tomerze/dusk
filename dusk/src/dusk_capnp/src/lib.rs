@@ -6,6 +6,9 @@ use std::path::Path;
 #[allow(clippy::all)]
 extern crate alloc;
 
+// Needed for ::capnp:: paths in macros
+pub extern crate capnp;
+
 pub mod prelude;
 
 pub mod stream_capnp {

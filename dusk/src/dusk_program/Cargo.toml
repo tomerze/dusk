@@ -11,7 +11,7 @@ embassy-time = { version = "0.5.0", public = true }
 dusk_capnp = { path = "../dusk_capnp/", public = true }
 capnp = { version = "0.21.5", default-features = false, features = ["alloc"], public = true}
 capnp-rpc = { version = "0.21.0", default-features = false, public = true }
-futures = { version = "0.3.31", default-features = false }
+futures = { version = "0.3.31", default-features = false, features = ["alloc"], public = true }
 hashbrown = { version = "0.16", default-features = false, public = true }
 indexmap = { version = "2.11.4", default-features = false, public = true }
 oneshot = { version = "0.1.11", default-features = false, features = ["async"], public = true}
@@ -20,5 +20,6 @@ serde = { version = "1.0", default-features = false, features = ["derive", "allo
 serde_json = { version = "1.0", default-features = false, features = ["alloc"], public = true }
 rapidhash = { version = "4.1.0", default-features = false, public = true }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"], public = true }
-async-trait = "0.1.89"
+async-trait = { version = "0.1.89", public = true }
+embassy-executor = { version = "*", public = true }
 log = "0.4.28"

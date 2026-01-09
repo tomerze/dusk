@@ -2,6 +2,7 @@
 #![feature(prelude_import)]
 
 extern crate alloc;
+extern crate capnp; // Needed for ::capnp:: paths in macros
 
 #[allow(unused)]
 #[prelude_import]
@@ -9,14 +10,11 @@ use dusk_capnp::prelude::*;
 
 use anyhow::{anyhow, Result};
 use async_net::TcpListener;
-use capnp::capability::{FromClientHook, Promise};
+use dusk_program::prelude::*;
 use dusk_program::signal::Signal;
 use dusk_program::{basic_launcher, portal::Portal};
 use dusk_program::{impl_portal_server, impl_program_args_server, signal};
-use embassy_executor::Spawner;
-use embassy_sync::channel::DynamicReceiver;
-use futures::io::AsyncReadExt;
-use futures::FutureExt;
+
 use std::string::String;
 
 #[allow(clippy::all)]

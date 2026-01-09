@@ -4,20 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embassy-executor = { version = "*", public = true, features = ["arch-std", "log", "nightly", "executor-thread"]}
-embassy-sync = { version = "*", public = true}
-embassy-time = { version = "*", public = true}
-embassy-futures = { version = "*", public = true }
 log = "0.4.28"
-capnp = { version = "0.21.5", default-features = false, features = ["alloc"], public = true}
-capnp-rpc = { version = "0.21.0", default-features = false, public = true }
-anyhow = { version = "1.0.99", default-features = false, public = true }
+anyhow = { version = "1.0.99", default-features = false }
+capnp = { version = "0.21.5", default-features = false, features = ["alloc"] }
+futures = "0.3.31"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk = { path = "../../dusk/src/dusk/" }
-async-trait = "0.1.89"
 async-net = "2.0.0"
-futures = "0.3.31"
 
 [build-dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}

@@ -3,6 +3,7 @@
 #![cfg_attr(not(feature = "client"), no_std)]
 
 extern crate alloc;
+extern crate capnp; // Needed for ::capnp:: paths in macros
 
 use alloc::string::String;
 use alloc::vec;
@@ -12,8 +13,8 @@ use alloc::vec;
 use dusk_capnp::prelude::*;
 
 use alloc::vec::Vec;
-use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::portal;
+use dusk_program::prelude::*;
 use dusk_program::value::{Record, Value};
 use dusk_program::{basic_launcher, basic_process, portal::Portal};
 
