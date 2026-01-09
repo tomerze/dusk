@@ -185,7 +185,7 @@ impl ProgramArgsBuilder for PsProgramArgsBuilder {
 
 #[cfg(feature = "client")]
 #[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
-pub fn program_args_builder_entry() -> ShEntry {
+pub fn sh_entry() -> ShEntry {
     ShEntry {
         info: ProgramInfo {
             program_id: Some(ps_capnp::PROGRAM_ID),

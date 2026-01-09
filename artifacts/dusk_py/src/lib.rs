@@ -6,7 +6,7 @@ fn dusk(module: &Bound<'_, PyModule>) -> PyResult<()> {
     // Unfortunately we need to trick the linker into including all
     // crates that register program args builders
 
-    black_box(dusk_program_ps::program_args_builder_entry);
+    black_box(dusk_program_ps::sh_entry);
 
     dusk_py::register_module(module)
 }
