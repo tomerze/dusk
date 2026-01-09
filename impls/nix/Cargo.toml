@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embassy-executor = { version = "0.9.1", public = true, features = ["arch-std", "log", "nightly", "executor-thread"]}
+embassy-executor = { version = "*", public = true, features = ["arch-std", "log", "nightly", "executor-thread"]}
 embassy-sync = { version = "*", public = true, features = ["log"] }
 embassy-time = { version = "*", public = true, features = ["std", "log"] }
 embassy-futures = { version = "*", public = true }
