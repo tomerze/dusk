@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Result};
 use chrono::Duration;
+use dusk_program::anyhow::{anyhow, Result};
 use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
 use std::{borrow::Cow, cell::Cell};
 

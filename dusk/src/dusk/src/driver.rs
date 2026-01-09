@@ -1,8 +1,8 @@
 use core::{future::Future, pin::Pin};
 
 use alloc::{rc::Rc, string::String};
-use anyhow::Result;
 use dusk_capnp::dusk_capnp::program_args;
+use dusk_program::anyhow::Result;
 use dusk_program::{namespace::Namespace, process::Process};
 
 pub type FutureProcessResult = Pin<Box<dyn Future<Output = Result<Box<dyn Process>>>>>;

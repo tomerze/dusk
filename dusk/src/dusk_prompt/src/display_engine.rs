@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
 use base64::prelude::*;
 use crossterm::style::Stylize;
+use dusk_program::anyhow::{anyhow, Result};
 use dusk_program::value::key_bytes_to_string;
 use dusk_program::value::{Record, Value};
 use nu_ansi_term::Color;

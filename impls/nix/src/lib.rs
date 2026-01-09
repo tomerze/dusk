@@ -3,8 +3,8 @@
 
 extern crate alloc;
 
-use anyhow::Result;
 use dusk::dusk_capnp::dusk_capnp::program_args;
+use dusk_program::anyhow::Result;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use embassy_executor::Executor;

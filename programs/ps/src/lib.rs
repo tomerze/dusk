@@ -13,15 +13,15 @@ use alloc::vec;
 
 #[allow(unused)]
 #[prelude_import]
-use dusk_capnp::prelude::*;
+use dusk_program::dusk_capnp::prelude::*;
 
 use alloc::vec::Vec;
-use dusk_capnp::dusk_capnp::portal;
+use dusk_program::dusk_capnp::dusk_capnp::portal;
 use dusk_program::prelude::*;
 use dusk_program::value::{Record, Value};
 
 #[cfg(feature = "client")]
-use dusk_capnp::dusk_capnp::dusk;
+use dusk_program::dusk_capnp::dusk_capnp::dusk;
 #[cfg(feature = "client")]
 use dusk_program::impl_program_args_server;
 #[cfg(feature = "client")]

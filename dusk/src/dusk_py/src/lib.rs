@@ -1,8 +1,8 @@
 #![allow(exported_private_dependencies)]
 #![feature(linkage)]
 
-use anyhow::Result;
 use dusk_capnp::dusk_capnp::dusk::Client;
+use dusk_program::anyhow::Result;
 use dusk_shell::connection::Connection;
 use pyo3::prelude::*;
 use std::str::FromStr;
@@ -152,10 +152,9 @@ impl Dusk {
                     }
                 }
             }
-            Ok::<(), anyhow::Error>(())
+            Ok::<(), dusk_program::anyhow::Error>(())
         }))
     }
-
     async fn handle_shutdown(
         client: Client,
         connection: Connection,

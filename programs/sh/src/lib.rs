@@ -9,12 +9,12 @@ extern crate capnp;
 #[cfg(feature = "client")]
 pub use linkme;
 
-use dusk_capnp::dusk_capnp::process;
+use dusk_program::dusk_capnp::dusk_capnp::process;
 #[allow(unused)]
 #[prelude_import]
-use dusk_capnp::prelude::*;
+use dusk_program::dusk_capnp::prelude::*;
 
-use dusk_capnp::pry;
+use dusk_program::dusk_capnp::pry;
 use dusk_program::prelude::*;
 use dusk_program::stream::UndoneStream;
 

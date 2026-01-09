@@ -1,9 +1,9 @@
 use alloc::rc::Rc;
 
-use anyhow::{anyhow, Ok, Result};
 use core::future::Future;
 use core::pin::Pin;
 use dusk::driver::{Driver, FutureProcessResult};
+use dusk_program::anyhow::{anyhow, Ok, Result};
 use dusk_program::launcher_set::{LauncherSet, LauncherSetBuilder};
 use dusk_program::{namespace::Namespace, process::Process};
 use nix::{sys::time::TimeValLike, unistd::gethostname};
@@ -75,9 +75,13 @@ impl Driver for NixDriver {
             launchers.launch(pid, namespace, program_args).await
         };
         Box::pin(fut)
-            as Pin<Box<dyn Future<Output = Result<Box<dyn Process>, anyhow::Error>> + 'static>>
+            as Pin<
+                Box<
+                    dyn Future<Output = Result<Box<dyn Process>, dusk_program::anyhow::Error>>
+                        + 'static,
+                >,
+            >
     }
-
     fn now(&self) -> Result<embassy_time::Instant> {
         Ok(embassy_time::Instant::from_micros(
             nix::time::clock_gettime(nix::time::ClockId::CLOCK_REALTIME)?

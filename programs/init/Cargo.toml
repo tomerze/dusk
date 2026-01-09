@@ -9,6 +9,7 @@ dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk = { path = "../../dusk/src/dusk/" }
 async-net = "2.0.0"
+# Declared for macro use, versions taken from dusk_program
 capnp = { version = "*", public = false }
 
 [build-dependencies]

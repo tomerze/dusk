@@ -12,7 +12,6 @@ dusk_shell = { path = "../dusk_shell" }
 dusk_capnp = { path = "../dusk_capnp" }
 dusk_program = { path = "../dusk_program" }
 dusk_program_sh = { path = "../../../programs/sh", features = ["client"] }
-anyhow = "1.0"
 capnp = "0.21.5"
 capnp-rpc = "0.21.0"
 serde-pickle = "1.1"

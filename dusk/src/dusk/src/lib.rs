@@ -12,7 +12,7 @@ extern crate alloc;
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
-use embassy_executor::Spawner;
+use dusk_program::embassy_executor::Spawner;
 
 use dusk_capnp::capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 

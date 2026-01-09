@@ -4,18 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embassy-executor = { version = "*", public = true, features = ["arch-std", "log", "nightly", "executor-thread"]}
-embassy-sync = { version = "*", public = true, features = ["log"] }
-embassy-time = { version = "*", public = true, features = ["std", "log"] }
-embassy-futures = { version = "*", public = true }
+# Declared for macro use, versions taken from dusk_program
+embassy-executor = { version = "*", features = ["arch-std", "log", "nightly", "executor-thread"]}
+embassy-time = "*"
+async-trait = "*"
 
-anyhow = "1.0.99"
 env_logger = "0.11.8"
 log = "0.4.28"
 nix = { version = "0.30.1", features = ["hostname", "time"] }
 dusk = { path = "../../dusk/src/dusk/" }
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
-async-trait = "0.1.89"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
 critical-section = { version = "1", features = ["std"] }
 rand = "0.8.5"

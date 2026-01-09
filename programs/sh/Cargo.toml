@@ -10,6 +10,7 @@ dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk = { path = "../../dusk/src/dusk/", public = true }
 slab = { version = "0.4.11", public = true }
 linkme = { version = "0.3", optional = true, public = true }
+# Declared for macro use, versions taken from dusk_program
 capnp = { version = "*", public = false }
 
 [build-dependencies]

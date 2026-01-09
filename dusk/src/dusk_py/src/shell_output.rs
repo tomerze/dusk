@@ -1,6 +1,6 @@
-use anyhow::Result;
 use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_capnp::dusk_capnp::stream;
+use dusk_program::anyhow::Result;
 use dusk_program::value::Value;
 use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};

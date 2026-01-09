@@ -7,7 +7,7 @@ extern crate capnp;
 
 #[allow(unused)]
 #[prelude_import]
-use dusk_capnp::prelude::*;
+use dusk_program::dusk_capnp::prelude::*;
 
 use async_net::TcpListener;
 use dusk_program::prelude::*;
