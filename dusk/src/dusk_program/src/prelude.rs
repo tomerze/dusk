@@ -16,6 +16,10 @@ pub use embassy_executor::Spawner;
 pub use embassy_sync::channel::DynamicReceiver;
 
 // Re-export specific futures traits that are commonly needed
+pub use futures::io::{AsyncReadExt, AsyncWriteExt};
 pub use futures::FutureExt;
 
-pub use futures::io::{AsyncReadExt, AsyncWriteExt};
+// Re-export commonly used dusk_program modules and types
+pub use crate::portal::Portal;
+pub use crate::signal::{self, Signal};
+pub use crate::{basic_launcher, basic_process, impl_portal_server, impl_program_args_server};

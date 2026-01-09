@@ -8,12 +8,8 @@ extern crate capnp; // Needed for ::capnp:: paths in macros
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
-use anyhow::{anyhow, Result};
 use async_net::TcpListener;
 use dusk_program::prelude::*;
-use dusk_program::signal::Signal;
-use dusk_program::{basic_launcher, portal::Portal};
-use dusk_program::{impl_portal_server, impl_program_args_server, signal};
 
 use std::string::String;
 
@@ -130,7 +126,7 @@ impl dusk_program::process::Process for InitProcess {
     async fn main(
         &self,
         signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let program_args = self
             .program_args
             .clone()
@@ -151,7 +147,7 @@ impl dusk_program::process::Process for InitProcess {
                     let spawner = unsafe { Spawner::for_current_executor().await };
                     spawner
                         .spawn(session_task)
-                        .map_err(|err| anyhow!("failed to spawn session task {err:#?}"))?;
+                        .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
                 }
                 signal = signal_receiver.receive().fuse() => {
                     match signal {

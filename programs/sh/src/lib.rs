@@ -10,13 +10,9 @@ use dusk_capnp::dusk_capnp::process;
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
-use anyhow::Result;
 use dusk_capnp::pry;
-use dusk_program::impl_portal_server;
-use dusk_program::portal::Portal;
 use dusk_program::prelude::*;
 use dusk_program::stream::UndoneStream;
-use dusk_program::{basic_launcher, basic_process};
 
 #[cfg(feature = "client")]
 pub mod args;
@@ -60,7 +56,7 @@ impl ShPortal {
     async fn command_string_to_program_args(
         engine: sh_capnp::engine::Client,
         command: &str,
-    ) -> Result<dusk_capnp::dusk_capnp::program_args::Client> {
+    ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
         let mut build_from_string_request = engine.build_program_args_from_string_request();
         build_from_string_request.get().set_string(command);
         let build_from_string_reply = build_from_string_request.send().promise.await?;
@@ -71,7 +67,7 @@ impl ShPortal {
     async fn execute_program_args(
         client: dusk_capnp::dusk_capnp::dusk::Client,
         program_args: dusk_capnp::dusk_capnp::program_args::Client,
-    ) -> Result<process::Client> {
+    ) -> anyhow::Result<process::Client> {
         let mut process_request = client.process_request();
         process_request.get().set_program_args(program_args);
         let process = capnp_rpc::new_future_client(async move {
@@ -90,7 +86,7 @@ impl ShPortal {
     async fn portal_and_pipe_output(
         process: process::Client,
         output: dusk_capnp::dusk_capnp::stream::Client,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let portal = capnp_rpc::new_future_client(async move {
             let portal_request = process.portal_request();
             let portal_reply = portal_request.send().promise.await?;
