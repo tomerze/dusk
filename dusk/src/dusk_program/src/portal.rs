@@ -1,5 +1,3 @@
-pub trait Portal {}
-
 #[macro_export]
 macro_rules! impl_portal_server {
     ($t:ty) => {

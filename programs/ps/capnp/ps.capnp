@@ -12,6 +12,4 @@ interface PsArgs extends(Dusk.ProgramArgs) {
   get @0 () -> (client: Dusk.Dusk, options :PsOptions);
 }
 
-interface PsPortal extends(Dusk.Portal) {
-  sh @0 (command :Text, output :Dusk.Stream) -> (input :Dusk.Stream);
-}
+interface PsPortal extends(Dusk.Portal) {}

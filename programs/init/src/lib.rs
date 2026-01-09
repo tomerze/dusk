@@ -36,8 +36,6 @@ impl InitPortal {
     }
 }
 
-impl Portal for InitPortal {}
-
 impl_portal_server!(InitPortal);
 
 impl init_capnp::init_portal::Server for InitPortal {}

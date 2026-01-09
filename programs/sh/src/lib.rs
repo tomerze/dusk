@@ -110,8 +110,6 @@ impl ShPortal {
     }
 }
 
-impl Portal for ShPortal {}
-
 impl_portal_server!(ShPortal);
 
 impl sh_capnp::sh_portal::Server for ShPortal {

@@ -8,7 +8,7 @@ log = "0.4.28"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 slab = { version = "0.4.11", public = true }
-dusk_program_sh = { path = "../sh", features = ["client"], public = true }
+dusk_program_sh = { path = "../sh", public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "*", public = false }
 linkme = { version = "*", optional = true, public = false }

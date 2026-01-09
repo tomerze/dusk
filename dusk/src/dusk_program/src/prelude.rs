@@ -20,6 +20,6 @@ pub use futures::io::{AsyncReadExt, AsyncWriteExt};
 pub use futures::FutureExt;
 
 // Re-export commonly used dusk_program modules and types
-pub use crate::portal::Portal;
+
 pub use crate::signal::{self, Signal};
 pub use crate::{basic_launcher, basic_process, impl_portal_server, impl_program_args_server};

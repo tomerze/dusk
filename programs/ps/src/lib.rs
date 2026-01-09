@@ -117,8 +117,6 @@ impl PsPortal {
     }
 }
 
-impl Portal for PsPortal {}
-
 impl portal::Server for PsPortal {
     fn input(
         &mut self,
