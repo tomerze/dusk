@@ -1,12 +1,32 @@
 #![allow(unused_imports)]
 
 use assert_cmd::assert::OutputAssertExt;
-use dusk_tests::{gen_port, get_dusk_cli_bin, DuskNixImpl, LISTEN_ADDR};
+use dusk_tests::{gen_port, DuskNixImpl, LISTEN_ADDR};
 use predicates::prelude::*;
 use rexpect::process::wait::WaitStatus;
 use rexpect::spawn;
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::thread;
+
+static DUSK_CLI_BIN: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+pub fn get_dusk_cli_bin() -> &'static std::path::Path {
+    DUSK_CLI_BIN.get_or_init(|| {
+        // Build once and cache the path. Escargot will only rebuild if needed.
+        // The key insight: use the cargo target directory which is shared across
+        // all test processes. Escargot will use cargo's lock file to ensure only
+        // one build happens at a time.
+        escargot::CargoBuild::new()
+            .bin("dusk")
+            .manifest_path("../../artifacts/dusk_cli/Cargo.toml")
+            .current_release()
+            .run()
+            .unwrap()
+            .path()
+            .to_owned()
+    })
+}
 
 #[test]
 fn test_run_ps() {

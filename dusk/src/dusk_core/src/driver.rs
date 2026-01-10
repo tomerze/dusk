@@ -34,13 +34,14 @@ macro_rules! dusk_driver_impl {
             <$t as $crate::driver::Driver>::hostname(&$name)
         }
 
-    #[no_mangle]
-    fn _dusk_process<'a>(
-        namespace: Rc<Namespace>,
-        program_args: $crate::dusk_capnp::dusk_capnp::program_args::Client,
-    ) -> FutureProcessResult {
-        <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
-    }        #[no_mangle]
+        #[no_mangle]
+        fn _dusk_process<'a>(
+            namespace: Rc<Namespace>,
+            program_args: $crate::dusk_capnp::dusk_capnp::program_args::Client,
+        ) -> FutureProcessResult {
+            <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
+        }
+        #[no_mangle]
         fn _dusk_now() -> Result<embassy_time::Instant> {
             <$t as $crate::driver::Driver>::now(&$name)
         }

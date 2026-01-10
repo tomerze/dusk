@@ -1,0 +1,7 @@
+[package]
+name = "dusk_py_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dusk_tests = { path = "../common" }

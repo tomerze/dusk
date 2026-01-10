@@ -17,4 +17,5 @@ members = [
   "artifacts/dusk_impl",
   "tests/common",
   "tests/cli",
+  "tests/py",
 ]

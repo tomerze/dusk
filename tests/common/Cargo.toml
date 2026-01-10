@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 rand = "0.9.2"
-escargot = "0.5"
 dusk_cli = { path = "../../dusk/src/dusk_cli" }
 dusk_nix = { path = "../../impls/nix" }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
