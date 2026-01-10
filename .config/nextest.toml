@@ -4,6 +4,9 @@ experimental = ["setup-scripts"]
 [scripts.setup.maturin-develop]
 command = { command-line = "tests/py/maturin-develop.sh", relative-to = "workspace-root" }
 
+[scripts.setup.dusk-cli-build]
+command = { command-line = "tests/cli/dusk-cli-build.sh", relative-to = "workspace-root" }
+
 [[profile.default.scripts]]
-filter = 'package(dusk_py_tests)'
-setup = ['maturin-develop']
+filter = 'all()'
+setup = ['dusk-cli-build', 'maturin-develop']

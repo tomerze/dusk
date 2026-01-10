@@ -6,23 +6,17 @@ use lazy_static::lazy_static;
 use predicates::prelude::*;
 use rexpect::process::wait::WaitStatus;
 use rexpect::spawn;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 
 lazy_static! {
-    static ref DUSK_CLI_BIN: std::path::PathBuf = {
-        // Build once and cache the path. Escargot will only rebuild if needed.
-        // The key insight: use the cargo target directory which is shared across
-        // all test processes. Escargot will use cargo's lock file to ensure only
-        // one build happens at a time.
-        escargot::CargoBuild::new()
-            .bin("dusk")
-            .manifest_path("../../artifacts/dusk_cli/Cargo.toml")
-            .current_release()
-            .run()
-            .unwrap()
-            .path()
-            .to_owned()
+    static ref DUSK_CLI_BIN: PathBuf = {
+        Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../target/debug/dusk"
+        ))
+        .to_path_buf()
     };
 }
 
