@@ -2,7 +2,7 @@ use alloc::rc::Rc;
 
 use core::future::Future;
 use core::pin::Pin;
-use dusk::driver::{Driver, FutureProcessResult};
+use dusk_core::driver::{Driver, FutureProcessResult};
 use dusk_program::anyhow::{anyhow, Ok, Result};
 use dusk_program::launcher_set::{LauncherSet, LauncherSetBuilder};
 use dusk_program::{namespace::Namespace, process::Process};
@@ -46,7 +46,7 @@ impl NixDriver {
     }
 }
 
-dusk::dusk_driver_impl!(static ref DRIVER: NixDriver = NixDriver::new());
+dusk_core::dusk_driver_impl!(static ref DRIVER: NixDriver = NixDriver::new());
 
 pub(crate) fn driver() -> &'static NixDriver {
     &DRIVER
@@ -62,7 +62,7 @@ impl Driver for NixDriver {
     fn process(
         &self,
         namespace: Rc<Namespace>,
-        program_args: dusk::dusk_capnp::dusk_capnp::program_args::Client,
+        program_args: dusk_core::dusk_capnp::dusk_capnp::program_args::Client,
     ) -> FutureProcessResult {
         let namespace_id = namespace.id;
         let launchers = match self.launchers(namespace_id) {

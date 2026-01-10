@@ -142,7 +142,7 @@ impl dusk_program::process::Process for InitProcess {
                     let (stream, _) = accept_result?;
                     stream.set_nodelay(true)?;
                     let (reader, writer) = stream.split();
-                    let session_task = dusk::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
+                    let session_task = dusk_core::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
                     let spawner = unsafe { Spawner::for_current_executor().await };
                     spawner
                         .spawn(session_task)

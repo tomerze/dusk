@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use dusk::dusk_capnp::dusk_capnp::program_args;
+use dusk_core::dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow::Result;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
@@ -20,7 +20,7 @@ async fn init(
     namespace: alloc::rc::Rc<Namespace>,
     init_program_args: program_args::Client,
 ) -> Result<()> {
-    let process = dusk::driver::process(namespace.clone(), init_program_args).await?;
+    let process = dusk_core::driver::process(namespace.clone(), init_program_args).await?;
 
     process.bootstrap().await?;
 

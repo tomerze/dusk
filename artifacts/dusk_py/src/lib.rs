@@ -4,7 +4,7 @@ use std::hint::black_box;
 #[pymodule]
 fn dusk(module: &Bound<'_, PyModule>) -> PyResult<()> {
     // Unfortunately we need to trick the linker into including all
-    // crates that register program args builders
+    // crates that register sh entries.
 
     black_box(dusk_program_ps::sh_entry);
 

@@ -7,7 +7,7 @@ edition = "2021"
 log = "0.4.28"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
-dusk = { path = "../../dusk/src/dusk/" }
+dusk_core = { path = "../../dusk/src/dusk_core/" }
 async-net = "2.0.0"
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "*", public = false }

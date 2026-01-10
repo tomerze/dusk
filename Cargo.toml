@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "dusk/src/dusk",
+  "dusk/src/dusk_core",
   "dusk/src/dusk_prompt",
   "dusk/src/dusk_cli",
   "dusk/src/dusk_program",
