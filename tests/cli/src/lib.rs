@@ -2,17 +2,15 @@
 
 use assert_cmd::assert::OutputAssertExt;
 use dusk_tests::{gen_port, DuskNixImpl, LISTEN_ADDR};
+use lazy_static::lazy_static;
 use predicates::prelude::*;
 use rexpect::process::wait::WaitStatus;
 use rexpect::spawn;
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
 use std::thread;
 
-static DUSK_CLI_BIN: OnceLock<std::path::PathBuf> = OnceLock::new();
-
-pub fn get_dusk_cli_bin() -> &'static std::path::Path {
-    DUSK_CLI_BIN.get_or_init(|| {
+lazy_static! {
+    static ref DUSK_CLI_BIN: std::path::PathBuf = {
         // Build once and cache the path. Escargot will only rebuild if needed.
         // The key insight: use the cargo target directory which is shared across
         // all test processes. Escargot will use cargo's lock file to ensure only
@@ -25,7 +23,11 @@ pub fn get_dusk_cli_bin() -> &'static std::path::Path {
             .unwrap()
             .path()
             .to_owned()
-    })
+    };
+}
+
+pub fn get_dusk_cli_bin() -> &'static std::path::Path {
+    &DUSK_CLI_BIN
 }
 
 #[test]

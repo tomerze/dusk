@@ -1,0 +1,9 @@
+nextest-version = "0.9.120"
+experimental = ["setup-scripts"]
+
+[scripts.setup.maturin-develop]
+command = { command-line = "tests/py/maturin-develop.sh", relative-to = "workspace-root" }
+
+[[profile.default.scripts]]
+filter = 'package(dusk_py_tests)'
+setup = ['maturin-develop']
