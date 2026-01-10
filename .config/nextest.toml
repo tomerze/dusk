@@ -2,10 +2,10 @@ nextest-version = "0.9.120"
 experimental = ["setup-scripts"]
 
 [scripts.setup.maturin-develop]
-command = { command-line = "tests/py/maturin-develop.sh", relative-to = "workspace-root" }
+command = { command-line = "tests/scripts/maturin-develop.sh", relative-to = "workspace-root" }
 
 [scripts.setup.dusk-cli-build]
-command = { command-line = "tests/cli/dusk-cli-build.sh", relative-to = "workspace-root" }
+command = { command-line = "tests/scripts/dusk-cli-build.sh", relative-to = "workspace-root" }
 
 [[profile.default.scripts]]
 filter = 'all()'
