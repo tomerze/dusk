@@ -31,7 +31,7 @@ client.disconnect()
         port = port
     );
 
-    assert!(run_python_code(&code), "python api sanity test failed");
+    assert!(run_python_code(&code));
 }
 
 #[test]
@@ -52,5 +52,5 @@ another_client.disconnect()
         port = port
     );
 
-    assert!(run_python_code(&code), "python api sanity test failed");
+    assert!(run_python_code(&code));
 }
