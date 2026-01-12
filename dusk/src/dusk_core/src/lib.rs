@@ -50,6 +50,6 @@ pub async fn session(
     let rpc_system = RpcSystem::new(Box::new(network), Some(dusk_client.clone().client));
 
     if let Err(err) = rpc_system.await {
-        error!("an error occured in an rpc system: `{err}`");
+        error!("an error occured in an rpc system: `{err:#?}`");
     }
 }

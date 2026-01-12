@@ -59,7 +59,7 @@ async fn process_task(process: Box<dyn Process>) {
     embassy_futures::yield_now().await;
     if let Err(err) = process.bootstrap().await {
         error!(
-            "Process with pid {} exited with error: {}",
+            "Process with pid {} exited with error: {:?}",
             process.pid(),
             err
         );
@@ -178,7 +178,7 @@ impl dusk::Server for DuskServer {
         let hostname = match driver::hostname() {
             Ok(id) => id,
             Err(err) => {
-                error!("failed to receive hostname from driver: `{err}`");
+                error!("failed to receive hostname from driver: `{err:#?}`");
                 String::from("error")
             }
         };

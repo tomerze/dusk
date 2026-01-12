@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{Parser, command};
+use clap::Parser;
 use dusk_program_sh::{
     engine::ShEngine,
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
@@ -92,10 +92,10 @@ async fn run(cli: Cli) {
                     let shell_kill_result = shell.kill().await;
                     // Print both shell kill errors and command errors
                     if let Err(err) = shell_kill_result {
-                        error!("error killing shell: {}", err);
+                        error!("error killing shell: {:?}", err);
                     }
                     if let Err(err) = session_result {
-                        error!("{}", err);
+                        error!("{:?}", err);
                     }
                     Ok::<(), anyhow::Error>(())
                 } => {
@@ -111,7 +111,7 @@ async fn run(cli: Cli) {
         })
         .await
     {
-        error!("critical error: {}", err);
+        error!("critical error: {:?}", err);
         // Exit with error
         std::process::exit(1);
     }
