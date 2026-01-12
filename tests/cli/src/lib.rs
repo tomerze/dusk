@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use assert_cmd::assert::OutputAssertExt;
-use dusk_tests::{gen_port, DuskNixImpl, LISTEN_ADDR};
+use dusk_tests::{DuskNixImpl, LISTEN_ADDR, gen_port};
 use lazy_static::lazy_static;
 use predicates::prelude::*;
 use rexpect::process::wait::WaitStatus;

@@ -14,7 +14,7 @@ use core::{convert::TryFrom, fmt, str};
 
 use dusk_capnp::capnp::Error;
 use indexmap::IndexMap;
-use serde::de::{self, value::MapAccessDeserializer, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, MapAccess, SeqAccess, Visitor, value::MapAccessDeserializer};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -40,27 +40,27 @@ pub fn key_string_to_bytes(s: &str) -> Vec<u8> {
     let mut chars = s.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if c == '\\' {
-            if let Some('x') = chars.peek() {
-                chars.next(); // consume 'x'
-                let hi = chars.next();
-                let lo = chars.next();
-                if let (Some(h), Some(l)) = (hi, lo) {
-                    if let Ok(val) = u8::from_str_radix(&format!("{}{}", h, l), 16) {
-                        bytes.push(val);
-                        continue;
-                    }
-                }
-                // malformed escape → push raw bytes
-                bytes.extend_from_slice(b"\\x");
-                if let Some(h) = hi {
-                    bytes.push(h as u8)
-                }
-                if let Some(l) = lo {
-                    bytes.push(l as u8)
-                }
+        if c == '\\'
+            && let Some('x') = chars.peek()
+        {
+            chars.next(); // consume 'x'
+            let hi = chars.next();
+            let lo = chars.next();
+            if let (Some(h), Some(l)) = (hi, lo)
+                && let Ok(val) = u8::from_str_radix(&format!("{}{}", h, l), 16)
+            {
+                bytes.push(val);
                 continue;
             }
+            // malformed escape → push raw bytes
+            bytes.extend_from_slice(b"\\x");
+            if let Some(h) = hi {
+                bytes.push(h as u8)
+            }
+            if let Some(l) = lo {
+                bytes.push(l as u8)
+            }
+            continue;
         }
         bytes.push(c as u8);
     }

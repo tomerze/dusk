@@ -11,10 +11,10 @@ use std::thread::JoinHandle;
 use tokio::sync::mpsc;
 
 mod shell_output;
-use shell_output::{handle_sh, ShellOutput};
+use shell_output::{ShellOutput, handle_sh};
 
 // Provide a dummy __pender symbol for embassy linkage compatibility
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[linkage = "weak"]
 static __pender: () = ();
 

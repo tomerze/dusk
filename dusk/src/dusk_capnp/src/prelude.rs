@@ -1,4 +1,4 @@
-pub use core::prelude::rust_2021::*;
+pub use core::prelude::rust_2024::*;
 
 // It is used, but somehow rust fails to recognize it.
 #[allow(unused_imports)]

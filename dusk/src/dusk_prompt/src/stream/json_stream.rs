@@ -32,15 +32,15 @@ impl stream::Server for JsonStream {
         params: dusk_capnp::dusk_capnp::stream::SendParams,
     ) -> Promise<(), capnp::Error> {
         let value = pry!(pry!(params.get()).get_value());
-        let mut json = pry!(pry!(
-            Value::from_reader(value).map_err(|e| capnp::Error::failed(e.to_string()))
-        )
-        .to_json_string()
-        .map_err(|e| capnp::Error::failed(e.to_string())));
+        let mut json = pry!(
+            pry!(Value::from_reader(value).map_err(|e| capnp::Error::failed(e.to_string())))
+                .to_json_string()
+                .map_err(|e| capnp::Error::failed(e.to_string()))
+        );
 
         if self.colored {
-            json = pry!(json
-                .to_colored_json_with_styler(
+            json = pry!(
+                json.to_colored_json_with_styler(
                     ColorMode::default().eval(),
                     Styler {
                         key: Color::Green.bold(),
@@ -52,7 +52,8 @@ impl stream::Server for JsonStream {
                         ..Default::default()
                     }
                 )
-                .map_err(|e| capnp::Error::failed(e.to_string())));
+                .map_err(|e| capnp::Error::failed(e.to_string()))
+            );
         }
 
         print!("{}\n\n", json); // Json objects are delimited by an empty line
@@ -65,9 +66,11 @@ impl stream::Server for JsonStream {
         _: dusk_capnp::dusk_capnp::stream::DoneResults,
     ) -> Promise<(), capnp::Error> {
         if let Some(done_sender) = self.done_sender.take() {
-            pry!(done_sender
-                .send(())
-                .map_err(|_| capnp::Error::failed("failed to send done signal".to_string())));
+            pry!(
+                done_sender
+                    .send(())
+                    .map_err(|_| capnp::Error::failed("failed to send done signal".to_string()))
+            );
             Promise::ok(())
         } else {
             Promise::err(capnp::Error::failed("done already called".to_string()))

@@ -1,5 +1,5 @@
 use chrono::Duration;
-use dusk_program::anyhow::{anyhow, Result};
+use dusk_program::anyhow::{Result, anyhow};
 use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
 use std::{borrow::Cow, cell::Cell};
 
@@ -12,10 +12,10 @@ use nu_color_config::TextStyle;
 use nu_table::{NuRecordsValue, NuTable, TableTheme};
 use pretty_duration::pretty_duration;
 use reedline::{
-    default_vi_insert_keybindings, default_vi_normal_keybindings, ColumnarMenu, DefaultCompleter,
-    DefaultHinter, DefaultValidator, EditCommand, Keybindings, ListMenu, MenuBuilder,
-    PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus, Reedline, ReedlineEvent,
-    ReedlineMenu, Vi,
+    ColumnarMenu, DefaultCompleter, DefaultHinter, DefaultValidator, EditCommand, Keybindings,
+    ListMenu, MenuBuilder, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus,
+    Reedline, ReedlineEvent, ReedlineMenu, Vi, default_vi_insert_keybindings,
+    default_vi_normal_keybindings,
 };
 
 use reedline::CursorConfig;

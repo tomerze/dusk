@@ -3,11 +3,11 @@ use alloc::rc::Rc;
 use core::future::Future;
 use core::pin::Pin;
 use dusk_core::driver::{Driver, FutureProcessResult};
-use dusk_program::anyhow::{anyhow, Ok, Result};
+use dusk_program::anyhow::{Ok, Result, anyhow};
 use dusk_program::launcher_set::{LauncherSet, LauncherSetBuilder};
 use dusk_program::{namespace::Namespace, process::Process};
 use nix::{sys::time::TimeValLike, unistd::gethostname};
-use rand::Rng;
+use rand::RngCore;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -71,7 +71,7 @@ impl Driver for NixDriver {
         };
         let fut = async move {
             let mut rng = rand::thread_rng();
-            let pid: u64 = rng.gen();
+            let pid: u64 = rng.next_u64();
             launchers.launch(pid, namespace, program_args).await
         };
         Box::pin(fut)

@@ -29,26 +29,26 @@ macro_rules! dusk_driver_impl {
             static ref $name: $t = $val;
         }
 
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         fn _dusk_hostname() -> Result<String> {
             <$t as $crate::driver::Driver>::hostname(&$name)
         }
 
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         fn _dusk_process<'a>(
             namespace: Rc<Namespace>,
             program_args: $crate::dusk_capnp::dusk_capnp::program_args::Client,
         ) -> FutureProcessResult {
             <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
         }
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         fn _dusk_now() -> Result<embassy_time::Instant> {
             <$t as $crate::driver::Driver>::now(&$name)
         }
     };
 }
 
-extern "Rust" {
+unsafe extern "Rust" {
     fn _dusk_hostname() -> Result<String>;
 
     fn _dusk_process<'a>(

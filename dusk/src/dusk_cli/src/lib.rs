@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{command, Parser};
+use clap::{Parser, command};
 use dusk_program_sh::{
     engine::ShEngine,
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},

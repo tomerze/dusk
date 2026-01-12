@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-use dusk_tests::{gen_port, DuskNixImpl, LISTEN_ADDR};
+use dusk_tests::{DuskNixImpl, LISTEN_ADDR, gen_port};
 use std::process::Command;
 
 #[allow(dead_code)]

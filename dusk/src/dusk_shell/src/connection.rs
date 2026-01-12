@@ -1,5 +1,5 @@
 use anyhow::Result;
-use capnp_rpc::{rpc_twoparty_capnp, twoparty, Disconnector, RpcSystem};
+use capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty};
 use dusk_capnp::dusk_capnp::dusk::Client;
 use futures::io::AsyncReadExt;
 use std::{net::SocketAddr, rc::Rc, sync::Mutex};

@@ -1,6 +1,6 @@
 use dusk_capnp::capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
-use dusk_program_init::{init_capnp::init_args, InitArgs, InitLauncher};
+use dusk_program_init::{InitArgs, InitLauncher, init_capnp::init_args};
 use dusk_program_ps::PsLauncher;
 use dusk_program_sh::ShLauncher;
 

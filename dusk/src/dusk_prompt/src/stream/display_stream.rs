@@ -35,10 +35,11 @@ impl<D: DisplayEngine> stream::Server for DisplayStream<D> {
             pry!(Value::from_reader(value).map_err(|e| capnp::Error::failed(e.to_string())));
         print!(
             "{}",
-            pry!(self
-                .display_engine
-                .render_value(value)
-                .map_err(|e| capnp::Error::failed(e.to_string())))
+            pry!(
+                self.display_engine
+                    .render_value(value)
+                    .map_err(|e| capnp::Error::failed(e.to_string()))
+            )
         );
         Promise::ok(())
     }
@@ -49,9 +50,11 @@ impl<D: DisplayEngine> stream::Server for DisplayStream<D> {
         _: dusk_capnp::dusk_capnp::stream::DoneResults,
     ) -> Promise<(), capnp::Error> {
         if let Some(done_sender) = self.done_sender.take() {
-            pry!(done_sender
-                .send(())
-                .map_err(|_| capnp::Error::failed("failed to send done signal".to_string())));
+            pry!(
+                done_sender
+                    .send(())
+                    .map_err(|_| capnp::Error::failed("failed to send done signal".to_string()))
+            );
             Promise::ok(())
         } else {
             Promise::err(capnp::Error::failed("done already called".to_string()))

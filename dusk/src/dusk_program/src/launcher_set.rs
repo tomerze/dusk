@@ -4,7 +4,7 @@ use crate::process::Process;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::{rc::Rc, sync::Arc};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;

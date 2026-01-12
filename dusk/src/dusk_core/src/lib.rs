@@ -14,7 +14,7 @@ use dusk_capnp::prelude::*;
 
 use dusk_program::embassy_executor::Spawner;
 
-use dusk_capnp::capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
+use dusk_capnp::capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
 
 use alloc::rc::Rc;
 use log::{error, info};

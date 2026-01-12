@@ -39,10 +39,12 @@ impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
                     program_name,
                     entry.info.program_id
                 );
-                let client = pry!(entry
-                    .program_args_builder
-                    .build(self.client.clone(), args)
-                    .map_err(|e| { capnp::Error::failed(e.to_string()) }));
+                let client = pry!(
+                    entry
+                        .program_args_builder
+                        .build(self.client.clone(), args)
+                        .map_err(|e| { capnp::Error::failed(e.to_string()) })
+                );
 
                 results.get().set_program_args(client);
                 return Promise::ok(());
