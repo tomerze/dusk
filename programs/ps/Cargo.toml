@@ -7,7 +7,9 @@ edition = "2024"
 log = "0.4.28"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
+dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 slab = { version = "0.4.11", public = true }
+anyhow = { version = "1.0.88", public = true }
 dusk_program_sh = { path = "../sh", public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "*", public = false }
