@@ -27,7 +27,6 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
     .unwrap();
     let portal_server: syn::Path =
         syn::parse_str("dusk_program::dusk_capnp::dusk_capnp::portal::Server").unwrap();
-    let portal_type_alias = format_ident!("{}Portal", pascal_name);
     let program_portal_server: syn::Path = syn::parse_str(&format!(
         "{}_capnp::{}_portal::Server",
         metadata.name, metadata.name
@@ -84,7 +83,6 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         /// Helper macro used by #[derive(Portal)] to emit the type alias and blanket impl.
         macro_rules! __derive_portal {
             ($user_ty:ty) => {
-                pub type #portal_type_alias = $user_ty;
                 impl #program_portal_server for $user_ty {}
             };
         }
@@ -92,7 +90,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         /// Helper macro used by #[derive(Process)] to emit the Process struct and impls.
         macro_rules! __derive_process {
             ($state_ty:ty) => {
-                pub type #state_type_alias = $state_ty;
+                type #state_type_alias = $state_ty;
 
                 #[derive(Clone)]
                 pub struct #process_struct_name {
@@ -160,7 +158,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         /// Helper macro used by #[derive(Launcher)] to emit the Launcher type alias and impl.
         macro_rules! __derive_launcher {
             ($user_ty:ty) => {
-                pub type #launcher_type_alias = $user_ty;
+                type #launcher_type_alias = $user_ty;
 
                 impl dusk_program::launcher::Launcher for $user_ty {
                     fn program_id(&self) -> u64 {

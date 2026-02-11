@@ -65,7 +65,7 @@ pub struct ProcessState;
 impl ProcessState {
     fn portal(&self) -> portal::Client {
         let client: ps_capnp::ps_portal::Client =
-            capnp_rpc::new_client(<PsPortal>::new(self.clone()));
+            capnp_rpc::new_client(<Portal>::new(self.clone()));
         client.cast_to::<portal::Client>()
     }
 

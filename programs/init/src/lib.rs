@@ -15,8 +15,6 @@ pub struct Args {
     port: u16,
 }
 
-//pub type InitArgs = Args;
-
 impl Args {
     pub fn new(address: &str, port: u16) -> Self {
         Args {
@@ -72,7 +70,7 @@ pub struct ProcessState;
 impl ProcessState {
     fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
         let client: init_capnp::init_portal::Client =
-            capnp_rpc::new_client(<InitPortal>::new(self.clone()));
+            capnp_rpc::new_client(<Portal>::new(self.clone()));
         client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
     }
 
