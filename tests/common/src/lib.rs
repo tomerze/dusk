@@ -1,6 +1,6 @@
 use dusk_capnp::capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
-use dusk_program_init::{InitArgs, InitLauncher, init_capnp::init_args};
+use dusk_program_init::{InitLauncher, init_capnp::init_args};
 use dusk_program_ps::PsLauncher;
 use dusk_program_sh::ShLauncher;
 use rand::Rng;
@@ -83,8 +83,10 @@ impl DuskNixImpl {
                         Box::new(PsLauncher {}),
                     ],
                 )),
-                capnp_rpc::new_client::<init_args::Client, _>(InitArgs::new(&address, port))
-                    .cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
+                capnp_rpc::new_client::<init_args::Client, _>(dusk_program_init::Args::new(
+                    &address, port,
+                ))
+                .cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
             );
         });
 

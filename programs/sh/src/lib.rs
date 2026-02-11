@@ -5,17 +5,11 @@
 extern crate alloc;
 extern crate capnp;
 
-// Re-export linkme for client-side program registration
 #[cfg(feature = "client")]
 pub use linkme;
 
 use dusk_program::dusk_capnp::dusk_capnp::process;
-#[allow(unused)]
-#[prelude_import]
-use dusk_program::dusk_capnp::prelude::*;
-
 use dusk_program::dusk_capnp::pry;
-use dusk_program::prelude::*;
 use dusk_program::stream::UndoneStream;
 
 #[cfg(feature = "client")]
@@ -27,34 +21,67 @@ pub mod entry;
 #[cfg(feature = "client")]
 pub mod engine;
 
-#[allow(clippy::all)]
-pub mod sh_capnp {
-    include!(concat!(env!("OUT_DIR"), "/capnp/sh_capnp.rs"));
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
+
+#[derive(dusk_program_proc::Launcher)]
+pub struct Launcher;
+
+#[dusk_program_proc::launcher_mixin]
+impl Launcher {
+    fn launch(
+        &mut self,
+        pid: u64,
+        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
+        program_args: dusk_capnp::dusk_capnp::program_args::Client,
+    ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
+        let state: ShProcessState = Default::default();
+        let cast_program_args =
+            capnp::capability::FromClientHook::cast_to::<sh_capnp::sh_args::Client>(program_args);
+        Ok(Box::new(<ShProcess>::new(
+            pid,
+            namespace,
+            cast_program_args,
+            state,
+        )))
+    }
 }
 
-basic_launcher!(
-    ShLauncher,
-    sh_capnp::PROGRAM_ID,
-    ShProcess,
-    sh_capnp::sh_args::Client
-);
-basic_process!(
-    ShProcess,
-    sh_capnp::PROGRAM_ID,
-    "sh",
-    env!("CARGO_PKG_VERSION"),
-    ShPortal,
-    sh_capnp::sh_portal::Client,
-    sh_capnp::sh_args::Client
-);
+#[derive(Clone, Default, dusk_program_proc::Process)]
+pub struct ProcessState;
 
-pub struct ShPortal {
+#[dusk_program_proc::process_mixin]
+impl ProcessState {
+    fn portal(&self) -> portal::Client {
+        let client: sh_capnp::sh_portal::Client =
+            capnp_rpc::new_client(<ShPortal>::new(self.clone()));
+        client.cast_to::<portal::Client>()
+    }
+
+    async fn main(
+        &self,
+        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+    ) -> anyhow::Result<()> {
+        loop {
+            let signal = signal_receiver.receive().await;
+            match signal {
+                Signal::Terminate => return Ok(()),
+                Signal::Unknown(_signal) => {}
+            }
+        }
+    }
+}
+
+pub type ShPortal = Portal;
+
+pub struct Portal {
     process: ShProcess,
 }
 
-impl ShPortal {
+impl Portal {
     pub fn new(process: ShProcess) -> Self {
-        ShPortal { process }
+        Portal { process }
     }
 
     async fn command_string_to_program_args(
@@ -110,9 +137,10 @@ impl ShPortal {
     }
 }
 
-impl_portal_server!(ShPortal);
+#[dusk_program_proc::portal_rpc_server]
+impl Portal {}
 
-impl sh_capnp::sh_portal::Server for ShPortal {
+impl sh_capnp::sh_portal::Server for Portal {
     fn sh(
         &mut self,
         params: sh_capnp::sh_portal::ShParams,

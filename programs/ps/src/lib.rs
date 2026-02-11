@@ -1,6 +1,5 @@
 #![allow(internal_features)]
 #![feature(prelude_import)]
-#![feature(min_specialization)]
 #![cfg_attr(not(feature = "client"), no_std)]
 
 extern crate alloc;
@@ -14,16 +13,27 @@ use dusk_program::dusk_capnp::dusk_capnp::dusk;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// TODO: remove when Args becomes a derive-after-definition like Portal
+dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
+
 #[cfg(feature = "client")]
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     pub client: dusk::Client,
 }
 
-dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
-
-// --- Launcher (must be after metadata! which generates __derive_launcher) ---
+#[cfg(feature = "client")]
+#[dusk_program_proc::args_rpc_server]
+impl Args {
+    fn get(
+        &mut self,
+        _params: ps_capnp::ps_args::GetParams,
+        mut results: ps_capnp::ps_args::GetResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        results.get().set_client(self.client.clone());
+        results.get().init_options();
+        Promise::ok(())
+    }
+}
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -47,8 +57,6 @@ impl Launcher {
         )))
     }
 }
-
-// --- Process (must be after definition! which generates __derive_process) ---
 
 #[derive(Clone, Default, dusk_program_proc::Process)]
 pub struct ProcessState;
@@ -74,8 +82,6 @@ impl ProcessState {
         }
     }
 }
-
-// --- Portal (must be after definition! which generates PsProcess and __derive_portal) ---
 
 #[derive(dusk_program_proc::Portal)]
 pub struct Portal {
@@ -118,20 +124,6 @@ impl Portal {
         }
 
         Ok((pids, program_ids, process_names, program_versions))
-    }
-}
-
-#[cfg(feature = "client")]
-#[dusk_program_proc::args_rpc_server]
-impl Args {
-    fn get(
-        &mut self,
-        _params: ps_capnp::ps_args::GetParams,
-        mut results: ps_capnp::ps_args::GetResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_client(self.client.clone());
-        results.get().init_options();
-        Promise::ok(())
     }
 }
 

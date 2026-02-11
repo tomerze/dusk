@@ -7,14 +7,15 @@ extern crate capnp;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// TODO: remove when Args becomes a derive-after-definition like Portal
+dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     address: std::string::String,
     port: u16,
 }
 
-pub type InitArgs = Args;
+//pub type InitArgs = Args;
 
 impl Args {
     pub fn new(address: &str, port: u16) -> Self {
@@ -25,9 +26,20 @@ impl Args {
     }
 }
 
-dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
+#[dusk_program_proc::args_rpc_server]
+impl Args {
+    fn get(
+        &mut self,
+        _params: init_capnp::init_args::GetParams,
+        mut results: init_capnp::init_args::GetResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let mut options = results.get().init_options();
+        options.set_address(&self.address);
+        options.set_port(self.port);
 
-// --- Launcher (must be after metadata! which generates __derive_launcher) ---
+        Promise::ok(())
+    }
+}
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -52,8 +64,6 @@ impl Launcher {
         )))
     }
 }
-
-// --- Process (must be after definition! which generates __derive_process) ---
 
 #[derive(Clone, Default, dusk_program_proc::Process)]
 pub struct ProcessState;
@@ -104,8 +114,6 @@ impl ProcessState {
     }
 }
 
-// --- Portal (must be after definition! which generates InitProcess and __derive_portal) ---
-
 #[derive(dusk_program_proc::Portal)]
 pub struct Portal {
     _process: InitProcess,
@@ -114,21 +122,6 @@ pub struct Portal {
 impl Portal {
     pub fn new(_process: InitProcess) -> Self {
         Portal { _process }
-    }
-}
-
-#[dusk_program_proc::args_rpc_server]
-impl Args {
-    fn get(
-        &mut self,
-        _params: init_capnp::init_args::GetParams,
-        mut results: init_capnp::init_args::GetResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        let mut options = results.get().init_options();
-        options.set_address(&self.address);
-        options.set_port(self.port);
-
-        Promise::ok(())
     }
 }
 
