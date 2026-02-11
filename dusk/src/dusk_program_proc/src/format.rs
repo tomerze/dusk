@@ -42,7 +42,26 @@ pub fn merge_mixin(
 pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
     let capnp_mod_name = format_ident!("{}_capnp", metadata.name);
     let capnp_mod_path = format!("/capnp/{}_capnp.rs", metadata.name);
+    let name = &metadata.name;
+
+    let args_server: syn::Path = syn::parse_str(&format!(
+        "{}_capnp::{}_args::Server",
+        metadata.name, metadata.name
+    ))
+    .unwrap();
+    let portal_server: syn::Path = syn::parse_str(&format!(
+        "dusk_program::dusk_capnp::dusk_capnp::portal::Server"
+    ))
+    .unwrap();
+    let portal_type_alias = format_ident!("{}Portal", metadata.name.to_case(Case::Pascal));
+    let program_portal_server: syn::Path = syn::parse_str(&format!(
+        "{}_capnp::{}_portal::Server",
+        metadata.name, metadata.name
+    ))
+    .unwrap();
+
     quote! {
+        use alloc::format;
         use alloc::string::String;
         use alloc::vec;
         use alloc::vec::Vec;
@@ -57,6 +76,44 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         pub mod #capnp_mod_name {
             include!(concat!(env!("OUT_DIR"), #capnp_mod_path));
         }
+
+        /// The program name, as declared in `definition!` metadata.
+        #[allow(unused)]
+        pub const PROGRAM_NAME: &str = #name;
+
+        #[allow(unused)]
+        pub use #capnp_mod_name::PROGRAM_ID;
+
+        #[allow(unused)]
+        pub use dusk_program::dusk_capnp::dusk_capnp::portal;
+        #[allow(unused)]
+        pub use dusk_program::value::{Record, Value};
+
+        /// Helper macro encoding the args RPC server trait path for this program.
+        macro_rules! __args_server_path {
+            ($self_ty:ty, { $($body:tt)* }) => {
+                impl #args_server for $self_ty {
+                    $($body)*
+                }
+            };
+        }
+
+        /// Helper macro encoding the portal RPC server trait path for this program.
+        macro_rules! __portal_server_path {
+            ($self_ty:ty, { $($body:tt)* }) => {
+                impl #portal_server for $self_ty {
+                    $($body)*
+                }
+            };
+        }
+
+        /// Helper macro used by #[derive(Portal)] to emit the type alias and blanket impl.
+        macro_rules! __derive_portal {
+            ($user_ty:ty) => {
+                pub type #portal_type_alias = $user_ty;
+                impl #program_portal_server for $user_ty {}
+            };
+        }
     }
 }
 
@@ -67,98 +124,6 @@ pub mod format_section {
 
     use super::*;
     use crate::parse::{ItemContent, Metadata, Section};
-
-    pub fn args(section: &Section, metadata: &Metadata) -> proc_macro2::TokenStream {
-        let pascal_name = metadata.name.to_case(Case::Pascal);
-        let struct_name = format_ident!("{}Args", pascal_name);
-        let program_id = &metadata.program_id;
-        let args_server: syn::Path = syn::parse_str(
-            format!("{}_capnp::{}_args::Server", metadata.name, metadata.name).as_str(),
-        )
-        .unwrap();
-
-        let mut public_type: Option<&syn::Path> = None;
-        let mut rpc_server: Option<&syn::Block> = None;
-        for item in section.items.iter() {
-            match item.key.to_string().as_str() {
-                "public_type" => {
-                    if let ItemContent::Path(path) = &item.content {
-                        public_type = Some(path);
-                    } else {
-                        return syn::Error::new_spanned(
-                            &item.key,
-                            "expected a type path for public_type",
-                        )
-                        .to_compile_error();
-                    }
-                }
-                "rpc_server" => {
-                    if let ItemContent::Block(block) = &item.content {
-                        rpc_server = Some(block);
-                    } else {
-                        return syn::Error::new_spanned(
-                            &item.key,
-                            "expected a block for rpc_server",
-                        )
-                        .to_compile_error();
-                    }
-                }
-                _ => {
-                    return syn::Error::new_spanned(
-                        &item.key,
-                        format!("unknown item key in section: {}", item.key),
-                    )
-                    .to_compile_error();
-                }
-            }
-        }
-
-        let type_definition = if let Some(public_type) = public_type {
-            quote! {
-                #[cfg(feature = "client")]
-                pub type #struct_name = #public_type;
-            }
-        } else {
-            quote! {
-                #[cfg(feature = "client")]
-                pub struct #struct_name;
-            }
-        };
-
-        let program_args_server_definition = quote! {
-            #[cfg(feature = "client")]
-            impl dusk_capnp::dusk_capnp::program_args::Server for #struct_name {
-                fn program_id(
-                    &mut self,
-                    _params: dusk_capnp::dusk_capnp::program_args::ProgramIdParams,
-                    mut results: dusk_capnp::dusk_capnp::program_args::ProgramIdResults,
-                ) -> capnp::capability::Promise<(), capnp::Error> {
-                    results.get().set_program_id(#program_id);
-                    capnp::capability::Promise::ok(())
-                }
-            }
-        };
-
-        let rpc_server_definition = if let Some(rpc_server) = rpc_server {
-            quote! {
-                #[cfg(feature = "client")]
-                impl #args_server for #struct_name #rpc_server
-            }
-        } else {
-            quote! {
-                #[cfg(feature = "client")]
-                impl #args_server for #struct_name {}
-            }
-        };
-
-        quote! {
-            #type_definition
-
-            #program_args_server_definition
-
-            #rpc_server_definition
-        }
-    }
 
     pub fn launcher(section: &Section, metadata: &Metadata) -> proc_macro2::TokenStream {
         let pascal_name = metadata.name.to_case(Case::Pascal);
@@ -205,12 +170,10 @@ pub mod format_section {
 
         let type_definition = if let Some(public_type) = public_type {
             quote! {
-                #[cfg(feature = "client")]
                 pub type #struct_name = #public_type;
             }
         } else {
             quote! {
-                #[cfg(feature = "client")]
                 pub struct #struct_name;
             }
         };
@@ -295,7 +258,6 @@ pub mod format_section {
         }
 
         let state_type_name = format_ident!("{}ProcessState", pascal_name);
-        let portal_state_type = format_ident!("{}PortalState", pascal_name);
 
         let state_type_definition = if let Some(state_type) = state_type {
             quote! { pub type #state_type_name = #state_type; }
@@ -341,7 +303,7 @@ pub mod format_section {
             quote! {
                 fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
                     let client: #portal_client =
-                        capnp_rpc::new_client(<#portal_type>::new(self.clone(), <#portal_state_type>::default()));
+                        capnp_rpc::new_client(<#portal_type>::new(self.clone()));
                     client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
                 }
             },
@@ -380,74 +342,6 @@ pub mod format_section {
             impl dusk_program::process::Process for #struct_name {
                 #mixin_body
             }
-        }
-    }
-
-    pub fn portal(section: &Section, metadata: &Metadata) -> proc_macro2::TokenStream {
-        let pascal_name = metadata.name.to_case(Case::Pascal);
-        let struct_name = format_ident!("{}Portal", pascal_name);
-        let process_name = format_ident!("{}Process", pascal_name);
-
-        let mut state_type: Option<&syn::Path> = None;
-        let mut rpc_server: Option<&syn::Block> = None;
-        for item in section.items.iter() {
-            match item.key.to_string().as_str() {
-                "state_type" => {
-                    if let ItemContent::Path(path) = &item.content {
-                        state_type = Some(path);
-                    } else {
-                        return syn::Error::new_spanned(
-                            &item.key,
-                            "expected a type path for state_type",
-                        )
-                        .to_compile_error();
-                    }
-                }
-                "rpc_server" => {
-                    if let ItemContent::Block(block) = &item.content {
-                        rpc_server = Some(block);
-                    } else {
-                        return syn::Error::new_spanned(&item.key, "expected a block for mixin")
-                            .to_compile_error();
-                    }
-                }
-                _ => {
-                    return syn::Error::new_spanned(
-                        &item.key,
-                        format!("unknown item key in section: {}", item.key),
-                    )
-                    .to_compile_error();
-                }
-            }
-        }
-
-        let state_type_name = format_ident!("{}PortalState", pascal_name);
-
-        let state_type_definition = if let Some(state_type) = state_type {
-            quote! { pub type #state_type_name = #state_type; }
-        } else {
-            quote! { pub type #state_type_name = (); }
-        };
-        quote! {
-            use dusk_program::dusk_capnp::dusk_capnp::portal;
-            use dusk_program::value::{Record, Value};
-
-            #state_type_definition
-
-            pub struct #struct_name {
-                process: #process_name,
-                state: #state_type_name,
-            }
-
-            impl #struct_name {
-                pub fn new(process: #process_name, state: #state_type_name) -> Self {
-                    #struct_name { process, state }
-                }
-            }
-
-            impl portal::Server for #struct_name #rpc_server
-
-            impl ps_capnp::ps_portal::Server for #struct_name {}
         }
     }
 }
