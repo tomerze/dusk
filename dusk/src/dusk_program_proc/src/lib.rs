@@ -48,8 +48,14 @@ pub fn derive_portal(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
 
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
+
     let expanded = quote::quote! {
-        __derive_portal!(#struct_name);
+        __derive_portal!(#(#cfg_attrs)* #struct_name);
     };
 
     TokenStream::from(expanded)
@@ -60,8 +66,14 @@ pub fn derive_process(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
 
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
+
     let expanded = quote::quote! {
-        __derive_process!(#struct_name);
+        __derive_process!(#(#cfg_attrs)* #struct_name);
     };
 
     TokenStream::from(expanded)
@@ -72,8 +84,14 @@ pub fn derive_launcher(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
 
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
+
     let expanded = quote::quote! {
-        __derive_launcher!(#struct_name);
+        __derive_launcher!(#(#cfg_attrs)* #struct_name);
     };
 
     TokenStream::from(expanded)
@@ -104,9 +122,14 @@ pub fn args_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::ItemImpl);
     let self_ty = &input.self_ty;
     let items = &input.items;
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
 
     let expanded = quote::quote! {
-        __args_server_path!(#self_ty, {
+        __args_server_path!(#(#cfg_attrs)* #self_ty, {
             #(#items)*
         });
     };
@@ -140,9 +163,14 @@ pub fn portal_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::ItemImpl);
     let self_ty = &input.self_ty;
     let items = &input.items;
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
 
     let expanded = quote::quote! {
-        __portal_server_path!(#self_ty, {
+        __portal_server_path!(#(#cfg_attrs)* #self_ty, {
             #(#items)*
         });
     };
@@ -167,9 +195,14 @@ pub fn process_mixin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::ItemImpl);
     let self_ty = &input.self_ty;
     let items = &input.items;
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
 
     let expanded = quote::quote! {
-        __process_mixin_path!(#self_ty, {
+        __process_mixin_path!(#(#cfg_attrs)* #self_ty, {
             #(#items)*
         });
     };
@@ -194,9 +227,14 @@ pub fn launcher_mixin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::ItemImpl);
     let self_ty = &input.self_ty;
     let items = &input.items;
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
 
     let expanded = quote::quote! {
-        __launcher_mixin_path!(#self_ty, {
+        __launcher_mixin_path!(#(#cfg_attrs)* #self_ty, {
             #(#items)*
         });
     };

@@ -64,7 +64,8 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         /// Helper macro encoding the args RPC server trait path for this program.
         macro_rules! __args_server_path {
-            ($self_ty:ty, { $($body:tt)* }) => {
+            ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
+                $(#[$meta])*
                 impl #args_server for $self_ty {
                     $($body)*
                 }
@@ -73,7 +74,8 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         /// Helper macro encoding the portal RPC server trait path for this program.
         macro_rules! __portal_server_path {
-            ($self_ty:ty, { $($body:tt)* }) => {
+            ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
+                $(#[$meta])*
                 impl #portal_server for $self_ty {
                     $($body)*
                 }
@@ -82,16 +84,19 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         /// Helper macro used by #[derive(Portal)] to emit the type alias and blanket impl.
         macro_rules! __derive_portal {
-            ($user_ty:ty) => {
+            ($(#[$meta:meta])* $user_ty:ty) => {
+                $(#[$meta])*
                 impl #program_portal_server for $user_ty {}
             };
         }
 
         /// Helper macro used by #[derive(Process)] to emit the Process struct and impls.
         macro_rules! __derive_process {
-            ($state_ty:ty) => {
+            ($(#[$meta:meta])* $state_ty:ty) => {
+                $(#[$meta])*
                 type #state_type_alias = $state_ty;
 
+                $(#[$meta])*
                 #[derive(Clone)]
                 pub struct #process_struct_name {
                     pub pid: u64,
@@ -100,6 +105,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                     pub state: $state_ty,
                 }
 
+                $(#[$meta])*
                 impl #process_struct_name {
                     pub fn new(
                         pid: u64,
@@ -116,6 +122,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                     }
                 }
 
+                $(#[$meta])*
                 #[async_trait::async_trait(?Send)]
                 impl dusk_program::process::Process for #process_struct_name {
                     fn pid(&self) -> u64 {
@@ -147,7 +154,8 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         /// Helper macro used by #[process_mixin] to emit the ProcessMixin impl.
         macro_rules! __process_mixin_path {
-            ($state_ty:ty, { $($body:tt)* }) => {
+            ($(#[$meta:meta])* $state_ty:ty, { $($body:tt)* }) => {
+                $(#[$meta])*
                 #[async_trait::async_trait(?Send)]
                 impl dusk_program::process::ProcessMixin for #process_struct_name {
                     $($body)*
@@ -157,9 +165,11 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         /// Helper macro used by #[derive(Launcher)] to emit the Launcher type alias and impl.
         macro_rules! __derive_launcher {
-            ($user_ty:ty) => {
+            ($(#[$meta:meta])* $user_ty:ty) => {
+                $(#[$meta])*
                 type #launcher_type_alias = $user_ty;
 
+                $(#[$meta])*
                 impl dusk_program::launcher::Launcher for $user_ty {
                     fn program_id(&self) -> u64 {
                         #program_id
@@ -170,7 +180,8 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         /// Helper macro used by #[launcher_mixin] to emit the LauncherMixin impl.
         macro_rules! __launcher_mixin_path {
-            ($user_ty:ty, { $($body:tt)* }) => {
+            ($(#[$meta:meta])* $user_ty:ty, { $($body:tt)* }) => {
+                $(#[$meta])*
                 impl dusk_program::launcher::LauncherMixin for #launcher_type_alias {
                     $($body)*
                 }
