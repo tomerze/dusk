@@ -5,49 +5,14 @@ mod parse;
 
 use proc_macro::TokenStream;
 
-use format::{format_header, format_section};
+use format::format_header;
 
-use parse::Definition;
+use parse::Metadata;
 
 #[proc_macro]
-pub fn definition(item: TokenStream) -> TokenStream {
-    let parsed = syn::parse_macro_input!(item as Definition);
-    let mut output = proc_macro2::TokenStream::new();
-
-    // Check for duplicate section names
-    let mut seen = std::collections::HashSet::new();
-    for section in &parsed.sections {
-        let name = section.name.to_string();
-        if !seen.insert(name.clone()) {
-            return syn::Error::new_spanned(
-                &section.name,
-                format!("duplicate section name: {}", name),
-            )
-            .to_compile_error()
-            .into();
-        }
-    }
-
-    // Output header and metadata
-    output.extend(format_header(&parsed.metadata));
-
-    for section in &parsed.sections {
-        let metadata = &parsed.metadata;
-        let section_code = match section.name.to_string().as_str() {
-            "launcher" => format_section::launcher(section, metadata),
-            "process" => format_section::process(section, metadata),
-            _ => {
-                return syn::Error::new_spanned(
-                    &section.name,
-                    format!("unknown section name: {}", section.name),
-                )
-                .to_compile_error()
-                .into();
-            }
-        };
-        output.extend(section_code);
-    }
-    TokenStream::from(output)
+pub fn metadata(item: TokenStream) -> TokenStream {
+    let parsed = syn::parse_macro_input!(item as Metadata);
+    TokenStream::from(format_header(&parsed))
 }
 
 #[proc_macro_derive(Args)]
@@ -85,6 +50,30 @@ pub fn derive_portal(item: TokenStream) -> TokenStream {
 
     let expanded = quote::quote! {
         __derive_portal!(#struct_name);
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Process)]
+pub fn derive_process(item: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(item as syn::DeriveInput);
+    let struct_name = &input.ident;
+
+    let expanded = quote::quote! {
+        __derive_process!(#struct_name);
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Launcher)]
+pub fn derive_launcher(item: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(item as syn::DeriveInput);
+    let struct_name = &input.ident;
+
+    let expanded = quote::quote! {
+        __derive_launcher!(#struct_name);
     };
 
     TokenStream::from(expanded)
@@ -154,6 +143,60 @@ pub fn portal_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let expanded = quote::quote! {
         __portal_server_path!(#self_ty, {
+            #(#items)*
+        });
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Attribute macro that rewrites `impl Type { ... }` into `impl ProcessMixin for {Name}Process { ... }`.
+///
+/// The user must provide both `portal()` and `main()` methods.
+#[proc_macro_attribute]
+pub fn process_mixin(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "process_mixin takes no arguments",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let input = syn::parse_macro_input!(item as syn::ItemImpl);
+    let self_ty = &input.self_ty;
+    let items = &input.items;
+
+    let expanded = quote::quote! {
+        __process_mixin_path!(#self_ty, {
+            #(#items)*
+        });
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Attribute macro that rewrites `impl Type { ... }` into `impl LauncherMixin for {Name}Launcher { ... }`.
+///
+/// The user must provide the `launch()` method.
+#[proc_macro_attribute]
+pub fn launcher_mixin(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(attr),
+            "launcher_mixin takes no arguments",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let input = syn::parse_macro_input!(item as syn::ItemImpl);
+    let self_ty = &input.self_ty;
+    let items = &input.items;
+
+    let expanded = quote::quote! {
+        __launcher_mixin_path!(#self_ty, {
             #(#items)*
         });
     };

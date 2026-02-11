@@ -9,14 +9,22 @@ use embassy_sync::channel::DynamicReceiver;
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
 use crate::signal;
-use crate::signal::Signal;
+
+#[async_trait::async_trait(?Send)]
+pub trait ProcessMixin {
+    fn portal(&self) -> portal::Client;
+    async fn main(
+        &self,
+        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+    ) -> Result<()>;
+}
 
 // You are probably wondering how processes are run.
 // There are two ways, inside a task of their own or inside the session task.
 // A process running inside a task of its own doesn't depend on the session it was created from, essentially making it a daemon.
 // Here are some flow charts for you:
-// 1. Run in task flow: DuskServer.run -> DuskServer.run_inside_task -> process_task -> Process.bootstrap -> Process.main
-// 2. Run in session flow: Process.run -> Process.bootstrap -> Process.main
+// 1. Run in task flow: DuskServer.run -> DuskServer.run_inside_task -> process_task -> Process.bootstrap -> Process.main -> ProcessMixin.main
+// 2. Run in session flow: Process.run -> Process.bootstrap -> Process.main -> ProcessMixin.main
 //
 // And how does one get a process?
 // Dusk.process -> Driver.process ->
@@ -25,28 +33,17 @@ use crate::signal::Signal;
 // Cool right?
 //
 // Note: Never run process.main directly, always use process.bootstrap.
-
 #[async_trait::async_trait(?Send)]
-pub trait Process {
+pub trait Process: ProcessMixin {
     fn pid(&self) -> u64;
     fn program_id(&self) -> u64;
     fn name(&self) -> alloc::string::String;
     fn version(&self) -> alloc::string::String;
     fn namespace(&self) -> Rc<Namespace>;
     fn clone_box(&self) -> Box<dyn Process>;
-    fn portal(&self) -> portal::Client;
 
-    async fn main(
-        &self,
-        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
-    ) -> Result<()> {
-        loop {
-            let signal = signal_receiver.receive().await;
-            match signal {
-                Signal::Terminate => return Ok(()),
-                Signal::Unknown(_signal) => {}
-            }
-        }
+    fn portal(&self) -> portal::Client {
+        <Self as ProcessMixin>::portal(self)
     }
 }
 
@@ -260,6 +257,31 @@ macro_rules! basic_process {
         }
 
         #[async_trait::async_trait(?Send)]
+        impl dusk_program::process::ProcessMixin for $process_type {
+            fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
+                let client: $portal_client_type =
+                    capnp_rpc::new_client(<$portal_type>::new(self.clone()));
+                client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
+            }
+
+            async fn main(
+                &self,
+                signal_receiver: embassy_sync::channel::DynamicReceiver<
+                    'async_trait,
+                    dusk_program::signal::Signal,
+                >,
+            ) -> anyhow::Result<()> {
+                loop {
+                    let signal = signal_receiver.receive().await;
+                    match signal {
+                        dusk_program::signal::Signal::Terminate => return Ok(()),
+                        dusk_program::signal::Signal::Unknown(_signal) => {}
+                    }
+                }
+            }
+        }
+
+        #[async_trait::async_trait(?Send)]
         impl dusk_program::process::Process for $process_type {
             fn pid(&self) -> u64 {
                 self.pid
@@ -282,11 +304,6 @@ macro_rules! basic_process {
                     namespace: self.namespace.clone(),
                     program_args: self.program_args.clone(),
                 })
-            }
-            fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
-                let client: $portal_client_type =
-                    capnp_rpc::new_client(<$portal_type>::new(self.clone()));
-                client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
             }
         }
     };

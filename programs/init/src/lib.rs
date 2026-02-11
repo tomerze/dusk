@@ -25,52 +25,78 @@ impl Args {
     }
 }
 
+dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
+
+// --- Launcher (must be after metadata! which generates __derive_launcher) ---
+
+#[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
-#[derive(Clone, Default)]
+#[dusk_program_proc::launcher_mixin]
+impl Launcher {
+    fn launch(
+        &mut self,
+        pid: u64,
+        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
+        program_args: dusk_capnp::dusk_capnp::program_args::Client,
+    ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
+        let state: InitProcessState = Default::default();
+        let cast_program_args = capnp::capability::FromClientHook::cast_to::<
+            init_capnp::init_args::Client,
+        >(program_args);
+        Ok(Box::new(<InitProcess>::new(
+            pid,
+            namespace,
+            cast_program_args,
+            state,
+        )))
+    }
+}
+
+// --- Process (must be after definition! which generates __derive_process) ---
+
+#[derive(Clone, Default, dusk_program_proc::Process)]
 pub struct ProcessState;
 
-dusk_program_proc::definition! {
-    metadata("init", VERSION, init_capnp::PROGRAM_ID)
+#[dusk_program_proc::process_mixin]
+impl ProcessState {
+    fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
+        let client: init_capnp::init_portal::Client =
+            capnp_rpc::new_client(<InitPortal>::new(self.clone()));
+        client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
+    }
 
-    [launcher]
-    public_type: Launcher
-    mixin: {}
+    async fn main(
+        &self,
+        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+    ) -> anyhow::Result<()> {
+        let program_args = self
+            .program_args
+            .clone()
+            .cast_to::<init_capnp::init_args::Client>();
+        let get_reply = program_args.get_request().send().promise.await?;
+        let options = get_reply.get()?.get_options()?;
+        let address = options.get_address()?;
+        let port = options.get_port();
+        let listener =
+            async_net::TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
 
-    [process]
-    state_type: ProcessState
-    mixin: {
-        async fn main(
-            &self,
-            signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
-        ) -> anyhow::Result<()> {
-            let program_args = self
-                .program_args
-                .clone()
-                .cast_to::<init_capnp::init_args::Client>();
-            let get_reply = program_args.get_request().send().promise.await?;
-            let options = get_reply.get()?.get_options()?;
-            let address = options.get_address()?;
-            let port = options.get_port();
-            let listener = async_net::TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
-
-            loop {
-                futures::select! {
-                    accept_result = listener.accept().fuse() => {
-                        let (stream, _) = accept_result?;
-                        stream.set_nodelay(true)?;
-                        let (reader, writer) = stream.split();
-                        let session_task = dusk_core::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
-                        let spawner = unsafe { Spawner::for_current_executor().await };
-                        spawner
-                            .spawn(session_task)
-                            .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
-                    }
-                    signal = signal_receiver.receive().fuse() => {
-                        match signal {
-                            Signal::Terminate => return Ok(()),
-                            Signal::Unknown(_signal) => {}
-                        }
+        loop {
+            futures::select! {
+                accept_result = listener.accept().fuse() => {
+                    let (stream, _) = accept_result?;
+                    stream.set_nodelay(true)?;
+                    let (reader, writer) = stream.split();
+                    let session_task = dusk_core::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
+                    let spawner = unsafe { Spawner::for_current_executor().await };
+                    spawner
+                        .spawn(session_task)
+                        .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
+                }
+                signal = signal_receiver.receive().fuse() => {
+                    match signal {
+                        Signal::Terminate => return Ok(()),
+                        Signal::Unknown(_signal) => {}
                     }
                 }
             }

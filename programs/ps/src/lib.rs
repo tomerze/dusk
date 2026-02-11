@@ -21,26 +21,58 @@ pub struct Args {
     pub client: dusk::Client,
 }
 
+dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
+
+// --- Launcher (must be after metadata! which generates __derive_launcher) ---
+
+#[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
-#[derive(Clone, Default)]
+#[dusk_program_proc::launcher_mixin]
+impl Launcher {
+    fn launch(
+        &mut self,
+        pid: u64,
+        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
+        program_args: dusk_capnp::dusk_capnp::program_args::Client,
+    ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
+        let state: PsProcessState = Default::default();
+        let cast_program_args =
+            capnp::capability::FromClientHook::cast_to::<ps_capnp::ps_args::Client>(program_args);
+        Ok(Box::new(<PsProcess>::new(
+            pid,
+            namespace,
+            cast_program_args,
+            state,
+        )))
+    }
+}
+
+// --- Process (must be after definition! which generates __derive_process) ---
+
+#[derive(Clone, Default, dusk_program_proc::Process)]
 pub struct ProcessState;
 
-dusk_program_proc::definition! {
-    metadata("ps", VERSION, ps_capnp::PROGRAM_ID)
+#[dusk_program_proc::process_mixin]
+impl ProcessState {
+    fn portal(&self) -> portal::Client {
+        let client: ps_capnp::ps_portal::Client =
+            capnp_rpc::new_client(<PsPortal>::new(self.clone()));
+        client.cast_to::<portal::Client>()
+    }
 
-
-    /// Interface of
-    /// process <-> process.
-    [launcher]
-    public_type: Launcher
-    mixin: {}
-
-    /// Interface of
-    /// core -> process.
-    [process]
-    state_type: ProcessState
-    mixin: {}
+    async fn main(
+        &self,
+        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+    ) -> anyhow::Result<()> {
+        loop {
+            let signal = signal_receiver.receive().await;
+            match signal {
+                Signal::Terminate => return Ok(()),
+                Signal::Unknown(_signal) => {}
+            }
+        }
+    }
 }
 
 // --- Portal (must be after definition! which generates PsProcess and __derive_portal) ---

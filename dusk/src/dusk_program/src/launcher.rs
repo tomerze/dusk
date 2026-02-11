@@ -3,8 +3,7 @@ use alloc::{boxed::Box, rc::Rc};
 use anyhow::Result;
 use dusk_capnp::dusk_capnp::program_args;
 
-pub trait Launcher {
-    fn program_id(&self) -> u64;
+pub trait LauncherMixin {
     fn launch(
         &mut self,
         pid: u64,
@@ -13,15 +12,16 @@ pub trait Launcher {
     ) -> Result<Box<dyn Process>>;
 }
 
+pub trait Launcher: LauncherMixin {
+    fn program_id(&self) -> u64;
+}
+
 #[macro_export]
 macro_rules! basic_launcher {
     ($launcher_name:ident, $program_id:expr, $process_type:ty, $args_type:path) => {
         pub struct $launcher_name {}
 
-        impl dusk_program::launcher::Launcher for $launcher_name {
-            fn program_id(&self) -> u64 {
-                $program_id
-            }
+        impl dusk_program::launcher::LauncherMixin for $launcher_name {
             fn launch(
                 &mut self,
                 pid: u64,
@@ -35,6 +35,12 @@ macro_rules! basic_launcher {
                     namespace,
                     cast_program_args,
                 )))
+            }
+        }
+
+        impl dusk_program::launcher::Launcher for $launcher_name {
+            fn program_id(&self) -> u64 {
+                $program_id
             }
         }
     };
