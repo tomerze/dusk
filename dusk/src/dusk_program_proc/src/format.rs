@@ -49,10 +49,8 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         metadata.name, metadata.name
     ))
     .unwrap();
-    let portal_server: syn::Path = syn::parse_str(&format!(
-        "dusk_program::dusk_capnp::dusk_capnp::portal::Server"
-    ))
-    .unwrap();
+    let portal_server: syn::Path =
+        syn::parse_str("dusk_program::dusk_capnp::dusk_capnp::portal::Server").unwrap();
     let portal_type_alias = format_ident!("{}Portal", metadata.name.to_case(Case::Pascal));
     let program_portal_server: syn::Path = syn::parse_str(&format!(
         "{}_capnp::{}_portal::Server",

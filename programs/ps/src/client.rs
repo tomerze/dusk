@@ -14,7 +14,7 @@ impl ProgramArgsBuilder for PsProgramArgsBuilder {
         client: dusk::Client,
         _args: &str,
     ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
-        let client: ps_capnp::ps_args::Client = capnp_rpc::new_client(PsArgs { client });
+        let client: ps_capnp::ps_args::Client = capnp_rpc::new_client(Args { client });
         Ok(client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
     }
 }

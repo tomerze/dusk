@@ -5,58 +5,94 @@ extern crate alloc;
 
 extern crate capnp;
 
-#[allow(unused)]
-#[prelude_import]
-use dusk_program::dusk_capnp::prelude::*;
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-use async_net::TcpListener;
-use dusk_program::prelude::*;
-
-use std::string::String;
-
-#[allow(clippy::all)]
-pub mod init_capnp {
-    include!(concat!(env!("OUT_DIR"), "/capnp/init_capnp.rs"));
-}
-
-basic_launcher!(
-    InitLauncher,
-    init_capnp::PROGRAM_ID,
-    InitProcess,
-    init_capnp::init_args::Client
-);
-
-pub struct InitPortal {
-    _process: InitProcess,
-}
-
-impl InitPortal {
-    pub fn new(_process: InitProcess) -> Self {
-        InitPortal { _process }
-    }
-}
-
-impl_portal_server!(InitPortal);
-
-impl init_capnp::init_portal::Server for InitPortal {}
-
-pub struct InitArgs {
-    address: String,
+// TODO: remove when Args becomes a derive-after-definition like Portal
+#[derive(dusk_program_proc::Args)]
+pub struct Args {
+    address: std::string::String,
     port: u16,
 }
 
-impl InitArgs {
+pub type InitArgs = Args;
+
+impl Args {
     pub fn new(address: &str, port: u16) -> Self {
-        InitArgs {
+        Args {
             address: address.to_string(),
             port,
         }
     }
 }
 
-impl_program_args_server!(InitArgs, crate::init_capnp::PROGRAM_ID);
+pub struct Launcher;
 
-impl init_capnp::init_args::Server for InitArgs {
+#[derive(Clone, Default)]
+pub struct ProcessState;
+
+dusk_program_proc::definition! {
+    metadata("init", VERSION, init_capnp::PROGRAM_ID)
+
+    [launcher]
+    public_type: Launcher
+    mixin: {}
+
+    [process]
+    state_type: ProcessState
+    mixin: {
+        async fn main(
+            &self,
+            signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+        ) -> anyhow::Result<()> {
+            let program_args = self
+                .program_args
+                .clone()
+                .cast_to::<init_capnp::init_args::Client>();
+            let get_reply = program_args.get_request().send().promise.await?;
+            let options = get_reply.get()?.get_options()?;
+            let address = options.get_address()?;
+            let port = options.get_port();
+            let listener = async_net::TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
+
+            loop {
+                futures::select! {
+                    accept_result = listener.accept().fuse() => {
+                        let (stream, _) = accept_result?;
+                        stream.set_nodelay(true)?;
+                        let (reader, writer) = stream.split();
+                        let session_task = dusk_core::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
+                        let spawner = unsafe { Spawner::for_current_executor().await };
+                        spawner
+                            .spawn(session_task)
+                            .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
+                    }
+                    signal = signal_receiver.receive().fuse() => {
+                        match signal {
+                            Signal::Terminate => return Ok(()),
+                            Signal::Unknown(_signal) => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Portal (must be after definition! which generates InitProcess and __derive_portal) ---
+
+#[derive(dusk_program_proc::Portal)]
+pub struct Portal {
+    _process: InitProcess,
+}
+
+impl Portal {
+    pub fn new(_process: InitProcess) -> Self {
+        Portal { _process }
+    }
+}
+
+#[dusk_program_proc::args_rpc_server]
+impl Args {
     fn get(
         &mut self,
         _params: init_capnp::init_args::GetParams,
@@ -70,91 +106,5 @@ impl init_capnp::init_args::Server for InitArgs {
     }
 }
 
-#[derive(Clone)]
-pub struct InitProcess {
-    pub pid: u64,
-    pub namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
-    pub program_args: init_capnp::init_args::Client,
-}
-
-impl InitProcess {
-    pub fn new(
-        pid: u64,
-        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
-        program_args: init_capnp::init_args::Client,
-    ) -> Self {
-        InitProcess {
-            pid,
-            namespace,
-            program_args,
-        }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl dusk_program::process::Process for InitProcess {
-    fn pid(&self) -> u64 {
-        self.pid
-    }
-    fn program_id(&self) -> u64 {
-        init_capnp::PROGRAM_ID
-    }
-    fn name(&self) -> alloc::string::String {
-        alloc::string::String::from("init")
-    }
-    fn version(&self) -> alloc::string::String {
-        alloc::string::String::from(env!("CARGO_PKG_VERSION"))
-    }
-    fn namespace(&self) -> alloc::rc::Rc<dusk_program::namespace::Namespace> {
-        self.namespace.clone()
-    }
-    fn clone_box(&self) -> Box<dyn dusk_program::process::Process> {
-        Box::new(InitProcess {
-            pid: self.pid,
-            namespace: self.namespace.clone(),
-            program_args: self.program_args.clone(),
-        })
-    }
-
-    fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
-        let client: init_capnp::init_portal::Client =
-            capnp_rpc::new_client(InitPortal::new(self.clone()));
-        client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
-    }
-
-    async fn main(
-        &self,
-        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
-    ) -> anyhow::Result<()> {
-        let program_args = self
-            .program_args
-            .clone()
-            .cast_to::<init_capnp::init_args::Client>();
-        let get_reply = program_args.get_request().send().promise.await?;
-        let options = get_reply.get()?.get_options()?;
-        let address = options.get_address()?;
-        let port = options.get_port();
-        let listener = TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
-
-        loop {
-            futures::select! {
-                accept_result = listener.accept().fuse() => {
-                    let (stream, _) = accept_result?;
-                    stream.set_nodelay(true)?;
-                    let (reader, writer) = stream.split();
-                    let session_task = dusk_core::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
-                    let spawner = unsafe { Spawner::for_current_executor().await };
-                    spawner
-                        .spawn(session_task)
-                        .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
-                }
-                signal = signal_receiver.receive().fuse() => {
-                    match signal {
-                        Signal::Terminate => return Ok(()),
-                        Signal::Unknown(_signal) => {}
-                    }
-                }
-            }
-        }
-    }
-}
+#[dusk_program_proc::portal_rpc_server]
+impl Portal {}

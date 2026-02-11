@@ -55,8 +55,14 @@ pub fn derive_args(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
 
+    let cfg_attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .collect();
+
     let expanded = quote::quote! {
-        #[cfg(feature = "client")]
+        #(#cfg_attrs)*
         impl dusk_program::dusk_capnp::dusk_capnp::program_args::Server for #struct_name {
             fn program_id(
                 &mut self,

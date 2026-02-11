@@ -9,11 +9,13 @@ extern crate capnp;
 #[cfg(feature = "client")]
 pub mod client;
 
+#[cfg(feature = "client")]
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // TODO: remove when Args becomes a derive-after-definition like Portal
+#[cfg(feature = "client")]
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     pub client: dusk::Client,
