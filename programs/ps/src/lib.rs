@@ -45,26 +45,33 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
         namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
         program_args: dusk_capnp::dusk_capnp::program_args::Client,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        let state: PsProcessState = Default::default();
-        let cast_program_args =
-            capnp::capability::FromClientHook::cast_to::<ps_capnp::ps_args::Client>(program_args);
-        Ok(Box::new(<PsProcess>::new(
+        Ok(Box::new(Process::with_context(ProcessContext {
             pid,
             namespace,
-            cast_program_args,
-            state,
-        )))
+            program_args,
+        })))
     }
 }
 
-#[derive(Clone, Default, dusk_program_proc::Process)]
-pub struct ProcessState;
+#[derive(Clone, dusk_program_proc::Process)]
+pub struct Process {
+    #[process_context]
+    pub ctx: ProcessContext,
+}
 
-#[dusk_program_proc::process_mixin]
-impl ProcessState {
+#[async_trait::async_trait(?Send)]
+impl dusk_program::process::ProcessMixin for Process {
+    fn with_context(ctx: dusk_program::process::ProcessContext) -> Self
+    where
+        Self: Sized,
+    {
+        Process { ctx }
+    }
+
     fn portal(&self) -> portal::Client {
-        let client: ps_capnp::ps_portal::Client =
-            capnp_rpc::new_client(<Portal>::new(self.clone()));
+        let client: ps_capnp::ps_portal::Client = capnp_rpc::new_client(Portal {
+            process: self.clone(),
+        });
         client.cast_to::<portal::Client>()
     }
 
@@ -84,18 +91,16 @@ impl ProcessState {
 
 #[derive(dusk_program_proc::Portal)]
 pub struct Portal {
-    process: PsProcess,
+    pub process: Process,
 }
 
 impl Portal {
-    pub fn new(process: PsProcess) -> Self {
-        Portal { process }
-    }
-
     async fn inner_ps(
-        process: &PsProcess,
+        process: &Process,
     ) -> capnp::Result<(Vec<u64>, Vec<u64>, Vec<String>, Vec<String>)> {
-        let program_args = process.program_args.clone();
+        let program_args = capnp::capability::FromClientHook::cast_to::<ps_capnp::ps_args::Client>(
+            process.ctx.program_args.clone(),
+        );
 
         let get_reply = program_args.get_request().send().promise.await?;
         let client = get_reply.get()?.get_client()?;

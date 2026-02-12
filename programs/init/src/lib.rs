@@ -49,27 +49,32 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
         namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
         program_args: dusk_capnp::dusk_capnp::program_args::Client,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        let state: InitProcessState = Default::default();
-        let cast_program_args = capnp::capability::FromClientHook::cast_to::<
-            init_capnp::init_args::Client,
-        >(program_args);
-        Ok(Box::new(<InitProcess>::new(
+        Ok(Box::new(Process::with_context(ProcessContext {
             pid,
             namespace,
-            cast_program_args,
-            state,
-        )))
+            program_args,
+        })))
     }
 }
 
-#[derive(Clone, Default, dusk_program_proc::Process)]
-pub struct ProcessState;
+#[derive(Clone, dusk_program_proc::Process)]
+pub struct Process {
+    #[process_context]
+    pub ctx: ProcessContext,
+}
 
-#[dusk_program_proc::process_mixin]
-impl ProcessState {
+#[async_trait::async_trait(?Send)]
+impl dusk_program::process::ProcessMixin for Process {
+    fn with_context(ctx: ProcessContext) -> Self
+    where
+        Self: Sized,
+    {
+        Process { ctx }
+    }
     fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
-        let client: init_capnp::init_portal::Client =
-            capnp_rpc::new_client(<Portal>::new(self.clone()));
+        let client: init_capnp::init_portal::Client = capnp_rpc::new_client(Portal {
+            process: self.clone(),
+        });
         client.cast_to::<dusk_capnp::dusk_capnp::portal::Client>()
     }
 
@@ -78,9 +83,11 @@ impl ProcessState {
         signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
     ) -> anyhow::Result<()> {
         let program_args = self
+            .ctx
             .program_args
             .clone()
             .cast_to::<init_capnp::init_args::Client>();
+
         let get_reply = program_args.get_request().send().promise.await?;
         let options = get_reply.get()?.get_options()?;
         let address = options.get_address()?;
@@ -94,7 +101,7 @@ impl ProcessState {
                     let (stream, _) = accept_result?;
                     stream.set_nodelay(true)?;
                     let (reader, writer) = stream.split();
-                    let session_task = dusk_core::session(self.namespace.clone(), Box::pin(reader), Box::pin(writer));
+                    let session_task = dusk_core::session(self.namespace().clone(), Box::pin(reader), Box::pin(writer));
                     let spawner = unsafe { Spawner::for_current_executor().await };
                     spawner
                         .spawn(session_task)
@@ -113,13 +120,7 @@ impl ProcessState {
 
 #[derive(dusk_program_proc::Portal)]
 pub struct Portal {
-    _process: InitProcess,
-}
-
-impl Portal {
-    pub fn new(_process: InitProcess) -> Self {
-        Portal { _process }
-    }
+    pub process: Process,
 }
 
 #[dusk_program_proc::impl_portal_rpc_server]

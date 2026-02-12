@@ -90,7 +90,7 @@ pub fn derive_launcher(item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-#[proc_macro_derive(Process)]
+#[proc_macro_derive(Process, attributes(process_context))]
 pub fn derive_process(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
@@ -101,37 +101,59 @@ pub fn derive_process(item: TokenStream) -> TokenStream {
         .filter(|attr| attr.path().is_ident("cfg"))
         .collect();
 
-    let expanded = quote::quote! {
-        __derive_process!(#(#cfg_attrs)* #struct_name);
+    let fields = match &input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            syn::Fields::Named(fields) => &fields.named,
+            _ => {
+                return syn::Error::new_spanned(
+                    &input.ident,
+                    "Process can only be derived for structs with named fields",
+                )
+                .to_compile_error()
+                .into();
+            }
+        },
+        _ => {
+            return syn::Error::new_spanned(
+                &input.ident,
+                "Process can only be derived for structs",
+            )
+            .to_compile_error()
+            .into();
+        }
     };
 
-    TokenStream::from(expanded)
-}
+    let context_fields: Vec<_> = fields
+        .iter()
+        .filter(|f| f.attrs.iter().any(|a| a.path().is_ident("process_context")))
+        .collect();
 
-#[proc_macro_attribute]
-pub fn process_mixin(attr: TokenStream, item: TokenStream) -> TokenStream {
-    if !attr.is_empty() {
+    if context_fields.len() != 1 {
         return syn::Error::new_spanned(
-            proc_macro2::TokenStream::from(attr),
-            "process_mixin takes no arguments",
+            &input.ident,
+            "Process derive requires exactly one field annotated with #[process_context]",
         )
         .to_compile_error()
         .into();
     }
 
-    let input = syn::parse_macro_input!(item as syn::ItemImpl);
-    let self_ty = &input.self_ty;
-    let items = &input.items;
-    let cfg_attrs: Vec<_> = input
-        .attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("cfg"))
-        .collect();
+    let context_field = context_fields[0];
+    let field_name = context_field.ident.as_ref().unwrap();
+
+    // Verify the field type is ProcessContext
+    let ty = &context_field.ty;
+    let type_str = quote::quote!(#ty).to_string();
+    if !type_str.contains("ProcessContext") {
+        return syn::Error::new_spanned(
+            ty,
+            "field annotated with #[process_context] must be of type ProcessContext",
+        )
+        .to_compile_error()
+        .into();
+    }
 
     let expanded = quote::quote! {
-        __process_mixin_path!(#(#cfg_attrs)* #self_ty, {
-            #(#items)*
-        });
+        __derive_process!(#(#cfg_attrs)* #struct_name, #field_name);
     };
 
     TokenStream::from(expanded)

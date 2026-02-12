@@ -21,4 +21,5 @@ pub use futures::io::{AsyncReadExt, AsyncWriteExt};
 
 // Re-export commonly used dusk_program modules and types
 
+pub use crate::process::{Process as _, ProcessContext, ProcessMixin};
 pub use crate::signal::{self, Signal};

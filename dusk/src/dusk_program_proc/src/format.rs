@@ -1,4 +1,3 @@
-use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
 
 use crate::parse::Metadata;
@@ -10,21 +9,12 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
     let version = &metadata.version;
     let program_id = &metadata.program_id;
 
-    let pascal_name = metadata.name.to_case(Case::Pascal);
-    let process_struct_name = format_ident!("{}Process", pascal_name);
-
-    let state_type_alias = format_ident!("{}ProcessState", pascal_name);
-
     let args_server: syn::Path = syn::parse_str(&format!(
         "{}_capnp::{}_args::Server",
         metadata.name, metadata.name
     ))
     .unwrap();
-    let args_client: syn::Path = syn::parse_str(&format!(
-        "{}_capnp::{}_args::Client",
-        metadata.name, metadata.name
-    ))
-    .unwrap();
+
     let program_portal_server: syn::Path = syn::parse_str(&format!(
         "{}_capnp::{}_portal::Server",
         metadata.name, metadata.name
@@ -80,42 +70,10 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         }
 
         macro_rules! __derive_process {
-            ($(#[$meta:meta])* $state_ty:ty) => {
-                $(#[$meta])*
-                type #state_type_alias = $state_ty;
-
-                $(#[$meta])*
-                #[derive(Clone)]
-                pub struct #process_struct_name {
-                    pub pid: u64,
-                    pub namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
-                    pub program_args: #args_client,
-                    pub state: $state_ty,
-                }
-
-                $(#[$meta])*
-                impl #process_struct_name {
-                    pub fn new(
-                        pid: u64,
-                        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
-                        program_args: #args_client,
-                        state: $state_ty,
-                    ) -> Self {
-                        #process_struct_name {
-                            pid,
-                            namespace,
-                            program_args,
-                            state,
-                        }
-                    }
-                }
-
+            ($(#[$meta:meta])* $user_ty:ty, $ctx_field:ident) => {
                 $(#[$meta])*
                 #[async_trait::async_trait(?Send)]
-                impl dusk_program::process::Process for #process_struct_name {
-                    fn pid(&self) -> u64 {
-                        self.pid
-                    }
+                impl dusk_program::process::Process for $user_ty {
                     fn program_id(&self) -> u64 {
                         #program_id
                     }
@@ -125,27 +83,15 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                     fn version(&self) -> alloc::string::String {
                         alloc::string::String::from(format!("{}", #version))
                     }
+                    fn clone_box(&self) -> alloc::boxed::Box<dyn dusk_program::process::Process> {
+                        alloc::boxed::Box::new(self.clone())
+                    }
                     fn namespace(&self) -> alloc::rc::Rc<dusk_program::namespace::Namespace> {
-                        self.namespace.clone()
+                        self.$ctx_field.namespace.clone()
                     }
-                    fn clone_box(&self) -> Box<dyn dusk_program::process::Process> {
-                        Box::new(#process_struct_name {
-                            pid: self.pid,
-                            namespace: self.namespace.clone(),
-                            program_args: self.program_args.clone(),
-                            state: self.state.clone(),
-                        })
+                    fn pid(&self) -> u64 {
+                        self.$ctx_field.pid
                     }
-                }
-            };
-        }
-
-        macro_rules! __process_mixin_path {
-            ($(#[$meta:meta])* $state_ty:ty, { $($body:tt)* }) => {
-                $(#[$meta])*
-                #[async_trait::async_trait(?Send)]
-                impl dusk_program::process::ProcessMixin for #process_struct_name {
-                    $($body)*
                 }
             };
         }

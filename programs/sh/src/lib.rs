@@ -52,25 +52,32 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
         namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
         program_args: dusk_capnp::dusk_capnp::program_args::Client,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        let state: ShProcessState = Default::default();
-        let cast_program_args =
-            capnp::capability::FromClientHook::cast_to::<sh_capnp::sh_args::Client>(program_args);
-        Ok(Box::new(<ShProcess>::new(
+        Ok(Box::new(Process::with_context(ProcessContext {
             pid,
             namespace,
-            cast_program_args,
-            state,
-        )))
+            program_args,
+        })))
     }
 }
 
-#[derive(Clone, Default, dusk_program_proc::Process)]
-pub struct ProcessState;
+#[derive(Clone, dusk_program_proc::Process)]
+pub struct Process {
+    #[process_context]
+    pub ctx: ProcessContext,
+}
 
-#[dusk_program_proc::process_mixin]
-impl ProcessState {
+#[async_trait::async_trait(?Send)]
+impl dusk_program::process::ProcessMixin for Process {
+    fn with_context(ctx: ProcessContext) -> Self
+    where
+        Self: Sized,
+    {
+        Process { ctx }
+    }
     fn portal(&self) -> portal::Client {
-        let client: sh_capnp::sh_portal::Client = capnp_rpc::new_client(Portal::new(self.clone()));
+        let client: sh_capnp::sh_portal::Client = capnp_rpc::new_client(Portal {
+            process: self.clone(),
+        });
         client.cast_to::<portal::Client>()
     }
 
@@ -90,14 +97,10 @@ impl ProcessState {
 
 #[derive(dusk_program_proc::Portal)]
 pub struct Portal {
-    process: ShProcess,
+    pub process: Process,
 }
 
 impl Portal {
-    pub fn new(process: ShProcess) -> Self {
-        Portal { process }
-    }
-
     async fn command_string_to_program_args(
         engine: sh_capnp::engine::Client,
         command: &str,
@@ -164,11 +167,13 @@ impl Portal {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_string());
         let output = pry!(pry!(params.get()).get_output());
 
-        let program_args = self.process.program_args.clone();
+        let program_args = self.process.ctx.program_args.clone();
 
         Promise::from_future(async move {
             // TODO actually parse the command and make it work like a shell
-
+            let program_args = capnp::capability::FromClientHook::cast_to::<
+                sh_capnp::sh_args::Client,
+            >(program_args);
             let engine = capnp_rpc::new_future_client(async move {
                 let get_request_result = program_args.get_request().send().promise.await?;
                 get_request_result.get()?.get_engine()

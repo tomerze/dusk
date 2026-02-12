@@ -4,19 +4,18 @@ use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
+use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::channel::DynamicReceiver;
 
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
 use crate::signal;
 
-#[async_trait::async_trait(?Send)]
-pub trait ProcessMixin {
-    fn portal(&self) -> portal::Client;
-    async fn main(
-        &self,
-        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
-    ) -> Result<()>;
+#[derive(Clone)]
+pub struct ProcessContext {
+    pub pid: u64,
+    pub namespace: alloc::rc::Rc<Namespace>,
+    pub program_args: program_args::Client,
 }
 
 // You are probably wondering how processes are run.
@@ -35,16 +34,24 @@ pub trait ProcessMixin {
 // Note: Never run process.main directly, always use process.bootstrap.
 #[async_trait::async_trait(?Send)]
 pub trait Process: ProcessMixin {
-    fn pid(&self) -> u64;
     fn program_id(&self) -> u64;
     fn name(&self) -> alloc::string::String;
     fn version(&self) -> alloc::string::String;
-    fn namespace(&self) -> Rc<Namespace>;
     fn clone_box(&self) -> Box<dyn Process>;
+    fn namespace(&self) -> Rc<Namespace>;
+    fn pid(&self) -> u64;
+}
 
-    fn portal(&self) -> portal::Client {
-        <Self as ProcessMixin>::portal(self)
-    }
+#[async_trait::async_trait(?Send)]
+pub trait ProcessMixin {
+    fn with_context(ctx: ProcessContext) -> Self
+    where
+        Self: Sized;
+    fn portal(&self) -> portal::Client;
+    async fn main(
+        &self,
+        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+    ) -> Result<()>;
 }
 
 impl dyn Process {
@@ -148,7 +155,7 @@ impl process::Server for dyn Process {
                 ps_map.contains_key(&pid)
             };
             if is_process_running {
-                let portal = <Self as Process>::portal(&*process);
+                let portal = <Self as ProcessMixin>::portal(&*process);
                 results.get().set_result(portal);
                 Ok(())
             } else {
