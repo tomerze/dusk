@@ -129,38 +129,40 @@ impl Portal {
 #[dusk_program_proc::impl_portal_rpc_server]
 impl Portal {}
 
-//  fn output(
-//         &mut self,
-//         params: portal::OutputParams,
-//         mut results: portal::OutputResults,
-//     ) -> Promise<(), ::capnp::Error> {
-//         dusk_capnp::pry!(results.set_pipeline());
-//         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-//         let process = self.process.clone();
-//         Promise::from_future(async move {
-//             let (pids, program_ids, names, versions) = Portal::inner_ps(&process).await?;
+impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
+    fn output(
+        &mut self,
+        params: dusk_program_sh::sh_capnp::output_portal::OutputParams,
+        mut results: dusk_program_sh::sh_capnp::output_portal::OutputResults,
+    ) -> Promise<(), ::capnp::Error> {
+        dusk_capnp::pry!(results.set_pipeline());
+        let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
+        let process = self.process.clone();
+        Promise::from_future(async move {
+            let (pids, program_ids, names, versions) = Portal::inner_ps(&process).await?;
 
-//             let mut send_request = stream.send_request();
+            let mut send_request = stream.send_request();
 
-//             let pid_values = pids.iter().copied().map(Value::Uint).collect();
-//             let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
-//             let name_values = names.iter().cloned().map(Value::String).collect();
-//             let version_values = versions.iter().cloned().map(Value::String).collect();
-//             let fields = Record::with_fields(
-//                 ps_capnp::RESULT_TYPE_ID,
-//                 [
-//                     (b"name".to_vec(), Value::List(name_values)),
-//                     (b"version".to_vec(), Value::List(version_values)),
-//                     (b"pid".to_vec(), Value::List(pid_values)),
-//                     (b"program_id".to_vec(), Value::List(program_id_values)),
-//                 ],
-//             );
+            let pid_values = pids.iter().copied().map(Value::Uint).collect();
+            let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
+            let name_values = names.iter().cloned().map(Value::String).collect();
+            let version_values = versions.iter().cloned().map(Value::String).collect();
+            let fields = Record::with_fields(
+                ps_capnp::RESULT_TYPE_ID,
+                [
+                    (b"name".to_vec(), Value::List(name_values)),
+                    (b"version".to_vec(), Value::List(version_values)),
+                    (b"pid".to_vec(), Value::List(pid_values)),
+                    (b"program_id".to_vec(), Value::List(program_id_values)),
+                ],
+            );
 
-//             let value_builder = send_request.get().init_value();
-//             Value::Record(fields).write_to_builder(value_builder)?;
+            let value_builder = send_request.get().init_value();
+            Value::Record(fields).write_to_builder(value_builder)?;
 
-//             send_request.send().await?;
-//             stream.done_request().send().promise.await?;
-//             Ok(())
-//         })
-//     }
+            send_request.send().await?;
+            stream.done_request().send().promise.await?;
+            Ok(())
+        })
+    }
+}

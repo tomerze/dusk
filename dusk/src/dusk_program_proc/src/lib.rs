@@ -153,8 +153,8 @@ pub fn derive_portal(item: TokenStream) -> TokenStream {
         impl dusk_program::dusk_capnp::dusk_capnp::portal::Server for #struct_name {
             fn program_id(
                 &mut self,
-                _params: dusk_program::dusk_capnp::dusk_capnp::program_args::ProgramIdParams,
-                mut results: dusk_program::dusk_capnp::dusk_capnp::program_args::ProgramIdResults,
+                _params: dusk_program::dusk_capnp::dusk_capnp::portal::ProgramIdParams,
+                mut results: dusk_program::dusk_capnp::dusk_capnp::portal::ProgramIdResults,
             ) -> capnp::capability::Promise<(), capnp::Error> {
                 results.get().set_program_id(PROGRAM_ID);
                 capnp::capability::Promise::ok(())

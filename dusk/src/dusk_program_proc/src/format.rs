@@ -43,7 +43,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
         use dusk_program::prelude::*;
 
-        #[allow(clippy::all)]
+        #[allow(clippy::all, unreachable_patterns)]
         pub mod #capnp_mod_name {
             include!(concat!(env!("OUT_DIR"), #capnp_mod_path));
         }

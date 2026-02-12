@@ -132,10 +132,13 @@ impl Portal {
         process: process::Client,
         output: dusk_capnp::dusk_capnp::stream::Client,
     ) -> anyhow::Result<()> {
-        let portal = capnp_rpc::new_future_client(async move {
+        let portal: sh_capnp::output_portal::Client = capnp_rpc::new_future_client(async move {
             let portal_request = process.portal_request();
             let portal_reply = portal_request.send().promise.await?;
-            portal_reply.get()?.get_result()
+            Ok(portal_reply
+                .get()?
+                .get_result()?
+                .cast_to::<sh_capnp::output_portal::Client>())
         });
 
         let (undone_stream, done_receiver) = UndoneStream::new_with_done_receiver(output);
