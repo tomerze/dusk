@@ -11,6 +11,7 @@ pub struct Shell {
     client: dusk::Client,
     sh_process: process::Client,
     pub hostname: String,
+    pub sh_pid: u64,
 }
 
 impl Shell {
@@ -61,10 +62,13 @@ impl Shell {
 
         let sh_process = Self::create_sh_process(client.clone(), engine).await?;
 
+        let pid_reply = sh_process.pid_request().send().promise.await?;
+        let sh_pid = pid_reply.get()?.get_result();
         Ok(Shell {
             client,
             sh_process,
             hostname: hostname.into(),
+            sh_pid,
         })
     }
 

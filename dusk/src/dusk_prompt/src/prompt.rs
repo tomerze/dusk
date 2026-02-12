@@ -63,7 +63,10 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
-        Cow::Owned(" ❯ ".to_string())
+        Cow::Owned(format!(
+            " {} ",
+            Style::new().fg(Color::LightGreen).paint("❯")
+        ))
     }
 
     fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
@@ -417,11 +420,19 @@ Program ID: `{program_id}`
                 .collect(),
         )?;
 
-        let prompt_string = Style::new()
-            .fg(Color::Yellow)
-            .bold()
-            .paint(format!("○ {}", self.shell.hostname))
-            .to_string();
+        let status_line: String = format!(
+            "{}{}{}{}",
+            Style::new().fg(Color::Yellow).paint("dusk "),
+            Style::new().fg(Color::Cyan).paint(dusk_capnp::VERSION),
+            Style::new().fg(Color::Green).paint(" @ "),
+            Style::new().fg(Color::Cyan).paint(&self.shell.hostname),
+        );
+
+        let prompt_string = format!(
+            "{}\n{}",
+            status_line,
+            Style::new().fg(Color::DarkGray).paint("○"),
+        );
         let prompt = ReedlinePrompt::new(&prompt_string);
 
         loop {
@@ -440,7 +451,7 @@ Program ID: `{program_id}`
                             stdout(),
                             MoveUp(1),
                             MoveToColumn(0),
-                            SetForegroundColor(CrosstermColor::Yellow),
+                            SetForegroundColor(CrosstermColor::Cyan),
                             Print("●"),
                             ResetColor,
                             MoveDown(1),

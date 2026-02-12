@@ -134,13 +134,13 @@ impl DefaultDisplayEngine {
                 let nu_list = self.convert_list_to_nu_list(list)?;
                 let table = JustTable::table(nu_list, self.table_opts(span, term_width))
                     .map_err(|err| anyhow!(err.to_string()))?;
-                Ok(table.unwrap_or_default())
+                Ok(Self::restyle_index_header(table.unwrap_or_default()))
             }
             Value::Record(fields) => {
                 if let Some(rows) = self.fields_to_rows(&fields)? {
                     let table = JustTable::table(rows, self.table_opts(span, term_width))
                         .map_err(|err| anyhow!(err.to_string()))?;
-                    return Ok(table.unwrap_or_default());
+                    return Ok(Self::restyle_index_header(table.unwrap_or_default()));
                 }
                 let nu_record = self.convert_fields_to_nu_record(fields)?;
                 let table = JustTable::kv_table(nu_record, self.table_opts(span, term_width))
@@ -148,6 +148,39 @@ impl DefaultDisplayEngine {
                 Ok(table.unwrap_or_default())
             }
         }
+    }
+
+    /// Nushell's table renderer applies the header style (yellow bold) uniformly to
+    /// the entire header row, overriding the index style at position (0,0). This
+    /// post-processes the rendered table to restyle just the `#` index header cell
+    /// from yellow bold to dark gray.
+    fn restyle_index_header(table: String) -> String {
+        let header_prefix = Color::Yellow.bold().prefix().to_string();
+        let index_style = Color::DarkGray.normal();
+
+        // Find the first occurrence of the header style in the first line,
+        // which corresponds to the `#` column header.
+        if let Some(first_header_pos) = table.find(&header_prefix) {
+            let after = &table[first_header_pos + header_prefix.len()..];
+            // The cell content is whitespace + `#` + whitespace, followed by a reset.
+            // Find where the reset code is to know the extent of this cell's content.
+            let reset = Color::Yellow.bold().suffix().to_string();
+            if let Some(reset_pos) = after.find(&reset) {
+                let cell_content = &after[..reset_pos];
+                // Only restyle if this cell actually contains `#`
+                if cell_content.trim() == "#" {
+                    let old = format!("{}{}{}", header_prefix, cell_content, reset);
+                    let new = format!(
+                        "{}{}{}",
+                        index_style.prefix(),
+                        cell_content,
+                        index_style.suffix()
+                    );
+                    return table.replacen(&old, &new, 1);
+                }
+            }
+        }
+        table
     }
 
     fn table_opts(&self, span: Span, width: usize) -> TableOpts<'_> {
@@ -158,7 +191,7 @@ impl DefaultDisplayEngine {
         );
         overrides.insert(
             "row_index".into(),
-            ComputableStyle::Static(Color::Cyan.bold()),
+            ComputableStyle::Static(Color::DarkGray.normal()),
         );
         let style = StyleComputer::new(&self.engine_state, &self.stack, overrides);
         TableOpts::new(
