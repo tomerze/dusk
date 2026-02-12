@@ -2,7 +2,7 @@ use anyhow::Result;
 use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
-use dusk_program_sh::args::ShArgs;
+use dusk_program_sh::ShArgs;
 use dusk_program_sh::sh_capnp::{engine, sh_args, sh_portal};
 use tokio::sync::oneshot;
 use tracing::debug;

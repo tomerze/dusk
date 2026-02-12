@@ -12,7 +12,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
 
     let pascal_name = metadata.name.to_case(Case::Pascal);
     let process_struct_name = format_ident!("{}Process", pascal_name);
-    let launcher_type_alias = format_ident!("{}Launcher", pascal_name);
+
     let state_type_alias = format_ident!("{}ProcessState", pascal_name);
 
     let args_server: syn::Path = syn::parse_str(&format!(
@@ -25,8 +25,6 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         metadata.name, metadata.name
     ))
     .unwrap();
-    let portal_server: syn::Path =
-        syn::parse_str("dusk_program::dusk_capnp::dusk_capnp::portal::Server").unwrap();
     let program_portal_server: syn::Path = syn::parse_str(&format!(
         "{}_capnp::{}_portal::Server",
         metadata.name, metadata.name
@@ -50,7 +48,6 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
             include!(concat!(env!("OUT_DIR"), #capnp_mod_path));
         }
 
-        /// The program name, as declared in `definition!` metadata.
         #[allow(unused)]
         pub const PROGRAM_NAME: &str = #name;
 
@@ -62,8 +59,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         #[allow(unused)]
         pub use dusk_program::value::{Record, Value};
 
-        /// Helper macro encoding the args RPC server trait path for this program.
-        macro_rules! __args_server_path {
+        macro_rules! __impl_args_rpc_server {
             ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
                 $(#[$meta])*
                 impl #args_server for $self_ty {
@@ -72,25 +68,17 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
             };
         }
 
-        /// Helper macro encoding the portal RPC server trait path for this program.
-        macro_rules! __portal_server_path {
-            ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
+        macro_rules! __derive_launcher {
+            ($(#[$meta:meta])* $user_ty:ty) => {
                 $(#[$meta])*
-                impl #portal_server for $self_ty {
-                    $($body)*
+                impl dusk_program::launcher::Launcher for $user_ty {
+                    fn program_id(&self) -> u64 {
+                        #program_id
+                    }
                 }
             };
         }
 
-        /// Helper macro used by #[derive(Portal)] to emit the type alias and blanket impl.
-        macro_rules! __derive_portal {
-            ($(#[$meta:meta])* $user_ty:ty) => {
-                $(#[$meta])*
-                impl #program_portal_server for $user_ty {}
-            };
-        }
-
-        /// Helper macro used by #[derive(Process)] to emit the Process struct and impls.
         macro_rules! __derive_process {
             ($(#[$meta:meta])* $state_ty:ty) => {
                 $(#[$meta])*
@@ -152,7 +140,6 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
             };
         }
 
-        /// Helper macro used by #[process_mixin] to emit the ProcessMixin impl.
         macro_rules! __process_mixin_path {
             ($(#[$meta:meta])* $state_ty:ty, { $($body:tt)* }) => {
                 $(#[$meta])*
@@ -163,29 +150,14 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
             };
         }
 
-        /// Helper macro used by #[derive(Launcher)] to emit the Launcher type alias and impl.
-        macro_rules! __derive_launcher {
-            ($(#[$meta:meta])* $user_ty:ty) => {
+        macro_rules! __impl_portal_rpc_server {
+            ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
                 $(#[$meta])*
-                type #launcher_type_alias = $user_ty;
-
-                $(#[$meta])*
-                impl dusk_program::launcher::Launcher for $user_ty {
-                    fn program_id(&self) -> u64 {
-                        #program_id
-                    }
-                }
-            };
-        }
-
-        /// Helper macro used by #[launcher_mixin] to emit the LauncherMixin impl.
-        macro_rules! __launcher_mixin_path {
-            ($(#[$meta:meta])* $user_ty:ty, { $($body:tt)* }) => {
-                $(#[$meta])*
-                impl dusk_program::launcher::LauncherMixin for #launcher_type_alias {
+                impl #program_portal_server for $self_ty {
                     $($body)*
                 }
             };
         }
+
     }
 }

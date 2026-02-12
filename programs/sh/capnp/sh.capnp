@@ -16,3 +16,7 @@ interface ShArgs extends(Dusk.ProgramArgs) {
 interface ShPortal extends(Dusk.Portal) {
   sh @0 (command :Text, output :Dusk.Stream) -> ();
 }
+
+interface OutputPortal extends(Dusk.Portal) {
+  output @0 (stream :Dusk.Stream) -> ();
+}

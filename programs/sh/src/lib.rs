@@ -13,9 +13,6 @@ use dusk_program::dusk_capnp::pry;
 use dusk_program::stream::UndoneStream;
 
 #[cfg(feature = "client")]
-pub mod args;
-
-#[cfg(feature = "client")]
 pub mod entry;
 
 #[cfg(feature = "client")]
@@ -25,11 +22,30 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
+#[derive(dusk_program_proc::Args)]
+#[cfg(feature = "client")]
+pub struct ShArgs {
+    pub engine: sh_capnp::engine::Client,
+}
+
+#[dusk_program_proc::impl_args_rpc_server]
+#[cfg(feature = "client")]
+impl ShArgs {
+    fn get(
+        &mut self,
+        _params: sh_capnp::sh_args::GetParams,
+        mut results: sh_capnp::sh_args::GetResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        results.get().set_engine(self.engine.clone());
+
+        capnp::capability::Promise::ok(())
+    }
+}
+
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
-#[dusk_program_proc::launcher_mixin]
-impl Launcher {
+impl dusk_program::launcher::LauncherMixin for Launcher {
     fn launch(
         &mut self,
         pid: u64,
@@ -54,8 +70,7 @@ pub struct ProcessState;
 #[dusk_program_proc::process_mixin]
 impl ProcessState {
     fn portal(&self) -> portal::Client {
-        let client: sh_capnp::sh_portal::Client =
-            capnp_rpc::new_client(<ShPortal>::new(self.clone()));
+        let client: sh_capnp::sh_portal::Client = capnp_rpc::new_client(Portal::new(self.clone()));
         client.cast_to::<portal::Client>()
     }
 
@@ -73,8 +88,7 @@ impl ProcessState {
     }
 }
 
-pub type ShPortal = Portal;
-
+#[derive(dusk_program_proc::Portal)]
 pub struct Portal {
     process: ShProcess,
 }
@@ -137,10 +151,8 @@ impl Portal {
     }
 }
 
-#[dusk_program_proc::portal_rpc_server]
-impl Portal {}
-
-impl sh_capnp::sh_portal::Server for Portal {
+#[dusk_program_proc::impl_portal_rpc_server]
+impl Portal {
     fn sh(
         &mut self,
         params: sh_capnp::sh_portal::ShParams,

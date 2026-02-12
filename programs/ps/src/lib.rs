@@ -15,14 +15,14 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
 
-#[cfg(feature = "client")]
 #[derive(dusk_program_proc::Args)]
+#[cfg(feature = "client")]
 pub struct Args {
     pub client: dusk::Client,
 }
 
+#[dusk_program_proc::impl_args_rpc_server]
 #[cfg(feature = "client")]
-#[dusk_program_proc::args_rpc_server]
 impl Args {
     fn get(
         &mut self,
@@ -38,8 +38,7 @@ impl Args {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
-#[dusk_program_proc::launcher_mixin]
-impl Launcher {
+impl dusk_program::launcher::LauncherMixin for Launcher {
     fn launch(
         &mut self,
         pid: u64,
@@ -127,52 +126,41 @@ impl Portal {
     }
 }
 
-#[dusk_program_proc::portal_rpc_server]
-impl Portal {
-    fn input(
-        &mut self,
-        _params: portal::InputParams,
-        mut results: portal::InputResults,
-    ) -> Promise<(), ::capnp::Error> {
-        results.get().set_stream(capnp_rpc::new_client(
-            dusk_program::stream::NoopStream::default(),
-        ));
-        Promise::ok(())
-    }
+#[dusk_program_proc::impl_portal_rpc_server]
+impl Portal {}
 
-    fn output(
-        &mut self,
-        params: portal::OutputParams,
-        mut results: portal::OutputResults,
-    ) -> Promise<(), ::capnp::Error> {
-        dusk_capnp::pry!(results.set_pipeline());
-        let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-        let process = self.process.clone();
-        Promise::from_future(async move {
-            let (pids, program_ids, names, versions) = Portal::inner_ps(&process).await?;
+//  fn output(
+//         &mut self,
+//         params: portal::OutputParams,
+//         mut results: portal::OutputResults,
+//     ) -> Promise<(), ::capnp::Error> {
+//         dusk_capnp::pry!(results.set_pipeline());
+//         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
+//         let process = self.process.clone();
+//         Promise::from_future(async move {
+//             let (pids, program_ids, names, versions) = Portal::inner_ps(&process).await?;
 
-            let mut send_request = stream.send_request();
+//             let mut send_request = stream.send_request();
 
-            let pid_values = pids.iter().copied().map(Value::Uint).collect();
-            let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
-            let name_values = names.iter().cloned().map(Value::String).collect();
-            let version_values = versions.iter().cloned().map(Value::String).collect();
-            let fields = Record::with_fields(
-                ps_capnp::RESULT_TYPE_ID,
-                [
-                    (b"name".to_vec(), Value::List(name_values)),
-                    (b"version".to_vec(), Value::List(version_values)),
-                    (b"pid".to_vec(), Value::List(pid_values)),
-                    (b"program_id".to_vec(), Value::List(program_id_values)),
-                ],
-            );
+//             let pid_values = pids.iter().copied().map(Value::Uint).collect();
+//             let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
+//             let name_values = names.iter().cloned().map(Value::String).collect();
+//             let version_values = versions.iter().cloned().map(Value::String).collect();
+//             let fields = Record::with_fields(
+//                 ps_capnp::RESULT_TYPE_ID,
+//                 [
+//                     (b"name".to_vec(), Value::List(name_values)),
+//                     (b"version".to_vec(), Value::List(version_values)),
+//                     (b"pid".to_vec(), Value::List(pid_values)),
+//                     (b"program_id".to_vec(), Value::List(program_id_values)),
+//                 ],
+//             );
 
-            let value_builder = send_request.get().init_value();
-            Value::Record(fields).write_to_builder(value_builder)?;
+//             let value_builder = send_request.get().init_value();
+//             Value::Record(fields).write_to_builder(value_builder)?;
 
-            send_request.send().await?;
-            stream.done_request().send().promise.await?;
-            Ok(())
-        })
-    }
-}
+//             send_request.send().await?;
+//             stream.done_request().send().promise.await?;
+//             Ok(())
+//         })
+//     }

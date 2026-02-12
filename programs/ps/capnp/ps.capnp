@@ -1,6 +1,7 @@
 @0xf059f27afd7e0035;
 
 using Dusk = import "/capnp/dusk.capnp";
+using Sh = import "/capnp/sh.capnp";
 
 const programId :UInt64 = 0xd111e8c31818511d;
 
@@ -12,4 +13,4 @@ interface PsArgs extends(Dusk.ProgramArgs) {
   get @0 () -> (client: Dusk.Dusk, options :PsOptions);
 }
 
-interface PsPortal extends(Dusk.Portal) {}
+interface PsPortal extends(Dusk.Portal, Sh.OutputPortal) {}

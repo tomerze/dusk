@@ -24,7 +24,7 @@ impl Args {
     }
 }
 
-#[dusk_program_proc::args_rpc_server]
+#[dusk_program_proc::impl_args_rpc_server]
 impl Args {
     fn get(
         &mut self,
@@ -42,8 +42,7 @@ impl Args {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
-#[dusk_program_proc::launcher_mixin]
-impl Launcher {
+impl dusk_program::launcher::LauncherMixin for Launcher {
     fn launch(
         &mut self,
         pid: u64,
@@ -123,5 +122,5 @@ impl Portal {
     }
 }
 
-#[dusk_program_proc::portal_rpc_server]
+#[dusk_program_proc::impl_portal_rpc_server]
 impl Portal {}

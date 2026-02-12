@@ -46,8 +46,7 @@ interface Process {
 }
 
 interface Portal {
-  input @0 () -> (stream :Stream);
-  output @1 (stream :Stream) -> ();
+  programId @0 () -> (program_id: UInt64);
 }
 
 struct ProcessEntry {
