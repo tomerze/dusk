@@ -2,7 +2,6 @@
 #![feature(prelude_import)]
 
 extern crate alloc;
-
 extern crate capnp;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");

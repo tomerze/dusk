@@ -12,6 +12,7 @@ pub use futures;
 
 // Re-export commonly used types for convenience
 pub use dusk_capnp::capnp::capability::{FromClientHook, Promise};
+pub use dusk_capnp::dusk_capnp::dusk;
 pub use embassy_executor::Spawner;
 pub use embassy_sync::channel::DynamicReceiver;
 

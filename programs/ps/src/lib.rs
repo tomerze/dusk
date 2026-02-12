@@ -8,9 +8,6 @@ extern crate capnp;
 #[cfg(feature = "client")]
 pub mod client;
 
-#[cfg(feature = "client")]
-use dusk_program::dusk_capnp::dusk_capnp::dusk;
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
