@@ -188,7 +188,6 @@ impl Portal {
             Self::portal_and_pipe_output(process.clone(), output.clone())
                 .await
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
-
             let mut kill_request = client.kill_request();
             kill_request.get().set_process(process);
             kill_request.get().set_signal(15); // SIGTERM

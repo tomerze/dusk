@@ -14,9 +14,10 @@ anyhow = { version = "1.0", public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "*", public = false }
 linkme = { version = "*", optional = true, public = false }
+clap = { version = "4", features = ["derive"], optional = true }
 
 [build-dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
 
 [features]
-client = ["linkme", "dusk_program_sh/client"]
+client = ["linkme", "dusk_program_sh/client", "clap"]

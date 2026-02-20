@@ -16,6 +16,8 @@ dusk_program_proc::metadata!("kill", VERSION, kill_capnp::PROGRAM_ID);
 #[cfg(feature = "client")]
 pub struct Args {
     pub client: dusk::Client,
+    pub pid: u64,
+    pub signal: u64,
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
@@ -27,7 +29,9 @@ impl Args {
         mut results: kill_capnp::kill_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         results.get().set_client(self.client.clone());
-        results.get().init_options();
+        let mut options = results.get().init_options();
+        options.set_pid(self.pid);
+        options.set_signal(self.signal);
         Promise::ok(())
     }
 }
