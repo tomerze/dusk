@@ -1,0 +1,23 @@
+[template]
+description = "A dusk program"
+cargo_generate_version = ">=0.21.0"
+
+[placeholders.program-name]
+type = "string"
+prompt = "Program name (lowercase, e.g. 'myprogram'):"
+regex = "^[a-z][a-z0-9_]*$"
+
+[placeholders.capnp-file-id]
+type = "string"
+prompt = "Capnp file ID (64-bit hex, e.g. '@0xabcdef1234567890'):"
+regex = "^@0x[0-9a-fA-F]{16}$"
+
+[placeholders.program-id]
+type = "string"
+prompt = "Program ID (64-bit hex, e.g. '0xabcdef1234567890'):"
+regex = "^0x[0-9a-fA-F]{16}$"
+
+[placeholders.result-type-id]
+type = "string"
+prompt = "Result type ID (64-bit hex, e.g. '0xabcdef1234567890'):"
+regex = "^0x[0-9a-fA-F]{16}$"
