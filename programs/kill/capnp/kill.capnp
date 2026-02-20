@@ -5,8 +5,6 @@ using Sh = import "/capnp/sh.capnp";
 
 const programId :UInt64 = 0x9e2a072da809eefe;
 
-const resultTypeId :UInt64 = 0xe67b052cb8b1db49;
-
 struct KillOptions {
   pid @0: UInt64;
   signal @1: UInt64;

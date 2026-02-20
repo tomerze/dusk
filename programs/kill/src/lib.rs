@@ -61,6 +61,20 @@ impl dusk_program::process::ProcessMixin for Process {
     where
         Self: Sized,
     {
+        let program_args = capnp::capability::FromClientHook::cast_to::<
+            kill_capnp::kill_args::Client,
+        >(ctx.program_args.clone());
+
+        let get_pipeline = program_args.get_request().send();
+        let client = get_pipeline.pipeline.get_client();
+
+        let mut kill_request = client.kill_request();
+        let get_reply = get_pipeline.promise.await?;
+        let options = get_reply.get()?.get_options()?;
+        kill_request.get().set_pid(options.get_pid());
+        kill_request.get().set_signal(options.get_signal());
+        kill_request.send().promise.await?;
+
         Ok(Process { ctx })
     }
 
@@ -103,8 +117,6 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         let _process = self.process.clone();
         Promise::from_future(async move {
-            // TODO: implement program logic here
-
             stream.done_request().send().promise.await?;
             Ok(())
         })

@@ -166,7 +166,6 @@ impl Portal {
         let program_args = self.process.ctx.program_args.clone();
 
         Promise::from_future(async move {
-            // TODO actually parse the command and make it work like a shell
             let program_args = capnp::capability::FromClientHook::cast_to::<
                 sh_capnp::sh_args::Client,
             >(program_args);
