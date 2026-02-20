@@ -1,3 +1,4 @@
+use crate::anyhow::Context;
 use crate::entry::ShEntriesBuilder;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
@@ -44,6 +45,7 @@ impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
                     entry
                         .program_args_builder
                         .build(self.client.clone(), args)
+                        .context("program args builder failed")
                         .into_capnp()
                 );
 

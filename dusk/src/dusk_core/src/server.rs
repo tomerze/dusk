@@ -11,6 +11,7 @@ use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::pry;
 use dusk_program::IntoCapnp;
+use dusk_program::anyhow::Context;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
 use embassy_executor::Spawner;
@@ -79,6 +80,7 @@ impl dusk::Server for DuskServer {
         Promise::from_future(async move {
             let process = driver::process(namespace.clone(), program_args)
                 .await
+                .context("process creation failed")
                 .into_capnp()?;
 
             let process_client = Self::new_process_client(process, namespace).await?;

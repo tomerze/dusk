@@ -8,6 +8,7 @@ extern crate capnp;
 #[cfg(feature = "client")]
 pub use linkme;
 
+use anyhow::Context;
 use dusk_program::dusk_capnp::dusk_capnp::process;
 use dusk_program::dusk_capnp::pry;
 use dusk_program::stream::UndoneStream;
@@ -180,13 +181,16 @@ impl Portal {
 
             let args = Self::command_string_to_program_args(engine, &command)
                 .await
+                .context("program args creation failed")
                 .into_capnp()?;
             let process = Self::execute_program_args(client.clone(), args)
                 .await
+                .context("process execution failed")
                 .into_capnp()?;
 
             Self::portal_and_pipe_output(process.clone(), output.clone())
                 .await
+                .context("output streaming failed")
                 .into_capnp()?;
             let mut kill_request = client.kill_request();
             kill_request.get().set_process(process);

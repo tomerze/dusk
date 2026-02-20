@@ -34,6 +34,6 @@ pub trait IntoCapnp<T> {
 
 impl<T> IntoCapnp<T> for anyhow::Result<T> {
     fn into_capnp(self) -> Result<T, dusk_capnp::capnp::Error> {
-        self.map_err(|e| dusk_capnp::capnp::Error::failed(alloc::format!("{e:#}")))
+        self.map_err(|e| dusk_capnp::capnp::Error::failed(alloc::format!("{e:?}")))
     }
 }

@@ -1,5 +1,5 @@
 use alloc::{boxed::Box, rc::Rc, string::ToString};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
@@ -173,7 +173,13 @@ impl process::Server for dyn Process {
         mut _results: process::RunResults,
     ) -> Promise<(), capnp::Error> {
         let process = self.clone_box();
-        Promise::from_future(async move { process.bootstrap().await.into_capnp() })
+        Promise::from_future(async move {
+            process
+                .bootstrap()
+                .await
+                .context("process bootstrap failed")
+                .into_capnp()
+        })
     }
 }
 
