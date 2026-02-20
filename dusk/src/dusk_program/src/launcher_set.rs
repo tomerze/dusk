@@ -1,11 +1,10 @@
 use crate::launcher::Launcher;
-use crate::namespace::Namespace;
+use crate::prelude::ProcessContext;
 use crate::process::Process;
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::{rc::Rc, sync::Arc};
 use anyhow::{Result, anyhow};
-use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 
@@ -44,14 +43,10 @@ impl LauncherSet {
         });
     }
 
-    pub async fn launch(
-        &self,
-        pid: u64,
-        namespace: Rc<Namespace>,
-        program_args: program_args::Client,
-    ) -> Result<Box<dyn Process>> {
+    pub async fn launch(&self, process_context: ProcessContext) -> Result<Box<dyn Process>> {
         let mut launchers = self.launchers.lock().await;
-        let program_id = program_args
+        let program_id = process_context
+            .program_args
             .program_id_request()
             .send()
             .promise
@@ -60,7 +55,7 @@ impl LauncherSet {
             .get_program_id();
         for launcher in launchers.iter_mut() {
             if launcher.program_id() == program_id {
-                return launcher.launch(pid, namespace, program_args);
+                return launcher.launch(process_context);
             }
         }
         Err(anyhow!("no launcher found for program id {}", program_id))

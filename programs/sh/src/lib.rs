@@ -48,15 +48,9 @@ pub struct Launcher;
 impl dusk_program::launcher::LauncherMixin for Launcher {
     fn launch(
         &mut self,
-        pid: u64,
-        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
-        program_args: dusk_capnp::dusk_capnp::program_args::Client,
+        process_context: ProcessContext,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        Ok(Box::new(Process::with_context(ProcessContext {
-            pid,
-            namespace,
-            program_args,
-        })))
+        Ok(Box::new(Process::with_context(process_context)))
     }
 }
 

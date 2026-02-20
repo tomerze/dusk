@@ -1,4 +1,5 @@
 use alloc::rc::Rc;
+use dusk_program::process::ProcessContext;
 
 use core::future::Future;
 use core::pin::Pin;
@@ -72,7 +73,13 @@ impl Driver for NixDriver {
         let fut = async move {
             let mut rng = rand::thread_rng();
             let pid: u64 = rng.next_u64();
-            launchers.launch(pid, namespace, program_args).await
+            launchers
+                .launch(ProcessContext {
+                    pid,
+                    namespace,
+                    program_args,
+                })
+                .await
         };
         Box::pin(fut)
             as Pin<
