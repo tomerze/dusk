@@ -55,7 +55,7 @@ impl LauncherSet {
             .get_program_id();
         for launcher in launchers.iter_mut() {
             if launcher.program_id() == program_id {
-                return launcher.launch(process_context);
+                return launcher.launch(process_context).await;
             }
         }
         Err(anyhow!("no launcher found for program id {}", program_id))

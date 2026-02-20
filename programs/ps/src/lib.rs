@@ -35,28 +35,68 @@ impl Args {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
+#[async_trait::async_trait(?Send)]
 impl dusk_program::launcher::LauncherMixin for Launcher {
-    fn launch(
+    async fn launch(
         &mut self,
         process_context: ProcessContext,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        Ok(Box::new(Process::with_context(process_context)))
+        Ok(Box::new(Process::with_context(process_context).await?))
     }
 }
 
 #[derive(Clone, dusk_program_proc::Process)]
 pub struct Process {
+    pids: Vec<u64>,
+    program_ids: Vec<u64>,
+    process_names: Vec<String>,
+    program_versions: Vec<String>,
     #[process_context]
-    pub ctx: ProcessContext,
+    ctx: ProcessContext,
 }
 
 #[async_trait::async_trait(?Send)]
 impl dusk_program::process::ProcessMixin for Process {
-    fn with_context(ctx: dusk_program::process::ProcessContext) -> Self
+    async fn with_context(ctx: dusk_program::process::ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Process { ctx }
+        let program_args = capnp::capability::FromClientHook::cast_to::<ps_capnp::ps_args::Client>(
+            ctx.program_args.clone(),
+        );
+
+        let get_reply = program_args.get_request().send().promise.await?;
+        let client = get_reply.get()?.get_client()?;
+        let _options = get_reply.get()?.get_options()?;
+        let ps_reply = client.ps_request().send().promise.await?;
+        let process_entries = ps_reply.get()?.get_process_entries()?;
+
+        let mut pids = vec![];
+        let mut program_ids = vec![];
+        let mut process_names = vec![];
+        let mut program_versions = vec![];
+
+        for entry in process_entries.iter() {
+            pids.push(entry.get_pid());
+
+            let process = entry.get_process()?;
+            let program_id_reply = process.program_id_request().send().promise.await?;
+            program_ids.push(program_id_reply.get()?.get_result());
+
+            let name_reply = process.name_request().send().promise.await?;
+            process_names.push(name_reply.get()?.get_result()?.to_string()?);
+
+            let program_version_reply = process.version_request().send().promise.await?;
+            program_versions.push(program_version_reply.get()?.get_result()?.to_string()?);
+        }
+
+        Ok(Process {
+            ctx,
+            pids,
+            program_ids,
+            process_names,
+            program_versions,
+        })
     }
 
     fn portal(&self) -> portal::Client {
@@ -85,43 +125,6 @@ pub struct Portal {
     pub process: Process,
 }
 
-impl Portal {
-    async fn inner_ps(
-        process: &Process,
-    ) -> capnp::Result<(Vec<u64>, Vec<u64>, Vec<String>, Vec<String>)> {
-        let program_args = capnp::capability::FromClientHook::cast_to::<ps_capnp::ps_args::Client>(
-            process.ctx.program_args.clone(),
-        );
-
-        let get_reply = program_args.get_request().send().promise.await?;
-        let client = get_reply.get()?.get_client()?;
-        let _options = get_reply.get()?.get_options()?;
-        let ps_reply = client.ps_request().send().promise.await?;
-        let process_entries = ps_reply.get()?.get_process_entries()?;
-
-        let mut pids = vec![];
-        let mut program_ids = vec![];
-        let mut process_names = vec![];
-        let mut program_versions = vec![];
-
-        for entry in process_entries.iter() {
-            pids.push(entry.get_pid());
-
-            let process = entry.get_process()?;
-            let program_id_reply = process.program_id_request().send().promise.await?;
-            program_ids.push(program_id_reply.get()?.get_result());
-
-            let name_reply = process.name_request().send().promise.await?;
-            process_names.push(name_reply.get()?.get_result()?.to_string()?);
-
-            let program_version_reply = process.version_request().send().promise.await?;
-            program_versions.push(program_version_reply.get()?.get_result()?.to_string()?);
-        }
-
-        Ok((pids, program_ids, process_names, program_versions))
-    }
-}
-
 #[dusk_program_proc::impl_portal_rpc_server]
 impl Portal {}
 
@@ -135,14 +138,27 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         let process = self.process.clone();
         Promise::from_future(async move {
-            let (pids, program_ids, names, versions) = Portal::inner_ps(&process).await?;
-
             let mut send_request = stream.send_request();
 
-            let pid_values = pids.iter().copied().map(Value::Uint).collect();
-            let program_id_values = program_ids.iter().copied().map(Value::Uint).collect();
-            let name_values = names.iter().cloned().map(Value::String).collect();
-            let version_values = versions.iter().cloned().map(Value::String).collect();
+            let pid_values = process.pids.iter().copied().map(Value::Uint).collect();
+            let program_id_values = process
+                .program_ids
+                .iter()
+                .copied()
+                .map(Value::Uint)
+                .collect();
+            let name_values = process
+                .process_names
+                .iter()
+                .cloned()
+                .map(Value::String)
+                .collect();
+            let version_values = process
+                .program_versions
+                .iter()
+                .cloned()
+                .map(Value::String)
+                .collect();
             let fields = Record::with_fields(
                 ps_capnp::RESULT_TYPE_ID,
                 [

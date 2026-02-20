@@ -45,7 +45,7 @@ pub trait Process: ProcessMixin {
 
 #[async_trait::async_trait(?Send)]
 pub trait ProcessMixin {
-    fn with_context(ctx: ProcessContext) -> Self
+    async fn with_context(ctx: ProcessContext) -> Result<Self>
     where
         Self: Sized;
     fn portal(&self) -> portal::Client;

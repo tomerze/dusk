@@ -41,12 +41,13 @@ impl Args {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
+#[async_trait::async_trait(?Send)]
 impl dusk_program::launcher::LauncherMixin for Launcher {
-    fn launch(
+    async fn launch(
         &mut self,
         process_context: ProcessContext,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        Ok(Box::new(Process::with_context(process_context)))
+        Ok(Box::new(Process::with_context(process_context).await?))
     }
 }
 
@@ -58,11 +59,11 @@ pub struct Process {
 
 #[async_trait::async_trait(?Send)]
 impl dusk_program::process::ProcessMixin for Process {
-    fn with_context(ctx: ProcessContext) -> Self
+    async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        Process { ctx }
+        Ok(Process { ctx })
     }
     fn portal(&self) -> dusk_capnp::dusk_capnp::portal::Client {
         let client: init_capnp::init_portal::Client = capnp_rpc::new_client(Portal {
