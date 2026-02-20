@@ -8,15 +8,9 @@ extern crate capnp;
 #[cfg(feature = "client")]
 pub mod client;
 
-use {{program-name}}_capnp as program_capnp;
-use dusk_capnp::capnp::capability::Promise;
-use dusk_program::process::{DynamicReceiver, signal};
-use dusk_program::process::signal::Signal;
-use dusk_program::portal;
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-dusk_program_proc::metadata!("{{program-name}}", VERSION, program_capnp::PROGRAM_ID);
+dusk_program_proc::metadata!("{{program-name}}", VERSION, {{program-name}}_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
 #[cfg(feature = "client")]
@@ -29,8 +23,8 @@ pub struct Args {
 impl Args {
     fn get(
         &mut self,
-        _params: program_capnp::{{program-name}}_args::GetParams,
-        mut results: program_capnp::{{program-name}}_args::GetResults,
+        _params: {{program-name}}_capnp::{{program-name}}_args::GetParams,
+        mut results: {{program-name}}_capnp::{{program-name}}_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         results.get().set_client(self.client.clone());
         results.get().init_options();
@@ -44,15 +38,9 @@ pub struct Launcher;
 impl dusk_program::launcher::LauncherMixin for Launcher {
     fn launch(
         &mut self,
-        pid: u64,
-        namespace: alloc::rc::Rc<dusk_program::namespace::Namespace>,
-        program_args: dusk_capnp::dusk_capnp::program_args::Client,
+        process_context: ProcessContext,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        Ok(Box::new(Process::with_context(ProcessContext {
-            pid,
-            namespace,
-            program_args,
-        })))
+        Ok(Box::new(Process::with_context(process_context)))
     }
 }
 
@@ -72,7 +60,7 @@ impl dusk_program::process::ProcessMixin for Process {
     }
 
     fn portal(&self) -> portal::Client {
-        let client: program_capnp::{{program-name}}_portal::Client =
+        let client: {{program-name}}_capnp::{{program-name}}_portal::Client =
             capnp_rpc::new_client(Portal {
                 process: self.clone(),
             });
