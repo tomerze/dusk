@@ -16,7 +16,6 @@ use dusk_program::stream::UndoneStream;
 #[cfg(feature = "client")]
 pub mod entry;
 
-#[cfg(feature = "client")]
 pub mod engine;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,13 +23,11 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
-#[cfg(feature = "client")]
 pub struct ShArgs {
     pub engine: sh_capnp::engine::Client,
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
-#[cfg(feature = "client")]
 impl ShArgs {
     fn get(
         &mut self,

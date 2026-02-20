@@ -13,13 +13,11 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
-#[cfg(feature = "client")]
 pub struct Args {
     pub client: dusk::Client,
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
-#[cfg(feature = "client")]
 impl Args {
     fn get(
         &mut self,

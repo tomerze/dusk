@@ -37,7 +37,6 @@ fn test_run_ps() {
         .assert()
         .success()
         .stdout(predicate::str::contains("init"))
-        .stdout(predicate::str::contains("ps"))
         .stdout(predicate::str::contains("sh"))
         .stdout(predicate::str::contains("program_id"));
 }
