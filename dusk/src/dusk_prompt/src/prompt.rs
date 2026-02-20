@@ -424,7 +424,7 @@ Program ID: `{program_id}`
             "{}{}{}{}",
             Style::new().fg(Color::Yellow).bold().paint("dusk "),
             Style::new().fg(Color::Cyan).paint(dusk_capnp::VERSION),
-            Style::new().fg(Color::Green).bold().paint(" @"),
+            Style::new().fg(Color::Yellow).bold().paint(" @"),
             Style::new().fg(Color::Cyan).paint(&self.shell.hostname),
         );
 
