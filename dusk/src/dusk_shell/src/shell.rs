@@ -103,8 +103,15 @@ impl Shell {
     pub async fn kill(self) -> Result<()> {
         let client = self.client.clone();
         let sh_process = self.sh_process.clone();
+        let pid = sh_process
+            .pid_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_result();
         let mut kill_request = client.kill_request();
-        kill_request.get().set_process(sh_process.clone());
+        kill_request.get().set_pid(pid);
         kill_request.get().set_signal(15); // SIGTERM
 
         let _ = kill_request.send().promise.await?;

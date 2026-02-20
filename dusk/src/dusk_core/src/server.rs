@@ -143,19 +143,11 @@ impl dusk::Server for DuskServer {
         params: dusk::KillParams,
         mut _results: dusk::KillResults,
     ) -> Promise<(), capnp::Error> {
-        let process = pry!(pry!(params.get()).get_process());
+        let pid = pry!(params.get()).get_pid();
         let signal = pry!(params.get()).get_signal();
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
-            let pid = process
-                .pid_request()
-                .send()
-                .promise
-                .await?
-                .get()?
-                .get_result();
-
             let channel = {
                 let ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
                 ps_signal_channel_map.get(&pid).cloned()

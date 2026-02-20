@@ -193,8 +193,15 @@ impl Portal {
                 .await
                 .context("output streaming failed")
                 .into_capnp()?;
+            let pid = process
+                .pid_request()
+                .send()
+                .promise
+                .await?
+                .get()?
+                .get_result();
             let mut kill_request = client.kill_request();
-            kill_request.get().set_process(process);
+            kill_request.get().set_pid(pid);
             kill_request.get().set_signal(15); // SIGTERM
             kill_request.send().promise.await?;
             output.done_request().send().promise.await?;

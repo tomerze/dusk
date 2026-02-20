@@ -58,6 +58,6 @@ interface Dusk {
     process @0 (programArgs: ProgramArgs) -> (result: Process);
     run @1 (process: Process) -> ();
     ps @2 () -> (process_entries :List(ProcessEntry));
-    kill @4 (process: Process, signal: UInt64) -> ();
+    kill @4 (pid: UInt64, signal: UInt64) -> ();
     hostname @3 () -> (result :Text);
 }
