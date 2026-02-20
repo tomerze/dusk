@@ -155,7 +155,7 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
 fn add_menu_keybindings(keybindings: &mut Keybindings) {
     keybindings.add_binding(
         KeyModifiers::CONTROL,
-        KeyCode::Char('x'),
+        KeyCode::Char('r'),
         ReedlineEvent::UntilFound(vec![
             ReedlineEvent::Menu("history_menu".to_string()),
             ReedlineEvent::MenuPageNext,
