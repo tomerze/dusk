@@ -68,12 +68,14 @@ impl Connection {
     }
 
     pub async fn disconnect(self) -> Result<()> {
-        let disconnector = self
+        let disconnector_option = self
             .disconnector_store
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock mutex: {}", e))?
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get disconnector"))?;
-        disconnector.await.map_err(anyhow::Error::from)
+            .take();
+        match disconnector_option {
+            Some(disconnector) => disconnector.await.map_err(anyhow::Error::from),
+            None => Ok(()), // Already disconnected
+        }
     }
 }
