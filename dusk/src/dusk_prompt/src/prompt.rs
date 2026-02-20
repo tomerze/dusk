@@ -422,9 +422,9 @@ Program ID: `{program_id}`
 
         let status_line: String = format!(
             "{}{}{}{}",
-            Style::new().fg(Color::Yellow).paint("dusk "),
+            Style::new().fg(Color::Yellow).bold().paint("dusk "),
             Style::new().fg(Color::Cyan).paint(dusk_capnp::VERSION),
-            Style::new().fg(Color::Green).paint(" @ "),
+            Style::new().fg(Color::Green).bold().paint(" @"),
             Style::new().fg(Color::Cyan).paint(&self.shell.hostname),
         );
 
