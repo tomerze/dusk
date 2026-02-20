@@ -23,3 +23,17 @@ pub mod process;
 pub mod signal;
 pub mod stream;
 pub mod value;
+
+/// Extension trait for converting error results into `capnp::Error`.
+///
+/// For `anyhow::Error`, uses `{:#}` formatting to preserve the full error chain.
+/// For other `Display` errors, uses standard formatting.
+pub trait IntoCapnp<T> {
+    fn into_capnp(self) -> Result<T, dusk_capnp::capnp::Error>;
+}
+
+impl<T> IntoCapnp<T> for anyhow::Result<T> {
+    fn into_capnp(self) -> Result<T, dusk_capnp::capnp::Error> {
+        self.map_err(|e| dusk_capnp::capnp::Error::failed(alloc::format!("{e:#}")))
+    }
+}

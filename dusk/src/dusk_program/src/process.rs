@@ -7,6 +7,7 @@ use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::channel::DynamicReceiver;
 
+use crate::IntoCapnp;
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
 use crate::signal;
@@ -172,12 +173,7 @@ impl process::Server for dyn Process {
         mut _results: process::RunResults,
     ) -> Promise<(), capnp::Error> {
         let process = self.clone_box();
-        Promise::from_future(async move {
-            process
-                .bootstrap()
-                .await
-                .map_err(|e| capnp::Error::failed(e.to_string()))
-        })
+        Promise::from_future(async move { process.bootstrap().await.into_capnp() })
     }
 }
 

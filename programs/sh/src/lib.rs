@@ -180,14 +180,14 @@ impl Portal {
 
             let args = Self::command_string_to_program_args(engine, &command)
                 .await
-                .map_err(|e| capnp::Error::failed(e.to_string()))?;
+                .into_capnp()?;
             let process = Self::execute_program_args(client.clone(), args)
                 .await
-                .map_err(|e| capnp::Error::failed(e.to_string()))?;
+                .into_capnp()?;
 
             Self::portal_and_pipe_output(process.clone(), output.clone())
                 .await
-                .map_err(|e| capnp::Error::failed(e.to_string()))?;
+                .into_capnp()?;
             let mut kill_request = client.kill_request();
             kill_request.get().set_process(process);
             kill_request.get().set_signal(15); // SIGTERM

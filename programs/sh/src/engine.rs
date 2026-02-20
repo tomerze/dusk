@@ -2,6 +2,7 @@ use crate::entry::ShEntriesBuilder;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::pry;
+use dusk_program::IntoCapnp;
 
 use crate::sh_capnp::engine;
 
@@ -43,7 +44,7 @@ impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
                     entry
                         .program_args_builder
                         .build(self.client.clone(), args)
-                        .map_err(|e| { capnp::Error::failed(e.to_string()) })
+                        .into_capnp()
                 );
 
                 results.get().set_program_args(client);
