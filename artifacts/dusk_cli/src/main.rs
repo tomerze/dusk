@@ -6,5 +6,6 @@ fn main() -> Result<()> {
     // crates that register sh entries.
 
     black_box(dusk_program_ps::client::sh_entry);
+    black_box(dusk_program_kill::client::sh_entry);
     dusk_cli::main()
 }

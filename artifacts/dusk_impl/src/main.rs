@@ -9,6 +9,7 @@ fn main() {
             Box::new(dusk_program_init::Launcher {}),
             Box::new(dusk_program_sh::Launcher {}),
             Box::new(dusk_program_ps::Launcher {}),
+            Box::new(dusk_program_kill::Launcher {}),
         ])),
         capnp_rpc::new_client::<init_args::Client, _>(dusk_program_init::Args::new(
             "0.0.0.0", 9090,
