@@ -53,7 +53,7 @@ impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
                 return Promise::ok(());
             }
         }
-        Promise::err(capnp::Error::failed(format!(
+        Promise::err(capnp::Error::failed(alloc::format!(
             "no sh entry found for `{}`",
             program_name
         )))

@@ -28,6 +28,15 @@ pub use dusk_capnp;
 
 mod tls;
 
+pub async fn local_client(
+    namespace: Rc<dusk_program::namespace::Namespace>,
+) -> dusk_capnp::dusk_capnp::dusk::Client {
+    let spawner = unsafe { Spawner::for_current_executor().await };
+    let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
+        dusk_capnp::capnp_rpc::new_client(server::DuskServer::new(namespace, spawner));
+    dusk_client
+}
+
 #[embassy_executor::task(pool_size = 8)]
 pub async fn session(
     namespace: Rc<dusk_program::namespace::Namespace>,
@@ -36,10 +45,8 @@ pub async fn session(
 ) {
     info!("session started with namespace `{}`", namespace.id);
 
-    let spawner = unsafe { Spawner::for_current_executor().await };
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
-    let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
-        dusk_capnp::capnp_rpc::new_client(server::DuskServer::new(namespace, spawner));
+    let dusk_client = local_client(namespace).await;
     let network = twoparty::VatNetwork::new(
         tls_reader,
         tls_writer,
