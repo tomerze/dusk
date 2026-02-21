@@ -15,7 +15,7 @@ use dusk_capnp::prelude::*;
 use dusk_capnp::capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
 
 use alloc::rc::Rc;
-use log::{error, info};
+use tracing::{error, info};
 
 use core::pin::Pin;
 use futures_io::{AsyncRead, AsyncWrite};

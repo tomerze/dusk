@@ -22,4 +22,4 @@ serde = { version = "1.0", default-features = false, features = ["derive", "allo
 serde_json = { version = "1.0", default-features = false, features = ["alloc"], public = true }
 rapidhash = { version = "4.1.0", default-features = false, public = true }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
-log = "0.4.28"
+tracing = { version = "0.1.41", default-features = false }

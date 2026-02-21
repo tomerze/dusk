@@ -36,7 +36,7 @@ impl<S: ShEntriesBuilder> engine::Server for ShEngine<S> {
 
         for entry in sh_entries {
             if entry.info.name == program_name {
-                log::debug!(
+                tracing::debug!(
                     "building args from program_args_builder for program `{}` id {:?}",
                     program_name,
                     entry.info.program_id

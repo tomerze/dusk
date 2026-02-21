@@ -14,7 +14,7 @@ use dusk_program::IntoCapnp;
 use dusk_program::anyhow::Context;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
-use log::error;
+use tracing::error;
 
 pub struct DuskServer {
     namespace: Rc<Namespace>,

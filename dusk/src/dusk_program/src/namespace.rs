@@ -9,8 +9,8 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use hashbrown::HashMap;
-use log::info;
 use nohash_hasher::BuildNoHashHasher;
+use tracing::info;
 
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
 pub type PsCapabilityServerSet = CapabilityServerSet<Box<dyn Process>, process::Client>;

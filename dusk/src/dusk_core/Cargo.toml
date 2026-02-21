@@ -11,7 +11,7 @@ embassy-executor = "*"
 embassy-futures = "*"
 embassy-time = "*"
 
-log = "0.4.28"
+tracing = { version = "0.1.41", default-features = false }
 static_cell = "2.1.1"
 futures-io = { version = "0.3.31", default-features = false, public = true }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }

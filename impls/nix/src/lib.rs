@@ -8,7 +8,7 @@ use dusk_program::anyhow::Result;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use embassy_executor::Executor;
-use log::error;
+use tracing::error;
 
 pub use dusk_program::launcher_set::LauncherSet;
 pub use dusk_program::launcher_set::LauncherSetBuilder;
@@ -41,10 +41,10 @@ async fn init_wrapper(
 }
 
 pub fn bootstrap_logging() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .filter_module("async_io", log::LevelFilter::Info)
-        .format_timestamp_nanos()
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_target(false)
+        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
         .init();
 }
 
