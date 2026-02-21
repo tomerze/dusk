@@ -399,7 +399,7 @@ Program ID: `{program_id}`
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
                 if let Err(e) = self.shell.sh(line, stream, done_receiver).await {
-                    tracing::error!("{:?}: {:?}", first_word, e);
+                    tracing::error!("{:?} exited with error:\n{:?}", first_word, e);
                 }
             }
         };

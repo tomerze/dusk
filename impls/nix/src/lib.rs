@@ -36,7 +36,8 @@ async fn init_wrapper(
 ) {
     if let Err(err) = init(namespace, init_program_args).await {
         error!("init task crashed: {err:#?}");
-    }
+    };
+    std::process::exit(0);
 }
 
 pub fn bootstrap_logging() {
