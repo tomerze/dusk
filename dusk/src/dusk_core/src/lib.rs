@@ -12,8 +12,6 @@ extern crate alloc;
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
-use dusk_program::embassy_executor::Spawner;
-
 use dusk_capnp::capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
 
 use alloc::rc::Rc;
@@ -31,13 +29,12 @@ mod tls;
 pub async fn local_client(
     namespace: Rc<dusk_program::namespace::Namespace>,
 ) -> dusk_capnp::dusk_capnp::dusk::Client {
-    let spawner = unsafe { Spawner::for_current_executor().await };
     let dusk_client: dusk_capnp::dusk_capnp::dusk::Client =
-        dusk_capnp::capnp_rpc::new_client(server::DuskServer::new(namespace, spawner));
+        dusk_capnp::capnp_rpc::new_client(server::DuskServer::new(namespace));
     dusk_client
 }
 
-#[embassy_executor::task(pool_size = 8)]
+#[embassy_executor::task(pool_size = 2)]
 pub async fn session(
     namespace: Rc<dusk_program::namespace::Namespace>,
     reader: Pin<Box<dyn AsyncRead>>,

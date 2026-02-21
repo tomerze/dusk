@@ -20,9 +20,11 @@ async fn init(
     namespace: alloc::rc::Rc<Namespace>,
     init_program_args: program_args::Client,
 ) -> Result<()> {
-    let process = dusk_core::driver::process(namespace.clone(), init_program_args).await?;
-
-    process.bootstrap().await?;
+    let client = dusk_core::local_client(namespace.clone()).await;
+    let mut process_request = client.process_request();
+    process_request.get().set_program_args(init_program_args);
+    let process = process_request.send().pipeline.get_result();
+    process.run_request().send().promise.await?;
 
     Ok(())
 }
@@ -49,17 +51,16 @@ pub fn run(
     launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
     init_program_args: program_args::Client,
 ) -> ! {
-    // And so it begins
-    let namespace_id = rand::random::<u64>();
-    let root = alloc::rc::Rc::new(Namespace::new(namespace_id));
-
-    driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
-
     // The executor lives for 'static because this function never returns
     // Using Box::leak is explicit about this intent
     let executor = Box::leak(Box::new(Executor::new()));
 
     executor.run(|spawner| {
+        // And so it begins
+        let namespace_id = rand::random::<u64>();
+        let root = alloc::rc::Rc::new(Namespace::new(namespace_id, spawner));
+
+        driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
         if let Err(err) = spawner.spawn(init_wrapper(root, init_program_args)) {
             error!("failed to spawn init task: {err:#?}")
         }

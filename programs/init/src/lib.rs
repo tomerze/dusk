@@ -96,8 +96,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     stream.set_nodelay(true)?;
                     let (reader, writer) = stream.split();
                     let session_task = dusk_core::session(self.namespace().clone(), Box::pin(reader), Box::pin(writer));
-                    let spawner = unsafe { Spawner::for_current_executor().await };
-                    spawner
+                    self.ctx.namespace.spawner
                         .spawn(session_task)
                         .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
                 }

@@ -4,6 +4,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use dusk_capnp::capnp_rpc::CapabilityServerSet;
 use dusk_capnp::dusk_capnp::process;
+use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
@@ -22,13 +23,14 @@ pub type PsSignalChannelMap = HashMap<u64, Rc<SignalChannel>, BuildNoHashHasher<
 /// The mutexes are used to allow interior mutability.
 pub struct Namespace {
     pub id: u64,
+    pub spawner: Spawner,
     pub ps_server_set: Mutex<NoopRawMutex, PsCapabilityServerSet>,
     pub ps_map: Mutex<NoopRawMutex, PsMap>,
     pub ps_signal_channel_map: Mutex<NoopRawMutex, PsSignalChannelMap>,
 }
 
 impl Namespace {
-    pub fn new(id: u64) -> Self {
+    pub fn new(id: u64, spawner: Spawner) -> Self {
         info!("namespace `{}` created", id);
         let ps_server_set = Mutex::<
             NoopRawMutex,
@@ -41,6 +43,7 @@ impl Namespace {
 
         Namespace {
             id,
+            spawner,
             ps_server_set,
             ps_map,
             ps_signal_channel_map,

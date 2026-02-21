@@ -14,29 +14,26 @@ use dusk_program::IntoCapnp;
 use dusk_program::anyhow::Context;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
-use embassy_executor::Spawner;
 use log::error;
 
 pub struct DuskServer {
     namespace: Rc<Namespace>,
-    spawner: Spawner,
 }
 
 impl DuskServer {
-    pub fn new(namespace: Rc<Namespace>, spawner: Spawner) -> Self {
-        DuskServer { namespace, spawner }
+    pub fn new(namespace: Rc<Namespace>) -> Self {
+        DuskServer { namespace }
     }
 
     async fn run_inside_task(
         process_client: process::Client,
         namespace: Rc<Namespace>,
-        spawner: Spawner,
     ) -> Result<(), capnp::Error> {
         let ps_server_set = namespace.ps_server_set.lock().await;
 
         if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
             let process = process_server.borrow().server.clone_box();
-            match spawner.spawn(process_task(process)) {
+            match namespace.spawner.spawn(process_task(process)) {
                 Ok(()) => Ok(()),
                 Err(e) => Err(capnp::Error::failed(e.to_string())),
             }
@@ -97,11 +94,7 @@ impl dusk::Server for DuskServer {
     ) -> Promise<(), capnp::Error> {
         let process = pry!(pry!(params.get()).get_process());
 
-        Promise::from_future(Self::run_inside_task(
-            process,
-            self.namespace.clone(),
-            self.spawner,
-        ))
+        Promise::from_future(Self::run_inside_task(process, self.namespace.clone()))
     }
 
     fn ps(
