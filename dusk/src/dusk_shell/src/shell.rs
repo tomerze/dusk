@@ -5,7 +5,6 @@ use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::ShArgs;
 use dusk_program_sh::sh_capnp::{engine, sh_args, sh_portal};
 use tokio::sync::oneshot;
-use tracing::debug;
 
 pub struct Shell {
     client: dusk::Client,
@@ -45,10 +44,6 @@ impl Shell {
             ))
         })?;
 
-        let pid_reply = process.pid_request().send().promise.await?;
-        let pid: u64 = pid_reply.get()?.get_result();
-
-        debug!("sh started with pid {}", pid);
         Ok(process)
     }
 

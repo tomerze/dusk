@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 # Declared for macro use, versions taken from dusk_program
-embassy-executor = { version = "*", features = ["arch-std", "log", "nightly", "executor-thread"]}
+embassy-executor = { version = "*", features = ["trace", "arch-std", "log", "nightly", "executor-thread"]}
 embassy-time = "*"
 async-trait = "*"
 
