@@ -120,7 +120,14 @@ impl DefaultDisplayEngine {
         match value {
             Value::Null => Ok("".to_string()),
             Value::Bool(b) => Ok(b.to_string().cyan().bold().to_string()),
-            Value::Uint(u) => Ok(u.to_string().cyan().bold().to_string()),
+            Value::Uint(u) => {
+                let formatted = if u > u32::MAX as u64 {
+                    format!("0x{:x}", u)
+                } else {
+                    u.to_string()
+                };
+                Ok(formatted.cyan().bold().to_string())
+            }
             Value::String(s) => Ok(s),
             Value::Text(s) => Ok(self.render_markdown_inline(&s)),
             Value::Bytes(b) => Ok(self

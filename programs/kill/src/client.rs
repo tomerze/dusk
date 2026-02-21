@@ -7,13 +7,22 @@ use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 use linkme::distributed_slice;
 use std::rc::Rc;
 
+fn parse_hex_or_decimal(s: &str) -> Result<u64, String> {
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u64::from_str_radix(hex, 16).map_err(|e| e.to_string())
+    } else {
+        s.parse::<u64>().map_err(|e| e.to_string())
+    }
+}
+
 #[derive(clap::Parser)]
 #[command(name = "kill", no_binary_name = true)]
 struct KillCli {
     /// PID of the process to signal
+    #[arg(value_parser = parse_hex_or_decimal)]
     pid: u64,
     /// Signal number to send (default: 15, SIGTERM)
-    #[arg(long, default_value_t = 15)]
+    #[arg(long, default_value_t = 15, value_parser = parse_hex_or_decimal)]
     signal: u64,
 }
 
