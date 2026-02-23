@@ -1,3 +1,6 @@
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering;
+
 use alloc::{boxed::Box, rc::Rc, string::ToString};
 use anyhow::{Context, Result};
 use dusk_capnp::capnp;
@@ -6,10 +9,13 @@ use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::channel::DynamicReceiver;
+use embassy_sync::signal::Signal;
+use tracing::Instrument;
 
 use crate::IntoCapnp;
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
+use crate::ready::Ready;
 use crate::signal;
 
 #[derive(Clone)]
@@ -52,6 +58,7 @@ pub trait ProcessMixin {
     async fn main(
         &self,
         signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+        ready: Ready,
     ) -> Result<()>;
 }
 
@@ -77,17 +84,30 @@ impl dyn Process {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
             ps_signal_channel_map.insert(self.pid(), channel.clone());
         }
-        tracing::debug!(
-            "started process with pid {}, program id {}",
-            self.pid(),
-            self.program_id()
-        );
-        let result = self.main(signal_receiver).await;
-        tracing::debug!(
-            "exited process with pid {}, program id {}",
-            self.pid(),
-            self.program_id()
-        );
+        let ready = Ready::new(Signal::new());
+        {
+            let mut ps_ready_map = namespace.ps_ready_map.lock().await;
+            ps_ready_map.insert(self.pid(), (Rc::new(AtomicBool::new(false)), ready.clone()));
+        }
+        let result = {
+            let span = tracing::info_span!(
+                "process_main",
+                pid = self.pid(),
+                program_id = self.program_id(),
+                program_name = self.name(),
+            );
+            span.in_scope(|| tracing::info!("main started"));
+            let result = self
+                .main(signal_receiver, ready)
+                .instrument(span.clone())
+                .await;
+            span.in_scope(|| tracing::info!("main ended"));
+            result
+        };
+        {
+            let mut ps_ready_map = namespace.ps_ready_map.lock().await;
+            ps_ready_map.remove(&self.pid());
+        }
         {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
             ps_signal_channel_map.remove(&self.pid());
@@ -155,13 +175,30 @@ impl process::Server for dyn Process {
                 let ps_map = namespace.ps_map.lock().await;
                 ps_map.contains_key(&pid)
             };
-            if is_process_running {
+            if !is_process_running {
+                return Err(capnp::Error::failed(
+                    "process is not running, cannot get portal".to_string(),
+                ));
+            }
+            let ready = {
+                let ps_ready_map = namespace.ps_ready_map.lock().await;
+                ps_ready_map.get(&pid).cloned()
+            };
+            if let Some(ready) = ready {
+                // The first element is an AtomicBool that marks if the process is ready.
+                // In case the process isn't ready we `wait` on the second element which is
+                // a signal that is fired when the process is ready
+                let (first, second) = ready;
+                if !first.load(Ordering::Acquire) {
+                    second.wait().await;
+                    first.store(true, Ordering::Release);
+                }
                 let portal = <Self as ProcessMixin>::portal(&*process);
                 results.get().set_result(portal);
                 Ok(())
             } else {
                 Err(capnp::Error::failed(
-                    "process is not running, cannot get portal".to_string(),
+                    "process does not appear in the ready map".to_string(),
                 ))
             }
         })

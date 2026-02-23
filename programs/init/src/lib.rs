@@ -4,6 +4,10 @@
 extern crate alloc;
 extern crate capnp;
 
+use alloc::rc::Rc;
+use core::cell::Cell;
+use dusk_program::{ready::Ready, signal::SignalReceiver};
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
@@ -74,7 +78,8 @@ impl dusk_program::process::ProcessMixin for Process {
 
     async fn main(
         &self,
-        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+        signal_receiver: SignalReceiver<'async_trait>,
+        ready: Ready,
     ) -> anyhow::Result<()> {
         let program_args = self
             .ctx
@@ -88,14 +93,22 @@ impl dusk_program::process::ProcessMixin for Process {
         let port = options.get_port();
         let listener =
             async_net::TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
-
+        ready.signal(());
         loop {
             futures::select! {
                 accept_result = listener.accept().fuse() => {
                     let (stream, _) = accept_result?;
                     stream.set_nodelay(true)?;
                     let (reader, writer) = stream.split();
-                    let session_task = dusk_core::session(self.namespace().clone(), Box::pin(reader), Box::pin(writer));
+
+                    let task_id = Rc::new(Cell::new(0));
+                    let session_task = dusk_core::session(
+                        task_id.clone(),
+                        self.namespace().clone(),
+                        Box::pin(reader),
+                        Box::pin(writer),
+                    );
+                    task_id.set(session_task.id());
                     self.ctx.namespace.spawner
                         .spawn(session_task)
                         .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;

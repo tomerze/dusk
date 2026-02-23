@@ -5,6 +5,8 @@
 extern crate alloc;
 extern crate capnp;
 
+use dusk_program::ready::Ready;
+use dusk_program::signal::SignalReceiver;
 #[cfg(feature = "client")]
 pub use linkme;
 
@@ -76,8 +78,10 @@ impl dusk_program::process::ProcessMixin for Process {
 
     async fn main(
         &self,
-        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+        signal_receiver: SignalReceiver<'async_trait>,
+        ready: Ready,
     ) -> anyhow::Result<()> {
+        ready.signal(());
         loop {
             let signal = signal_receiver.receive().await;
             match signal {
@@ -123,7 +127,6 @@ impl Portal {
         Ok(process)
     }
 
-    // TODO change this to pipe io and support input as well
     async fn portal_and_pipe_output(
         process: process::Client,
         output: dusk_capnp::dusk_capnp::stream::Client,

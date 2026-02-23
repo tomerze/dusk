@@ -1,3 +1,5 @@
+use embassy_sync::channel::DynamicReceiver;
+
 pub enum Signal {
     Terminate,
     Unknown(u64),
@@ -11,3 +13,5 @@ impl From<u64> for Signal {
         }
     }
 }
+
+pub type SignalReceiver<'a> = DynamicReceiver<'a, Signal>;

@@ -2,6 +2,8 @@
 #![feature(prelude_import)]
 #![cfg_attr(not(feature = "client"), no_std)]
 
+use dusk_program::{ready::Ready, signal::SignalReceiver};
+
 extern crate alloc;
 extern crate capnp;
 
@@ -59,20 +61,6 @@ impl dusk_program::process::ProcessMixin for Process {
     where
         Self: Sized,
     {
-        let program_args = capnp::capability::FromClientHook::cast_to::<
-            kill_capnp::kill_args::Client,
-        >(ctx.program_args.clone());
-
-        let get_pipeline = program_args.get_request().send();
-        let client = get_pipeline.pipeline.get_client();
-
-        let mut kill_request = client.kill_request();
-        let get_reply = get_pipeline.promise.await?;
-        let options = get_reply.get()?.get_options()?;
-        kill_request.get().set_pid(options.get_pid());
-        kill_request.get().set_signal(options.get_signal());
-        kill_request.send().promise.await?;
-
         Ok(Process { ctx })
     }
 
@@ -85,8 +73,24 @@ impl dusk_program::process::ProcessMixin for Process {
 
     async fn main(
         &self,
-        signal_receiver: DynamicReceiver<'async_trait, signal::Signal>,
+        signal_receiver: SignalReceiver<'async_trait>,
+        ready: Ready,
     ) -> anyhow::Result<()> {
+        let program_args = capnp::capability::FromClientHook::cast_to::<
+            kill_capnp::kill_args::Client,
+        >(self.ctx.program_args.clone());
+
+        let get_pipeline = program_args.get_request().send();
+        let client = get_pipeline.pipeline.get_client();
+
+        let mut kill_request = client.kill_request();
+        let get_reply = get_pipeline.promise.await?;
+        let options = get_reply.get()?.get_options()?;
+        kill_request.get().set_pid(options.get_pid());
+        kill_request.get().set_signal(options.get_signal());
+        kill_request.send().promise.await?;
+
+        ready.signal(());
         loop {
             let signal = signal_receiver.receive().await;
             match signal {

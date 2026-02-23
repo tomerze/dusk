@@ -14,6 +14,7 @@ use dusk_program::IntoCapnp;
 use dusk_program::anyhow::Context;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
+use tracing::debug;
 use tracing::error;
 
 pub struct DuskServer {
@@ -71,6 +72,7 @@ impl dusk::Server for DuskServer {
         params: dusk::ProcessParams,
         mut results: dusk::ProcessResults,
     ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.process", "rpc call");
         let program_args = pry!(pry!(params.get()).get_program_args());
 
         let namespace = self.namespace.clone();
@@ -92,6 +94,7 @@ impl dusk::Server for DuskServer {
         params: dusk::RunParams,
         mut _results: dusk::RunResults,
     ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.run", "rpc call");
         let process = pry!(pry!(params.get()).get_process());
 
         Promise::from_future(Self::run_inside_task(process, self.namespace.clone()))
@@ -102,6 +105,7 @@ impl dusk::Server for DuskServer {
         _params: dusk::PsParams,
         mut results: dusk::PsResults,
     ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.ps", "rpc call");
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
             let ps_vec: Vec<(u64, process::Client)> = {
@@ -138,6 +142,7 @@ impl dusk::Server for DuskServer {
     ) -> Promise<(), capnp::Error> {
         let pid = pry!(params.get()).get_pid();
         let signal = pry!(params.get()).get_signal();
+        debug!(method = "Dusk.kill", ?pid, ?signal, "rpc call");
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
@@ -163,6 +168,8 @@ impl dusk::Server for DuskServer {
         _params: dusk::HostnameParams,
         mut results: dusk::HostnameResults,
     ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.hostname", "rpc call");
+
         let hostname = match driver::hostname() {
             Ok(id) => id,
             Err(err) => {

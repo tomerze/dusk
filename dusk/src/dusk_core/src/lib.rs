@@ -17,14 +17,20 @@ use dusk_capnp::capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
 use alloc::rc::Rc;
 use tracing::{error, info};
 
+use core::cell::Cell;
 use core::pin::Pin;
+use core::sync::atomic::{AtomicU64, Ordering};
 use futures_io::{AsyncRead, AsyncWrite};
+use tracing::Instrument;
 
 pub mod driver;
 pub mod server;
+pub mod trace;
 pub use dusk_capnp;
 
 mod tls;
+
+static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub async fn local_client(
     namespace: Rc<dusk_program::namespace::Namespace>,
@@ -34,13 +40,22 @@ pub async fn local_client(
     dusk_client
 }
 
-#[embassy_executor::task(pool_size = 2)]
+#[embassy_executor::task(pool_size = 16)]
 pub async fn session(
+    task_id: Rc<Cell<u32>>,
     namespace: Rc<dusk_program::namespace::Namespace>,
     reader: Pin<Box<dyn AsyncRead>>,
     writer: Pin<Box<dyn AsyncWrite>>,
 ) {
-    info!("session started with namespace `{}`", namespace.id);
+    let session_id = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let span = tracing::info_span!(
+        "session",
+        ?session_id,
+        task_id = task_id.get(),
+        namespace_id = namespace.id
+    );
+
+    span.in_scope(|| info!("session started"));
 
     let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client = local_client(namespace).await;
@@ -53,7 +68,9 @@ pub async fn session(
 
     let rpc_system = RpcSystem::new(Box::new(network), Some(dusk_client.clone().client));
 
-    if let Err(err) = rpc_system.await {
+    if let Err(err) = rpc_system.instrument(span.clone()).await {
         error!("an error occured in an rpc system: `{err:#?}`");
     }
+
+    span.in_scope(|| info!("session ended"));
 }

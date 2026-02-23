@@ -20,6 +20,7 @@ pub mod launcher_set;
 pub mod namespace;
 pub mod prelude;
 pub mod process;
+pub mod ready;
 pub mod signal;
 pub mod stream;
 pub mod value;

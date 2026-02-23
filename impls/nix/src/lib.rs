@@ -8,11 +8,13 @@ use dusk_program::anyhow::Result;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use embassy_executor::Executor;
+use tracing::Instrument;
 use tracing::error;
 
 pub use dusk_program::launcher_set::LauncherSet;
 pub use dusk_program::launcher_set::LauncherSetBuilder;
 pub use dusk_program::launcher_set::StatelessLauncherSetBuilder;
+use tracing::info_span;
 
 mod driver;
 
@@ -34,8 +36,12 @@ async fn init_wrapper(
     namespace: alloc::rc::Rc<Namespace>,
     init_program_args: program_args::Client,
 ) {
-    if let Err(err) = init(namespace, init_program_args).await {
-        error!("init task crashed: {err:#?}");
+    let span = info_span!("init", namespace_id = namespace.id);
+    if let Err(err) = init(namespace, init_program_args)
+        .instrument(span.clone())
+        .await
+    {
+        span.in_scope(|| error!("init task crashed: {err:#?}"));
     };
     std::process::exit(0);
 }

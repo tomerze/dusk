@@ -12,9 +12,9 @@ embassy-futures = "*"
 embassy-time = "*"
 
 tracing = { version = "0.1.41", default-features = false }
-static_cell = "2.1.1"
 futures-io = { version = "0.3.31", default-features = false, public = true }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+static_cell = "2.1.1"
 
 dusk_capnp = { path = "../dusk_capnp/", public = true}
 dusk_program = { path = "../dusk_program/", public = true}

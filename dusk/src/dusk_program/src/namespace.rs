@@ -1,4 +1,7 @@
+use core::sync::atomic::AtomicBool;
+
 use crate::process::Process;
+use crate::ready::Ready;
 use crate::signal;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -13,9 +16,11 @@ use nohash_hasher::BuildNoHashHasher;
 use tracing::info;
 
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
+
 pub type PsCapabilityServerSet = CapabilityServerSet<Box<dyn Process>, process::Client>;
 pub type PsMap = HashMap<u64, Box<dyn Process>, BuildNoHashHasher<u64>>;
 pub type PsSignalChannelMap = HashMap<u64, Rc<SignalChannel>, BuildNoHashHasher<u64>>;
+pub type PsReadyMap = HashMap<u64, (Rc<AtomicBool>, Ready), BuildNoHashHasher<u64>>;
 
 /// A namespace is a container for processes and potentially other driver resources.
 ///
@@ -27,11 +32,12 @@ pub struct Namespace {
     pub ps_server_set: Mutex<NoopRawMutex, PsCapabilityServerSet>,
     pub ps_map: Mutex<NoopRawMutex, PsMap>,
     pub ps_signal_channel_map: Mutex<NoopRawMutex, PsSignalChannelMap>,
+    pub ps_ready_map: Mutex<NoopRawMutex, PsReadyMap>,
 }
 
 impl Namespace {
     pub fn new(id: u64, spawner: Spawner) -> Self {
-        info!("namespace `{}` created", id);
+        info!(namespace_id = id, "namespace created");
         let ps_server_set = Mutex::<
             NoopRawMutex,
             CapabilityServerSet<Box<dyn Process>, process::Client>,
@@ -40,6 +46,7 @@ impl Namespace {
         let ps_map = Mutex::<NoopRawMutex, PsMap>::new(HashMap::default());
         let ps_signal_channel_map =
             Mutex::<NoopRawMutex, PsSignalChannelMap>::new(HashMap::default());
+        let ps_ready_map = Mutex::<NoopRawMutex, PsReadyMap>::new(HashMap::default());
 
         Namespace {
             id,
@@ -47,6 +54,7 @@ impl Namespace {
             ps_server_set,
             ps_map,
             ps_signal_channel_map,
+            ps_ready_map,
         }
     }
 }
