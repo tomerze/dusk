@@ -4,6 +4,7 @@ use crate::driver;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::Cell;
 use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::capnp_rpc;
@@ -14,8 +15,10 @@ use dusk_program::IntoCapnp;
 use dusk_program::anyhow::Context;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
+use tracing::Instrument;
 use tracing::debug;
 use tracing::error;
+use tracing::info_span;
 
 pub struct DuskServer {
     namespace: Rc<Namespace>,
@@ -34,7 +37,10 @@ impl DuskServer {
 
         if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
             let process = process_server.borrow().server.clone_box();
-            match namespace.spawner.spawn(process_task(process)) {
+            let task_id = Rc::new(Cell::new(0));
+            let spawn_token = process_task(task_id.clone(), process);
+            task_id.set(spawn_token.id());
+            match namespace.spawner.spawn(spawn_token) {
                 Ok(()) => Ok(()),
                 Err(e) => Err(capnp::Error::failed(e.to_string())),
             }
@@ -55,14 +61,25 @@ impl DuskServer {
 }
 
 #[embassy_executor::task(pool_size = 8)]
-async fn process_task(process: Box<dyn Process>) {
+async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>) {
+    let span = info_span!(
+        "process",
+        task_id = task_id.get(),
+        pid = process.pid(),
+        program_id = process.program_id(),
+        program_name = process.name(),
+        program_version = process.version(),
+        namespace_id = process.namespace().id
+    );
     embassy_futures::yield_now().await;
-    if let Err(err) = process.bootstrap().await {
-        error!(
-            "Process with pid {} exited with error: {:?}",
-            process.pid(),
-            err
-        );
+    if let Err(err) = process.bootstrap().instrument(span.clone()).await {
+        span.in_scope(|| {
+            error!(
+                pid = process.pid(),
+                error = err.to_string(),
+                "process bootstrap exited with error"
+            )
+        });
     }
 }
 

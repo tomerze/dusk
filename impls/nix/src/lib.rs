@@ -25,8 +25,11 @@ async fn init(
     let client = dusk_core::local_client(namespace.clone()).await;
     let mut process_request = client.process_request();
     process_request.get().set_program_args(init_program_args);
-    let process = process_request.send().pipeline.get_result();
-    process.run_request().send().promise.await?;
+    let process_response = process_request.send().promise.await?;
+    let process = process_response.get()?;
+    let mut run_request = client.run_request();
+    run_request.get().set_process(process.get_result()?);
+    run_request.send().promise.await?;
 
     Ok(())
 }
@@ -43,7 +46,6 @@ async fn init_wrapper(
     {
         span.in_scope(|| error!("init task crashed: {err:#?}"));
     };
-    std::process::exit(0);
 }
 
 pub fn bootstrap_logging() {

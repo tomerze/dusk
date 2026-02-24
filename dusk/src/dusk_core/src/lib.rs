@@ -52,7 +52,11 @@ pub async fn session(
         "session",
         ?session_id,
         task_id = task_id.get(),
-        namespace_id = namespace.id
+        namespace_id = namespace.id,
+        pid = tracing::field::Empty,
+        program_id = tracing::field::Empty,
+        program_name = tracing::field::Empty,
+        program_version = tracing::field::Empty,
     );
 
     span.in_scope(|| info!("session started"));

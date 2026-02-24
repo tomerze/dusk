@@ -86,23 +86,22 @@ impl dyn Process {
             let mut ps_ready_map = namespace.ps_ready_map.lock().await;
             ps_ready_map.insert(self.pid(), ready.clone());
         }
-        let result = {
-            let span = tracing::info_span!(
-                "process_main",
-                pid = self.pid(),
-                program_id = self.program_id(),
-                program_name = self.name(),
-            );
-            span.in_scope(|| tracing::info!("main started"));
-            let result = self
-                .main(signal_receiver, ready)
-                .instrument(span.clone())
-                .await;
-            span.in_scope(|| tracing::info!("main ended"));
-            result
-        };
+
+        tracing::info!("main called");
+        let result = self
+            .main(signal_receiver, ready)
+            .instrument(tracing::Span::current())
+            .await;
+        let error = result.as_ref().err().map(|e| e.to_string());
+        tracing::info!(error = error, "main exited");
+
         {
             let mut ps_ready_map = namespace.ps_ready_map.lock().await;
+            if let Some(ready) = ps_ready_map.get_mut(&self.pid()) {
+                ready.sender().send(true);
+            } else {
+                tracing::error!("failed to ensure process is ready after main exited");
+            }
             ps_ready_map.remove(&self.pid());
         }
         {
@@ -113,7 +112,7 @@ impl dyn Process {
             let mut ps_map = namespace.ps_map.lock().await;
             ps_map.remove(&self.pid());
         }
-        result
+        Ok(())
     }
 }
 
@@ -205,9 +204,16 @@ impl process::Server for dyn Process {
         mut _results: process::RunResults,
     ) -> Promise<(), capnp::Error> {
         let process = self.clone_box();
+        let span = tracing::Span::current();
+
+        span.record("pid", Self::pid(self));
+        span.record("program_id", Self::program_id(self));
+        span.record("program_name", Self::name(self));
+        span.record("program_version", Self::version(self));
         Promise::from_future(async move {
             process
                 .bootstrap()
+                .instrument(tracing::Span::current())
                 .await
                 .context("process bootstrap failed")
                 .into_capnp()
