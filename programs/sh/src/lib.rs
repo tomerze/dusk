@@ -18,6 +18,7 @@ use dusk_program::stream::UndoneStream;
 #[cfg(feature = "client")]
 pub mod entry;
 
+#[cfg(feature = "client")]
 pub mod compiler;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -154,6 +155,7 @@ impl Portal {
         let output = pry!(pry!(params.get()).get_output());
 
         let args_to_execute = pry!(script.get_program_args());
+        let background = script.get_background();
 
         let program_args = self.process.ctx.program_args.clone();
 
@@ -170,6 +172,13 @@ impl Portal {
                 .await
                 .context("process execution failed")
                 .into_capnp()?;
+
+            if background {
+                // Since `process` is a future client we need to somehow trigger it's creation.
+                let _pid = process.pid_request().send().promise.await?;
+                output.done_request().send().promise.await?;
+                return Ok(());
+            }
 
             Self::portal_and_pipe_output(process.clone(), output.clone())
                 .await
