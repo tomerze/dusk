@@ -49,7 +49,7 @@ impl<S: ShEntriesBuilder> Compiler<S> {
             Some((program_args, should_be_empty)) => {
                 if !should_be_empty.is_empty() {
                     return Err(anyhow!(
-                        "illegal syntax found `{}` after `&`",
+                        "syntax error, found `{}` after `&`",
                         should_be_empty
                     ));
                 }
