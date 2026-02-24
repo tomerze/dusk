@@ -1,6 +1,6 @@
 use chrono::Duration;
 use dusk_program::anyhow::{Result, anyhow};
-use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
+use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo, ShEntriesBuilder};
 use std::{borrow::Cow, cell::Cell};
 
 use crossterm::{
@@ -203,21 +203,23 @@ where
     Display { display_engine: &'a D },
 }
 
-pub struct Prompt<'a, D, F>
+pub struct Prompt<'a, D, F, S>
 where
     D: DisplayEngine + Clone + 'static,
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
+    S: ShEntriesBuilder,
 {
-    shell: &'a mut Shell,
+    shell: &'a mut Shell<S>,
     available_programs_info: Vec<ProgramInfo>,
     display_engine: D,
     stream_factory: F,
 }
 
-impl<'a, D, F> Prompt<'a, D, F>
+impl<'a, D, F, S> Prompt<'a, D, F, S>
 where
     D: DisplayEngine + Clone + 'static,
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
+    S: ShEntriesBuilder,
 {
     const BUILTIN_COMMANDS: [ProgramInfo; 3] = [
         ProgramInfo {
@@ -250,7 +252,7 @@ The `help` command displays information about available commands.
     ];
 
     pub async fn new(
-        shell: &'a mut Shell,
+        shell: &'a mut Shell<S>,
         get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
         stream_factory: F,

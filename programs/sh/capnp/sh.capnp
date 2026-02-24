@@ -4,17 +4,19 @@ using Dusk = import "/capnp/dusk.capnp";
 
 const programId :UInt64 = 0x8d0e0504ec994ea4;
 
-interface Engine {
-  buildProgramArgsFromString @0 (string :Text) -> (program_args: Dusk.ProgramArgs);
-  client @1 () -> (client :Dusk.Dusk);
+struct Script {
+  programArgs @0: Dusk.ProgramArgs;
+  background @1: Bool;
 }
 
+struct ShOptions {}
+
 interface ShArgs extends(Dusk.ProgramArgs) {
-  get @0 () -> (engine :Engine);
+  get @0 () -> (client: Dusk.Dusk, options :ShOptions);
 }
 
 interface ShPortal extends(Dusk.Portal) {
-  sh @0 (command :Text, output :Dusk.Stream) -> ();
+  sh @0 (script :Script, output :Dusk.Stream) -> ();
 }
 
 interface OutputPortal extends(Dusk.Portal) {

@@ -109,10 +109,13 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
 
     tokio::task::spawn_local(async move {
         // Create a new shell for this command
-        let shell_result = dusk_shell::shell::Shell::new(dusk_program_sh::engine::ShEngine::new(
+        let shell_result = dusk_shell::shell::Shell::new(
             client.clone(),
-            dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-        ))
+            dusk_program_sh::compiler::Compiler::new(
+                client.clone(),
+                dusk_program_sh::entry::StaticShEntriesBuilder::default(),
+            ),
+        )
         .await;
 
         let mut shell = match shell_result {

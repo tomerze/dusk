@@ -18,7 +18,7 @@ use dusk_program::stream::UndoneStream;
 #[cfg(feature = "client")]
 pub mod entry;
 
-pub mod engine;
+pub mod compiler;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -26,7 +26,7 @@ dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs {
-    pub engine: sh_capnp::engine::Client,
+    pub client: dusk::Client,
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
@@ -36,7 +36,8 @@ impl ShArgs {
         _params: sh_capnp::sh_args::GetParams,
         mut results: sh_capnp::sh_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_engine(self.engine.clone());
+        results.get().set_client(self.client.clone());
+        results.get().init_options();
 
         capnp::capability::Promise::ok(())
     }
@@ -98,17 +99,6 @@ pub struct Portal {
 }
 
 impl Portal {
-    async fn command_string_to_program_args(
-        engine: sh_capnp::engine::Client,
-        command: &str,
-    ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
-        let mut build_from_string_request = engine.build_program_args_from_string_request();
-        build_from_string_request.get().set_string(command);
-        let build_from_string_reply = build_from_string_request.send().promise.await?;
-        let result = build_from_string_reply.get()?.get_program_args()?;
-        Ok(result)
-    }
-
     async fn execute_program_args(
         client: dusk_capnp::dusk_capnp::dusk::Client,
         program_args: dusk_capnp::dusk_capnp::program_args::Client,
@@ -160,8 +150,10 @@ impl Portal {
         params: sh_capnp::sh_portal::ShParams,
         _results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let command = pry!(pry!(pry!(params.get()).get_command()).to_string());
+        let script = pry!(pry!(params.get()).get_script());
         let output = pry!(pry!(params.get()).get_output());
+
+        let args_to_execute = pry!(script.get_program_args());
 
         let program_args = self.process.ctx.program_args.clone();
 
@@ -169,21 +161,12 @@ impl Portal {
             let program_args = capnp::capability::FromClientHook::cast_to::<
                 sh_capnp::sh_args::Client,
             >(program_args);
-            let engine = capnp_rpc::new_future_client(async move {
-                let get_request_result = program_args.get_request().send().promise.await?;
-                get_request_result.get()?.get_engine()
-            });
-            let engine_clone = engine.clone();
             let client = capnp_rpc::new_future_client(async move {
-                let client_request = engine_clone.client_request().send().promise.await?;
-                client_request.get()?.get_client()
+                let get_request_result = program_args.get_request().send().promise.await?;
+                get_request_result.get()?.get_client()
             });
 
-            let args = Self::command_string_to_program_args(engine, &command)
-                .await
-                .context("program args creation failed")
-                .into_capnp()?;
-            let process = Self::execute_program_args(client.clone(), args)
+            let process = Self::execute_program_args(client.clone(), args_to_execute)
                 .await
                 .context("process execution failed")
                 .into_capnp()?;

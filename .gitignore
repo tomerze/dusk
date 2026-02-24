@@ -10,6 +10,7 @@
 /tests/cli/history.sqlite3
 /tests/cli/history.sqlite3-shm
 /tests/cli/history.sqlite3-wal
+/vendor/capnproto
 /build
 /docs/site
 /**/__pycache__

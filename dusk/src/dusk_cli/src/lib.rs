@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use dusk_program_sh::{
-    engine::ShEngine,
+    compiler::Compiler,
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
 };
 use dusk_prompt::{
@@ -25,7 +25,7 @@ struct Cli {
     debug_console: bool,
 }
 
-async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
+async fn single_command(shell: &mut Shell<impl ShEntriesBuilder>, command: String) -> Result<()> {
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
     let (json_stream, done_receiver) =
@@ -41,7 +41,7 @@ async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
 }
 
 async fn interactive_prompt(
-    shell: &mut Shell,
+    shell: &mut Shell<impl ShEntriesBuilder>,
     sh_entries_builder: impl ShEntriesBuilder,
 ) -> Result<()> {
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
@@ -80,11 +80,9 @@ async fn run(cli: Cli) {
                     let client = connection.client().await;
                     let sh_entries_builder = StaticShEntriesBuilder::default();
                     let mut shell = Shell::new(
-                            ShEngine::new(
-                                client,
-                                sh_entries_builder.clone()
-                            )
-                        ).await?;
+                        client.clone(),
+                        Compiler::new(client, sh_entries_builder.clone())
+                    ).await?;
                     let session_result = match cli.command {
                         Some(command) => single_command(&mut shell, command).await,
                         None => interactive_prompt(&mut shell, sh_entries_builder).await,
