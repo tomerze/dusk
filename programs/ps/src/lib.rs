@@ -120,7 +120,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 .program_versions
                 .push(program_version_reply.get()?.get_result()?.to_string()?);
         }
-        ready.signal(());
+        ready.sender().send(true);
         loop {
             let signal = signal_receiver.receive().await;
             match signal {

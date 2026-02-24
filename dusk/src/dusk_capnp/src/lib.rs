@@ -7,6 +7,9 @@ extern crate alloc;
 /// The version of the `dusk_capnp` crate (read from Cargo.toml at compile time).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The git revision of the workspace at build time.
+pub const GIT_REV: &str = env!("GIT_REV");
+
 // Re-export Cap'n Proto crates for all dependent crates
 pub extern crate capnp;
 pub extern crate capnp_rpc;

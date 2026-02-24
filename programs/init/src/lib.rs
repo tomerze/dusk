@@ -93,7 +93,8 @@ impl dusk_program::process::ProcessMixin for Process {
         let port = options.get_port();
         let listener =
             async_net::TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
-        ready.signal(());
+        ready.sender().send(true);
+
         loop {
             futures::select! {
                 accept_result = listener.accept().fuse() => {

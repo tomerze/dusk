@@ -1,6 +1,3 @@
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering;
-
 use alloc::{boxed::Box, rc::Rc, string::ToString};
 use anyhow::{Context, Result};
 use dusk_capnp::capnp;
@@ -9,7 +6,7 @@ use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::channel::DynamicReceiver;
-use embassy_sync::signal::Signal;
+use embassy_sync::watch::Watch;
 use tracing::Instrument;
 
 use crate::IntoCapnp;
@@ -84,10 +81,10 @@ impl dyn Process {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
             ps_signal_channel_map.insert(self.pid(), channel.clone());
         }
-        let ready = Ready::new(Signal::new());
+        let ready = Ready::new(Watch::new_with(false));
         {
             let mut ps_ready_map = namespace.ps_ready_map.lock().await;
-            ps_ready_map.insert(self.pid(), (Rc::new(AtomicBool::new(false)), ready.clone()));
+            ps_ready_map.insert(self.pid(), ready.clone());
         }
         let result = {
             let span = tracing::info_span!(
@@ -185,20 +182,18 @@ impl process::Server for dyn Process {
                 ps_ready_map.get(&pid).cloned()
             };
             if let Some(ready) = ready {
-                // The first element is an AtomicBool that marks if the process is ready.
-                // In case the process isn't ready we `wait` on the second element which is
-                // a signal that is fired when the process is ready
-                let (first, second) = ready;
-                if !first.load(Ordering::Acquire) {
-                    second.wait().await;
-                    first.store(true, Ordering::Release);
+                let mut rcv = ready.receiver().unwrap();
+
+                while !rcv.get().await {
+                    rcv.changed().await;
                 }
+
                 let portal = <Self as ProcessMixin>::portal(&*process);
                 results.get().set_result(portal);
                 Ok(())
             } else {
                 Err(capnp::Error::failed(
-                    "process does not appear in the ready map".to_string(),
+                    "process does not appear in the ready map, likely not running".to_string(),
                 ))
             }
         })

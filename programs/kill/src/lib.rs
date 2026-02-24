@@ -90,7 +90,7 @@ impl dusk_program::process::ProcessMixin for Process {
         kill_request.get().set_signal(options.get_signal());
         kill_request.send().promise.await?;
 
-        ready.signal(());
+        ready.sender().send(true);
         loop {
             let signal = signal_receiver.receive().await;
             match signal {

@@ -133,6 +133,15 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
 }
 
 fn main() {
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("failed to execute git");
+
+    let git_hash = String::from_utf8(output.stdout).unwrap();
+
+    println!("cargo:rustc-env=GIT_REV={}", &git_hash.trim()[..16]);
+
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let capnp_root = Path::new(&out_dir).join("capnproto");
     let capnp_bin = ensure_capnp_build(&capnp_root);

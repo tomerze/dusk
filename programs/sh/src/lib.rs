@@ -81,7 +81,7 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        ready.signal(());
+        ready.sender().send(true);
         loop {
             let signal = signal_receiver.receive().await;
             match signal {
