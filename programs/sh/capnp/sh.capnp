@@ -5,8 +5,22 @@ using Dusk = import "/capnp/dusk.capnp";
 const programId :UInt64 = 0x8d0e0504ec994ea4;
 
 struct Script {
-  programArgs @0: Dusk.ProgramArgs;
-  background @1: Bool;
+  struct Statement {
+    struct Expr {
+      struct ExprPair {
+        first @0: Expr;
+        second @1: Expr;
+      }
+      union {
+        programArgs @0: Dusk.ProgramArgs;
+        and @1: ExprPair;
+        or @2: ExprPair;
+      }
+    }
+    expr @0: Expr;
+    background @1: Bool;
+  }
+  statements @0 :List(Statement);
 }
 
 struct ShOptions {}

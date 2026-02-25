@@ -11,15 +11,16 @@ use dusk_program::signal::SignalReceiver;
 pub use linkme;
 
 use anyhow::Context;
-use dusk_program::dusk_capnp::dusk_capnp::process;
-use dusk_program::dusk_capnp::pry;
-use dusk_program::stream::UndoneStream;
 
 #[cfg(feature = "client")]
 pub mod entry;
 
 #[cfg(feature = "client")]
 pub mod compiler;
+
+mod interpreter;
+
+use interpreter::Interpreter;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -61,6 +62,7 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 pub struct Process {
     #[process_context]
     pub ctx: ProcessContext,
+    pub interpreter: Interpreter,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -69,7 +71,17 @@ impl dusk_program::process::ProcessMixin for Process {
     where
         Self: Sized,
     {
-        Ok(Process { ctx })
+        let program_args = capnp::capability::FromClientHook::cast_to::<sh_capnp::sh_args::Client>(
+            ctx.clone().program_args,
+        );
+        let client = capnp_rpc::new_future_client(async move {
+            let get_request_result = program_args.get_request().send().promise.await?;
+            get_request_result.get()?.get_client()
+        });
+        Ok(Process {
+            ctx,
+            interpreter: Interpreter::new(client),
+        })
     }
     fn portal(&self) -> portal::Client {
         let client: sh_capnp::sh_portal::Client = capnp_rpc::new_client(Portal {
@@ -99,50 +111,7 @@ pub struct Portal {
     pub process: Process,
 }
 
-impl Portal {
-    async fn execute_program_args(
-        client: dusk_capnp::dusk_capnp::dusk::Client,
-        program_args: dusk_capnp::dusk_capnp::program_args::Client,
-    ) -> anyhow::Result<process::Client> {
-        let mut process_request = client.process_request();
-        process_request.get().set_program_args(program_args);
-        let process = capnp_rpc::new_future_client(async move {
-            let process_reply = process_request.send().promise.await?;
-            let process = process_reply.get()?.get_result()?;
-            let mut run_request = client.run_request();
-            run_request.get().set_process(process.clone());
-            let _run_reply = run_request.send().promise.await?;
-            Ok(process)
-        });
-
-        Ok(process)
-    }
-
-    async fn portal_and_pipe_output(
-        process: process::Client,
-        output: dusk_capnp::dusk_capnp::stream::Client,
-    ) -> anyhow::Result<()> {
-        let portal: sh_capnp::output_portal::Client = capnp_rpc::new_future_client(async move {
-            let portal_request = process.portal_request();
-            let portal_reply = portal_request.send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_capnp::output_portal::Client>())
-        });
-
-        let (undone_stream, done_receiver) = UndoneStream::new_with_done_receiver(output);
-
-        let mut output_request = portal.output_request();
-        output_request
-            .get()
-            .set_stream(capnp_rpc::new_client(undone_stream));
-        let _output_reply = output_request.send().promise.await?;
-        done_receiver.await.map_err(|e| anyhow::anyhow!("{}", e))?;
-
-        Ok(())
-    }
-}
+impl Portal {}
 
 #[dusk_program_proc::impl_portal_rpc_server]
 impl Portal {
@@ -151,52 +120,17 @@ impl Portal {
         params: sh_capnp::sh_portal::ShParams,
         _results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let script = pry!(pry!(params.get()).get_script());
-        let output = pry!(pry!(params.get()).get_output());
-
-        let args_to_execute = pry!(script.get_program_args());
-        let background = script.get_background();
-
-        let program_args = self.process.ctx.program_args.clone();
-
+        let interpreter = self.process.interpreter.clone();
         Promise::from_future(async move {
-            let program_args = capnp::capability::FromClientHook::cast_to::<
-                sh_capnp::sh_args::Client,
-            >(program_args);
-            let client = capnp_rpc::new_future_client(async move {
-                let get_request_result = program_args.get_request().send().promise.await?;
-                get_request_result.get()?.get_client()
-            });
+            let params = params.get()?;
+            let script = params.get_script()?;
+            let output = params.get_output()?;
 
-            let process = Self::execute_program_args(client.clone(), args_to_execute)
+            interpreter
+                .exec(script, output)
                 .await
-                .context("process execution failed")
+                .context("sh execution failed")
                 .into_capnp()?;
-
-            if background {
-                // Since `process` is a future client we need to somehow trigger it's creation.
-                let _pid = process.pid_request().send().promise.await?;
-                output.done_request().send().promise.await?;
-                return Ok(());
-            }
-
-            Self::portal_and_pipe_output(process.clone(), output.clone())
-                .await
-                .context("output streaming failed")
-                .into_capnp()?;
-            let pid = process
-                .pid_request()
-                .send()
-                .promise
-                .await?
-                .get()?
-                .get_result();
-            let mut kill_request = client.kill_request();
-            kill_request.get().set_pid(pid);
-            kill_request.get().set_signal(15); // SIGTERM
-            kill_request.send().promise.await?;
-            output.done_request().send().promise.await?;
-
             Ok(())
         })
     }

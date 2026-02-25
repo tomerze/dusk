@@ -33,7 +33,7 @@ impl<D: DisplayEngine> stream::Server for DisplayStream<D> {
         let value = pry!(pry!(params.get()).get_value());
         let value =
             pry!(Value::from_reader(value).map_err(|e| capnp::Error::failed(e.to_string())));
-        print!(
+        println!(
             "{}",
             pry!(
                 self.display_engine
