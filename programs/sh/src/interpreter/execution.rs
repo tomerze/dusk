@@ -1,5 +1,4 @@
 use crate::sh_capnp;
-use crate::sh_capnp::script::statement::expr;
 use capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::program_args;
@@ -8,6 +7,7 @@ use dusk_program::anyhow::{self, Result, anyhow};
 use dusk_program::prelude::dusk;
 use dusk_program::stream::UndoneStream;
 
+#[derive(Clone)]
 pub enum Mode {
     Background(),
     Output(stream::Client),
@@ -72,7 +72,7 @@ impl Execution {
         Ok(())
     }
 
-    async fn program_args(&self, program_args: program_args::Client) -> Result<()> {
+    pub async fn program_args(&self, program_args: program_args::Client) -> Result<()> {
         let process = self.execute_process(program_args).await?;
 
         if let Mode::Background() = self.mode {
@@ -97,46 +97,5 @@ impl Execution {
         kill_request.send().promise.await?;
 
         Ok(())
-    }
-
-    async fn or(&self, expr_pair: expr::expr_pair::Reader<'_>) -> Result<()> {
-        let first = expr_pair.reborrow().get_first()?;
-        let second = expr_pair.reborrow().get_second()?;
-        let result = self.exec_expr_wrapper(first).await;
-        if result.is_err() {
-            self.exec_expr_wrapper(second).await?;
-        } else {
-            result?
-        };
-        Ok(())
-    }
-    async fn and(&self, expr_pair: expr::expr_pair::Reader<'_>) -> Result<()> {
-        let first = expr_pair.reborrow().get_first()?;
-        let second = expr_pair.reborrow().get_second()?;
-        let result = self.exec_expr_wrapper(first).await;
-        if result.is_ok() {
-            self.exec_expr_wrapper(second).await?;
-        } else {
-            result?
-        };
-        Ok(())
-    }
-
-    // This apparently makes the Rust gods happy
-    async fn exec_expr_wrapper(&self, expr: expr::Reader<'_>) -> Result<()> {
-        Box::pin(async move { self.exec_expr(expr).await }).await
-    }
-
-    pub async fn exec_expr(&self, expr: expr::Reader<'_>) -> Result<()> {
-        tracing::info!("exec_expr called");
-        match (expr.reborrow().which()?, &self.mode) {
-            (expr::ProgramArgs(Ok(program_args)), _) => self.program_args(program_args).await,
-            (expr::And(_) | expr::Or(_), Mode::Background()) => Err(anyhow!(
-                "complex expressions can't run in the background, use `sh -c \"<complex expr>\" &` instead"
-            )),
-            (expr::And(Ok(expr_pair)), Mode::Output(_)) => self.and(expr_pair).await,
-            (expr::Or(Ok(expr_pair)), Mode::Output(_)) => self.or(expr_pair).await,
-            _ => Err(anyhow!("error traversing expression `{:?}", expr)),
-        }
     }
 }

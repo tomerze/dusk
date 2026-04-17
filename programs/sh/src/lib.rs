@@ -18,6 +18,9 @@ pub mod entry;
 #[cfg(feature = "client")]
 pub mod compiler;
 
+#[cfg(feature = "client")]
+mod client;
+
 mod interpreter;
 
 use interpreter::Interpreter;
