@@ -32,7 +32,7 @@ impl<S: ShEntriesBuilder> Compiler<S> {
             if entry.info.name == cmd.program {
                 let client = entry
                     .program_args_builder
-                    .build(self.client.clone(), &cmd.args.join(" "))
+                    .build(self.client.clone(), &cmd.args)
                     .context("program args builder failed")
                     .into_capnp()?;
 

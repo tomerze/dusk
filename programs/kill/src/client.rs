@@ -32,9 +32,9 @@ impl ProgramArgsBuilder for KillProgramArgsBuilder {
     fn build(
         &self,
         client: dusk::Client,
-        args: &str,
+        args: &[&str],
     ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
-        let cli = KillCli::try_parse_from(args.split_whitespace())?;
+        let cli = KillCli::try_parse_from(args)?;
         let client: kill_capnp::kill_args::Client = capnp_rpc::new_client(Args {
             client,
             pid: cli.pid,
