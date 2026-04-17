@@ -30,6 +30,13 @@ impl Interpreter {
                 Inst::Command { program_args, mode } => {
                     let exec = execution::Execution::new(self.client.clone(), mode.clone());
                     result_register = exec.program_args(program_args.clone()).await;
+                    if let Some(e) = result_register.as_ref().err() {
+                        tracing::warn!(
+                            pc = pc,
+                            error = e.to_string(),
+                            "program execution exited with error"
+                        )
+                    }
                     pc += 1;
                 }
                 Inst::JumpIfError(target) => {

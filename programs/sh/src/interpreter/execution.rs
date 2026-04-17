@@ -82,7 +82,6 @@ impl Execution {
         };
 
         self.portal_process_and_pipe_output(process.clone()).await?;
-
         let pid = process
             .pid_request()
             .send()

@@ -19,8 +19,14 @@ impl<S: ShEntriesBuilder> Shell<S> {
     async fn create_sh_process_reconnect_callback(
         client: dusk::Client,
     ) -> capnp::Result<process::Client> {
+        let mut options =
+            capnp_rpc::ImbuedMessageBuilder::new(capnp::message::HeapAllocator::new());
+        options
+            .get_root::<dusk_program_sh::sh_capnp::sh_options::Builder>()?
+            .set_server(());
         let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs>(ShArgs {
             client: client.clone(),
+            options,
         });
         let mut process_request = client.process_request();
         process_request.get().set_program_args(

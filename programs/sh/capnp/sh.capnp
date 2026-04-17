@@ -23,7 +23,13 @@ struct Script {
   statements @0 :List(Statement);
 }
 
-struct ShOptions {}
+struct ShOptions {
+  union {
+    server @0: Void;
+    script @1: Script;
+    detachedScript @2: Script;
+  }
+}
 
 interface ShArgs extends(Dusk.ProgramArgs) {
   get @0 () -> (client: Dusk.Dusk, options :ShOptions);

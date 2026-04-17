@@ -23,9 +23,31 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
         client: dusk::Client,
         args: &[&str],
     ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
-        let _cli = ShCli::try_parse_from(args)?;
-        let client: sh_capnp::sh_args::Client = capnp_rpc::new_client(ShArgs { client });
-        Ok(client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
+        let cli = ShCli::try_parse_from(args)?;
+        let mut options =
+            capnp_rpc::ImbuedMessageBuilder::new(capnp::message::HeapAllocator::new());
+        match cli.command {
+            None => {
+                options
+                    .get_root::<crate::sh_capnp::sh_options::Builder>()?
+                    .set_server(());
+            }
+            Some(cmd) => {
+                let mut compiler = crate::compiler::Compiler::new(
+                    client.clone(),
+                    crate::entry::StaticShEntriesBuilder::default(),
+                );
+                let opts = options.get_root::<crate::sh_capnp::sh_options::Builder>()?;
+                if cli.detach {
+                    compiler.compile(&cmd, opts.init_detached_script())?;
+                } else {
+                    compiler.compile(&cmd, opts.init_script())?;
+                }
+            }
+        }
+        let sh_client: sh_capnp::sh_args::Client =
+            capnp_rpc::new_client(ShArgs { client, options });
+        Ok(sh_client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
     }
 }
 

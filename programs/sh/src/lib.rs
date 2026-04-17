@@ -5,12 +5,16 @@
 extern crate alloc;
 extern crate capnp;
 
-use dusk_program::ready::Ready;
-use dusk_program::signal::SignalReceiver;
-#[cfg(feature = "client")]
-pub use linkme;
+use alloc::rc::Rc;
+use core::cell::RefCell;
 
 use anyhow::Context;
+use dusk_capnp::pry;
+use dusk_program::ready::Ready;
+use dusk_program::signal::SignalReceiver;
+use dusk_program::stream::NoopStream;
+#[cfg(feature = "client")]
+pub use linkme;
 
 #[cfg(feature = "client")]
 pub mod entry;
@@ -32,6 +36,7 @@ dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs {
     pub client: dusk::Client,
+    pub options: capnp_rpc::ImbuedMessageBuilder<capnp::message::HeapAllocator>,
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
@@ -42,8 +47,8 @@ impl ShArgs {
         mut results: sh_capnp::sh_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         results.get().set_client(self.client.clone());
-        results.get().init_options();
-
+        let opts_builder = pry!(self.options.get_root::<sh_capnp::sh_options::Builder>());
+        pry!(results.get().set_options(opts_builder.reborrow_as_reader()));
         capnp::capability::Promise::ok(())
     }
 }
@@ -61,11 +66,14 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
     }
 }
 
+type ArgsGetReply = capnp::capability::Response<sh_capnp::sh_args::get_results::Owned>;
+
 #[derive(Clone, dusk_program_proc::Process)]
 pub struct Process {
     #[process_context]
     pub ctx: ProcessContext,
-    pub interpreter: Interpreter,
+    interpreter: Rc<RefCell<Option<Interpreter>>>,
+    args_get_reply: Rc<RefCell<Option<ArgsGetReply>>>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -74,18 +82,13 @@ impl dusk_program::process::ProcessMixin for Process {
     where
         Self: Sized,
     {
-        let program_args = capnp::capability::FromClientHook::cast_to::<sh_capnp::sh_args::Client>(
-            ctx.clone().program_args,
-        );
-        let client = capnp_rpc::new_future_client(async move {
-            let get_request_result = program_args.get_request().send().promise.await?;
-            get_request_result.get()?.get_client()
-        });
         Ok(Process {
             ctx,
-            interpreter: Interpreter::new(client),
+            interpreter: Rc::new(RefCell::new(None)),
+            args_get_reply: Rc::new(RefCell::new(None)),
         })
     }
+
     fn portal(&self) -> portal::Client {
         let client: sh_capnp::sh_portal::Client = capnp_rpc::new_client(Portal {
             process: self.clone(),
@@ -98,6 +101,26 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
+        let program_args = capnp::capability::FromClientHook::cast_to::<sh_capnp::sh_args::Client>(
+            self.ctx.program_args.clone(),
+        );
+        let get_reply = program_args.get_request().send().promise.await?;
+        {
+            let reply = get_reply.get()?;
+            let client = reply.get_client()?;
+            let options = reply.get_options()?;
+
+            *self.interpreter.borrow_mut() = Some(Interpreter::new(client));
+
+            if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
+                let interpreter = self.interpreter.borrow().as_ref().unwrap().clone();
+                let noop: dusk_capnp::dusk_capnp::stream::Client =
+                    capnp_rpc::new_client(NoopStream::new());
+                interpreter.exec(script?, noop).await?;
+            }
+        }
+        *self.args_get_reply.borrow_mut() = Some(get_reply);
+
         ready.sender().send(true);
         loop {
             let signal = signal_receiver.receive().await;
@@ -114,8 +137,6 @@ pub struct Portal {
     pub process: Process,
 }
 
-impl Portal {}
-
 #[dusk_program_proc::impl_portal_rpc_server]
 impl Portal {
     fn sh(
@@ -123,17 +144,57 @@ impl Portal {
         params: sh_capnp::sh_portal::ShParams,
         _results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let interpreter = self.process.interpreter.clone();
+        let interpreter = self.process.interpreter.borrow().as_ref().unwrap().clone();
         Promise::from_future(async move {
             let params = params.get()?;
             let script = params.get_script()?;
             let output = params.get_output()?;
-
             interpreter
                 .exec(script, output)
                 .await
                 .context("sh execution failed")
                 .into_capnp()?;
+            Ok(())
+        })
+    }
+}
+
+impl sh_capnp::output_portal::Server for Portal {
+    fn output(
+        &mut self,
+        params: sh_capnp::output_portal::OutputParams,
+        mut results: sh_capnp::output_portal::OutputResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        tracing::info!("output called!");
+        pry!(results.set_pipeline());
+        let stream = pry!(pry!(params.get()).get_stream());
+        let get_reply = pry!(
+            self.process
+                .args_get_reply
+                .borrow_mut()
+                .take()
+                .ok_or_else(|| { capnp::Error::failed("args reply not available".into()) })
+        );
+        let interpreter_cell = self.process.interpreter.clone();
+        Promise::from_future(async move {
+            let reply = get_reply.get()?;
+            let options = reply.get_options()?;
+            match options.which()? {
+                sh_capnp::sh_options::Which::Script(script) => {
+                    let interpreter = interpreter_cell.borrow().as_ref().unwrap().clone();
+                    interpreter
+                        .exec(script?, stream)
+                        .await
+                        .context("script execution failed")
+                        .into_capnp()?;
+                }
+                sh_capnp::sh_options::Which::DetachedScript(_) => {
+                    stream.done_request().send().promise.await?;
+                }
+                sh_capnp::sh_options::Which::Server(()) => {
+                    return Err(capnp::Error::failed("running in server mode".into()));
+                }
+            }
             Ok(())
         })
     }
