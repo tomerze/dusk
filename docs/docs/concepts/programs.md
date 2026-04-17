@@ -64,15 +64,6 @@ impl dusk_program::launcher::Launcher for ShLauncher {
 Launchers are initialized once by the dusk impl and are used to `launch` the program into a process.
 They allow processes to communicate with each other efficiently and share the same memory.
 
-In most cases you'd want to use a basic launcher
-```rust
-basic_launcher!(
-    ShLauncher,
-    sh_capnp::PROGRAM_ID,
-    ShProcess,
-    sh_capnp::sh_args::Client
-);
-```
 
 ### Process
 
