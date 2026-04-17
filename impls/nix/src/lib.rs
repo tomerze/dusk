@@ -3,6 +3,8 @@
 
 extern crate alloc;
 
+use alloc::rc::Rc;
+use core::cell::Cell;
 use dusk_core::dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow::Result;
 use dusk_program::launcher_set;
@@ -18,10 +20,7 @@ use tracing::info_span;
 
 mod driver;
 
-async fn init(
-    namespace: alloc::rc::Rc<Namespace>,
-    init_program_args: program_args::Client,
-) -> Result<()> {
+async fn init(namespace: Rc<Namespace>, init_program_args: program_args::Client) -> Result<()> {
     let client = dusk_core::local_client(namespace.clone()).await;
     let mut process_request = client.process_request();
     process_request.get().set_program_args(init_program_args);
@@ -36,10 +35,11 @@ async fn init(
 
 #[embassy_executor::task(pool_size = 16)]
 async fn init_wrapper(
-    namespace: alloc::rc::Rc<Namespace>,
+    task_id: Rc<Cell<u32>>,
+    namespace: Rc<Namespace>,
     init_program_args: program_args::Client,
 ) {
-    let span = info_span!("init", namespace_id = namespace.id);
+    let span = info_span!("init", task_id = task_id.get(), namespace_id = namespace.id);
     if let Err(err) = init(namespace, init_program_args)
         .instrument(span.clone())
         .await
@@ -67,10 +67,13 @@ pub fn run(
     executor.run(|spawner| {
         // And so it begins
         let namespace_id = rand::random::<u64>();
-        let root = alloc::rc::Rc::new(Namespace::new(namespace_id, spawner));
+        let root = Rc::new(Namespace::new(namespace_id, spawner));
 
         driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
-        if let Err(err) = spawner.spawn(init_wrapper(root, init_program_args)) {
+        let task_id = Rc::new(Cell::new(0));
+        let spawn_token = init_wrapper(task_id.clone(), root, init_program_args);
+        task_id.set(spawn_token.id());
+        if let Err(err) = spawner.spawn(spawn_token) {
             error!("failed to spawn init task: {err:#?}")
         }
     });
