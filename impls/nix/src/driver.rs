@@ -78,6 +78,9 @@ impl Driver for NixDriver {
                     pid,
                     namespace,
                     program_args,
+                    name: Rc::new(dusk_program::embassy_sync::blocking_mutex::Mutex::new(
+                        core::cell::RefCell::new(None),
+                    )),
                 })
                 .await
         };

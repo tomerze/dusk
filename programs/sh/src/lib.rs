@@ -111,11 +111,20 @@ impl dusk_program::process::ProcessMixin for Process {
             self.ctx.program_args.clone(),
         );
         let get_reply = program_args.get_request().send().promise.await?;
-        {
-            let reply = get_reply.get()?;
-            let client = reply.get_client()?;
-            let options = reply.get_options()?;
+        let reply = get_reply.get()?;
+        let client = reply.get_client()?;
+        let options = reply.get_options()?;
 
+        let name_suffix = match options.which()? {
+            sh_capnp::sh_options::Which::DetachedScript(_) => "detached",
+            sh_capnp::sh_options::Which::Script(_) => "script",
+            sh_capnp::sh_options::Which::Server(_) => "server",
+        };
+
+        self.ctx
+            .name
+            .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
+        {
             self.state.borrow_mut().interpreter = Some(Interpreter::new(client));
 
             if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
@@ -178,7 +187,6 @@ impl sh_capnp::output_portal::Server for Portal {
         params: sh_capnp::output_portal::OutputParams,
         mut results: sh_capnp::output_portal::OutputResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        tracing::info!("output called!");
         pry!(results.set_pipeline());
         let stream = pry!(pry!(params.get()).get_stream());
         let get_reply = pry!(
@@ -206,7 +214,11 @@ impl sh_capnp::output_portal::Server for Portal {
                     stream.done_request().send().promise.await?;
                 }
                 sh_capnp::sh_options::Which::Server(()) => {
-                    return Err(capnp::Error::failed("running in server mode".into()));
+                    let mut request = stream.send_request();
+                    let value_builder = request.get().init_value();
+                    Value::Text("running in server mode".to_string())
+                        .write_to_builder(value_builder)?;
+                    request.send().await?;
                 }
             }
             Ok(())

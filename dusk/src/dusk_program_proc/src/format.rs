@@ -78,7 +78,12 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                         #program_id
                     }
                     fn name(&self) -> alloc::string::String {
-                        alloc::string::String::from(#name)
+                        let name = self.$ctx_field.name.lock(|n| n.borrow().clone());
+                        if let Some(name) = name {
+                            name
+                        } else {
+                            alloc::string::String::from(#name)
+                        }
                     }
                     fn version(&self) -> alloc::string::String {
                         alloc::string::String::from(format!("{}", #version))

@@ -35,10 +35,10 @@ interface ShArgs extends(Dusk.ProgramArgs) {
   get @0 () -> (client: Dusk.Dusk, options :ShOptions);
 }
 
-interface ShPortal extends(Dusk.Portal) {
-  sh @0 (script :Script, output :Dusk.Stream) -> ();
-}
-
 interface OutputPortal extends(Dusk.Portal) {
   output @0 (stream :Dusk.Stream) -> ();
+}
+
+interface ShPortal extends(Dusk.Portal, OutputPortal) {
+  sh @0 (script :Script, output :Dusk.Stream) -> ();
 }

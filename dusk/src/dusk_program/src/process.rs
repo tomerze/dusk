@@ -20,6 +20,12 @@ pub struct ProcessContext {
     pub pid: u64,
     pub namespace: alloc::rc::Rc<Namespace>,
     pub program_args: program_args::Client,
+    pub name: Rc<
+        embassy_sync::blocking_mutex::Mutex<
+            embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
+            core::cell::RefCell<Option<alloc::string::String>>,
+        >,
+    >,
 }
 
 // You are probably wondering how processes are run.
