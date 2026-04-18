@@ -4,6 +4,7 @@ use crate::sh_capnp::script;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
+use execution::ExecutionError;
 use inst::Inst;
 
 mod execution;
@@ -29,14 +30,14 @@ impl Interpreter {
             match &instructions[pc] {
                 Inst::Command { program_args, mode } => {
                     let exec = execution::Execution::new(self.client.clone(), mode.clone());
-                    result_register = exec.program_args(program_args.clone()).await;
-                    if let Some(e) = result_register.as_ref().err() {
-                        tracing::warn!(
-                            pc = pc,
-                            error = e.to_string(),
-                            "program execution exited with error"
-                        )
-                    }
+                    result_register = match exec.program_args(program_args.clone()).await {
+                        Ok(()) => Ok(()),
+                        Err(ExecutionError::Runtime(e)) => {
+                            tracing::error!(pc, error = %e, "runtime error during program execution");
+                            Err(e)
+                        }
+                        Err(ExecutionError::Program(e)) => Err(e),
+                    };
                     pc += 1;
                 }
                 Inst::JumpIfError(target) => {
