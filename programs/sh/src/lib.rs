@@ -68,12 +68,16 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 
 type ArgsGetReply = capnp::capability::Response<sh_capnp::sh_args::get_results::Owned>;
 
+struct State {
+    interpreter: Option<Interpreter>,
+    args_get_reply: Option<ArgsGetReply>,
+}
+
 #[derive(Clone, dusk_program_proc::Process)]
 pub struct Process {
     #[process_context]
     pub ctx: ProcessContext,
-    interpreter: Rc<RefCell<Option<Interpreter>>>,
-    args_get_reply: Rc<RefCell<Option<ArgsGetReply>>>,
+    state: Rc<RefCell<State>>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -84,8 +88,10 @@ impl dusk_program::process::ProcessMixin for Process {
     {
         Ok(Process {
             ctx,
-            interpreter: Rc::new(RefCell::new(None)),
-            args_get_reply: Rc::new(RefCell::new(None)),
+            state: Rc::new(RefCell::new(State {
+                interpreter: None,
+                args_get_reply: None,
+            })),
         })
     }
 
@@ -110,16 +116,16 @@ impl dusk_program::process::ProcessMixin for Process {
             let client = reply.get_client()?;
             let options = reply.get_options()?;
 
-            *self.interpreter.borrow_mut() = Some(Interpreter::new(client));
+            self.state.borrow_mut().interpreter = Some(Interpreter::new(client));
 
             if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
-                let interpreter = self.interpreter.borrow().as_ref().unwrap().clone();
+                let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
                 let noop: dusk_capnp::dusk_capnp::stream::Client =
                     capnp_rpc::new_client(NoopStream::new());
                 interpreter.exec(script?, noop).await?;
             }
         }
-        *self.args_get_reply.borrow_mut() = Some(get_reply);
+        self.state.borrow_mut().args_get_reply = Some(get_reply);
 
         ready.sender().send(true);
         loop {
@@ -144,7 +150,14 @@ impl Portal {
         params: sh_capnp::sh_portal::ShParams,
         _results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let interpreter = self.process.interpreter.borrow().as_ref().unwrap().clone();
+        let interpreter = self
+            .process
+            .state
+            .borrow()
+            .interpreter
+            .as_ref()
+            .unwrap()
+            .clone();
         Promise::from_future(async move {
             let params = params.get()?;
             let script = params.get_script()?;
@@ -170,18 +183,19 @@ impl sh_capnp::output_portal::Server for Portal {
         let stream = pry!(pry!(params.get()).get_stream());
         let get_reply = pry!(
             self.process
-                .args_get_reply
+                .state
                 .borrow_mut()
+                .args_get_reply
                 .take()
                 .ok_or_else(|| { capnp::Error::failed("args reply not available".into()) })
         );
-        let interpreter_cell = self.process.interpreter.clone();
+        let state_cell = self.process.state.clone();
         Promise::from_future(async move {
             let reply = get_reply.get()?;
             let options = reply.get_options()?;
             match options.which()? {
                 sh_capnp::sh_options::Which::Script(script) => {
-                    let interpreter = interpreter_cell.borrow().as_ref().unwrap().clone();
+                    let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
                     interpreter
                         .exec(script?, stream)
                         .await
