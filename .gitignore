@@ -16,3 +16,4 @@
 /**/__pycache__
 /**/dusk*.so
 /.github
+/.claude/settings.local.json
