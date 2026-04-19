@@ -28,8 +28,11 @@ impl Interpreter {
 
         while pc < instructions.len() {
             match &instructions[pc] {
-                Inst::Command { program_args, mode } => {
-                    let exec = execution::Execution::new(self.client.clone(), mode.clone());
+                Inst::Command {
+                    program_args,
+                    output,
+                } => {
+                    let exec = execution::Execution::new(self.client.clone(), output.clone());
                     result_register = match exec.program_args(program_args.clone()).await {
                         Ok(()) => Ok(()),
                         Err(ExecutionError::Runtime(e)) => {

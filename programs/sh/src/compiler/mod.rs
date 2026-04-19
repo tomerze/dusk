@@ -79,12 +79,15 @@ impl<S: ShEntriesBuilder> Compiler<S> {
     }
 
     pub fn compile(&mut self, s: &str, builder: crate::sh_capnp::script::Builder) -> Result<()> {
-        let (_, program_ast) = parse::ast(s).map_err(|_| anyhow::anyhow!("syntax error"))?;
+        let (remaining, program_ast) =
+            parse::ast(s).map_err(|_| anyhow::anyhow!("syntax error"))?;
+        if !remaining.trim().is_empty() {
+            return Err(anyhow::anyhow!("syntax error"));
+        }
 
         let mut stmts = builder.init_statements(program_ast.statements.len() as u32);
         for (i, ast_stmt) in program_ast.statements.into_iter().enumerate() {
             let mut stmt = stmts.reborrow().get(i as u32);
-            stmt.set_background(ast_stmt.background);
             self.compile_expr(&ast_stmt.expr, &mut stmt.reborrow().init_expr())?;
         }
 

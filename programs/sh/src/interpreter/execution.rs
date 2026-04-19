@@ -7,12 +7,6 @@ use dusk_program::anyhow;
 use dusk_program::prelude::dusk;
 use dusk_program::stream::UndoneStream;
 
-#[derive(Clone)]
-pub enum Mode {
-    Background(),
-    Output(stream::Client),
-}
-
 pub enum ExecutionError {
     Runtime(anyhow::Error),
     Program(anyhow::Error),
@@ -20,12 +14,12 @@ pub enum ExecutionError {
 
 pub struct Execution {
     client: dusk::Client,
-    mode: Mode,
+    output: stream::Client,
 }
 
 impl Execution {
-    pub fn new(client: dusk::Client, mode: Mode) -> Self {
-        Self { client, mode }
+    pub fn new(client: dusk::Client, output: stream::Client) -> Self {
+        Self { client, output }
     }
 
     async fn execute_process(
@@ -50,15 +44,6 @@ impl Execution {
         &self,
         process: process::Client,
     ) -> Result<(), ExecutionError> {
-        let output = match &self.mode {
-            Mode::Background() => {
-                return Err(ExecutionError::Runtime(anyhow::anyhow!(
-                    "this function should never be called for background processes"
-                )));
-            }
-            Mode::Output(output) => output,
-        };
-
         // Portal acquisition — runtime errors
         let portal_reply = process
             .portal_request()
@@ -73,7 +58,8 @@ impl Execution {
             .map_err(|e| ExecutionError::Runtime(e.into()))?
             .cast_to::<sh_capnp::output_portal::Client>();
 
-        let (undone_stream, done_receiver) = UndoneStream::new_with_done_receiver(output.clone());
+        let (undone_stream, done_receiver) =
+            UndoneStream::new_with_done_receiver(self.output.clone());
         let mut output_request = portal.output_request();
         output_request
             .get()
@@ -99,17 +85,6 @@ impl Execution {
         program_args: program_args::Client,
     ) -> Result<(), ExecutionError> {
         let process = self.execute_process(program_args).await?;
-
-        if let Mode::Background() = self.mode {
-            let _pid = process
-                .pid_request()
-                .send()
-                .promise
-                .await
-                .map_err(|e| ExecutionError::Runtime(e.into()))?;
-            return Ok(());
-        }
-
         self.portal_process_and_pipe_output(process.clone()).await?;
 
         let pid = process

@@ -8,7 +8,6 @@ pub struct Ast<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Statement<'a> {
     pub expr: Expr<'a>,
-    pub background: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

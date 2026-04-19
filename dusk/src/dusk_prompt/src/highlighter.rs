@@ -117,7 +117,7 @@ impl Highlighter for CustomHighlighter {
                         chars.next();
                         styled.push((Style::new().bold().fg(Color::Magenta), "&&".into()));
                     } else {
-                        styled.push((Style::new().bold().fg(Color::Yellow), "&".into()));
+                        styled.push((Style::new().fg(Color::White), "&".into()));
                     }
 
                     at_command_start = true;

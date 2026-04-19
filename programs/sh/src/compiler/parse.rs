@@ -2,7 +2,6 @@ use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, space0, space1};
-use nom::combinator::opt;
 use nom::multi::{fold_many0, separated_list1};
 use nom::sequence::{pair, preceded};
 use nom::{IResult, bytes::complete::is_not, sequence::delimited};
@@ -56,16 +55,7 @@ fn logical_expr(input: &str) -> IResult<&str, ast::Expr<'_>> {
 
 fn statement(input: &str) -> IResult<&str, ast::Statement<'_>> {
     let (input, expr) = logical_expr(input)?;
-
-    let (input, background) = opt(preceded(space0, tag("&"))).parse(input)?;
-
-    Ok((
-        input,
-        ast::Statement {
-            expr,
-            background: background.is_some(),
-        },
-    ))
+    Ok((input, ast::Statement { expr }))
 }
 
 pub fn ast(input: &str) -> IResult<&str, ast::Ast<'_>> {

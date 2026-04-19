@@ -18,7 +18,6 @@ struct Script {
       }
     }
     expr @0: Expr;
-    background @1: Bool;
   }
   statements @0 :List(Statement);
 }

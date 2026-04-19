@@ -4,7 +4,6 @@ use dusk_program::anyhow::{Result, anyhow};
 
 use crate::sh_capnp::script;
 
-use super::execution::Mode;
 use super::inst::Inst;
 
 pub fn lower(script: script::Reader<'_>, output: &stream::Client) -> Result<Vec<Inst>> {
@@ -12,12 +11,7 @@ pub fn lower(script: script::Reader<'_>, output: &stream::Client) -> Result<Vec<
     let statements = script.get_statements()?;
 
     for statement in statements.iter() {
-        let expr = statement.get_expr()?;
-        if statement.get_background() {
-            lower_background_expr(expr, &mut instructions)?;
-        } else {
-            lower_expr(expr, output, &mut instructions)?;
-        }
+        lower_expr(statement.get_expr()?, output, &mut instructions)?;
     }
 
     Ok(instructions)
@@ -33,7 +27,7 @@ fn lower_expr(
         Which::ProgramArgs(Ok(pa)) => {
             instructions.push(Inst::Command {
                 program_args: pa,
-                mode: Mode::Output(output.clone()),
+                output: output.clone(),
             });
             Ok(())
         }
@@ -56,24 +50,5 @@ fn lower_expr(
             Ok(())
         }
         _ => Err(anyhow!("error lowering expression")),
-    }
-}
-
-fn lower_background_expr(
-    expr: script::statement::expr::Reader<'_>,
-    instructions: &mut Vec<Inst>,
-) -> Result<()> {
-    use script::statement::expr::Which;
-    match expr.which()? {
-        Which::ProgramArgs(Ok(pa)) => {
-            instructions.push(Inst::Command {
-                program_args: pa,
-                mode: Mode::Background(),
-            });
-            Ok(())
-        }
-        _ => Err(anyhow!(
-            "complex expressions can't run in the background, use `sh -c \"<complex expr>\" &` instead"
-        )),
     }
 }
