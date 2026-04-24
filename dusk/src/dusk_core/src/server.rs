@@ -60,7 +60,7 @@ impl DuskServer {
     }
 }
 
-#[embassy_executor::task(pool_size = 8)]
+#[embassy_executor::task(pool_size = 16)]
 async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>) {
     let span = info_span!(
         "process",

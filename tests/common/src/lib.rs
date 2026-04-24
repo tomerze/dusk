@@ -1,7 +1,7 @@
 use dusk_capnp::capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
 use dusk_program_init::init_capnp::init_args;
-use std::sync::atomic::{AtomicU16, Ordering};
+use rand::Rng;
 use std::sync::{Arc, Mutex};
 use tracing::Level;
 use tracing_subscriber::Layer;
@@ -9,10 +9,9 @@ use tracing_subscriber::layer::SubscriberExt;
 
 pub const LISTEN_ADDR: &str = "127.0.0.1";
 
-static PORT_COUNTER: AtomicU16 = AtomicU16::new(19000);
-
 pub fn gen_port() -> u16 {
-    PORT_COUNTER.fetch_add(1, Ordering::Relaxed)
+    let mut rng = rand::rng();
+    rng.random_range(1001..=65535)
 }
 
 #[derive(Clone)]
@@ -63,12 +62,16 @@ impl tracing::field::Visit for MessageVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
             self.0 = format!("{:?}", value);
+        } else {
+            self.0.push_str(&format!(" {}={:?}", field.name(), value));
         }
     }
 
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "message" {
             self.0 = value.to_string();
+        } else {
+            self.0.push_str(&format!(" {}={:?}", field.name(), value));
         }
     }
 }
@@ -82,8 +85,10 @@ impl DuskNixImpl {
         let address = address.to_string();
         let log_capture = LogCapture::new();
         let log_capture_clone = log_capture.clone();
+        let address_clone = address.clone();
 
         std::thread::spawn(move || {
+            let address = address_clone;
             let subscriber = tracing_subscriber::registry().with(log_capture_clone);
             let _ = tracing::subscriber::set_global_default(subscriber);
 
@@ -101,6 +106,15 @@ impl DuskNixImpl {
                 .cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
             );
         });
+
+        // Block until the server is accepting connections.
+        let addr = format!("{}:{}", address, port);
+        for _ in 0..100 {
+            if std::net::TcpStream::connect(&addr).is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
 
         Self { log_capture }
     }
