@@ -100,11 +100,7 @@ impl Execution {
         let mut kill_request = self.client.kill_request();
         kill_request.get().set_pid(pid);
         kill_request.get().set_signal(15);
-        kill_request
-            .send()
-            .promise
-            .await
-            .map_err(|e| ExecutionError::Runtime(e.into()))?;
+        let _ = kill_request.send().promise.await;
 
         let mut waitpid_request = self.client.waitpid_request();
         waitpid_request.get().set_pid(pid);
