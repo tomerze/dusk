@@ -1,7 +1,7 @@
 use dusk_capnp::capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
 use dusk_program_init::init_capnp::init_args;
-use rand::Rng;
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use tracing::Level;
 use tracing_subscriber::Layer;
@@ -9,9 +9,10 @@ use tracing_subscriber::layer::SubscriberExt;
 
 pub const LISTEN_ADDR: &str = "127.0.0.1";
 
+static PORT_COUNTER: AtomicU16 = AtomicU16::new(19000);
+
 pub fn gen_port() -> u16 {
-    let mut rng = rand::rng();
-    rng.random_range(1001..=65535)
+    PORT_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
 #[derive(Clone)]

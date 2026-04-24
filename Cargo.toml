@@ -16,6 +16,7 @@ members = [
     "programs/init",
     "programs/ps",
     "programs/sh",
+    "tests/api",
     "tests/cli",
     "tests/common",
     "tests/py",

@@ -180,6 +180,47 @@ impl dusk::Server for DuskServer {
         })
     }
 
+    fn waitpid(
+        &mut self,
+        params: dusk::WaitpidParams,
+        mut _results: dusk::WaitpidResults,
+    ) -> Promise<(), capnp::Error> {
+        let pid = pry!(params.get()).get_pid();
+        debug!(method = "Dusk.waitpid", ?pid, "rpc call");
+
+        let namespace = self.namespace.clone();
+        Promise::from_future(async move {
+            let exit_watch = namespace.ps_exit_map.lock().await.get(&pid).cloned();
+            let Some(exit_watch) = exit_watch else {
+                return Err(capnp::Error::failed(
+                    "failed to find exit watch for process".to_string(),
+                ));
+            };
+
+            let mut receiver = exit_watch.receiver().ok_or_else(|| {
+                capnp::Error::failed("failed to acquire receiver for process exit watch, maximum amount of receivers reached".into())
+            })?;
+
+            let mut changed = false;
+            let result = loop {
+                if let Some(result) = receiver.get().await {
+                    break result;
+                }
+                if changed {
+                    return Err(capnp::Error::failed(
+                        "exit watch event fired but no result was found".to_string(),
+                    ));
+                }
+                receiver.changed().await;
+                changed = true;
+            };
+
+            namespace.ps_exit_map.lock().await.remove(&pid);
+
+            result.map_err(capnp::Error::failed)
+        })
+    }
+
     fn hostname(
         &mut self,
         _params: dusk::HostnameParams,

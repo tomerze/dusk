@@ -60,4 +60,5 @@ interface Dusk {
     ps @2 () -> (process_entries :List(ProcessEntry));
     kill @4 (pid: UInt64, signal: UInt64) -> ();
     hostname @3 () -> (result :Text);
+    waitpid @5 (pid: UInt64) -> ();
 }

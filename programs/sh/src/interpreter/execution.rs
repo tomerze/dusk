@@ -106,6 +106,14 @@ impl Execution {
             .await
             .map_err(|e| ExecutionError::Runtime(e.into()))?;
 
+        let mut waitpid_request = self.client.waitpid_request();
+        waitpid_request.get().set_pid(pid);
+        waitpid_request
+            .send()
+            .promise
+            .await
+            .map_err(|e| ExecutionError::Program(e.into()))?;
+
         Ok(())
     }
 }

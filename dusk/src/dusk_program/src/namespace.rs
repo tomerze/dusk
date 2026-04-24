@@ -20,6 +20,14 @@ pub type PsCapabilityServerSet = CapabilityServerSet<Box<dyn Process>, process::
 pub type PsMap = HashMap<u64, Box<dyn Process>, BuildNoHashHasher<u64>>;
 pub type PsSignalChannelMap = HashMap<u64, Rc<SignalChannel>, BuildNoHashHasher<u64>>;
 pub type PsReadyMap = HashMap<u64, Ready, BuildNoHashHasher<u64>>;
+pub type ExitWatch = alloc::rc::Rc<
+    embassy_sync::watch::Watch<
+        CriticalSectionRawMutex,
+        Option<Result<(), alloc::string::String>>,
+        8,
+    >,
+>;
+pub type PsExitMap = HashMap<u64, ExitWatch, BuildNoHashHasher<u64>>;
 
 /// A namespace is a container for processes and potentially other driver resources.
 ///
@@ -32,6 +40,7 @@ pub struct Namespace {
     pub ps_map: Mutex<CriticalSectionRawMutex, PsMap>,
     pub ps_signal_channel_map: Mutex<CriticalSectionRawMutex, PsSignalChannelMap>,
     pub ps_ready_map: Mutex<CriticalSectionRawMutex, PsReadyMap>,
+    pub ps_exit_map: Mutex<CriticalSectionRawMutex, PsExitMap>,
 }
 
 impl Namespace {
@@ -51,6 +60,7 @@ impl Namespace {
         let ps_signal_channel_map =
             Mutex::<CriticalSectionRawMutex, PsSignalChannelMap>::new(HashMap::default());
         let ps_ready_map = Mutex::<CriticalSectionRawMutex, PsReadyMap>::new(HashMap::default());
+        let ps_exit_map = Mutex::<CriticalSectionRawMutex, PsExitMap>::new(HashMap::default());
 
         Namespace {
             id,
@@ -59,6 +69,7 @@ impl Namespace {
             ps_map,
             ps_signal_channel_map,
             ps_ready_map,
+            ps_exit_map,
         }
     }
 }
