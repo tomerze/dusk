@@ -66,16 +66,16 @@ pub trait LauncherSetBuilder: Send + Sync {
     fn build(&self) -> Result<LauncherSet>;
 }
 
-pub struct StatelessLauncherSetBuilder {
+pub struct BasicLauncherSetBuilder {
     launcher_set: LauncherSet,
 }
 
-impl StatelessLauncherSetBuilder {
+impl BasicLauncherSetBuilder {
     pub fn new(launcher_set: LauncherSet) -> Self {
-        StatelessLauncherSetBuilder { launcher_set }
+        BasicLauncherSetBuilder { launcher_set }
     }
 }
-impl LauncherSetBuilder for StatelessLauncherSetBuilder {
+impl LauncherSetBuilder for BasicLauncherSetBuilder {
     fn build(&self) -> Result<LauncherSet> {
         Ok(self.launcher_set.clone())
     }

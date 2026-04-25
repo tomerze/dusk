@@ -2,10 +2,11 @@ use dusk_capnp::capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
 use dusk_program_init::init_capnp::init_args;
 
-fn main() {
+#[unsafe(no_mangle)]
+pub extern "C" fn dusk_node_run() {
     dusk_nix::bootstrap_logging();
     dusk_nix::run(
-        dusk_nix::StatelessLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(vec![
+        dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(vec![
             Box::new(dusk_program_init::Launcher {}),
             Box::new(dusk_program_sh::Launcher {}),
             Box::new(dusk_program_ps::Launcher {}),

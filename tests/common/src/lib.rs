@@ -93,7 +93,7 @@ impl DuskNixImpl {
             let _ = tracing::subscriber::set_global_default(subscriber);
 
             dusk_nix::run(
-                dusk_nix::StatelessLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(
+                dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(
                     vec![
                         Box::new(dusk_program_init::Launcher {}),
                         Box::new(dusk_program_sh::Launcher {}),

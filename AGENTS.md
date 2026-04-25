@@ -203,7 +203,7 @@ This means the driver is resolved at link time. `dusk_core` is `no_std` and has 
 
 ## Launcher Registration
 
-Launchers are built once per `Dusk.process` call via `LauncherSetBuilder::build()`. The `StatelessLauncherSetBuilder` clones a pre-built `LauncherSet` (cheap — the inner `Vec` is behind an `Arc`). Custom builders can produce per-call or per-namespace launcher sets if needed.
+Launchers are built once per `Dusk.process` call via `LauncherSetBuilder::build()`. The `BasicLauncherSetBuilder` clones a pre-built `LauncherSet` (cheap — the inner `Vec` is behind an `Arc`). Custom builders can produce per-call or per-namespace launcher sets if needed.
 
 The dispatch path inside `LauncherSet::launch` does one round-trip RPC back to the client to read `program_args.program_id()`, then iterates the launcher vec for a matching `program_id()`. Keep launcher vecs short; there is no indexing.
 

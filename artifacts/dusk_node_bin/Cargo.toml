@@ -1,0 +1,11 @@
+[package]
+name = "dusk_node_bin"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "dusk_node"
+path = "src/main.rs"
+
+[dependencies]
+dusk_node = { path = "../dusk_node" }

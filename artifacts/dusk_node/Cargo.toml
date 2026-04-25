@@ -1,11 +1,10 @@
 [package]
-name = "dusk_impl"
+name = "dusk_node"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "dusk_impl"
-path = "src/main.rs"
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
 dusk_nix = { path = "../../impls/nix" }

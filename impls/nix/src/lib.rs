@@ -13,9 +13,9 @@ use embassy_executor::Executor;
 use tracing::Instrument;
 use tracing::error;
 
+pub use dusk_program::launcher_set::BasicLauncherSetBuilder;
 pub use dusk_program::launcher_set::LauncherSet;
 pub use dusk_program::launcher_set::LauncherSetBuilder;
-pub use dusk_program::launcher_set::StatelessLauncherSetBuilder;
 use tracing::info_span;
 
 mod driver;
