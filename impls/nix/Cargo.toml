@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Declared for macro use, versions taken from dusk_program
-embassy-executor = { version = "*", features = ["trace", "arch-std", "log", "nightly", "executor-thread"]}
-embassy-time = "*"
+embassy-executor = { version = "0.10.0", features = ["trace", "platform-std", "log", "nightly", "executor-thread"]}
 async-trait = "*"
 
 env_logger = "0.11.8"

@@ -11,7 +11,7 @@ dusk_program_sh = { path = "../sh", public = true }
 slab = { version = "0.4", public = true }
 anyhow = { version = "1.0", public = true }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "*", public = false }
+capnp = { version = "0.21", public = false }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
 

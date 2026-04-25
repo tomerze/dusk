@@ -11,7 +11,7 @@ dusk_core = { path = "../../dusk/src/dusk_core/" }
 async-net = "2.0.0"
 futures = { version = "0.3.31", features = ["async-await"] }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "*", public = false }
+capnp = { version = "0.21", public = false }
 
 [build-dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}

@@ -38,12 +38,11 @@ impl DuskServer {
         if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
             let process = process_server.borrow().server.clone_box();
             let task_id = Rc::new(Cell::new(0));
-            let spawn_token = process_task(task_id.clone(), process);
+            let spawn_token = process_task(task_id.clone(), process)
+                .map_err(|e| capnp::Error::failed(e.to_string()))?;
             task_id.set(spawn_token.id());
-            match namespace.spawner.spawn(spawn_token) {
-                Ok(()) => Ok(()),
-                Err(e) => Err(capnp::Error::failed(e.to_string())),
-            }
+            namespace.spawner.spawn(spawn_token);
+            Ok(())
         } else {
             Err(capnp::Error::failed("Process not found".to_string()))
         }
@@ -71,7 +70,7 @@ async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>) {
         program_version = process.version(),
         namespace_id = process.namespace().id
     );
-    embassy_futures::yield_now().await;
+    dusk_program::embassy_futures::yield_now().await;
     if let Err(err) = process.bootstrap().instrument(span.clone()).await {
         span.in_scope(|| {
             error!(

@@ -92,8 +92,8 @@ impl Driver for NixDriver {
                 >,
             >
     }
-    fn now(&self) -> Result<embassy_time::Instant> {
-        Ok(embassy_time::Instant::from_micros(
+    fn now(&self) -> Result<dusk_program::embassy_time::Instant> {
+        Ok(dusk_program::embassy_time::Instant::from_micros(
             nix::time::clock_gettime(nix::time::ClockId::CLOCK_REALTIME)?
                 .num_microseconds()
                 .try_into()

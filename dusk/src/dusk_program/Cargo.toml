@@ -11,7 +11,7 @@ anyhow = { version = "1.0.99", default-features = false, public = true }
 embassy-sync = { version = "0.7.2", public = true }
 embassy-futures = { version = "0.1.2", public = true }
 embassy-time = { version = "0.5.0", public = true }
-embassy-executor = { version = "0.9.1", public = true }
+embassy-executor = { version = "0.10.0", public = true }
 async-trait = { version = "0.1.89", public = true }
 
 hashbrown = { version = "0.16", default-features = false, public = true }

@@ -108,11 +108,9 @@ impl dusk_program::process::ProcessMixin for Process {
                         self.namespace().clone(),
                         Box::pin(reader),
                         Box::pin(writer),
-                    );
+                    )?;
                     task_id.set(session_task.id());
-                    self.ctx.namespace.spawner
-                        .spawn(session_task)
-                        .map_err(|err| anyhow::anyhow!("failed to spawn session task {err:#?}"))?;
+                    self.ctx.namespace.spawner.spawn(session_task);
                 }
                 signal = signal_receiver.receive().fuse() => {
                     match signal {

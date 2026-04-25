@@ -7,7 +7,9 @@ pub use async_trait;
 pub use dusk_capnp::capnp;
 pub use dusk_capnp::capnp_rpc;
 pub use embassy_executor;
+pub use embassy_futures;
 pub use embassy_sync;
+pub use embassy_time;
 pub use futures;
 
 // Re-export commonly used types for convenience

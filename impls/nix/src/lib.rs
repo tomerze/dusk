@@ -7,9 +7,9 @@ use alloc::rc::Rc;
 use core::cell::Cell;
 use dusk_core::dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow::Result;
+use dusk_program::embassy_executor::Executor;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
-use embassy_executor::Executor;
 use tracing::Instrument;
 use tracing::error;
 
@@ -71,10 +71,12 @@ pub fn run(
 
         driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
         let task_id = Rc::new(Cell::new(0));
-        let spawn_token = init_wrapper(task_id.clone(), root, init_program_args);
-        task_id.set(spawn_token.id());
-        if let Err(err) = spawner.spawn(spawn_token) {
-            error!("failed to spawn init task: {err:#?}")
+        match init_wrapper(task_id.clone(), root, init_program_args) {
+            Ok(spawn_token) => {
+                task_id.set(spawn_token.id());
+                spawner.spawn(spawn_token);
+            }
+            Err(err) => error!("failed to create init task: {err:#?}"),
         }
     });
 

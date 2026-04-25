@@ -5,11 +5,9 @@ edition = "2024"
 
 [dependencies]
 
-# Declared for macro use, versions taken from dusk_program
+# Declared for macro use, version pinned to match dusk_program
+embassy-executor = "0.10.0"
 async-trait = "*"
-embassy-executor = "*"
-embassy-futures = "*"
-embassy-time = "*"
 
 tracing = { version = "0.1.41", default-features = false }
 futures-io = { version = "0.3.31", default-features = false, public = true }

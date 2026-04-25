@@ -12,7 +12,7 @@ dusk_core = { path = "../../dusk/src/dusk_core/", public = true }
 slab = { version = "0.4.11", public = true }
 linkme = { version = "0.3", optional = true, public = true }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "*", public = false }
+capnp = { version = "0.21", public = false }
 nom = { version = "8.0.0", optional = true, public = true }
 clap = { version = "4", features = ["derive"], optional = true }
 
