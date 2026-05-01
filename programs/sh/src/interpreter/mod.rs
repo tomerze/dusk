@@ -21,7 +21,12 @@ impl Interpreter {
         Interpreter { client }
     }
 
-    pub async fn exec(&self, script: script::Reader<'_>, output: stream::Client) -> Result<()> {
+    pub async fn exec(
+        &self,
+        script: script::Reader<'_>,
+        output: stream::Client,
+        detached: bool,
+    ) -> Result<()> {
         let instructions = lower::lower(script, &output)?;
         let mut pc = 0;
         let mut result_register: Result<()> = Ok(());
@@ -32,7 +37,8 @@ impl Interpreter {
                     program_args,
                     output,
                 } => {
-                    let exec = execution::Execution::new(self.client.clone(), output.clone());
+                    let exec =
+                        execution::Execution::new(self.client.clone(), output.clone(), detached);
                     result_register = match exec.program_args(program_args.clone()).await {
                         Ok(()) => Ok(()),
                         Err(ExecutionError::Runtime(e)) => {

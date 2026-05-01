@@ -109,7 +109,7 @@ impl DuskNixImpl {
 
         // Block until the server is accepting connections.
         let addr = format!("{}:{}", address, port);
-        for _ in 0..100 {
+        loop {
             if std::net::TcpStream::connect(&addr).is_ok() {
                 break;
             }

@@ -15,11 +15,16 @@ pub enum ExecutionError {
 pub struct Execution {
     client: dusk::Client,
     output: stream::Client,
+    detached: bool,
 }
 
 impl Execution {
-    pub fn new(client: dusk::Client, output: stream::Client) -> Self {
-        Self { client, output }
+    pub fn new(client: dusk::Client, output: stream::Client, detached: bool) -> Self {
+        Self {
+            client,
+            output,
+            detached,
+        }
     }
 
     async fn execute_process(
@@ -43,7 +48,7 @@ impl Execution {
     async fn portal_process_and_pipe_output(
         &self,
         process: process::Client,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<bool, ExecutionError> {
         // Portal acquisition — runtime errors
         let portal_reply = process
             .portal_request()
@@ -72,12 +77,8 @@ impl Execution {
             .await
             .map_err(|e| ExecutionError::Program(e.into()))?;
 
-        // Done signaling — runtime (protocol invariant)
-        done_receiver
-            .await
-            .map_err(|e| ExecutionError::Runtime(anyhow::anyhow!("{}", e)))?;
-
-        Ok(())
+        // Done signaling — sender drop is acceptable.
+        Ok(done_receiver.await.is_ok())
     }
 
     pub async fn program_args(
@@ -85,7 +86,11 @@ impl Execution {
         program_args: program_args::Client,
     ) -> Result<(), ExecutionError> {
         let process = self.execute_process(program_args).await?;
-        self.portal_process_and_pipe_output(process.clone()).await?;
+        let done = self.portal_process_and_pipe_output(process.clone()).await?;
+
+        if !done && self.detached {
+            return Ok(());
+        }
 
         let pid = process
             .pid_request()

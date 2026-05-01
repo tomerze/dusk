@@ -131,7 +131,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
                 let noop: dusk_capnp::dusk_capnp::stream::Client =
                     capnp_rpc::new_client(NoopStream::new());
-                interpreter.exec(script?, noop).await?;
+                interpreter.exec(script?, noop, true).await?;
             }
         }
         self.state.borrow_mut().args_get_reply = Some(get_reply);
@@ -172,7 +172,7 @@ impl Portal {
             let script = params.get_script()?;
             let output = params.get_output()?;
             interpreter
-                .exec(script, output)
+                .exec(script, output, false)
                 .await
                 .context("sh execution failed")
                 .into_capnp()?;
@@ -205,7 +205,7 @@ impl sh_capnp::output_portal::Server for Portal {
                 sh_capnp::sh_options::Which::Script(script) => {
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
                     interpreter
-                        .exec(script?, stream)
+                        .exec(script?, stream, false)
                         .await
                         .context("script execution failed")
                         .into_capnp()?;
