@@ -10,6 +10,7 @@ dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core = { path = "../../dusk/src/dusk_core/", public = true }
 slab = { version = "0.4.11", public = true }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher"] }
 linkme = { version = "0.3", optional = true, public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "0.21", public = false }

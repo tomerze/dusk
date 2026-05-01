@@ -15,9 +15,18 @@ struct Script {
         programArgs @0: Dusk.ProgramArgs;
         and @1: ExprPair;
         or @2: ExprPair;
+        call @3: Text;
+        tailCall @4: Text;
       }
     }
-    expr @0: Expr;
+    struct FunctionDefinition {
+      name @0: Text;
+      body @1: Script;
+    }
+    union {
+      expr @0: Expr;
+      functionDefinition @1: FunctionDefinition;
+    }
   }
   statements @0 :List(Statement);
 }

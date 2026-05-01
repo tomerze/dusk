@@ -1,10 +1,11 @@
+use nom::IResult;
 use nom::Parser;
 use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::{char, space0, space1};
+use nom::bytes::complete::{is_not, tag, take_while1};
+use nom::character::complete::{char, multispace0, space0, space1};
+use nom::combinator::recognize;
 use nom::multi::{fold_many0, separated_list1};
-use nom::sequence::{pair, preceded};
-use nom::{IResult, bytes::complete::is_not, sequence::delimited};
+use nom::sequence::{delimited, pair, preceded};
 
 use super::ast;
 
@@ -17,11 +18,15 @@ fn quoted_double(input: &str) -> IResult<&str, &str> {
 }
 
 fn bare_word(input: &str) -> IResult<&str, &str> {
-    is_not(" \t\r\n;&|").parse(input)
+    is_not(" \t\r\n;&|(){}").parse(input)
 }
 
 fn word(input: &str) -> IResult<&str, &str> {
     alt((quoted_single, quoted_double, bare_word)).parse(input)
+}
+
+fn identifier(input: &str) -> IResult<&str, &str> {
+    recognize(take_while1(|c: char| c.is_alphanumeric() || c == '_')).parse(input)
 }
 
 fn command_expr(input: &str) -> IResult<&str, ast::Expr<'_>> {
@@ -53,14 +58,35 @@ fn logical_expr(input: &str) -> IResult<&str, ast::Expr<'_>> {
     .parse(input)
 }
 
+fn function_definition(input: &str) -> IResult<&str, ast::Statement<'_>> {
+    let (input, name) = identifier(input)?;
+    let (input, _) = preceded(space0, tag("()")).parse(input)?;
+    let (input, _) = preceded(multispace0, char('{')).parse(input)?;
+    let (input, body) = preceded(multispace0, ast).parse(input)?;
+    let (input, _) = preceded(multispace0, char('}')).parse(input)?;
+    Ok((input, ast::Statement::FunctionDefinition { name, body }))
+}
+
 fn statement(input: &str) -> IResult<&str, ast::Statement<'_>> {
-    let (input, expr) = logical_expr(input)?;
-    Ok((input, ast::Statement { expr }))
+    alt((function_definition, logical_expr.map(ast::Statement::Expr))).parse(input)
+}
+
+fn statement_separator(input: &str) -> IResult<&str, ()> {
+    let (input, _) = preceded(
+        space0,
+        take_while1(|c: char| c == ';' || c == '\n' || c == '\r'),
+    )
+    .parse(input)?;
+    Ok((input, ()))
 }
 
 pub fn ast(input: &str) -> IResult<&str, ast::Ast<'_>> {
+    let (input, _) = multispace0(input)?;
     let (input, statements) =
-        separated_list1(preceded(space0, tag(";")), preceded(space0, statement)).parse(input)?;
+        separated_list1(statement_separator, preceded(multispace0, statement)).parse(input)?;
+    let (input, _) = multispace0(input)?;
+    let (input, _) = nom::combinator::opt(statement_separator).parse(input)?;
+    let (input, _) = multispace0(input)?;
 
     Ok((input, ast::Ast { statements }))
 }
