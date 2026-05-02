@@ -6,17 +6,17 @@ use dusk_capnp::dusk_capnp::program_args;
 
 pub type Frame = Vec<Inst>;
 
-pub struct ScriptMessage(pub capnp::message::Builder<capnp::message::HeapAllocator>);
+pub struct ScriptWrapper(pub capnp::message::Builder<capnp::message::HeapAllocator>);
 // Safety: HeapAllocator owns its segments via Vec; the internal pointers point into
 // that owned heap data, which stays valid across thread moves.
-unsafe impl Send for ScriptMessage {}
-unsafe impl Sync for ScriptMessage {}
+unsafe impl Send for ScriptWrapper {}
+unsafe impl Sync for ScriptWrapper {}
 
 pub enum Inst {
     ProgramArgs(program_args::Client),
     Call(String),
     TailCall(String),
-    DefineFunction { symbol: String, body: Arc<ScriptMessage> },
+    DefineFunction { symbol: String, body: Arc<ScriptWrapper> },
     JumpIfOk(usize),
     JumpIfError(usize),
 }

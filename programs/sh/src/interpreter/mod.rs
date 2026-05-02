@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use alloc::string::String;
 use core::future::Future;
 use core::pin::Pin;
-use dusk_program::anyhow::{Result, anyhow};
+use dusk_program::anyhow::Result;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::mutex::Mutex;
 use hashbrown::{HashMap, HashSet};
@@ -13,14 +13,14 @@ use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
 use execution::ExecutionError;
-use inst::{Frame, Inst, ScriptMessage};
+use inst::{Frame, Inst, ScriptWrapper};
 
 mod compiler;
 mod execution;
 mod inst;
 
-pub type FunctionTable =
-    Arc<Mutex<CriticalSectionRawMutex, HashMap<String, Arc<ScriptMessage>>>>;
+pub(crate) type FunctionTable =
+    Arc<Mutex<CriticalSectionRawMutex, HashMap<String, Arc<ScriptWrapper>>>>;
 
 #[derive(Clone)]
 pub struct Interpreter {
@@ -30,7 +30,7 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(
+    pub(crate) fn new(
         client: dusk::Client,
         sh_args: sh_capnp::sh_args::Client,
         function_table: FunctionTable,
@@ -53,27 +53,12 @@ impl Interpreter {
         let frame = compiler::compile(script, self.sh_args.clone(), symbols).await?;
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
-            "frame disassembly"
+            "script frame disassembly"
         );
         let frame = Arc::new(frame);
         let _ = self.exec_inner(frame, output.clone(), detached).await;
         output.done_request().send().promise.await?;
         Ok(())
-    }
-
-    async fn compile_function(&self, symbol: &str) -> Result<Arc<Frame>> {
-        let body = self
-            .function_table
-            .lock()
-            .await
-            .get(symbol)
-            .cloned()
-            .ok_or_else(|| anyhow!("unknown function: {}", symbol))?;
-        let symbols: HashSet<String> =
-            self.function_table.lock().await.keys().cloned().collect();
-        let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
-        let frame = compiler::compile(script, self.sh_args.clone(), symbols).await?;
-        Ok(Arc::new(frame))
     }
 
     fn exec_inner<'a>(
@@ -110,7 +95,7 @@ impl Interpreter {
                     }
                     Inst::Call(symbol) => {
                         let symbol = symbol.clone();
-                        match self.compile_function(&symbol).await {
+                        match compiler::compile_function(&self.function_table, self.sh_args.clone(), &symbol).await {
                             Ok(frame) => {
                                 result_register =
                                     self.exec_inner(frame, output.clone(), detached).await;
@@ -121,7 +106,7 @@ impl Interpreter {
                     }
                     Inst::TailCall(symbol) => {
                         let symbol = symbol.clone();
-                        match self.compile_function(&symbol).await {
+                        match compiler::compile_function(&self.function_table, self.sh_args.clone(), &symbol).await {
                             Ok(frame) => {
                                 current_frame = frame;
                                 pc = 0;

@@ -8,9 +8,10 @@ use hashbrown::HashSet;
 use crate::sh_capnp;
 use crate::sh_capnp::script;
 
-use super::inst::{Frame, Inst, ScriptMessage};
+use super::FunctionTable;
+use super::inst::{self, Frame, Inst, ScriptWrapper};
 
-pub async fn compile(
+pub(super) async fn compile(
     script: script::Reader<'_>,
     sh_args: sh_capnp::sh_args::Client,
     mut functions: HashSet<String>,
@@ -19,6 +20,28 @@ pub async fn compile(
     compile_script(script, &sh_args, &mut functions, &mut output_frame).await?;
     optimize_tail_call(&mut output_frame);
     Ok(output_frame)
+}
+
+pub(super) async fn compile_function(
+    function_table: &FunctionTable,
+    sh_args: sh_capnp::sh_args::Client,
+    symbol: &str,
+) -> Result<Arc<Frame>> {
+    let body = function_table
+        .lock()
+        .await
+        .get(symbol)
+        .cloned()
+        .ok_or_else(|| anyhow!("unknown function: {}", symbol))?;
+    let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
+    let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
+    let frame = compile(script, sh_args, symbols).await?;
+        tracing::debug!(
+            dump = %inst::format_instructions(&frame),
+            symbol = symbol,
+            "function frame disassembly"
+        );
+    Ok(Arc::new(frame))
 }
 
 fn optimize_tail_call(frame: &mut Frame) {
@@ -62,7 +85,7 @@ async fn compile_statement<'a>(
             message.set_root(def.get_body()?)?;
             output_frame.push(Inst::DefineFunction {
                 symbol,
-                body: Arc::new(ScriptMessage(message)),
+                body: Arc::new(ScriptWrapper(message)),
             });
             Ok(())
         }

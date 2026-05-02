@@ -62,3 +62,4 @@ nav:
   - Development: development.md
   - Concepts:
       - Programs: concepts/programs.md
+      - Shell: concepts/shell.md
