@@ -4,7 +4,7 @@ use nom::branch::alt;
 use nom::bytes::complete::{is_not, tag, take_while1};
 use nom::character::complete::{char, multispace0, space0, space1};
 use nom::combinator::recognize;
-use nom::multi::{fold_many0, separated_list1};
+use nom::multi::{fold_many0, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded};
 
 use super::ast;
@@ -83,10 +83,71 @@ fn statement_separator(input: &str) -> IResult<&str, ()> {
 pub fn ast(input: &str) -> IResult<&str, ast::Ast<'_>> {
     let (input, _) = multispace0(input)?;
     let (input, statements) =
-        separated_list1(statement_separator, preceded(multispace0, statement)).parse(input)?;
+        separated_list0(statement_separator, preceded(multispace0, statement)).parse(input)?;
     let (input, _) = multispace0(input)?;
     let (input, _) = nom::combinator::opt(statement_separator).parse(input)?;
     let (input, _) = multispace0(input)?;
 
     Ok((input, ast::Ast { statements }))
+}
+
+/// Strip `//` line comments and `/* ... */` block comments from `input`.
+/// Quoted strings (`'...'`, `"..."`) are preserved verbatim. Block comments
+/// are replaced by a single space so `foo/*x*/bar` becomes `foo bar`, not
+/// `foobar`.
+pub fn strip_comments(input: &str) -> std::string::String {
+    let mut out = std::string::String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_single = false;
+    let mut in_double = false;
+    while let Some(c) = chars.next() {
+        if in_single {
+            out.push(c);
+            if c == '\'' {
+                in_single = false;
+            }
+            continue;
+        }
+        if in_double {
+            out.push(c);
+            if c == '"' {
+                in_double = false;
+            }
+            continue;
+        }
+        match c {
+            '\'' => {
+                in_single = true;
+                out.push(c);
+            }
+            '"' => {
+                in_double = true;
+                out.push(c);
+            }
+            '/' if chars.peek() == Some(&'/') => {
+                // Line comment — drop everything up to (but not including) `\n`.
+                while let Some(&n) = chars.peek() {
+                    if n == '\n' {
+                        break;
+                    }
+                    chars.next();
+                }
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                // Block comment — drop through the matching `*/`. Substitute a
+                // single space so adjoining tokens don't merge.
+                chars.next();
+                let mut prev = '\0';
+                for n in chars.by_ref() {
+                    if prev == '*' && n == '/' {
+                        break;
+                    }
+                    prev = n;
+                }
+                out.push(' ');
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }

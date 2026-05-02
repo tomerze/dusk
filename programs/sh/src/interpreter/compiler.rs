@@ -8,7 +8,7 @@ use hashbrown::HashSet;
 use crate::sh_capnp;
 use crate::sh_capnp::script;
 
-use super::FunctionTable;
+use super::{CompiledFunctions, FunctionTable};
 use super::inst::{self, Frame, Inst, ScriptWrapper};
 
 pub(super) async fn compile(
@@ -22,26 +22,62 @@ pub(super) async fn compile(
     Ok(output_frame)
 }
 
-pub(super) async fn compile_function(
-    function_table: &FunctionTable,
+pub(super) fn compile_function<'a>(
+    function_table: &'a FunctionTable,
+    compiled_functions: &'a CompiledFunctions,
     sh_args: sh_capnp::sh_args::Client,
-    symbol: &str,
-) -> Result<Arc<Frame>> {
-    let body = function_table
-        .lock()
-        .await
-        .get(symbol)
-        .cloned()
-        .ok_or_else(|| anyhow!("unknown function: {}", symbol))?;
-    let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
-    let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
-    let frame = compile(script, sh_args, symbols).await?;
+    symbol: &'a str,
+) -> Pin<Box<dyn Future<Output = Result<Arc<Frame>>> + 'a>> {
+    Box::pin(async move {
+        if let Some(frame) = compiled_functions.borrow().get(symbol).cloned() {
+            return Ok(frame);
+        }
+        let body = function_table
+            .lock()
+            .await
+            .get(symbol)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown function: {}", symbol))?;
+        // Empty placeholder so recursive calls back to `symbol` short-circuit.
+        compiled_functions
+            .borrow_mut()
+            .insert(symbol.to_string(), Arc::new(Frame::new()));
+
+        let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
+        let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
+        let frame = match compile(script, sh_args.clone(), symbols).await {
+            Ok(f) => f,
+            Err(e) => {
+                compiled_functions.borrow_mut().remove(symbol);
+                return Err(e);
+            }
+        };
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
             symbol = symbol,
             "function frame disassembly"
         );
-    Ok(Arc::new(frame))
+
+        // Eagerly compile every function this body calls.
+        let dep_symbols: alloc::vec::Vec<String> = frame
+            .iter()
+            .filter_map(|i| match i {
+                Inst::Call(s) | Inst::TailCall(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        for dep in dep_symbols {
+            // Ignore errors / missing bodies — runtime resolve will surface them.
+            let _ = compile_function(function_table, compiled_functions, sh_args.clone(), &dep)
+                .await;
+        }
+
+        let frame = Arc::new(frame);
+        compiled_functions
+            .borrow_mut()
+            .insert(symbol.to_string(), frame.clone());
+        Ok(frame)
+    })
 }
 
 fn optimize_tail_call(frame: &mut Frame) {

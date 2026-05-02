@@ -32,6 +32,14 @@ greet
 
 Functions persist for the lifetime of the `sh` process: once you define a function, you can call it from any subsequent command in the same shell session. Definitions accumulate; redefining a name replaces the previous definition.
 
+To remove a function, redefine it with an empty body:
+
+```sh
+greet() {}                  # undefine greet
+```
+
+After this, `greet` resolves to a regular program lookup again (and fails if no such program exists).
+
 Each call to a function re-evaluates its body in the current shell session. This means the function body is resolved against the **current** set of available programs and the current session — not whatever state existed when the function was defined. As a practical consequence:
 
 - A function body can reference other functions defined later, as long as those functions exist by the time the call actually fires.
@@ -48,3 +56,9 @@ ps && kill 1 || kill 2      # left-to-right; same as ((ps && kill 1) || kill 2)
 ```
 
 Statement separators (`;`, newline) do not short-circuit — every statement runs regardless of the previous one's outcome.
+
+## Detached scripts
+
+`sh -d <command>` runs `<command>` as a fire-and-forget background script. Output is discarded and the resulting `sh` process **daemonizes** — it keeps running after the script finishes and is only torn down when something explicitly kills it. Use this when you want a command sequence to outlive the caller.
+
+See [Daemonization](programs.md#daemonization) for how a process opts into this behaviour.

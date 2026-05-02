@@ -95,3 +95,41 @@ the portal capability based on the program id of the process.
 The `#!capnp Dusk.Portal` interface defines method to obtain an input stream and provide and output stream to the portal.
 Over these streams you can send `Dusk.Value`s which allow you to send arbitrary structured but schemaless data.
 This is effectively the `stdin` and `stdout` of your portal.
+
+## Daemonization
+
+A process is "daemonized" when its parent (typically a shell running it as a command)
+relinquishes the ability to clean it up automatically. After daemonization the process
+keeps running and is only torn down when something explicitly sends it `Dusk.kill`.
+
+The signal for daemonization is **the absence of a `done` call on the output stream**:
+
+* When the parent calls `output.output(stream)` it expects the process to either:
+    1. Drive the stream to completion and call `stream.done()` on it (the stream is
+       wrapped server-side, so calling `done` does **not** propagate to the parent's
+       stream — it only tells the parent "I'm finished, you can clean me up"). The
+       parent then sends `Dusk.kill` and `Dusk.waitpid` to tear the process down.
+    2. Return from the `output` handler **without** calling `stream.done()`. The
+       parent treats this as "the process intends to keep running" and skips the
+       kill / waitpid step entirely. The process is now a daemon.
+
+The wrapping detail matters: the parent installs an `UndoneStream` between itself and
+the child so that `done` is intercepted as a "you can clean me up" signal rather than
+ending the parent's view of its own stream. This is what lets a long-running daemon
+go through the same `output` handshake as a short-lived command.
+
+A few consequences:
+
+* Daemonization is a per-call decision, not a per-process mode. The same `Process`
+  type can serve a one-shot call and a daemon call from different `output`
+  invocations — it's purely a function of whether the handler chose to ack `done`.
+* From the shell's perspective a daemonized command always reports success: the
+  command's `Inst::ProgramArgs` returns `Ok` once `output` returns, regardless of
+  whether `done` was called.
+* Because there is no kill, **the daemon is responsible for its own teardown**.
+  It has to either exit on its own (`Signal::Terminate` from a deliberate
+  `Dusk.kill` from somewhere else) or run forever.
+
+The shell's `sh -d <command>` is the canonical example: it runs its argument
+through a discard sink at process startup, then deliberately omits the `done` ack
+in `output` so the resulting `sh` process daemonizes.

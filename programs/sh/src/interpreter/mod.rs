@@ -1,5 +1,7 @@
+use alloc::rc::Rc;
 use alloc::sync::Arc;
 use alloc::string::String;
+use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
 use dusk_program::anyhow::Result;
@@ -22,11 +24,14 @@ mod inst;
 pub(crate) type FunctionTable =
     Arc<Mutex<CriticalSectionRawMutex, HashMap<String, Arc<ScriptWrapper>>>>;
 
+pub(crate) type CompiledFunctions = Rc<RefCell<HashMap<String, Arc<Frame>>>>;
+
 #[derive(Clone)]
 pub struct Interpreter {
     client: dusk::Client,
     sh_args: sh_capnp::sh_args::Client,
     function_table: FunctionTable,
+    compiled_functions: CompiledFunctions,
 }
 
 impl Interpreter {
@@ -39,14 +44,27 @@ impl Interpreter {
             client,
             sh_args,
             function_table,
+            compiled_functions: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    async fn resolve_function(&self, symbol: &str) -> Result<Arc<Frame>> {
+        if let Some(frame) = self.compiled_functions.borrow().get(symbol).cloned() {
+            return Ok(frame);
+        }
+        compiler::compile_function(
+            &self.function_table,
+            &self.compiled_functions,
+            self.sh_args.clone(),
+            symbol,
+        )
+        .await
     }
 
     pub async fn exec(
         &self,
         script: script::Reader<'_>,
         output: stream::Client,
-        detached: bool,
     ) -> Result<()> {
         let symbols: HashSet<String> =
             self.function_table.lock().await.keys().cloned().collect();
@@ -56,7 +74,7 @@ impl Interpreter {
             "script frame disassembly"
         );
         let frame = Arc::new(frame);
-        let _ = self.exec_inner(frame, output.clone(), detached).await;
+        let _ = self.exec_inner(frame, output.clone()).await;
         output.done_request().send().promise.await?;
         Ok(())
     }
@@ -65,11 +83,10 @@ impl Interpreter {
         &'a self,
         frame: Arc<Frame>,
         output: stream::Client,
-        detached: bool,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
         Box::pin(async move {
             let mut current_frame = frame;
-            let mut pc = 0usize; // Program counter, at the current frame
+            let mut pc = 0usize;
             let mut result_register: Result<()> = Ok(());
 
             loop {
@@ -82,7 +99,6 @@ impl Interpreter {
                         let exec = execution::Execution::new(
                             self.client.clone(),
                             output.clone(),
-                            detached,
                         );
                         result_register = match exec.program_args(program_args.clone()).await {
                             Ok(()) => Ok(()),
@@ -96,10 +112,10 @@ impl Interpreter {
                     }
                     Inst::Call(symbol) => {
                         let symbol = symbol.clone();
-                        match compiler::compile_function(&self.function_table, self.sh_args.clone(), &symbol).await {
+                        match self.resolve_function(&symbol).await {
                             Ok(frame) => {
                                 result_register =
-                                    self.exec_inner(frame, output.clone(), detached).await;
+                                    self.exec_inner(frame, output.clone()).await;
                             }
                             Err(e) => result_register = Err(e),
                         }
@@ -107,7 +123,7 @@ impl Interpreter {
                     }
                     Inst::TailCall(symbol) => {
                         let symbol = symbol.clone();
-                        match compiler::compile_function(&self.function_table, self.sh_args.clone(), &symbol).await {
+                        match self.resolve_function(&symbol).await {
                             Ok(frame) => {
                                 current_frame = frame;
                                 pc = 0;
@@ -119,10 +135,35 @@ impl Interpreter {
                         }
                     }
                     Inst::DefineFunction { symbol, body } => {
-                        self.function_table
-                            .lock()
+                        let symbol = symbol.clone();
+                        let body = body.clone();
+                        let is_empty = body
+                            .0
+                            .get_root_as_reader::<script::Reader<'_>>()?
+                            .get_statements()?
+                            .is_empty();
+                        if is_empty {
+                            self.function_table.lock().await.remove(&symbol);
+                            self.compiled_functions.borrow_mut().remove(&symbol);
+                        } else {
+                            self.function_table
+                                .lock()
+                                .await
+                                .insert(symbol.clone(), body);
+                            // Drop any stale compiled frame so compile_function
+                            // recompiles against the new body.
+                            self.compiled_functions.borrow_mut().remove(&symbol);
+                            if let Err(e) = compiler::compile_function(
+                                &self.function_table,
+                                &self.compiled_functions,
+                                self.sh_args.clone(),
+                                &symbol,
+                            )
                             .await
-                            .insert(symbol.clone(), body.clone());
+                            {
+                                tracing::error!(error = %e, "function compilation failed");
+                            }
+                        }
                         result_register = Ok(());
                         pc += 1;
                     }

@@ -15,16 +15,11 @@ pub enum ExecutionError {
 pub struct Execution {
     client: dusk::Client,
     output: stream::Client,
-    detached: bool,
 }
 
 impl Execution {
-    pub fn new(client: dusk::Client, output: stream::Client, detached: bool) -> Self {
-        Self {
-            client,
-            output,
-            detached,
-        }
+    pub fn new(client: dusk::Client, output: stream::Client) -> Self {
+        Self { client, output }
     }
 
     async fn execute_process(
@@ -88,7 +83,9 @@ impl Execution {
         let process = self.execute_process(program_args).await?;
         let done = self.portal_process_and_pipe_output(process.clone()).await?;
 
-        if !done && self.detached {
+        // No done signal → the process daemonized itself by returning from
+        // `output` without acking. Leave it running and report success.
+        if !done {
             return Ok(());
         }
 

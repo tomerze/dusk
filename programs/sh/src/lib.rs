@@ -215,7 +215,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
                 let noop: dusk_capnp::dusk_capnp::stream::Client =
                     capnp_rpc::new_client(NoopStream::new());
-                interpreter.exec(script?, noop, true).await?;
+                interpreter.exec(script?, noop).await?;
             }
         }
         self.state.borrow_mut().args_get_reply = Some(get_reply);
@@ -256,10 +256,27 @@ impl Portal {
             let script = params.get_script()?;
             let output = params.get_output()?;
             interpreter
-                .exec(script, output, false)
+                .exec(script, output)
                 .await
                 .context("sh execution failed")
                 .into_capnp()?;
+            Ok(())
+        })
+    }
+
+    fn functions(
+        &mut self,
+        _params: sh_capnp::sh_portal::FunctionsParams,
+        mut results: sh_capnp::sh_portal::FunctionsResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let function_table = self.process.function_table.clone();
+        Promise::from_future(async move {
+            let symbols: alloc::vec::Vec<alloc::string::String> =
+                function_table.lock().await.keys().cloned().collect();
+            let mut list = results.get().init_symbols(symbols.len() as u32);
+            for (i, name) in symbols.iter().enumerate() {
+                list.set(i as u32, name.as_str());
+            }
             Ok(())
         })
     }
@@ -289,13 +306,17 @@ impl sh_capnp::output_portal::Server for Portal {
                 sh_capnp::sh_options::Which::Script(script) => {
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
                     interpreter
-                        .exec(script?, stream, false)
+                        .exec(script?, stream)
                         .await
                         .context("script execution failed")
                         .into_capnp()?;
                 }
                 sh_capnp::sh_options::Which::DetachedScript(_) => {
-                    stream.done_request().send().promise.await?;
+                    // The script has already been executed in `main` against a
+                    // discard sink. Daemonize by returning without calling
+                    // `done` on the caller's stream — the caller treats a
+                    // missing `done` as "the process intends to keep running"
+                    // and skips the kill.
                 }
                 sh_capnp::sh_options::Which::Server(()) => {
                     let mut request = stream.send_request();

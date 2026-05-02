@@ -107,6 +107,25 @@ impl Shell {
         Ok(())
     }
 
+    /// Returns the names of functions currently defined in the sh process.
+    pub async fn functions(&self) -> Result<Vec<String>> {
+        let sh_process = self.sh_process.clone();
+        let sh_portal = capnp_rpc::new_future_client(async move {
+            let portal_reply = sh_process.portal_request().send().promise.await?;
+            Ok(portal_reply
+                .get()?
+                .get_result()?
+                .cast_to::<sh_portal::Client>())
+        });
+        let reply = sh_portal.functions_request().send().promise.await?;
+        let symbols = reply.get()?.get_symbols()?;
+        let mut out = Vec::with_capacity(symbols.len() as usize);
+        for symbol in symbols.iter() {
+            out.push(symbol?.to_str()?.to_string());
+        }
+        Ok(out)
+    }
+
     /// Kill the shell process, must be called to clean up resources.
     /// Isn't in Drop to allow async cleanup.
     pub async fn kill(self) -> Result<()> {

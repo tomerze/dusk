@@ -4,7 +4,7 @@ use dusk_program::anyhow;
 mod ast;
 mod tokenize;
 
-pub use tokenize::command_words;
+pub use tokenize::{command_words, strip_comments};
 
 #[derive(Clone, Default)]
 pub struct Parser;
@@ -82,8 +82,9 @@ impl Parser {
     }
 
     pub fn parse(&mut self, s: &str, builder: crate::sh_capnp::script::Builder) -> Result<()> {
+        let stripped = tokenize::strip_comments(s);
         let (remaining, program_ast) =
-            tokenize::ast(s).map_err(|_| anyhow::anyhow!("syntax error"))?;
+            tokenize::ast(&stripped).map_err(|_| anyhow::anyhow!("syntax error"))?;
         if !remaining.trim().is_empty() {
             return Err(anyhow::anyhow!("syntax error"));
         }

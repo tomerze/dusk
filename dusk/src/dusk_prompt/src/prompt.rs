@@ -12,10 +12,10 @@ use nu_color_config::TextStyle;
 use nu_table::{NuRecordsValue, NuTable, TableTheme};
 use pretty_duration::pretty_duration;
 use reedline::{
-    ColumnarMenu, DefaultCompleter, DefaultHinter, DefaultValidator, EditCommand, Keybindings,
-    ListMenu, MenuBuilder, PromptEditMode, PromptHistorySearch, PromptHistorySearchStatus,
-    Reedline, ReedlineEvent, ReedlineMenu, Vi, default_vi_insert_keybindings,
-    default_vi_normal_keybindings,
+    ColumnarMenu, DefaultCompleter, DefaultHinter, DefaultValidator, EditCommand, Highlighter,
+    Keybindings, ListMenu, MenuBuilder, PromptEditMode, PromptHistorySearch,
+    PromptHistorySearchStatus, Reedline, ReedlineEvent, ReedlineMenu, Vi,
+    default_vi_insert_keybindings, default_vi_normal_keybindings,
 };
 
 use reedline::CursorConfig;
@@ -93,7 +93,10 @@ impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
     }
 }
 
-fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
+fn get_line_editor(
+    commands: Vec<String>,
+    functions: crate::highlighter::FunctionNames,
+) -> Result<Reedline> {
     let history = Box::new(
         reedline::SqliteBackedHistory::with_file("history.sqlite3".into(), None, None)
             .map_err(|_err| anyhow!("failed to open history db"))?,
@@ -109,6 +112,7 @@ fn get_line_editor(commands: Vec<String>) -> Result<Reedline> {
 
     let highlighter = CustomHighlighter {
         external_commands: commands,
+        functions,
     };
     let mut line_editor = Reedline::create()
         .with_history_session_id(None)
@@ -219,7 +223,7 @@ where
     D: DisplayEngine + Clone + 'static,
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
 {
-    const BUILTIN_COMMANDS: [ProgramInfo; 3] = [
+    const BUILTIN_COMMANDS: [ProgramInfo; 4] = [
         ProgramInfo {
             name: "clear",
             version: "builtin",
@@ -245,6 +249,15 @@ where
 The `help` command displays information about available commands.
 * Use `help` to list all available commands.
 * Use `help <command>` to get more information about a specific command.
+"#,
+        },
+        ProgramInfo {
+            name: "functions",
+            version: "builtin",
+            program_id: None,
+            short_description: "list all defined shell functions",
+            long_description: r#"
+The `functions` command lists all functions defined in any shell
 "#,
         },
     ];
@@ -360,6 +373,58 @@ Program ID: `{program_id}`
         Ok(())
     }
 
+    async fn print_functions(&self) -> Result<()> {
+        let functions = self.shell.functions().await?;
+        if functions.is_empty() {
+            let example = "// defines foo function which just calls itself\nfoo() {\n    foo\n}";
+            let highlighter = CustomHighlighter {
+                external_commands: Vec::new(),
+                functions: std::sync::Arc::new(std::sync::Mutex::new(vec![
+                    "foo".to_string(),
+                ])),
+            };
+            let highlighted: String = example
+                .lines()
+                .map(|line| {
+                    highlighter
+                        .highlight(line, 0)
+                        .buffer
+                        .iter()
+                        .map(|(style, text)| style.paint(text).to_string())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            println!(
+                "no functions defined, you can define one like this:\n{highlighted}"
+            );
+            return Ok(());
+        }
+        let mut table = NuTable::new(functions.len() + 1, 1);
+        table.set_row(
+            0,
+            vec![NuRecordsValue::new("function name".into())],
+        );
+        for (i, name) in functions.iter().enumerate() {
+            table.set_row(
+                i + 1,
+                vec![NuRecordsValue::new(
+                    self.display_engine
+                        .render_markdown_inline(format!("**{}**", name).as_str()),
+                )],
+            );
+        }
+        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::DarkGray)));
+        table.set_header_style(
+            TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
+        );
+        table.set_theme(TableTheme::rounded());
+        table.set_structure(false, true, false);
+        let width = crossterm::terminal::size()?.0 as usize;
+        println!("{}", table.draw(width).unwrap_or("[cannot fit]".to_string()));
+        Ok(())
+    }
+
     fn get_stream(&self, is_raw: bool) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver) {
         if is_raw {
             (self.stream_factory)(StreamRequest::Raw)
@@ -374,7 +439,9 @@ Program ID: `{program_id}`
     /// That is mainly being able to clear the prompt.
     ///
     /// Return true when prompt should exit.
-    async fn process_line(&mut self, mut line: &str, line_editor: &mut Reedline) -> Result<bool> {
+    async fn process_line(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
+        let stripped = dusk_program_sh::parser::strip_comments(line);
+        let mut line = stripped.as_str();
         let first_word = match line.split_whitespace().next() {
             Some(word) => word,
             None => return Ok(false),
@@ -386,6 +453,9 @@ Program ID: `{program_id}`
             }
             "help" => {
                 self.help(line)?;
+            }
+            "functions" => {
+                self.print_functions().await?;
             }
             _sh_entry_name => {
                 // get last word of line
@@ -413,11 +483,14 @@ Program ID: `{program_id}`
     }
 
     async fn run_inner(&mut self) -> Result<()> {
+        let function_names: crate::highlighter::FunctionNames =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut line_editor = get_line_editor(
             self.available_programs_info
                 .iter()
                 .map(|p| p.name.to_string())
                 .collect(),
+            function_names.clone(),
         )?;
 
         let status_line: String = format!(
@@ -436,6 +509,12 @@ Program ID: `{program_id}`
         let prompt = ReedlinePrompt::new(&prompt_string);
 
         loop {
+            // Refresh the live function list before each prompt so the highlighter
+            // marks function names that have been defined / undefined since.
+            match self.shell.functions().await {
+                Ok(symbols) => *function_names.lock().unwrap() = symbols,
+                Err(e) => tracing::warn!(error = %e, "failed to fetch shell functions"),
+            }
             let sig = line_editor.read_line(&prompt)?;
             match sig {
                 Signal::Success(buffer) => {

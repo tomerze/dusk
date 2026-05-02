@@ -240,3 +240,34 @@ Build requires `make`, `cmake`, and `autotools` (used to build the vendored Cap'
 ## no_std
 
 Most crates are `no_std` with `extern crate alloc`. Embassy is used instead of tokio. Cap'n Proto runs in `alloc` mode. Avoid introducing `std`-only dependencies in `dusk_program`, `dusk_core`, or program crates.
+
+## Working agreements
+
+Read these before touching anything in this repo. They describe failure modes I hit before because of my own lack of compitance.
+
+### Don't cut corners silently
+
+If you take a shortcut, **say so explicitly in your reply**. Examples of cutting a corner: skipping a piece of the task because "good enough", picking a simpler implementation than the user asked for, glossing over an edge case, leaving a TODO, doing the lazy version of a UI element. Always flag it: "I cut a corner here — X is Y instead of Z because …" so the user can decide whether to accept it.
+
+Concrete example of where I failed: when asked to add a `functions` builtin to the shell prompt, the first version printed `name\nname\nname` to stdout instead of rendering a `NuTable` like the existing `help` builtin does. The visual contract for "list things in the prompt" was already established and obvious; I cheaped out anyway. Don't do this. Match the surrounding convention.
+
+### Ask when unsure
+
+If the task is ambiguous, the design space has more than one reasonable shape, or you're about to make a non-trivial decision the user didn't sign off on, **ask**. Cheaper to ask one question than to undo a refactor.
+
+### Ask before adding many functions / classes
+
+If a task is going to introduce more than a couple of new functions, types, modules, or files, **stop and ask first**. List the names you intend to add and one-line purposes for each. Wait for sign-off. The user has made it clear repeatedly that "three new helpers" is almost never the right answer.
+
+### Don't redesign without explicit instruction
+
+The default is: solve the problem inside the existing design. Don't refactor neighbouring code, don't rename things, don't introduce a new abstraction "while you're here". If you genuinely think the design needs to change to solve the task, **say so and ask** — don't unilaterally restructure. The user explicitly stating "redesign / refactor X" is the only green light.
+
+### The user is likely right
+
+The code of this project was written **with care**. If something is written a certain way, it's likely for a reason.
+If something looks off and not right **say so**.
+
+Always assume your own understanding is limited, your style is off, your reasoning naive. 
+
+The user knows best.
