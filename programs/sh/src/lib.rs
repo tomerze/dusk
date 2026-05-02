@@ -7,14 +7,18 @@ extern crate capnp;
 
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use alloc::sync::Arc;
 
 use anyhow::Context;
 use dusk_capnp::pry;
 #[cfg(feature = "client")]
 use dusk_program::IntoCapnp;
+use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use dusk_program::embassy_sync::mutex::Mutex;
 use dusk_program::ready::Ready;
 use dusk_program::signal::SignalReceiver;
 use dusk_program::stream::NoopStream;
+use hashbrown::HashMap;
 #[cfg(feature = "client")]
 pub use linkme;
 
@@ -29,7 +33,7 @@ mod client;
 
 mod interpreter;
 
-use interpreter::Interpreter;
+use interpreter::{FunctionTable, Interpreter};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -103,11 +107,15 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
 }
 
 #[derive(dusk_program_proc::Launcher)]
-pub struct Launcher;
+pub struct Launcher {
+    function_table: FunctionTable,
+}
 
 impl Launcher {
     pub fn new() -> Self {
-        Self
+        Self {
+            function_table: Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new())),
+        }
     }
 }
 
@@ -117,7 +125,10 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
         &mut self,
         process_context: ProcessContext,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        Ok(Box::new(Process::with_context(process_context).await?))
+        Ok(Box::new(
+            Process::with_context_and_function_table(process_context, self.function_table.clone())
+                .await?,
+        ))
     }
 }
 
@@ -132,7 +143,26 @@ struct State {
 pub struct Process {
     #[process_context]
     pub ctx: ProcessContext,
+    function_table: FunctionTable,
     state: Rc<RefCell<State>>,
+}
+impl Process {
+    async fn with_context_and_function_table(
+        ctx: ProcessContext,
+        function_table: FunctionTable,
+    ) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Process {
+            ctx,
+            function_table: function_table,
+            state: Rc::new(RefCell::new(State {
+                interpreter: None,
+                args_get_reply: None,
+            })),
+        })
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -141,13 +171,8 @@ impl dusk_program::process::ProcessMixin for Process {
     where
         Self: Sized,
     {
-        Ok(Process {
-            ctx,
-            state: Rc::new(RefCell::new(State {
-                interpreter: None,
-                args_get_reply: None,
-            })),
-        })
+        Ok(Self::with_context_and_function_table(ctx, Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new()))).await?)
+        
     }
 
     fn portal(&self) -> portal::Client {
@@ -180,8 +205,11 @@ impl dusk_program::process::ProcessMixin for Process {
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
         {
-            self.state.borrow_mut().interpreter =
-                Some(Interpreter::new(client, program_args.clone()));
+            self.state.borrow_mut().interpreter = Some(Interpreter::new(
+                client,
+                program_args.clone(),
+                self.function_table.clone(),
+            ));
 
             if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
                 let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();

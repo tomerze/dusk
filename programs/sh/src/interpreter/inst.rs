@@ -1,4 +1,4 @@
-use alloc::rc::Rc;
+use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write;
@@ -6,11 +6,17 @@ use dusk_capnp::dusk_capnp::program_args;
 
 pub type Frame = Vec<Inst>;
 
+pub struct ScriptMessage(pub capnp::message::Builder<capnp::message::HeapAllocator>);
+// Safety: HeapAllocator owns its segments via Vec; the internal pointers point into
+// that owned heap data, which stays valid across thread moves.
+unsafe impl Send for ScriptMessage {}
+unsafe impl Sync for ScriptMessage {}
+
 pub enum Inst {
     ProgramArgs(program_args::Client),
     Call(String),
     TailCall(String),
-    DefineFunction { symbol: String, frame: Rc<Frame> },
+    DefineFunction { symbol: String, body: Arc<ScriptMessage> },
     JumpIfOk(usize),
     JumpIfError(usize),
 }
@@ -35,10 +41,8 @@ fn write_instructions(output: &mut String, instructions: &[Inst], indent: usize)
             Inst::TailCall(symbol) => {
                 let _ = writeln!(output, "tail_call {symbol}");
             }
-            Inst::DefineFunction { symbol, frame } => {
-                let _ = writeln!(output, "define {symbol} {{");
-                write_instructions(output, frame, indent + 2);
-                let _ = writeln!(output, "{:indent$}}}", "");
+            Inst::DefineFunction { symbol, .. } => {
+                let _ = writeln!(output, "define {symbol}");
             }
             Inst::JumpIfOk(target) => {
                 let _ = writeln!(output, "jump_if_ok {target:04}");

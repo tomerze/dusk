@@ -1,4 +1,4 @@
-use alloc::rc::Rc;
+use alloc::sync::Arc;
 use alloc::string::{String, ToString};
 use core::future::Future;
 use core::pin::Pin;
@@ -8,13 +8,13 @@ use hashbrown::HashSet;
 use crate::sh_capnp;
 use crate::sh_capnp::script;
 
-use super::inst::{Frame, Inst};
+use super::inst::{Frame, Inst, ScriptMessage};
 
 pub async fn compile(
     script: script::Reader<'_>,
     sh_args: sh_capnp::sh_args::Client,
+    mut functions: HashSet<String>,
 ) -> Result<Frame> {
-    let mut functions = HashSet::new();
     let mut output_frame = Frame::new();
     compile_script(script, &sh_args, &mut functions, &mut output_frame).await?;
     optimize_tail_call(&mut output_frame);
@@ -57,12 +57,12 @@ async fn compile_statement<'a>(
             let def = def?;
             let symbol = def.get_symbol()?.to_str()?.to_string();
             functions.insert(symbol.clone());
-            let mut function_frame = Frame::new();
-            compile_script(def.get_body()?, sh_args, functions, &mut function_frame).await?;
-            optimize_tail_call(&mut function_frame);
+            let mut message =
+                capnp::message::Builder::new(capnp::message::HeapAllocator::new());
+            message.set_root(def.get_body()?)?;
             output_frame.push(Inst::DefineFunction {
                 symbol,
-                frame: Rc::new(function_frame),
+                body: Arc::new(ScriptMessage(message)),
             });
             Ok(())
         }
