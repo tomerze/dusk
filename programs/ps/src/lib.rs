@@ -38,6 +38,12 @@ impl Args {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
+impl Launcher {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 #[async_trait::async_trait(?Send)]
 impl dusk_program::launcher::LauncherMixin for Launcher {
     async fn launch(

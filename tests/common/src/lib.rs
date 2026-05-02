@@ -95,9 +95,9 @@ impl DuskNixImpl {
             dusk_nix::run(
                 dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(
                     vec![
-                        Box::new(dusk_program_init::Launcher {}),
-                        Box::new(dusk_program_sh::Launcher {}),
-                        Box::new(dusk_program_ps::Launcher {}),
+                        Box::new(dusk_program_init::Launcher::new()),
+                        Box::new(dusk_program_sh::Launcher::new()),
+                        Box::new(dusk_program_ps::Launcher::new()),
                     ],
                 )),
                 capnp_rpc::new_client::<init_args::Client, _>(dusk_program_init::Args::new(
