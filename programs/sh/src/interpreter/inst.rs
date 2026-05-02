@@ -24,7 +24,7 @@ fn write_instructions(output: &mut String, instructions: &[Inst], indent: usize)
         let _ = write!(output, "{:indent$}{pc:04}: ", "");
 
         match instruction {
-            Inst::ProgramArgs { .. } => {
+            Inst::ProgramArgs(_) => {
                 let _ = writeln!(output, "program_args");
             }
             Inst::Call(name) => {

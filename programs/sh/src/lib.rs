@@ -56,6 +56,12 @@ impl ShArgs {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
+impl Launcher {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 #[async_trait::async_trait(?Send)]
 impl dusk_program::launcher::LauncherMixin for Launcher {
     async fn launch(
@@ -125,7 +131,8 @@ impl dusk_program::process::ProcessMixin for Process {
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
         {
-            self.state.borrow_mut().interpreter = Some(Interpreter::new(client));
+            self.state.borrow_mut().interpreter =
+                Some(Interpreter::new(client, program_args.clone()));
 
             if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
                 let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();

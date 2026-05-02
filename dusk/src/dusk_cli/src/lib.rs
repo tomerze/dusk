@@ -25,7 +25,7 @@ struct Cli {
     debug_console: bool,
 }
 
-async fn single_command(shell: &mut Shell<impl ShEntriesBuilder>, command: String) -> Result<()> {
+async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
     let (json_stream, done_receiver) =
@@ -41,7 +41,7 @@ async fn single_command(shell: &mut Shell<impl ShEntriesBuilder>, command: Strin
 }
 
 async fn interactive_prompt(
-    shell: &mut Shell<impl ShEntriesBuilder>,
+    shell: &mut Shell,
     sh_entries_builder: impl ShEntriesBuilder,
 ) -> Result<()> {
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
@@ -81,7 +81,8 @@ async fn run(cli: Cli) {
                     let sh_entries_builder = StaticShEntriesBuilder::default();
                     let mut shell = Shell::new(
                         client.clone(),
-                        Compiler::new(client, sh_entries_builder.clone())
+                        sh_entries_builder.clone(),
+                        Compiler::new(),
                     ).await?;
                     let session_result = match cli.command {
                         Some(command) => single_command(&mut shell, command).await,

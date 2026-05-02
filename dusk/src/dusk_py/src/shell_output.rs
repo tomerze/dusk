@@ -111,10 +111,8 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
         // Create a new shell for this command
         let shell_result = dusk_shell::shell::Shell::new(
             client.clone(),
-            dusk_program_sh::compiler::Compiler::new(
-                client.clone(),
-                dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-            ),
+            dusk_program_sh::entry::StaticShEntriesBuilder::default(),
+            dusk_program_sh::compiler::Compiler::new(),
         )
         .await;
 

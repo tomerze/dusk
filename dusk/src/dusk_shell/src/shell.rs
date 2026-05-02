@@ -7,26 +7,28 @@ use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use dusk_program_sh::{ShArgs, compiler::Compiler};
 use tokio::sync::oneshot;
 
-pub struct Shell<S: ShEntriesBuilder> {
+pub struct Shell {
     client: dusk::Client,
-    compiler: Compiler<S>,
+    compiler: Compiler,
     sh_process: process::Client,
     pub hostname: String,
     pub sh_pid: u64,
 }
 
-impl<S: ShEntriesBuilder> Shell<S> {
-    async fn create_sh_process_reconnect_callback(
+impl Shell {
+    async fn create_sh_process_reconnect_callback<S: ShEntriesBuilder>(
         client: dusk::Client,
+        sh_entries_builder: S,
     ) -> capnp::Result<process::Client> {
         let mut options =
             capnp_rpc::ImbuedMessageBuilder::new(capnp::message::HeapAllocator::new());
         options
             .get_root::<dusk_program_sh::sh_capnp::sh_options::Builder>()?
             .set_server(());
-        let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs>(ShArgs {
+        let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs<S>>(ShArgs {
             client: client.clone(),
             options,
+            sh_entries_builder,
         });
         let mut process_request = client.process_request();
         process_request.get().set_program_args(
@@ -41,21 +43,31 @@ impl<S: ShEntriesBuilder> Shell<S> {
         Ok(process)
     }
 
-    async fn create_sh_process(client: dusk::Client) -> Result<process::Client> {
+    async fn create_sh_process<S: ShEntriesBuilder>(
+        client: dusk::Client,
+        sh_entries_builder: S,
+    ) -> Result<process::Client> {
         let (process, _) = capnp_rpc::auto_reconnect(move || {
             Ok(capnp_rpc::new_future_client(
-                Self::create_sh_process_reconnect_callback(client.clone()),
+                Self::create_sh_process_reconnect_callback(
+                    client.clone(),
+                    sh_entries_builder.clone(),
+                ),
             ))
         })?;
 
         Ok(process)
     }
 
-    pub async fn new(client: dusk::Client, compiler: Compiler<S>) -> Result<Self> {
+    pub async fn new<S: ShEntriesBuilder>(
+        client: dusk::Client,
+        sh_entries_builder: S,
+        compiler: Compiler,
+    ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
-        let sh_process = Self::create_sh_process(client.clone()).await?;
+        let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
 
         let pid_reply = sh_process.pid_request().send().promise.await?;
         let sh_pid = pid_reply.get()?.get_result();

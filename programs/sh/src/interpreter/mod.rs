@@ -70,7 +70,7 @@ impl Interpreter {
                     return result_register;
                 }
                 match &current_frame[pc] {
-                    Inst::ProgramArgs { program_args } => {
+                    Inst::ProgramArgs(program_args) => {
                         let exec = execution::Execution::new(
                             self.client.clone(),
                             output.clone(),
