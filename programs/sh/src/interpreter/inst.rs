@@ -5,7 +5,7 @@ use core::fmt::Write;
 use dusk_capnp::dusk_capnp::program_args;
 
 pub enum Inst {
-    Command { program_args: program_args::Client },
+    ProgramArgs(program_args::Client),
     Call(String),
     TailCall(String),
     DefineFunction { name: String, frame: Rc<Vec<Inst>> },
@@ -24,8 +24,8 @@ fn write_instructions(output: &mut String, instructions: &[Inst], indent: usize)
         let _ = write!(output, "{:indent$}{pc:04}: ", "");
 
         match instruction {
-            Inst::Command { .. } => {
-                let _ = writeln!(output, "command");
+            Inst::ProgramArgs { .. } => {
+                let _ = writeln!(output, "program_args");
             }
             Inst::Call(name) => {
                 let _ = writeln!(output, "call {name}");

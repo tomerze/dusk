@@ -12,11 +12,9 @@ struct Script {
         second @1: Expr;
       }
       union {
-        programArgs @0: Dusk.ProgramArgs;
+        command @0: Text;
         and @1: ExprPair;
         or @2: ExprPair;
-        call @3: Text;
-        tailCall @4: Text;
       }
     }
     struct FunctionDefinition {
@@ -41,6 +39,7 @@ struct ShOptions {
 
 interface ShArgs extends(Dusk.ProgramArgs) {
   get @0 () -> (client: Dusk.Dusk, options :ShOptions);
+  buildProgramArgs @1 (command :Text) -> (programArgs :Dusk.ProgramArgs);
 }
 
 interface OutputPortal extends(Dusk.Portal) {

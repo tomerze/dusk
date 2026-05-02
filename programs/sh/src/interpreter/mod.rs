@@ -7,6 +7,7 @@ use core::pin::Pin;
 use dusk_program::anyhow::{Result, anyhow};
 use hashbrown::HashMap;
 
+use crate::sh_capnp;
 use crate::sh_capnp::script;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
@@ -21,13 +22,15 @@ mod lower;
 #[derive(Clone)]
 pub struct Interpreter {
     client: dusk::Client,
+    sh_args: sh_capnp::sh_args::Client,
     functions: Rc<RefCell<HashMap<String, Rc<Vec<Inst>>>>>,
 }
 
 impl Interpreter {
-    pub fn new(client: dusk::Client) -> Self {
+    pub fn new(client: dusk::Client, sh_args: sh_capnp::sh_args::Client) -> Self {
         Interpreter {
             client,
+            sh_args,
             functions: Rc::new(RefCell::new(HashMap::new())),
         }
     }
@@ -38,9 +41,9 @@ impl Interpreter {
         output: stream::Client,
         detached: bool,
     ) -> Result<()> {
-        let instructions = lower::lower(script)?;
+        let instructions = lower::lower(script, self.sh_args.clone()).await?;
         tracing::debug!(
-            assembly = %inst::format_instructions(&instructions),
+            dump = %inst::format_instructions(&instructions),
             "script disassembly"
         );
         let instructions = Rc::new(instructions);
@@ -67,7 +70,7 @@ impl Interpreter {
                     return result_register;
                 }
                 match &current_frame[pc] {
-                    Inst::Command { program_args } => {
+                    Inst::ProgramArgs { program_args } => {
                         let exec = execution::Execution::new(
                             self.client.clone(),
                             output.clone(),

@@ -1,7 +1,7 @@
 extern crate linkme;
 
 use super::*;
-use crate::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
+use crate::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry, StaticShEntriesBuilder};
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use linkme::distributed_slice;
@@ -33,10 +33,7 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
                     .set_server(());
             }
             Some(cmd) => {
-                let mut compiler = crate::compiler::Compiler::new(
-                    client.clone(),
-                    crate::entry::StaticShEntriesBuilder::default(),
-                );
+                let mut compiler = crate::compiler::Compiler::new();
                 let opts = options.get_root::<crate::sh_capnp::sh_options::Builder>()?;
                 if cli.detach {
                     compiler.compile(&cmd, opts.init_detached_script())?;
@@ -45,8 +42,11 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
                 }
             }
         }
-        let sh_client: sh_capnp::sh_args::Client =
-            capnp_rpc::new_client(ShArgs { client, options });
+        let sh_client: sh_capnp::sh_args::Client = capnp_rpc::new_client(ShArgs {
+            client,
+            options,
+            sh_entries_builder: StaticShEntriesBuilder::default(),
+        });
         Ok(sh_client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
     }
 }

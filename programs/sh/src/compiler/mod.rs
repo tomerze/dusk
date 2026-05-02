@@ -1,46 +1,17 @@
-use crate::anyhow::{Context, Result};
-use crate::entry::ShEntriesBuilder;
-
-use dusk_capnp::dusk_capnp::dusk;
-use dusk_capnp::dusk_capnp::program_args;
-use dusk_program::anyhow::anyhow;
-use dusk_program::{IntoCapnp, anyhow};
-use std::collections::HashSet;
-use std::string::String;
+use crate::anyhow::Result;
+use dusk_program::anyhow;
 
 mod ast;
 mod parse;
 
-#[derive(Clone)]
-pub struct Compiler<S: ShEntriesBuilder> {
-    client: dusk::Client,
-    sh_entries_builder: S,
-    functions: HashSet<String>,
-}
+pub use parse::command_words;
 
-impl<S: ShEntriesBuilder> Compiler<S> {
-    pub fn new(client: dusk::Client, sh_entries_builder: S) -> Self {
-        Self {
-            client,
-            sh_entries_builder,
-            functions: HashSet::new(),
-        }
-    }
+#[derive(Clone, Default)]
+pub struct Compiler;
 
-    fn compile_command(&self, cmd: &ast::Command) -> Result<program_args::Client> {
-        let sh_entries = self.sh_entries_builder.get_entries();
-
-        for entry in sh_entries {
-            if entry.info.name == cmd.program {
-                let client = entry
-                    .program_args_builder
-                    .build(self.client.clone(), &cmd.args)
-                    .context("program args builder failed")
-                    .into_capnp()?;
-                return Ok(client);
-            }
-        }
-        Err(anyhow!("no sh entry found for `{}`", cmd.program))
+impl Compiler {
+    pub fn new() -> Self {
+        Self
     }
 
     fn compile_expr_pair(
@@ -62,16 +33,8 @@ impl<S: ShEntriesBuilder> Compiler<S> {
         builder: &mut crate::sh_capnp::script::statement::expr::Builder,
     ) -> Result<()> {
         match expr {
-            ast::Expr::Command(cmd) => {
-                if !cmd.args.is_empty() && self.functions.contains(cmd.program) {
-                    return Err(anyhow!("function `{}` cannot take arguments", cmd.program));
-                }
-                if self.functions.contains(cmd.program) {
-                    builder.reborrow().set_call(cmd.program);
-                } else {
-                    let program_args = self.compile_command(cmd)?;
-                    builder.reborrow().set_program_args(program_args);
-                }
+            ast::Expr::Command(source) => {
+                builder.reborrow().set_command(*source);
             }
             ast::Expr::And(first, second) => {
                 let mut and_builder = builder.reborrow().init_and();
@@ -96,8 +59,6 @@ impl<S: ShEntriesBuilder> Compiler<S> {
                 self.compile_expr(expr, &mut expr_builder)?;
             }
             ast::Statement::FunctionDefinition { name, body } => {
-                // Register before compiling body so recursive references resolve.
-                self.functions.insert((*name).to_string());
                 let mut def_builder = builder.reborrow().init_function_definition();
                 def_builder.set_name(*name);
                 let body_builder = def_builder.init_body();

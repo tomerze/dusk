@@ -13,13 +13,7 @@ pub enum Statement<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr<'a> {
-    Command(Command<'a>),
+    Command(&'a str),
     And(Box<Expr<'a>>, Box<Expr<'a>>),
     Or(Box<Expr<'a>>, Box<Expr<'a>>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Command<'a> {
-    pub program: &'a str,
-    pub args: Vec<&'a str>,
 }

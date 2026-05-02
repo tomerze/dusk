@@ -50,9 +50,13 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         pub use dusk_program::value::{Record, Value};
 
         macro_rules! __impl_args_rpc_server {
-            ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
+            (
+                $(#[$meta:meta])*
+                [$($impl_generics:tt)*] [$($self_ty:tt)*] [$($where_clause:tt)*]
+                { $($body:tt)* }
+            ) => {
                 $(#[$meta])*
-                impl #args_server for $self_ty {
+                impl $($impl_generics)* #args_server for $($self_ty)* $($where_clause)* {
                     $($body)*
                 }
             };
@@ -102,9 +106,13 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         }
 
         macro_rules! __impl_portal_rpc_server {
-            ($(#[$meta:meta])* $self_ty:ty, { $($body:tt)* }) => {
+            (
+                $(#[$meta:meta])*
+                [$($impl_generics:tt)*] [$($self_ty:tt)*] [$($where_clause:tt)*]
+                { $($body:tt)* }
+            ) => {
                 $(#[$meta])*
-                impl #program_portal_server for $self_ty {
+                impl $($impl_generics)* #program_portal_server for $($self_ty)* $($where_clause)* {
                     $($body)*
                 }
             };

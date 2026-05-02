@@ -29,13 +29,13 @@ fn identifier(input: &str) -> IResult<&str, &str> {
     recognize(take_while1(|c: char| c.is_alphanumeric() || c == '_')).parse(input)
 }
 
+pub fn command_words(input: &str) -> IResult<&str, std::vec::Vec<&str>> {
+    separated_list1(space1, word).parse(input)
+}
+
 fn command_expr(input: &str) -> IResult<&str, ast::Expr<'_>> {
-    let (input, parts) = separated_list1(space1, word).parse(input)?;
-
-    let program = parts[0];
-    let args = parts[1..].to_vec();
-
-    Ok((input, ast::Expr::Command(ast::Command { program, args })))
+    let (input, source) = recognize(separated_list1(space1, word)).parse(input)?;
+    Ok((input, ast::Expr::Command(source)))
 }
 
 fn logical_expr(input: &str) -> IResult<&str, ast::Expr<'_>> {

@@ -19,6 +19,7 @@ pub fn metadata(item: TokenStream) -> TokenStream {
 pub fn derive_args(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let cfg_attrs: Vec<_> = input
         .attrs
@@ -28,7 +29,9 @@ pub fn derive_args(item: TokenStream) -> TokenStream {
 
     let expanded = quote::quote! {
         #(#cfg_attrs)*
-        impl dusk_program::dusk_capnp::dusk_capnp::program_args::Server for #struct_name {
+        impl #impl_generics dusk_program::dusk_capnp::dusk_capnp::program_args::Server
+            for #struct_name #ty_generics #where_clause
+        {
             fn program_id(
                 &mut self,
                 _params: dusk_program::dusk_capnp::dusk_capnp::program_args::ProgramIdParams,
@@ -55,6 +58,7 @@ pub fn impl_args_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStream
     }
 
     let input = syn::parse_macro_input!(item as syn::ItemImpl);
+    let (impl_generics, _, where_clause) = input.generics.split_for_impl();
     let self_ty = &input.self_ty;
     let items = &input.items;
     let cfg_attrs: Vec<_> = input
@@ -64,9 +68,11 @@ pub fn impl_args_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStream
         .collect();
 
     let expanded = quote::quote! {
-        __impl_args_rpc_server!(#(#cfg_attrs)* #self_ty, {
-            #(#items)*
-        });
+        __impl_args_rpc_server!(
+            #(#cfg_attrs)*
+            [#impl_generics] [#self_ty] [#where_clause]
+            { #(#items)* }
+        );
     };
 
     TokenStream::from(expanded)
@@ -163,6 +169,7 @@ pub fn derive_process(item: TokenStream) -> TokenStream {
 pub fn derive_portal(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let cfg_attrs: Vec<_> = input
         .attrs
@@ -172,7 +179,9 @@ pub fn derive_portal(item: TokenStream) -> TokenStream {
 
     let expanded = quote::quote! {
         #(#cfg_attrs)*
-        impl dusk_program::dusk_capnp::dusk_capnp::portal::Server for #struct_name {
+        impl #impl_generics dusk_program::dusk_capnp::dusk_capnp::portal::Server
+            for #struct_name #ty_generics #where_clause
+        {
             fn program_id(
                 &mut self,
                 _params: dusk_program::dusk_capnp::dusk_capnp::portal::ProgramIdParams,
@@ -199,6 +208,7 @@ pub fn impl_portal_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStre
     }
 
     let input = syn::parse_macro_input!(item as syn::ItemImpl);
+    let (impl_generics, _, where_clause) = input.generics.split_for_impl();
     let self_ty = &input.self_ty;
     let items = &input.items;
     let cfg_attrs: Vec<_> = input
@@ -208,9 +218,11 @@ pub fn impl_portal_rpc_server(attr: TokenStream, item: TokenStream) -> TokenStre
         .collect();
 
     let expanded = quote::quote! {
-        __impl_portal_rpc_server!(#(#cfg_attrs)* #self_ty, {
-            #(#items)*
-        });
+        __impl_portal_rpc_server!(
+            #(#cfg_attrs)*
+            [#impl_generics] [#self_ty] [#where_clause]
+            { #(#items)* }
+        );
     };
 
     TokenStream::from(expanded)
