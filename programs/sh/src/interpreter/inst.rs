@@ -4,11 +4,13 @@ use alloc::vec::Vec;
 use core::fmt::Write;
 use dusk_capnp::dusk_capnp::program_args;
 
+pub type Frame = Vec<Inst>;
+
 pub enum Inst {
     ProgramArgs(program_args::Client),
     Call(String),
     TailCall(String),
-    DefineFunction { name: String, frame: Rc<Vec<Inst>> },
+    DefineFunction { name: String, frame: Rc<Frame> },
     JumpIfOk(usize),
     JumpIfError(usize),
 }

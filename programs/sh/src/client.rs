@@ -24,17 +24,16 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
         args: &[&str],
     ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
         let cli = ShCli::try_parse_from(args)?;
-        let mut options =
-            capnp_rpc::ImbuedMessageBuilder::new(capnp::message::HeapAllocator::new());
+        let mut options = capnp::message::Builder::new_default();
         match cli.command {
             None => {
                 options
-                    .get_root::<crate::sh_capnp::sh_options::Builder>()?
+                    .init_root::<crate::sh_capnp::sh_options::Builder>()
                     .set_server(());
             }
             Some(cmd) => {
                 let mut compiler = crate::compiler::Compiler::new();
-                let opts = options.get_root::<crate::sh_capnp::sh_options::Builder>()?;
+                let opts = options.init_root::<crate::sh_capnp::sh_options::Builder>();
                 if cli.detach {
                     compiler.compile(&cmd, opts.init_detached_script())?;
                 } else {

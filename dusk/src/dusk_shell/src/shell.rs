@@ -20,10 +20,9 @@ impl Shell {
         client: dusk::Client,
         sh_entries_builder: S,
     ) -> capnp::Result<process::Client> {
-        let mut options =
-            capnp_rpc::ImbuedMessageBuilder::new(capnp::message::HeapAllocator::new());
+        let mut options = capnp::message::Builder::new_default();
         options
-            .get_root::<dusk_program_sh::sh_capnp::sh_options::Builder>()?
+            .init_root::<dusk_program_sh::sh_capnp::sh_options::Builder>()
             .set_server(());
         let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs<S>>(ShArgs {
             client: client.clone(),

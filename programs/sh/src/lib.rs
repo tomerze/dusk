@@ -10,6 +10,8 @@ use core::cell::RefCell;
 
 use anyhow::Context;
 use dusk_capnp::pry;
+#[cfg(feature = "client")]
+use dusk_program::IntoCapnp;
 use dusk_program::ready::Ready;
 use dusk_program::signal::SignalReceiver;
 use dusk_program::stream::NoopStream;
@@ -33,23 +35,70 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
+#[cfg(feature = "client")]
 #[derive(dusk_program_proc::Args)]
-pub struct ShArgs {
+pub struct ShArgs<S: entry::ShEntriesBuilder> {
     pub client: dusk::Client,
-    pub options: capnp_rpc::ImbuedMessageBuilder<capnp::message::HeapAllocator>,
+    pub options: capnp::message::Builder<capnp::message::HeapAllocator>,
+    pub sh_entries_builder: S,
 }
 
+#[cfg(feature = "client")]
 #[dusk_program_proc::impl_args_rpc_server]
-impl ShArgs {
+impl<S: entry::ShEntriesBuilder> ShArgs<S> {
     fn get(
         &mut self,
         _params: sh_capnp::sh_args::GetParams,
         mut results: sh_capnp::sh_args::GetResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         results.get().set_client(self.client.clone());
-        let opts_builder = pry!(self.options.get_root::<sh_capnp::sh_options::Builder>());
-        pry!(results.get().set_options(opts_builder.reborrow_as_reader()));
+        let opts_reader = pry!(
+            self.options
+                .get_root_as_reader::<sh_capnp::sh_options::Reader>()
+        );
+        pry!(results.get().set_options(opts_reader));
         capnp::capability::Promise::ok(())
+    }
+
+    fn build_program_args(
+        &mut self,
+        params: sh_capnp::sh_args::BuildProgramArgsParams,
+        mut results: sh_capnp::sh_args::BuildProgramArgsResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let command = pry!(pry!(pry!(params.get()).get_command()).to_str());
+        let (remaining, words) = pry!(
+            crate::compiler::command_words(command)
+                .map_err(|_| anyhow::anyhow!("invalid command `{}`", command))
+                .into_capnp()
+        );
+        if !remaining.trim().is_empty() {
+            return capnp::capability::Promise::err(capnp::Error::failed(format!(
+                "invalid command `{command}`"
+            )));
+        }
+        let program = pry!(
+            words
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("empty command"))
+                .into_capnp()
+        );
+        let args = &words[1..];
+        for entry in self.sh_entries_builder.get_entries() {
+            if entry.info.name == *program {
+                let pa = pry!(
+                    entry
+                        .program_args_builder
+                        .build(self.client.clone(), args)
+                        .context("program args builder failed")
+                        .into_capnp()
+                );
+                results.get().set_program_args(pa);
+                return capnp::capability::Promise::ok(());
+            }
+        }
+        capnp::capability::Promise::err(capnp::Error::failed(format!(
+            "no sh entry found for `{program}`"
+        )))
     }
 }
 

@@ -1,6 +1,5 @@
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
@@ -13,7 +12,7 @@ use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
 use execution::ExecutionError;
-use inst::Inst;
+use inst::{Frame, Inst};
 
 mod execution;
 mod inst;
@@ -23,7 +22,7 @@ mod lower;
 pub struct Interpreter {
     client: dusk::Client,
     sh_args: sh_capnp::sh_args::Client,
-    functions: Rc<RefCell<HashMap<String, Rc<Vec<Inst>>>>>,
+    functions: Rc<RefCell<HashMap<String, Rc<Frame>>>>,
 }
 
 impl Interpreter {
@@ -41,27 +40,25 @@ impl Interpreter {
         output: stream::Client,
         detached: bool,
     ) -> Result<()> {
-        let instructions = lower::lower(script, self.sh_args.clone()).await?;
+        let frame = lower::lower(script, self.sh_args.clone()).await?;
         tracing::debug!(
-            dump = %inst::format_instructions(&instructions),
-            "script disassembly"
+            dump = %inst::format_instructions(&frame),
+            "frame disassembly"
         );
-        let instructions = Rc::new(instructions);
-        let _ = self
-            .exec_inner(instructions, output.clone(), detached)
-            .await;
+        let frame = Rc::new(frame);
+        let _ = self.exec_inner(frame, output.clone(), detached).await;
         output.done_request().send().promise.await?;
         Ok(())
     }
 
     fn exec_inner<'a>(
         &'a self,
-        instructions: Rc<Vec<Inst>>,
+        frame: Rc<Frame>,
         output: stream::Client,
         detached: bool,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
         Box::pin(async move {
-            let mut current_frame = instructions;
+            let mut current_frame = frame;
             let mut pc = 0usize; // Program counter, at the current frame
             let mut result_register: Result<()> = Ok(());
 
