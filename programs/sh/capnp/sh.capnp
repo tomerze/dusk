@@ -18,7 +18,7 @@ struct Script {
       }
     }
     struct FunctionDefinition {
-      name @0: Text;
+      symbol @0: Text;
       body @1: Script;
     }
     union {

@@ -10,7 +10,7 @@ pub enum Inst {
     ProgramArgs(program_args::Client),
     Call(String),
     TailCall(String),
-    DefineFunction { name: String, frame: Rc<Frame> },
+    DefineFunction { symbol: String, frame: Rc<Frame> },
     JumpIfOk(usize),
     JumpIfError(usize),
 }
@@ -29,14 +29,14 @@ fn write_instructions(output: &mut String, instructions: &[Inst], indent: usize)
             Inst::ProgramArgs(_) => {
                 let _ = writeln!(output, "program_args");
             }
-            Inst::Call(name) => {
-                let _ = writeln!(output, "call {name}");
+            Inst::Call(symbol) => {
+                let _ = writeln!(output, "call {symbol}");
             }
-            Inst::TailCall(name) => {
-                let _ = writeln!(output, "tail_call {name}");
+            Inst::TailCall(symbol) => {
+                let _ = writeln!(output, "tail_call {symbol}");
             }
-            Inst::DefineFunction { name, frame } => {
-                let _ = writeln!(output, "define {name} {{");
+            Inst::DefineFunction { symbol, frame } => {
+                let _ = writeln!(output, "define {symbol} {{");
                 write_instructions(output, frame, indent + 2);
                 let _ = writeln!(output, "{:indent$}}}", "");
             }

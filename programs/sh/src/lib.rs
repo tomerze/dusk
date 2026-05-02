@@ -22,7 +22,7 @@ pub use linkme;
 pub mod entry;
 
 #[cfg(feature = "client")]
-pub mod compiler;
+pub mod parser;
 
 #[cfg(feature = "client")]
 mod client;
@@ -67,7 +67,7 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_str());
         let (remaining, words) = pry!(
-            crate::compiler::command_words(command)
+            crate::parser::command_words(command)
                 .map_err(|_| anyhow::anyhow!("invalid command `{}`", command))
                 .into_capnp()
         );

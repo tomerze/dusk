@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
 use dusk_program_sh::{
-    compiler::Compiler,
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
+    parser::Parser as ShParser,
 };
 use dusk_prompt::{
     display_engine::DefaultDisplayEngine,
@@ -82,7 +82,7 @@ async fn run(cli: Cli) {
                     let mut shell = Shell::new(
                         client.clone(),
                         sh_entries_builder.clone(),
-                        Compiler::new(),
+                        ShParser::new(),
                     ).await?;
                     let session_result = match cli.command {
                         Some(command) => single_command(&mut shell, command).await,

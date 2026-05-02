@@ -32,12 +32,12 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
                     .set_server(());
             }
             Some(cmd) => {
-                let mut compiler = crate::compiler::Compiler::new();
+                let mut parser = crate::parser::Parser::new();
                 let opts = options.init_root::<crate::sh_capnp::sh_options::Builder>();
                 if cli.detach {
-                    compiler.compile(&cmd, opts.init_detached_script())?;
+                    parser.parse(&cmd, opts.init_detached_script())?;
                 } else {
-                    compiler.compile(&cmd, opts.init_script())?;
+                    parser.parse(&cmd, opts.init_script())?;
                 }
             }
         }

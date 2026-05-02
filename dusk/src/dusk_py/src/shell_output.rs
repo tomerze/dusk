@@ -112,7 +112,7 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
         let shell_result = dusk_shell::shell::Shell::new(
             client.clone(),
             dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-            dusk_program_sh::compiler::Compiler::new(),
+            dusk_program_sh::parser::Parser::new(),
         )
         .await;
 

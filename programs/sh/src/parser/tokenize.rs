@@ -59,12 +59,12 @@ fn logical_expr(input: &str) -> IResult<&str, ast::Expr<'_>> {
 }
 
 fn function_definition(input: &str) -> IResult<&str, ast::Statement<'_>> {
-    let (input, name) = identifier(input)?;
+    let (input, symbol) = identifier(input)?;
     let (input, _) = preceded(space0, tag("()")).parse(input)?;
     let (input, _) = preceded(multispace0, char('{')).parse(input)?;
     let (input, body) = preceded(multispace0, ast).parse(input)?;
     let (input, _) = preceded(multispace0, char('}')).parse(input)?;
-    Ok((input, ast::Statement::FunctionDefinition { name, body }))
+    Ok((input, ast::Statement::FunctionDefinition { symbol, body }))
 }
 
 fn statement(input: &str) -> IResult<&str, ast::Statement<'_>> {

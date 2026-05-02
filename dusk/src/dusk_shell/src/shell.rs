@@ -4,12 +4,12 @@ use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::entry::ShEntriesBuilder;
 use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
-use dusk_program_sh::{ShArgs, compiler::Compiler};
+use dusk_program_sh::{ShArgs, parser::Parser};
 use tokio::sync::oneshot;
 
 pub struct Shell {
     client: dusk::Client,
-    compiler: Compiler,
+    parser: Parser,
     sh_process: process::Client,
     pub hostname: String,
     pub sh_pid: u64,
@@ -61,7 +61,7 @@ impl Shell {
     pub async fn new<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
-        compiler: Compiler,
+        parser: Parser,
     ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
@@ -72,7 +72,7 @@ impl Shell {
         let sh_pid = pid_reply.get()?.get_result();
         Ok(Shell {
             client: client.clone(),
-            compiler,
+            parser,
             sh_process,
             hostname: hostname.into(),
             sh_pid,
@@ -98,7 +98,7 @@ impl Shell {
 
         let mut sh_request = sh_portal.sh_request();
         let script_builder = sh_request.get().init_script();
-        self.compiler.compile(script, script_builder)?;
+        self.parser.parse(script, script_builder)?;
 
         sh_request.get().set_output(stream);
         let _sh_reply = sh_request.send().promise.await?;

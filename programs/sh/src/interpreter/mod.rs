@@ -14,9 +14,9 @@ use dusk_capnp::dusk_capnp::stream;
 use execution::ExecutionError;
 use inst::{Frame, Inst};
 
+mod compiler;
 mod execution;
 mod inst;
-mod lower;
 
 #[derive(Clone)]
 pub struct Interpreter {
@@ -40,7 +40,7 @@ impl Interpreter {
         output: stream::Client,
         detached: bool,
     ) -> Result<()> {
-        let frame = lower::lower(script, self.sh_args.clone()).await?;
+        let frame = compiler::compile(script, self.sh_args.clone()).await?;
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
             "frame disassembly"
@@ -83,36 +83,36 @@ impl Interpreter {
                         };
                         pc += 1;
                     }
-                    Inst::Call(name) => {
-                        let frame = self.functions.borrow().get(name).cloned();
+                    Inst::Call(symbol) => {
+                        let frame = self.functions.borrow().get(symbol).cloned();
                         match frame {
                             Some(frame) => {
                                 result_register =
                                     self.exec_inner(frame, output.clone(), detached).await;
                             }
                             None => {
-                                result_register = Err(anyhow!("unknown function: {}", name));
+                                result_register = Err(anyhow!("unknown function: {}", symbol));
                             }
                         }
                         pc += 1;
                     }
-                    Inst::TailCall(name) => {
-                        let frame = self.functions.borrow().get(name).cloned();
+                    Inst::TailCall(symbol) => {
+                        let frame = self.functions.borrow().get(symbol).cloned();
                         match frame {
                             Some(frame) => {
                                 current_frame = frame;
                                 pc = 0;
                             }
                             None => {
-                                result_register = Err(anyhow!("unknown function: {}", name));
+                                result_register = Err(anyhow!("unknown function: {}", symbol));
                                 pc += 1;
                             }
                         }
                     }
-                    Inst::DefineFunction { name, frame } => {
+                    Inst::DefineFunction { symbol, frame } => {
                         self.functions
                             .borrow_mut()
-                            .insert(name.clone(), frame.clone());
+                            .insert(symbol.clone(), frame.clone());
                         result_register = Ok(());
                         pc += 1;
                     }

@@ -8,7 +8,7 @@ pub struct Ast<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement<'a> {
     Expr(Expr<'a>),
-    FunctionDefinition { name: &'a str, body: Ast<'a> },
+    FunctionDefinition { symbol: &'a str, body: Ast<'a> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
