@@ -73,6 +73,7 @@ impl Interpreter {
             let mut result_register: Result<()> = Ok(());
 
             loop {
+                dusk_program::embassy_futures::yield_now().await;
                 if pc >= current_frame.len() {
                     return result_register;
                 }

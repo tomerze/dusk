@@ -5,7 +5,9 @@ use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::dusk_capnp::program_args;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::DynamicReceiver;
+use embassy_sync::signal::Signal;
 use embassy_sync::watch::Watch;
 use tracing::Instrument;
 
@@ -67,7 +69,10 @@ pub trait ProcessMixin {
 }
 
 impl dyn Process {
-    pub async fn bootstrap(&self) -> Result<()> {
+    pub async fn bootstrap(
+        &self,
+        registered: Option<&Signal<CriticalSectionRawMutex, ()>>,
+    ) -> Result<()> {
         let namespace = self.namespace();
         {
             let mut ps_map = namespace.ps_map.lock().await;
@@ -95,6 +100,10 @@ impl dyn Process {
         {
             let mut ps_exit_map = namespace.ps_exit_map.lock().await;
             ps_exit_map.insert(self.pid(), exit_watch.clone());
+        }
+
+        if let Some(registered) = registered {
+            registered.signal(());
         }
 
         tracing::info!("main called");
@@ -235,7 +244,7 @@ impl process::Server for dyn Process {
         span.record("program_version", Self::version(self));
         Promise::from_future(async move {
             process
-                .bootstrap()
+                .bootstrap(None)
                 .instrument(tracing::Span::current())
                 .await
                 .context("process bootstrap failed")

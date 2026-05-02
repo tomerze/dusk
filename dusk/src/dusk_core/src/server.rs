@@ -13,6 +13,8 @@ use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::pry;
 use dusk_program::IntoCapnp;
 use dusk_program::anyhow::Context;
+use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use dusk_program::embassy_sync::signal::Signal;
 use dusk_program::namespace::Namespace;
 use dusk_program::process::Process;
 use tracing::Instrument;
@@ -38,10 +40,15 @@ impl DuskServer {
         if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
             let process = process_server.borrow().server.clone_box();
             let task_id = Rc::new(Cell::new(0));
-            let spawn_token = process_task(task_id.clone(), process)
+            let registered = Rc::new(Signal::<CriticalSectionRawMutex, ()>::new());
+            let spawn_token = process_task(task_id.clone(), process, registered.clone())
                 .map_err(|e| capnp::Error::failed(e.to_string()))?;
             task_id.set(spawn_token.id());
             namespace.spawner.spawn(spawn_token);
+            // Wait for the process to be registered in the namespace maps before
+            // replying — otherwise a follow-up `portal()` can race the registration
+            // and see the pid as not-yet-running.
+            registered.wait().await;
             Ok(())
         } else {
             Err(capnp::Error::failed("Process not found".to_string()))
@@ -60,7 +67,11 @@ impl DuskServer {
 }
 
 #[embassy_executor::task(pool_size = 16)]
-async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>) {
+async fn process_task(
+    task_id: Rc<Cell<u32>>,
+    process: Box<dyn Process>,
+    registered: Rc<Signal<CriticalSectionRawMutex, ()>>,
+) {
     let span = info_span!(
         "process",
         task_id = task_id.get(),
@@ -71,7 +82,14 @@ async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>) {
         namespace_id = process.namespace().id
     );
     dusk_program::embassy_futures::yield_now().await;
-    if let Err(err) = process.bootstrap().instrument(span.clone()).await {
+    if let Err(err) = process
+        .bootstrap(Some(&registered))
+        .instrument(span.clone())
+        .await
+    {
+        // If bootstrap failed before signalling, unblock the run handler so it
+        // doesn't hang forever waiting on a registration that never happens.
+        registered.signal(());
         span.in_scope(|| {
             error!(
                 pid = process.pid(),
