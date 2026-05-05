@@ -4,8 +4,13 @@ use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::program_args;
 use dusk_capnp::dusk_capnp::{process, stream};
 use dusk_program::anyhow;
+use dusk_program::embassy_futures::select::{Either, select};
+use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use dusk_program::embassy_sync::signal::Signal;
 use dusk_program::prelude::dusk;
 use dusk_program::stream::UndoneStream;
+
+pub type Stop = Signal<CriticalSectionRawMutex, ()>;
 
 pub enum ExecutionError {
     Runtime(anyhow::Error),
@@ -79,9 +84,23 @@ impl Execution {
     pub async fn program_args(
         &self,
         program_args: program_args::Client,
+        stop: &Stop,
     ) -> Result<(), ExecutionError> {
         let process = self.execute_process(program_args).await?;
-        let done = self.portal_process_and_pipe_output(process.clone()).await?;
+
+        let done = match select(
+            self.portal_process_and_pipe_output(process.clone()),
+            stop.wait(),
+        )
+        .await
+        {
+            Either::First(result) => result?,
+            Either::Second(()) => {
+                // Re-signal so callers up the stack also observe the stop.
+                stop.signal(());
+                true
+            }
+        };
 
         // No done signal → the process daemonized itself by returning from
         // `output` without acking. Leave it running and report success.

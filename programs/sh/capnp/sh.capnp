@@ -46,7 +46,11 @@ interface OutputPortal extends(Dusk.Portal) {
   output @0 (stream :Dusk.Stream) -> ();
 }
 
+interface ShStop {
+  stop @0 () -> ();
+}
+
 interface ShPortal extends(Dusk.Portal, OutputPortal) {
-  sh @0 (script :Script, output :Dusk.Stream) -> ();
+  sh @0 (script :Script, output :Dusk.Stream) -> (stop :ShStop);
   functions @1 () -> (symbols :List(Text));
 }

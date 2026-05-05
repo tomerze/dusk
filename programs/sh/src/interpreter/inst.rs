@@ -33,22 +33,22 @@ fn write_instructions(output: &mut String, instructions: &[Inst], indent: usize)
 
         match instruction {
             Inst::ProgramArgs(_) => {
-                let _ = writeln!(output, "program_args");
+                let _ = write!(output, "program_args; ");
             }
             Inst::Call(symbol) => {
-                let _ = writeln!(output, "call {symbol}");
+                let _ = write!(output, "call {symbol}; ");
             }
             Inst::TailCall(symbol) => {
-                let _ = writeln!(output, "tail_call {symbol}");
+                let _ = write!(output, "tail_call {symbol}; ");
             }
             Inst::DefineFunction { symbol, .. } => {
-                let _ = writeln!(output, "define {symbol}");
+                let _ = write!(output, "define {symbol}; ");
             }
             Inst::JumpIfOk(target) => {
-                let _ = writeln!(output, "jump_if_ok {target:04}");
+                let _ = write!(output, "jump_if_ok {target:04}; ");
             }
             Inst::JumpIfError(target) => {
-                let _ = writeln!(output, "jump_if_error {target:04}");
+                let _ = write!(output, "jump_if_error {target:04}; ");
             }
         }
     }

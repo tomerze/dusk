@@ -1,12 +1,13 @@
 #![allow(internal_features)]
 #![feature(prelude_import)]
+#![feature(impl_trait_in_assoc_type)]
 #![cfg_attr(not(feature = "client"), no_std)]
 
 extern crate alloc;
 extern crate capnp;
 
 use alloc::rc::Rc;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use alloc::sync::Arc;
 
 use anyhow::Context;
@@ -33,7 +34,7 @@ mod client;
 
 mod interpreter;
 
-use interpreter::{FunctionTable, Interpreter};
+use interpreter::{FunctionTable, Interpreter, Stop};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -137,6 +138,88 @@ type ArgsGetReply = capnp::capability::Response<sh_capnp::sh_args::get_results::
 struct State {
     interpreter: Option<Interpreter>,
     args_get_reply: Option<ArgsGetReply>,
+    active_stops: alloc::vec::Vec<Rc<Stop>>,
+}
+
+struct StopServer {
+    stop: Rc<Stop>,
+}
+
+impl sh_capnp::sh_stop::Server for StopServer {
+    fn stop(
+        &mut self,
+        _params: sh_capnp::sh_stop::StopParams,
+        _results: sh_capnp::sh_stop::StopResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        self.stop.signal(());
+        capnp::capability::Promise::ok(())
+    }
+}
+
+
+#[embassy_executor::task(pool_size = 16)]
+async fn sh_exec_task(
+    task_id: Rc<Cell<u32>>,
+    pid: u64,
+    interpreter: Interpreter,
+    script_msg: capnp::message::Builder<capnp::message::HeapAllocator>,
+    output: dusk_capnp::dusk_capnp::stream::Client,
+    stop: Rc<Stop>,
+    state: Rc<RefCell<State>>,
+) {
+    use tracing::Instrument;
+    let span = tracing::info_span!("sh_exec", task_id = task_id.get(), pid);
+    async move {
+        let reader = match script_msg.get_root_as_reader::<sh_capnp::script::Reader>() {
+            Ok(reader) => reader,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to read script root");
+                state
+                    .borrow_mut()
+                    .active_stops
+                    .retain(|s| !Rc::ptr_eq(s, &stop));
+                return;
+            }
+        };
+        if let Err(e) = interpreter.exec(reader, output, &stop).await {
+            tracing::error!(error = %e, "script execution failed");
+        }
+        state
+            .borrow_mut()
+            .active_stops
+            .retain(|s| !Rc::ptr_eq(s, &stop));
+    }
+    .instrument(span)
+    .await;
+}
+
+fn spawn_sh_exec_task(
+    ctx: &ProcessContext,
+    interpreter: Interpreter,
+    script: sh_capnp::script::Reader<'_>,
+    output: dusk_capnp::dusk_capnp::stream::Client,
+    state: Rc<RefCell<State>>,
+) -> capnp::Result<Rc<Stop>> {
+    let mut script_msg = capnp::message::Builder::new_default();
+    script_msg.set_root::<sh_capnp::script::Owned>(script)?;
+
+    let stop = Rc::new(Stop::new());
+    state.borrow_mut().active_stops.push(stop.clone());
+
+    let task_id = Rc::new(Cell::new(0u32));
+    let token = sh_exec_task(
+        task_id.clone(),
+        ctx.pid,
+        interpreter,
+        script_msg,
+        output,
+        stop.clone(),
+        state,
+    )
+    .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
+    task_id.set(token.id());
+    ctx.namespace.spawner.spawn(token);
+    Ok(stop)
 }
 
 #[derive(Clone, dusk_program_proc::Process)]
@@ -160,6 +243,7 @@ impl Process {
             state: Rc::new(RefCell::new(State {
                 interpreter: None,
                 args_get_reply: None,
+                active_stops: alloc::vec::Vec::new(),
             })),
         })
     }
@@ -200,10 +284,10 @@ impl dusk_program::process::ProcessMixin for Process {
             sh_capnp::sh_options::Which::Script(_) => "script",
             sh_capnp::sh_options::Which::Server(_) => "server",
         };
-
         self.ctx
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
+        let mut ready_sent = false;
         {
             self.state.borrow_mut().interpreter = Some(Interpreter::new(
                 client,
@@ -212,19 +296,36 @@ impl dusk_program::process::ProcessMixin for Process {
             ));
 
             if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
+                ready.sender().send(true);
+                ready_sent = true;
                 let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
                 let noop: dusk_capnp::dusk_capnp::stream::Client =
                     capnp_rpc::new_client(NoopStream::new());
-                interpreter.exec(script?, noop).await?;
+                spawn_sh_exec_task(
+                    &self.ctx,
+                    interpreter,
+                    script?,
+                    noop,
+                    self.state.clone(),
+                )
+                .map_err(|e| anyhow::anyhow!("failed to spawn detached script: {e}"))?;
             }
         }
         self.state.borrow_mut().args_get_reply = Some(get_reply);
 
-        ready.sender().send(true);
+        if !ready_sent {
+            ready.sender().send(true);
+        }
+
         loop {
             let signal = signal_receiver.receive().await;
             match signal {
-                Signal::Terminate => return Ok(()),
+                Signal::Terminate => {
+                    for stop in self.state.borrow().active_stops.iter() {
+                        stop.signal(());
+                    }
+                    return Ok(());
+                }
                 Signal::Unknown(_signal) => {}
             }
         }
@@ -241,7 +342,7 @@ impl Portal {
     fn sh(
         &mut self,
         params: sh_capnp::sh_portal::ShParams,
-        _results: sh_capnp::sh_portal::ShResults,
+        mut results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let interpreter = self
             .process
@@ -251,17 +352,20 @@ impl Portal {
             .as_ref()
             .unwrap()
             .clone();
-        Promise::from_future(async move {
-            let params = params.get()?;
-            let script = params.get_script()?;
-            let output = params.get_output()?;
-            interpreter
-                .exec(script, output)
-                .await
-                .context("sh execution failed")
-                .into_capnp()?;
-            Ok(())
-        })
+        let params = pry!(params.get());
+        let script = pry!(params.get_script());
+        let output = pry!(params.get_output());
+
+        let stop = pry!(spawn_sh_exec_task(
+            &self.process.ctx,
+            interpreter,
+            script,
+            output,
+            self.process.state.clone(),
+        ));
+        let stop_client: sh_capnp::sh_stop::Client = capnp_rpc::new_client(StopServer { stop });
+        results.get().set_stop(stop_client);
+        capnp::capability::Promise::ok(())
     }
 
     fn functions(
@@ -299,17 +403,14 @@ impl sh_capnp::output_portal::Server for Portal {
                 .ok_or_else(|| { capnp::Error::failed("args reply not available".into()) })
         );
         let state_cell = self.process.state.clone();
+        let ctx = self.process.ctx.clone();
         Promise::from_future(async move {
             let reply = get_reply.get()?;
             let options = reply.get_options()?;
             match options.which()? {
                 sh_capnp::sh_options::Which::Script(script) => {
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
-                    interpreter
-                        .exec(script?, stream)
-                        .await
-                        .context("script execution failed")
-                        .into_capnp()?;
+                    spawn_sh_exec_task(&ctx, interpreter, script?, stream, state_cell.clone())?;
                 }
                 sh_capnp::sh_options::Which::DetachedScript(_) => {
                     // The script has already been executed in `main` against a

@@ -14,6 +14,7 @@ use crate::sh_capnp::script;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
+pub use execution::Stop;
 use execution::ExecutionError;
 use inst::{Frame, Inst, ScriptWrapper};
 
@@ -65,6 +66,7 @@ impl Interpreter {
         &self,
         script: script::Reader<'_>,
         output: stream::Client,
+        stop: &Stop,
     ) -> Result<()> {
         let symbols: HashSet<String> =
             self.function_table.lock().await.keys().cloned().collect();
@@ -74,7 +76,7 @@ impl Interpreter {
             "script frame disassembly"
         );
         let frame = Arc::new(frame);
-        let _ = self.exec_inner(frame, output.clone()).await;
+        let _ = self.exec_inner(frame, output.clone(), stop).await;
         output.done_request().send().promise.await?;
         Ok(())
     }
@@ -83,6 +85,7 @@ impl Interpreter {
         &'a self,
         frame: Arc<Frame>,
         output: stream::Client,
+        stop: &'a Stop,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
         Box::pin(async move {
             let mut current_frame = frame;
@@ -91,6 +94,9 @@ impl Interpreter {
 
             loop {
                 dusk_program::embassy_futures::yield_now().await;
+                if stop.signaled() {
+                    return Ok(());
+                }
                 if pc >= current_frame.len() {
                     return result_register;
                 }
@@ -100,7 +106,7 @@ impl Interpreter {
                             self.client.clone(),
                             output.clone(),
                         );
-                        result_register = match exec.program_args(program_args.clone()).await {
+                        result_register = match exec.program_args(program_args.clone(), stop).await {
                             Ok(()) => Ok(()),
                             Err(ExecutionError::Runtime(e)) => {
                                 tracing::error!(pc, error = %e, "runtime error during program execution");
@@ -115,7 +121,7 @@ impl Interpreter {
                         match self.resolve_function(&symbol).await {
                             Ok(frame) => {
                                 result_register =
-                                    self.exec_inner(frame, output.clone()).await;
+                                    self.exec_inner(frame, output.clone(), stop).await;
                             }
                             Err(e) => result_register = Err(e),
                         }

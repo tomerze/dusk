@@ -259,9 +259,21 @@ If the task is ambiguous, the design space has more than one reasonable shape, o
 
 If a task is going to introduce more than a couple of new functions, types, modules, or files, **stop and ask first**. List the names you intend to add and one-line purposes for each. Wait for sign-off. The user has made it clear repeatedly that "three new helpers" is almost never the right answer.
 
+### Write like an engineer, you are not a script kiddie.
+
+* Add tests and docs without me explicitly telling you.
+* Think of edge cases.
+* Don't save up on tokens in your naming. It's `stop` not `s`, `request` not `req`, `address` not `addr`. Your code should read **clean*.
+
 ### Don't redesign without explicit instruction
 
 The default is: solve the problem inside the existing design. Don't refactor neighbouring code, don't rename things, don't introduce a new abstraction "while you're here". If you genuinely think the design needs to change to solve the task, **say so and ask** — don't unilaterally restructure. The user explicitly stating "redesign / refactor X" is the only green light.
+
+### Don't write near-duplicate functions
+
+If two functions you are about to write differ in a single field or a single line of body, that's not two functions, that's one function with a parameter or a small wrapper. Stop, unify, then continue. Copy-pasting an existing task / handler / helper and tweaking one identifier is the failure mode here.
+
+Concrete example of where I failed: while wiring sh script execution into an embassy task, I wrote `detached_script_task` for the `DetachedScript` branch and then went on to author a near-identical `sh_script_task` for the `Script` branch — same captures, same span shape, same exec/error-log/retain epilogue, only difference being `noop` vs. a real `output: stream::Client`. The right shape was a single task taking the output stream as a parameter. Look for this pattern explicitly before adding the second function.
 
 ### The user is likely right
 
