@@ -5,6 +5,7 @@ use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::entry::ShEntriesBuilder;
 use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
 use dusk_program_sh::{ShArgs, parser::Parser};
+use std::future::Future;
 use tokio::sync::oneshot;
 
 pub struct Shell {
@@ -79,11 +80,17 @@ impl Shell {
         })
     }
 
+    /// Run `script` against the shell process. Returns once the output stream signals done.
+    ///
+    /// `stop_signal` is awaited concurrently; if it resolves before the command finishes, the
+    /// returned `ShStop` capability is invoked and `sh` then waits for done. Pass
+    /// `std::future::pending()` if the caller has no way to ask for a stop.
     pub async fn sh(
         &mut self,
         script: &str,
         stream: stream::Client,
         done_receiver: oneshot::Receiver<()>,
+        stop_signal: impl Future<Output = ()>,
     ) -> Result<()> {
         let sh_process = self.sh_process.clone();
 
@@ -101,9 +108,20 @@ impl Shell {
         self.parser.parse(script, script_builder)?;
 
         sh_request.get().set_output(stream);
-        let _sh_reply = sh_request.send().promise.await?;
-        // sh returns immediately, but the shell command is running until done is called on the output stream.
-        done_receiver.await?;
+        let sh_reply = sh_request.send().promise.await?;
+        let stop = sh_reply.get()?.get_stop()?;
+        // sh returns immediately; the command keeps running until done is called on the output
+        // stream. Race done against the caller's stop signal — if stop wins, ask the sh process
+        // to stop and then wait for done so we don't return while it's still finishing.
+        let mut done_receiver = done_receiver;
+        let stop_signal = std::pin::pin!(stop_signal);
+        tokio::select! {
+            result = &mut done_receiver => result?,
+            _ = stop_signal => {
+                stop.stop_request().send().promise.await?;
+                done_receiver.await?;
+            }
+        }
         Ok(())
     }
 

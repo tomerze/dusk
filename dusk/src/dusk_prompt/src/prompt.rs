@@ -1,7 +1,8 @@
 use chrono::Duration;
 use dusk_program::anyhow::{Result, anyhow};
 use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
-use std::{borrow::Cow, cell::Cell};
+use std::{borrow::Cow, cell::Cell, rc::Rc};
+use tokio::sync::Notify;
 
 use crossterm::{
     cursor::SetCursorStyle,
@@ -216,6 +217,8 @@ where
     available_programs_info: Vec<ProgramInfo>,
     display_engine: D,
     stream_factory: F,
+    /// Fired by the caller (e.g. on ctrl+c) to ask the running command to stop.
+    stop_signal: Rc<Notify>,
 }
 
 impl<'a, D, F> Prompt<'a, D, F>
@@ -267,6 +270,7 @@ The `functions` command lists all functions defined in any shell
         get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
         stream_factory: F,
+        stop_signal: Rc<Notify>,
     ) -> Result<Self> {
         let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
 
@@ -277,6 +281,7 @@ The `functions` command lists all functions defined in any shell
             available_programs_info,
             display_engine,
             stream_factory,
+            stop_signal,
         })
     }
 
@@ -468,7 +473,11 @@ Program ID: `{program_id}`
                 }
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
-                if let Err(e) = self.shell.sh(line, stream, done_receiver).await {
+                if let Err(e) = self
+                    .shell
+                    .sh(line, stream, done_receiver, self.stop_signal.notified())
+                    .await
+                {
                     tracing::error!("{:?} exited with error:\n{:?}", first_word, e);
                 }
             }

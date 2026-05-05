@@ -11,7 +11,9 @@ use dusk_prompt::{
 };
 use dusk_shell::{connection::Connection, shell::Shell};
 use std::net::SocketAddr;
+use std::rc::Rc;
 use tokio::signal;
+use tokio::sync::Notify;
 use tracing::{error, info};
 
 #[derive(Parser)]
@@ -25,7 +27,11 @@ struct Cli {
     debug_console: bool,
 }
 
-async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
+async fn single_command(
+    shell: &mut Shell,
+    command: String,
+    stop_signal: &Notify,
+) -> Result<()> {
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
     let (json_stream, done_receiver) =
@@ -35,6 +41,7 @@ async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
             command.as_str(),
             capnp_rpc::new_client(json_stream),
             done_receiver,
+            stop_signal.notified(),
         )
         .await?;
     Ok(())
@@ -43,6 +50,7 @@ async fn single_command(shell: &mut Shell, command: String) -> Result<()> {
 async fn interactive_prompt(
     shell: &mut Shell,
     sh_entries_builder: impl ShEntriesBuilder,
+    stop_signal: Rc<Notify>,
 ) -> Result<()> {
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
         StreamRequest::Raw => {
@@ -63,10 +71,23 @@ async fn interactive_prompt(
         sh_entries_builder,
         DefaultDisplayEngine::default(),
         stream_factory,
+        stop_signal,
     )
     .await?;
     prompt.run().await?;
     Ok(())
+}
+
+async fn stop_on_ctrl_c(stop_signal: Rc<Notify>) {
+    loop {
+        if signal::ctrl_c().await.is_err() {
+            // SIGINT listener registration failed; park so the work arm drives shutdown.
+            error!("failed to listen for ctrl+c");
+            std::future::pending::<()>().await;
+        }
+        info!("ctrl+c: stopping running commands");
+        stop_signal.notify_waiters();
+    }
 }
 
 async fn run(cli: Cli) {
@@ -75,6 +96,7 @@ async fn run(cli: Cli) {
     if let Err(err) = local_set
         .run_until(async move {
             let connection = Connection::connect(cli.address).await?;
+            let stop_signal = Rc::new(Notify::new());
             tokio::select! {
                 result = async {
                     let client = connection.client().await;
@@ -85,8 +107,13 @@ async fn run(cli: Cli) {
                         ShParser::new(),
                     ).await?;
                     let session_result = match cli.command {
-                        Some(command) => single_command(&mut shell, command).await,
-                        None => interactive_prompt(&mut shell, sh_entries_builder).await,
+                        Some(command) => {
+                            single_command(&mut shell, command, &stop_signal).await
+                        }
+                        None => {
+                            interactive_prompt(&mut shell, sh_entries_builder, stop_signal.clone())
+                                .await
+                        }
                     };
                     let shell_kill_result = shell.kill().await;
                     // Print both shell kill errors and command errors
@@ -101,9 +128,7 @@ async fn run(cli: Cli) {
                     result?;
                     info!("exiting");
                 }
-                _ = signal::ctrl_c() => {
-                    error!("existing due to signal not caught by prompt");
-                }
+                _ = stop_on_ctrl_c(stop_signal.clone()) => {}
             };
             connection.disconnect().await?;
             Ok::<(), anyhow::Error>(())

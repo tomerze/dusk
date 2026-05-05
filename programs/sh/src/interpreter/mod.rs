@@ -152,10 +152,14 @@ impl Interpreter {
                             self.function_table.lock().await.remove(&symbol);
                             self.compiled_functions.borrow_mut().remove(&symbol);
                         } else {
-                            self.function_table
+                            let previous = self
+                                .function_table
                                 .lock()
                                 .await
                                 .insert(symbol.clone(), body);
+                            if previous.is_some() {
+                                tracing::info!(symbol = %symbol, "overwriting existing function");
+                            }
                             // Drop any stale compiled frame so compile_function
                             // recompiles against the new body.
                             self.compiled_functions.borrow_mut().remove(&symbol);

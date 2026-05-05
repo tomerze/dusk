@@ -124,8 +124,10 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
             }
         };
 
-        // Run the command (this will wait for done_rx signal internally)
-        let result = shell.sh(&command, stream_client, done_rx).await;
+        // No external stop source in the Python embedding; let the command run to completion.
+        let result = shell
+            .sh(&command, stream_client, done_rx, std::future::pending())
+            .await;
 
         // Kill the shell now that the command has completed
         let _ = shell.kill().await;
