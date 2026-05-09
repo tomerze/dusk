@@ -3,8 +3,8 @@ use capnp::capability::FromClientHook;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::{sh_args, sh_portal};
-use dusk_program_sh::{ShArgs, parser::Parser};
+use dusk_program_sh::sh_capnp::sh_portal;
+use dusk_program_sh::{ShArgs, ShMode, parser::Parser};
 use std::future::Future;
 use tokio::sync::oneshot;
 
@@ -21,19 +21,11 @@ impl Shell {
         client: dusk::Client,
         sh_entries_builder: S,
     ) -> capnp::Result<process::Client> {
-        let mut options = capnp::message::Builder::new_default();
-        options
-            .init_root::<dusk_program_sh::sh_capnp::sh_options::Builder>()
-            .set_server(());
-        let program_args = capnp_rpc::new_client::<sh_args::Client, ShArgs<S>>(ShArgs {
-            client: client.clone(),
-            options,
-            sh_entries_builder,
-        });
+        let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
+            .map_err(|err| capnp::Error::failed(format!("{err:?}")))?;
+        let program_args = sh_args.as_program_args()?;
         let mut process_request = client.process_request();
-        process_request.get().set_program_args(
-            program_args.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
-        );
+        program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
         let process_reply = process_request.send().promise.await?;
         let process = process_reply.get()?.get_result()?;
 

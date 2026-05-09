@@ -45,14 +45,7 @@ impl LauncherSet {
 
     pub async fn launch(&self, process_context: ProcessContext) -> Result<Box<dyn Process>> {
         let mut launchers = self.launchers.lock().await;
-        let program_id = process_context
-            .program_args
-            .program_id_request()
-            .send()
-            .promise
-            .await?
-            .get()?
-            .get_program_id();
+        let program_id = process_context.program_args.program_id()?;
         for launcher in launchers.iter_mut() {
             if launcher.program_id() == program_id {
                 return launcher.launch(process_context).await;

@@ -63,7 +63,7 @@ impl Driver for NixDriver {
     fn process(
         &self,
         namespace: Rc<Namespace>,
-        program_args: dusk_core::dusk_capnp::dusk_capnp::program_args::Client,
+        program_args: Rc<dusk_program::program_args::ProgramArgs>,
     ) -> FutureProcessResult {
         let namespace_id = namespace.id;
         let launchers = match self.launchers(namespace_id) {

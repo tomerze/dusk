@@ -1,13 +1,11 @@
-use dusk_capnp::capnp::capability::FromClientHook;
-use dusk_capnp::capnp_rpc;
-use dusk_program_init::init_capnp::init_args;
+use dusk_program_init::Args as InitArgs;
 use rand::Rng;
 use std::sync::{Arc, Mutex};
 use tracing::Level;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 
-pub const LISTEN_ADDR: &str = "127.0.0.1";
+pub const LISTEN_ADDRESS: &str = "127.0.0.1";
 
 pub fn gen_port() -> u16 {
     let mut rng = rand::rng();
@@ -92,6 +90,9 @@ impl DuskNixImpl {
             let subscriber = tracing_subscriber::registry().with(log_capture_clone);
             let _ = tracing::subscriber::set_global_default(subscriber);
 
+            let init_program_args = InitArgs::new(&address, port)
+                .as_program_args()
+                .expect("build init program_args");
             dusk_nix::run(
                 dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(
                     vec![
@@ -100,17 +101,14 @@ impl DuskNixImpl {
                         Box::new(dusk_program_ps::Launcher::new()),
                     ],
                 )),
-                capnp_rpc::new_client::<init_args::Client, _>(dusk_program_init::Args::new(
-                    &address, port,
-                ))
-                .cast_to::<dusk_capnp::dusk_capnp::program_args::Client>(),
+                init_program_args,
             );
         });
 
         // Block until the server is accepting connections.
-        let addr = format!("{}:{}", address, port);
+        let socket_address = format!("{}:{}", address, port);
         loop {
-            if std::net::TcpStream::connect(&addr).is_ok() {
+            if std::net::TcpStream::connect(&socket_address).is_ok() {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(10));

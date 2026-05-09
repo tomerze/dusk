@@ -283,3 +283,17 @@ If something looks off and not right **say so**.
 Always assume your own understanding is limited, your style is off, your reasoning naive. 
 
 The user knows best.
+
+### No abbreviations on variables or function names.
+
+* program_args not pa
+* request not req
+* borrow_mut not bm
+
+If you want to use an abbreviation that isn't already commonly used in the project, **ask first**. Don't introduce a new short form unilaterally — even ones that seem obvious. The bar is "is this exact abbreviation already in use here", not "is this a familiar shorthand".
+
+### Don't break dependency injection.
+
+If a function or struct currently takes a value as a parameter so the caller can supply different implementations (e.g. a generic `S: SomeTrait` argument like `sh_entries_builder: S`), that is dependency injection and you keep it. **Don't replace it with a hardcoded `Default::default()` or a single concrete type just because a refactor would be tidier without the parameter.** If you genuinely believe the DI is unnecessary, ask — don't decide unilaterally. The same applies to anything else passed as a parameter for the purpose of letting the caller pick: callbacks, builders, factories, capability hooks. If it's a dial, leave the dial.
+
+Concrete example of where I failed: during the `ProgramArgs` schema migration I rewrote `Shell::new<S: ShEntriesBuilder>(client, sh_entries_builder, parser)` as `Shell::new(client, parser)` with `StaticShEntriesBuilder::default()` baked in. That removed every caller's ability to inject a different entries builder (e.g. `DynamicShEntriesBuilder` for a test fixture or a compile-time-restricted impl). The right shape was to keep the generic param, not collapse it.

@@ -1,8 +1,9 @@
-use alloc::sync::Arc;
+use alloc::rc::Rc;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Write;
-use dusk_capnp::dusk_capnp::program_args;
+use dusk_program::program_args::ProgramArgs;
 
 pub type Frame = Vec<Inst>;
 
@@ -13,7 +14,7 @@ unsafe impl Send for ScriptWrapper {}
 unsafe impl Sync for ScriptWrapper {}
 
 pub enum Inst {
-    ProgramArgs(program_args::Client),
+    ProgramArgs(Rc<ProgramArgs>),
     Call(String),
     TailCall(String),
     DefineFunction { symbol: String, body: Arc<ScriptWrapper> },

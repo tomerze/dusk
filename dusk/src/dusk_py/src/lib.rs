@@ -61,7 +61,7 @@ impl Dusk {
     ///     A Dusk client instance
     #[new]
     fn new(_py: Python, address: String, port: u16) -> PyResult<Self> {
-        let addr = std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
+        let address = std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
             std::net::Ipv4Addr::from_str(&address)
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
             port,
@@ -71,7 +71,7 @@ impl Dusk {
         let (init_tx, mut init_rx) = mpsc::unbounded_channel::<Result<()>>();
 
         let thread_handle =
-            std::thread::spawn(move || Self::connection_thread(addr, message_rx, init_tx));
+            std::thread::spawn(move || Self::connection_thread(address, message_rx, init_tx));
 
         // Wait for initialization to complete or fail
         match init_rx.blocking_recv() {
@@ -111,21 +111,21 @@ impl Dusk {
 
 impl Dusk {
     fn connection_thread(
-        addr: std::net::SocketAddr,
+        address: std::net::SocketAddr,
         mut message_rx: mpsc::UnboundedReceiver<Message>,
         init_tx: mpsc::UnboundedSender<Result<()>>,
     ) -> Result<()> {
         let rt = tokio::runtime::Runtime::new()?;
         let local_set = tokio::task::LocalSet::new();
 
-        async fn init(addr: std::net::SocketAddr) -> Result<(Connection, Client)> {
-            let connection = Connection::connect(addr).await?;
+        async fn init(address: std::net::SocketAddr) -> Result<(Connection, Client)> {
+            let connection = Connection::connect(address).await?;
             let client = connection.client().await;
             Ok((connection, client))
         }
 
         rt.block_on(local_set.run_until(async move {
-            let (connection, client) = match init(addr).await {
+            let (connection, client) = match init(address).await {
                 Ok((connection, client)) => {
                     let _ = init_tx.send(Ok(()));
                     (connection, client)

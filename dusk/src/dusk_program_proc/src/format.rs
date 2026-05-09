@@ -10,7 +10,19 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
     let program_id = &metadata.program_id;
 
     let args_server: syn::Path = syn::parse_str(&format!(
-        "{}_capnp::{}_args::Server",
+        "{}_capnp::{}_args::server::Server",
+        metadata.name, metadata.name
+    ))
+    .unwrap();
+
+    let server_client: syn::Path = syn::parse_str(&format!(
+        "{}_capnp::{}_args::server::Client",
+        metadata.name, metadata.name
+    ))
+    .unwrap();
+
+    let data_owned: syn::Path = syn::parse_str(&format!(
+        "{}_capnp::{}_args::data::Owned",
         metadata.name, metadata.name
     ))
     .unwrap();
@@ -58,6 +70,59 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                 $(#[$meta])*
                 impl $($impl_generics)* #args_server for $($self_ty)* $($where_clause)* {
                     $($body)*
+                }
+            };
+        }
+        
+        macro_rules! __derive_args {
+            (
+                $(#[$meta:meta])*
+                [$($impl_generics:tt)*] [$($self_ty:tt)*] [$($where_clause:tt)*]
+                [$data_field:ident]
+            ) => {
+                $(#[$meta])*
+                const _: () = {
+                    fn __derive_args_assert<__T: ?::core::marker::Sized + #args_server>() {}
+                    #[allow(dead_code)]
+                    fn __derive_args_check $($impl_generics)* () $($where_clause)* {
+                        __derive_args_assert::<$($self_ty)*>();
+                    }
+                };
+
+                $(#[$meta])*
+                impl $($impl_generics)* $($self_ty)* $($where_clause)* {
+                    #[allow(unused_qualifications)]
+                    pub fn as_program_args(
+                        self,
+                    ) -> dusk_program::dusk_capnp::capnp::Result<
+                        alloc::rc::Rc<dusk_program::program_args::ProgramArgs>,
+                    > {
+                        let owned = dusk_program::program_args::ProgramArgs::new();
+                        // Phase 1: write program_id and args.data by copying
+                        // the typed reader out of the `#[data]` field
+                        // (`capnp::message::TypedBuilder<#data_owned>`) into
+                        // the args.data slot. Borrows `&self.$data_field`;
+                        // the borrow ends with the closure.
+                        owned.with_root_builder(|mut root| {
+                            root.set_program_id(PROGRAM_ID);
+                            let mut data_dest = root.init_args().init_data();
+                            let data_reader = self.$data_field.get_root_as_reader()?;
+                            data_dest.set_as::<#data_owned>(data_reader)
+                        })?;
+                        // Phase 2: consume `self` into a server cap and stash
+                        // it in args.server. Use `get_args()` (not
+                        // `init_args()`) — `init_args()` clears both pointer
+                        // slots and would wipe the data we just wrote.
+                        let server: #server_client =
+                            dusk_program::dusk_capnp::capnp_rpc::new_client(self);
+                        owned.with_root_builder(|root| {
+                            root.get_args().init_server().set_as_capability(
+                                <_ as dusk_program::dusk_capnp::capnp::capability::FromClientHook>::into_client_hook(server),
+                            );
+                            Ok(())
+                        })?;
+                        Ok(alloc::rc::Rc::new(owned))
+                    }
                 }
             };
         }

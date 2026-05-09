@@ -7,6 +7,7 @@ edition = "2024"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
+dusk_core = { path = "../../dusk/src/dusk_core/" }
 slab = { version = "0.4.11", public = true }
 anyhow = { version = "1.0.88", public = true }
 dusk_program_sh = { path = "../sh", public = true }

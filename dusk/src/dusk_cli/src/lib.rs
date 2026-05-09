@@ -85,7 +85,6 @@ async fn stop_on_ctrl_c(stop_signal: Rc<Notify>) {
             error!("failed to listen for ctrl+c");
             std::future::pending::<()>().await;
         }
-        info!("ctrl+c: stopping running commands");
         stop_signal.notify_waiters();
     }
 }
@@ -105,7 +104,8 @@ async fn run(cli: Cli) {
                         client.clone(),
                         sh_entries_builder.clone(),
                         ShParser::new(),
-                    ).await?;
+                    )
+                    .await?;
                     let session_result = match cli.command {
                         Some(command) => {
                             single_command(&mut shell, command, &stop_signal).await

@@ -1,13 +1,15 @@
+use alloc::rc::Rc;
+
 use crate::sh_capnp;
 use capnp::capability::FromClientHook;
 use dusk_capnp::capnp_rpc;
-use dusk_capnp::dusk_capnp::program_args;
 use dusk_capnp::dusk_capnp::{process, stream};
 use dusk_program::anyhow;
 use dusk_program::embassy_futures::select::{Either, select};
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::signal::Signal;
 use dusk_program::prelude::dusk;
+use dusk_program::program_args::ProgramArgs;
 use dusk_program::stream::UndoneStream;
 
 pub type Stop = Signal<CriticalSectionRawMutex, ()>;
@@ -29,11 +31,13 @@ impl Execution {
 
     async fn execute_process(
         &self,
-        program_args: program_args::Client,
+        program_args: Rc<ProgramArgs>,
     ) -> Result<process::Client, ExecutionError> {
         let client = self.client.clone();
         let mut process_request = client.clone().process_request();
-        process_request.get().set_program_args(program_args);
+        program_args
+            .with_reader(|reader| process_request.get().set_program_args(reader))
+            .map_err(|e| ExecutionError::Runtime(e.into()))?;
         let process = capnp_rpc::new_future_client(async move {
             let process_reply = process_request.send().promise.await?;
             let process = process_reply.get()?.get_result()?;
@@ -83,7 +87,7 @@ impl Execution {
 
     pub async fn program_args(
         &self,
-        program_args: program_args::Client,
+        program_args: Rc<ProgramArgs>,
         stop: &Stop,
     ) -> Result<(), ExecutionError> {
         let process = self.execute_process(program_args).await?;

@@ -3,6 +3,7 @@ extern crate linkme;
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
+use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
 use linkme::distributed_slice;
 use std::rc::Rc;
@@ -16,12 +17,11 @@ struct PsProgramArgsBuilder {}
 impl ProgramArgsBuilder for PsProgramArgsBuilder {
     fn build(
         &self,
-        client: dusk::Client,
+        _client: dusk::Client,
         args: &[&str],
-    ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
+    ) -> anyhow::Result<Rc<ProgramArgs>> {
         let _cli = PsCli::try_parse_from(args)?;
-        let client: ps_capnp::ps_args::Client = capnp_rpc::new_client(Args { client });
-        Ok(client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
+        Ok(Args::new().as_program_args()?)
     }
 }
 

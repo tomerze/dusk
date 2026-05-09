@@ -7,5 +7,6 @@ edition = "2024"
 dusk_tests = { path = "../common" }
 dusk_shell = { path = "../../dusk/src/dusk_shell" }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp" }
+dusk_program = { path = "../../dusk/src/dusk_program" }
 dusk_program_ps = { path = "../../programs/ps" }
 tokio = { version = "1", features = ["rt", "macros"] }

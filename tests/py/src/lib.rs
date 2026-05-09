@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-use dusk_tests::{DuskNixImpl, LISTEN_ADDR, gen_port};
+use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use std::process::Command;
 
 #[allow(dead_code)]
@@ -18,16 +18,16 @@ fn run_python_code(code: &str) -> bool {
 #[test]
 fn test_sanity() {
     let port = gen_port();
-    let address = LISTEN_ADDR;
+    let address = LISTEN_ADDRESS;
     let _dusk = DuskNixImpl::new(address, port);
 
     let code = format!(
         r#"
 import dusk
-client = dusk.Dusk("{addr}", {port})
+client = dusk.Dusk("{address}", {port})
 client.disconnect()
 "#,
-        addr = address,
+        address = address,
         port = port
     );
 
@@ -37,18 +37,18 @@ client.disconnect()
 #[test]
 fn test_multiple_clients_same_server() {
     let port = gen_port();
-    let address = LISTEN_ADDR;
+    let address = LISTEN_ADDRESS;
     let _dusk = DuskNixImpl::new(address, port);
 
     let code = format!(
         r#"
 import dusk
-client = dusk.Dusk("{addr}", {port})
-another_client = dusk.Dusk("{addr}", {port})
+client = dusk.Dusk("{address}", {port})
+another_client = dusk.Dusk("{address}", {port})
 client.disconnect()
 another_client.disconnect()
 "#,
-        addr = address,
+        address = address,
         port = port
     );
 

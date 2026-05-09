@@ -4,7 +4,6 @@ use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
-use dusk_capnp::dusk_capnp::program_args;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::DynamicReceiver;
 use embassy_sync::signal::Signal;
@@ -15,6 +14,7 @@ use crate::IntoCapnp;
 use crate::namespace::ExitWatch;
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
+use crate::program_args::ProgramArgs;
 use crate::ready::Ready;
 use crate::signal;
 
@@ -22,7 +22,7 @@ use crate::signal;
 pub struct ProcessContext {
     pub pid: u64,
     pub namespace: alloc::rc::Rc<Namespace>,
-    pub program_args: program_args::Client,
+    pub program_args: Rc<ProgramArgs>,
     pub name: Rc<
         embassy_sync::blocking_mutex::Mutex<
             embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,
@@ -40,8 +40,8 @@ pub struct ProcessContext {
 //
 // And how does one get a process?
 // Dusk.process -> Driver.process ->
-// LauncherSet.launch <- program_args.get_program_id (dusk server back to dusk client RPC)
-// -> Launcher.launch -> Process
+// LauncherSet.launch (reads program_id from the args message) ->
+// Launcher.launch -> Process
 // Cool right?
 //
 // Note: Never run process.main directly, always use process.bootstrap.

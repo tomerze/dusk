@@ -3,8 +3,8 @@ use std::vec::Vec;
 
 use crate::linkme::distributed_slice;
 use dusk_capnp::dusk_capnp::dusk;
-use dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow;
+use dusk_program::program_args::ProgramArgs;
 
 #[derive(Copy, Clone)]
 pub struct ProgramInfo {
@@ -16,7 +16,11 @@ pub struct ProgramInfo {
 }
 
 pub trait ProgramArgsBuilder {
-    fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<program_args::Client>;
+    fn build(
+        &self,
+        client: dusk::Client,
+        args: &[&str],
+    ) -> anyhow::Result<Rc<ProgramArgs>>;
 }
 
 #[derive(Clone)]

@@ -15,7 +15,7 @@ pub fn metadata(item: TokenStream) -> TokenStream {
     TokenStream::from(format_header(&parsed))
 }
 
-#[proc_macro_derive(Args)]
+#[proc_macro_derive(Args, attributes(data))]
 pub fn derive_args(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
@@ -27,20 +27,49 @@ pub fn derive_args(item: TokenStream) -> TokenStream {
         .filter(|attr| attr.path().is_ident("cfg"))
         .collect();
 
-    let expanded = quote::quote! {
-        #(#cfg_attrs)*
-        impl #impl_generics dusk_program::dusk_capnp::dusk_capnp::program_args::Server
-            for #struct_name #ty_generics #where_clause
-        {
-            fn program_id(
-                &mut self,
-                _params: dusk_program::dusk_capnp::dusk_capnp::program_args::ProgramIdParams,
-                mut results: dusk_program::dusk_capnp::dusk_capnp::program_args::ProgramIdResults,
-            ) -> capnp::capability::Promise<(), capnp::Error> {
-                results.get().set_program_id(PROGRAM_ID);
-                capnp::capability::Promise::ok(())
+    let fields = match &input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            syn::Fields::Named(fields) => &fields.named,
+            _ => {
+                return syn::Error::new_spanned(
+                    &input.ident,
+                    "Args can only be derived for structs with named fields",
+                )
+                .to_compile_error()
+                .into();
             }
+        },
+        _ => {
+            return syn::Error::new_spanned(
+                &input.ident,
+                "Args can only be derived for structs",
+            )
+            .to_compile_error()
+            .into();
         }
+    };
+
+    let data_fields: Vec<_> = fields
+        .iter()
+        .filter(|f| f.attrs.iter().any(|a| a.path().is_ident("data")))
+        .collect();
+
+    if data_fields.len() != 1 {
+        return syn::Error::new_spanned(
+            &input.ident,
+            "Args derive requires exactly one field annotated with #[data]",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let data_field_ident = data_fields[0].ident.as_ref().unwrap();
+
+    let expanded = quote::quote! {
+        __derive_args!(
+            #(#cfg_attrs)*
+            [#impl_generics] [#struct_name #ty_generics] [#where_clause] [#data_field_ident]
+        );
     };
 
     TokenStream::from(expanded)

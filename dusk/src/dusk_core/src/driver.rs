@@ -1,8 +1,8 @@
 use core::{future::Future, pin::Pin};
 
 use alloc::{rc::Rc, string::String};
-use dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow::Result;
+use dusk_program::program_args::ProgramArgs;
 use dusk_program::{namespace::Namespace, process::Process};
 
 pub type FutureProcessResult = Pin<Box<dyn Future<Output = Result<Box<dyn Process>>>>>;
@@ -15,7 +15,7 @@ pub trait Driver: Send + Sync + 'static {
     fn process(
         &self,
         namespace: Rc<Namespace>,
-        program_args: program_args::Client,
+        program_args: Rc<ProgramArgs>,
     ) -> FutureProcessResult;
 
     fn now(&self) -> Result<dusk_program::embassy_time::Instant>;
@@ -37,7 +37,7 @@ macro_rules! dusk_driver_impl {
         #[unsafe(no_mangle)]
         fn _dusk_process<'a>(
             namespace: Rc<Namespace>,
-            program_args: $crate::dusk_capnp::dusk_capnp::program_args::Client,
+            program_args: Rc<dusk_program::program_args::ProgramArgs>,
         ) -> FutureProcessResult {
             <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
         }
@@ -53,7 +53,7 @@ unsafe extern "Rust" {
 
     fn _dusk_process<'a>(
         namespace: Rc<Namespace>,
-        program_args: program_args::Client,
+        program_args: Rc<ProgramArgs>,
     ) -> FutureProcessResult;
 
     fn _dusk_now() -> Result<dusk_program::embassy_time::Instant>;
@@ -65,7 +65,7 @@ pub fn hostname() -> Result<String> {
 
 pub fn process(
     namespace: Rc<Namespace>,
-    program_args: program_args::Client,
+    program_args: Rc<ProgramArgs>,
 ) -> FutureProcessResult {
     unsafe { _dusk_process(namespace, program_args) }
 }

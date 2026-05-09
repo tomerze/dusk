@@ -30,10 +30,12 @@ interface Stream {
   done @1 () -> ();
 }
 
-# Program arguments struct inherit from here,
-# it is later downcasted based on programId.
-interface ProgramArgs {
-  programId @0 () -> (program_id: UInt64);
+struct ProgramArgs(D, S) {
+  programId @0 :UInt64;
+  args :group {
+    data @1 :D;
+    server @2 :S;
+  }
 }
 
 interface Process {
@@ -55,7 +57,7 @@ struct ProcessEntry {
 }
 
 interface Dusk {
-    process @0 (programArgs: ProgramArgs) -> (result: Process);
+    process @0 (programArgs :ProgramArgs(AnyPointer, AnyPointer)) -> (result: Process);
     run @1 (process: Process) -> ();
     ps @2 () -> (process_entries :List(ProcessEntry));
     kill @4 (pid: UInt64, signal: UInt64) -> ();

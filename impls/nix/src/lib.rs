@@ -5,11 +5,11 @@ extern crate alloc;
 
 use alloc::rc::Rc;
 use core::cell::Cell;
-use dusk_core::dusk_capnp::dusk_capnp::program_args;
 use dusk_program::anyhow::Result;
 use dusk_program::embassy_executor::Executor;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
+use dusk_program::program_args::ProgramArgs;
 use tracing::Instrument;
 use tracing::error;
 
@@ -20,10 +20,10 @@ use tracing::info_span;
 
 mod driver;
 
-async fn init(namespace: Rc<Namespace>, init_program_args: program_args::Client) -> Result<()> {
+async fn init(namespace: Rc<Namespace>, init_program_args: Rc<ProgramArgs>) -> Result<()> {
     let client = dusk_core::local_client(namespace.clone()).await;
     let mut process_request = client.process_request();
-    process_request.get().set_program_args(init_program_args);
+    init_program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
     let process_response = process_request.send().promise.await?;
     let process = process_response.get()?;
     let mut run_request = client.run_request();
@@ -37,7 +37,7 @@ async fn init(namespace: Rc<Namespace>, init_program_args: program_args::Client)
 async fn init_wrapper(
     task_id: Rc<Cell<u32>>,
     namespace: Rc<Namespace>,
-    init_program_args: program_args::Client,
+    init_program_args: Rc<ProgramArgs>,
 ) {
     let span = info_span!("init", task_id = task_id.get(), namespace_id = namespace.id);
     if let Err(err) = init(namespace, init_program_args)
@@ -58,7 +58,7 @@ pub fn bootstrap_logging() {
 
 pub fn run(
     launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
-    init_program_args: program_args::Client,
+    init_program_args: Rc<ProgramArgs>,
 ) -> ! {
     // The executor lives for 'static because this function never returns
     // Using Box::leak is explicit about this intent

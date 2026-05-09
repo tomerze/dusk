@@ -149,7 +149,10 @@ fn compile_expr<'a>(
                     let mut request = sh_args.build_program_args_request();
                     request.get().set_command(text);
                     let reply = request.send().promise.await?;
-                    let program_args = reply.get()?.get_program_args()?;
+                    let program_args =
+                        dusk_program::program_args::ProgramArgs::from_reader(
+                            reply.get()?.get_program_args()?,
+                        )?;
                     output_frame.push(Inst::ProgramArgs(program_args));
                 }
                 Ok(())

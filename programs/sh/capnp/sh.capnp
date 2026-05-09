@@ -29,17 +29,18 @@ struct Script {
   statements @0 :List(Statement);
 }
 
-struct ShOptions {
-  union {
-    server @0: Void;
-    script @1: Script;
-    detachedScript @2: Script;
+struct ShArgs {
+  struct Data {
+    union {
+      server @0: Void;
+      script @1: Script;
+      detachedScript @2: Script;
+    }
   }
-}
-
-interface ShArgs extends(Dusk.ProgramArgs) {
-  get @0 () -> (client: Dusk.Dusk, options :ShOptions);
-  buildProgramArgs @1 (command :Text) -> (programArgs :Dusk.ProgramArgs);
+  interface Server {
+    buildProgramArgs @0 (command :Text)
+      -> (programArgs :Dusk.ProgramArgs(AnyPointer, AnyPointer));
+  }
 }
 
 interface OutputPortal extends(Dusk.Portal) {

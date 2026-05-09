@@ -14,33 +14,25 @@ dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
-    address: std::string::String,
-    port: u16,
+    #[data]
+    pub data: capnp::message::TypedBuilder<init_capnp::init_args::data::Owned>,
 }
 
 impl Args {
     pub fn new(address: &str, port: u16) -> Self {
-        Args {
-            address: address.to_string(),
-            port,
+        let mut data =
+            capnp::message::TypedBuilder::<init_capnp::init_args::data::Owned>::new_default();
+        {
+            let mut root = data.init_root();
+            root.set_address(address);
+            root.set_port(port);
         }
+        Args { data }
     }
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
-impl Args {
-    fn get(
-        &mut self,
-        _params: init_capnp::init_args::GetParams,
-        mut results: init_capnp::init_args::GetResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        let mut options = results.get().init_options();
-        options.set_address(&self.address);
-        options.set_port(self.port);
-
-        Promise::ok(())
-    }
-}
+impl Args {}
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -87,18 +79,13 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let program_args = self
-            .ctx
-            .program_args
-            .clone()
-            .cast_to::<init_capnp::init_args::Client>();
-
-        let get_reply = program_args.get_request().send().promise.await?;
-        let options = get_reply.get()?.get_options()?;
-        let address = options.get_address()?;
-        let port = options.get_port();
+        let (address, port) = self.ctx.program_args.with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
+            let address = data.get_address()?.to_string()?;
+            let port = data.get_port();
+            Ok((address, port))
+        })?;
         let listener =
-            async_net::TcpListener::bind(format!("{}:{}", address.to_str()?, port)).await?;
+            async_net::TcpListener::bind(format!("{}:{}", address, port)).await?;
         ready.sender().send(true);
 
         loop {

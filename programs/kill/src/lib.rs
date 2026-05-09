@@ -16,25 +16,25 @@ dusk_program_proc::metadata!("kill", VERSION, kill_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
-    pub client: dusk::Client,
-    pub pid: u64,
-    pub signal: u64,
+    #[data]
+    pub data: capnp::message::TypedBuilder<kill_capnp::kill_args::data::Owned>,
+}
+
+impl Args {
+    pub fn new(pid: u64, signal: u64) -> Self {
+        let mut data =
+            capnp::message::TypedBuilder::<kill_capnp::kill_args::data::Owned>::new_default();
+        {
+            let mut root = data.init_root();
+            root.set_pid(pid);
+            root.set_signal(signal);
+        }
+        Args { data }
+    }
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
-impl Args {
-    fn get(
-        &mut self,
-        _params: kill_capnp::kill_args::GetParams,
-        mut results: kill_capnp::kill_args::GetResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_client(self.client.clone());
-        let mut options = results.get().init_options();
-        options.set_pid(self.pid);
-        options.set_signal(self.signal);
-        Promise::ok(())
-    }
-}
+impl Args {}
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -82,18 +82,17 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let program_args = capnp::capability::FromClientHook::cast_to::<
-            kill_capnp::kill_args::Client,
-        >(self.ctx.program_args.clone());
+        let (pid, signal) = self
+            .ctx
+            .program_args
+            .with_data::<kill_capnp::kill_args::data::Owned, _, _>(|data| {
+                Ok((data.get_pid(), data.get_signal()))
+            })?;
 
-        let get_pipeline = program_args.get_request().send();
-        let client = get_pipeline.pipeline.get_client();
-
+        let client = dusk_core::local_client(self.namespace().clone()).await;
         let mut kill_request = client.kill_request();
-        let get_reply = get_pipeline.promise.await?;
-        let options = get_reply.get()?.get_options()?;
-        kill_request.get().set_pid(options.get_pid());
-        kill_request.get().set_signal(options.get_signal());
+        kill_request.get().set_pid(pid);
+        kill_request.get().set_signal(signal);
         kill_request.send().promise.await?;
 
         ready.sender().send(true);

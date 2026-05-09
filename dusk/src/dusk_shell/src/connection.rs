@@ -14,11 +14,11 @@ pub struct Connection {
 
 impl Connection {
     fn auto_connect(
-        addr: SocketAddr,
+        address: SocketAddr,
         disconnector_store: DisconnectorStore,
     ) -> capnp::Result<Client> {
         let client = capnp_rpc::new_future_client(async move {
-            let stream = TcpStream::connect(addr).await?;
+            let stream = TcpStream::connect(address).await?;
             stream.set_nodelay(true)?;
 
             let stream = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream);
@@ -46,11 +46,11 @@ impl Connection {
         Ok(client)
     }
 
-    pub async fn connect(addr: SocketAddr) -> Result<Self> {
+    pub async fn connect(address: SocketAddr) -> Result<Self> {
         let disconnector_store: DisconnectorStore = Rc::new(Mutex::new(None));
         let disconnector_store_clone = disconnector_store.clone();
         let (client, _) = capnp_rpc::auto_reconnect(move || {
-            if let Ok(client) = Self::auto_connect(addr, disconnector_store_clone.clone()) {
+            if let Ok(client) = Self::auto_connect(address, disconnector_store_clone.clone()) {
                 Ok(client)
             } else {
                 Err(capnp::Error::failed("Failed to connect".to_string()))

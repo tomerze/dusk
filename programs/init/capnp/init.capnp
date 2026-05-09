@@ -4,13 +4,12 @@ using Dusk = import "/capnp/dusk.capnp";
 
 const programId :UInt64 = 0xd77c7f8193a1856c;
 
-struct InitOptions {
+struct InitArgs {
+  struct Data {
     address @0 :Text;
     port @1 :UInt16;
-}
-
-interface InitArgs extends(Dusk.ProgramArgs) {
-  get @0 () -> (options :InitOptions);
+  }
+  interface Server {}
 }
 
 interface InitPortal extends(Dusk.Portal) {}

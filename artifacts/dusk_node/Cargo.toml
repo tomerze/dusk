@@ -9,6 +9,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 [dependencies]
 dusk_nix = { path = "../../impls/nix" }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
+dusk_program = { path = "../../dusk/src/dusk_program/" }
 dusk_program_sh = { path = "../../programs/sh" }
 dusk_program_ps = { path = "../../programs/ps" }
 dusk_program_kill = { path = "../../programs/kill" }

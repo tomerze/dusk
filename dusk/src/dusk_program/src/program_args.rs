@@ -1,0 +1,101 @@
+use alloc::rc::Rc;
+use core::cell::RefCell;
+
+use dusk_capnp::capnp;
+use dusk_capnp::capnp::any_pointer;
+use dusk_capnp::capnp::capability::FromClientHook;
+use dusk_capnp::capnp::message::HeapAllocator;
+use dusk_capnp::capnp::traits::Owned;
+use dusk_capnp::capnp_rpc::ImbuedMessageBuilder;
+use dusk_capnp::dusk_capnp::program_args;
+
+/// Wire-level type of `ProgramArgs` as it appears on `Dusk.process`.
+pub type AnyProgramArgs = program_args::Owned<any_pointer::Owned, any_pointer::Owned>;
+
+pub struct ProgramArgs {
+    inner: RefCell<ImbuedMessageBuilder<HeapAllocator>>,
+}
+
+impl ProgramArgs {
+    pub fn new() -> Self {
+        Self {
+            inner: RefCell::new(ImbuedMessageBuilder::new(HeapAllocator::new())),
+        }
+    }
+
+    pub fn with_root_builder<R, F>(&self, f: F) -> capnp::Result<R>
+    where
+        F: for<'a> FnOnce(
+            program_args::Builder<'a, any_pointer::Owned, any_pointer::Owned>,
+        ) -> capnp::Result<R>,
+    {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        f(root)
+    }
+
+    /// Copy a `ProgramArgs` reader into a new owned message. Capabilities
+    /// embedded in the source are forwarded into the destination's cap table.
+    pub fn from_reader(
+        reader: program_args::Reader<'_, any_pointer::Owned, any_pointer::Owned>,
+    ) -> capnp::Result<Rc<Self>> {
+        let owned = Self::new();
+        owned.inner.borrow_mut().set_root::<AnyProgramArgs>(reader)?;
+        Ok(Rc::new(owned))
+    }
+
+    /// Read the `programId` field.
+    pub fn program_id(&self) -> capnp::Result<u64> {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        Ok(root.into_reader().get_program_id())
+    }
+
+    /// Read the `args.data` slot as the typed reader of `T` and feed it into
+    /// `f`. Mirrors [`Self::server_as`] but for the data slot, so processes
+    /// can pull pure-data parameters out without an RPC roundtrip.
+    pub fn with_data<T, R, F>(&self, f: F) -> capnp::Result<R>
+    where
+        T: Owned,
+        F: for<'a> FnOnce(<T as Owned>::Reader<'a>) -> capnp::Result<R>,
+    {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        let data = root.into_reader().get_args().get_data()?;
+        f(data.get_as::<<T as Owned>::Reader<'_>>()?)
+    }
+
+    /// Extract `args.server` as the capability type `T`.
+    pub fn server_as<T: FromClientHook>(&self) -> capnp::Result<T> {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        root.into_reader()
+            .get_args()
+            .get_server()?
+            .get_as_capability::<T>()
+    }
+
+    /// Borrow the message as a reader inside a closure. Used to feed it into
+    /// an outgoing RPC request's `program_args` field.
+    pub fn with_reader<R, F>(&self, f: F) -> capnp::Result<R>
+    where
+        F: for<'a> FnOnce(
+            program_args::Reader<'a, any_pointer::Owned, any_pointer::Owned>,
+        ) -> capnp::Result<R>,
+    {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        f(root.into_reader())
+    }
+}
+
+impl Default for ProgramArgs {
+    fn default() -> Self {
+        Self::new()
+    }
+}

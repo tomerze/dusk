@@ -41,34 +41,59 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
 #[cfg(feature = "client")]
+pub enum ShMode {
+    Server,
+    Script(alloc::string::String),
+    DetachedScript(alloc::string::String),
+}
+
+#[cfg(feature = "client")]
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs<S: entry::ShEntriesBuilder> {
+    #[data]
+    pub data: capnp::message::TypedBuilder<sh_capnp::sh_args::data::Owned>,
     pub client: dusk::Client,
-    pub options: capnp::message::Builder<capnp::message::HeapAllocator>,
     pub sh_entries_builder: S,
+}
+
+#[cfg(feature = "client")]
+impl<S: entry::ShEntriesBuilder> ShArgs<S> {
+    pub fn new(
+        client: dusk::Client,
+        sh_entries_builder: S,
+        mode: ShMode,
+    ) -> anyhow::Result<Self> {
+        let mut data =
+            capnp::message::TypedBuilder::<sh_capnp::sh_args::data::Owned>::new_default();
+        {
+            let mut data_builder = data.init_root();
+            match mode {
+                ShMode::Server => data_builder.set_server(()),
+                ShMode::Script(command) => {
+                    let mut parser = crate::parser::Parser::new();
+                    parser.parse(&command, data_builder.init_script())?;
+                }
+                ShMode::DetachedScript(command) => {
+                    let mut parser = crate::parser::Parser::new();
+                    parser.parse(&command, data_builder.init_detached_script())?;
+                }
+            }
+        }
+        Ok(Self {
+            data,
+            client,
+            sh_entries_builder,
+        })
+    }
 }
 
 #[cfg(feature = "client")]
 #[dusk_program_proc::impl_args_rpc_server]
 impl<S: entry::ShEntriesBuilder> ShArgs<S> {
-    fn get(
-        &mut self,
-        _params: sh_capnp::sh_args::GetParams,
-        mut results: sh_capnp::sh_args::GetResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_client(self.client.clone());
-        let opts_reader = pry!(
-            self.options
-                .get_root_as_reader::<sh_capnp::sh_options::Reader>()
-        );
-        pry!(results.get().set_options(opts_reader));
-        capnp::capability::Promise::ok(())
-    }
-
     fn build_program_args(
         &mut self,
-        params: sh_capnp::sh_args::BuildProgramArgsParams,
-        mut results: sh_capnp::sh_args::BuildProgramArgsResults,
+        params: sh_capnp::sh_args::server::BuildProgramArgsParams,
+        mut results: sh_capnp::sh_args::server::BuildProgramArgsResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_str());
         let (remaining, words) = pry!(
@@ -90,14 +115,16 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
         let args = &words[1..];
         for entry in self.sh_entries_builder.get_entries() {
             if entry.info.name == *program {
-                let pa = pry!(
+                let program_args = pry!(
                     entry
                         .program_args_builder
                         .build(self.client.clone(), args)
                         .context("program args builder failed")
                         .into_capnp()
                 );
-                results.get().set_program_args(pa);
+                pry!(
+                    program_args.with_reader(|reader| results.get().set_program_args(reader))
+                );
                 return capnp::capability::Promise::ok(());
             }
         }
@@ -133,11 +160,8 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
     }
 }
 
-type ArgsGetReply = capnp::capability::Response<sh_capnp::sh_args::get_results::Owned>;
-
 struct State {
     interpreter: Option<Interpreter>,
-    args_get_reply: Option<ArgsGetReply>,
     active_stops: alloc::vec::Vec<Rc<Stop>>,
 }
 
@@ -239,10 +263,9 @@ impl Process {
     {
         Ok(Process {
             ctx,
-            function_table: function_table,
+            function_table,
             state: Rc::new(RefCell::new(State {
                 interpreter: None,
-                args_get_reply: None,
                 active_stops: alloc::vec::Vec::new(),
             })),
         })
@@ -256,7 +279,7 @@ impl dusk_program::process::ProcessMixin for Process {
         Self: Sized,
     {
         Ok(Self::with_context_and_function_table(ctx, Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new()))).await?)
-        
+
     }
 
     fn portal(&self) -> portal::Client {
@@ -271,49 +294,54 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let program_args = capnp::capability::FromClientHook::cast_to::<sh_capnp::sh_args::Client>(
-            self.ctx.program_args.clone(),
-        );
-        let get_reply = program_args.get_request().send().promise.await?;
-        let reply = get_reply.get()?;
-        let client = reply.get_client()?;
-        let options = reply.get_options()?;
+        let sh_args_server = self
+            .ctx
+            .program_args
+            .server_as::<sh_capnp::sh_args::server::Client>()?;
+        let client = dusk_core::local_client(self.namespace().clone()).await;
 
-        let name_suffix = match options.which()? {
-            sh_capnp::sh_options::Which::DetachedScript(_) => "detached",
-            sh_capnp::sh_options::Which::Script(_) => "script",
-            sh_capnp::sh_options::Which::Server(_) => "server",
-        };
+        let (name_suffix, is_detached) = self
+            .ctx
+            .program_args
+            .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
+                Ok(match data.which()? {
+                    sh_capnp::sh_args::data::Which::Server(_) => ("server", false),
+                    sh_capnp::sh_args::data::Which::Script(_) => ("script", false),
+                    sh_capnp::sh_args::data::Which::DetachedScript(_) => ("detached", true),
+                })
+            })?;
         self.ctx
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
-        let mut ready_sent = false;
-        {
-            self.state.borrow_mut().interpreter = Some(Interpreter::new(
-                client,
-                program_args.clone(),
-                self.function_table.clone(),
-            ));
 
-            if let sh_capnp::sh_options::Which::DetachedScript(script) = options.which()? {
-                ready.sender().send(true);
-                ready_sent = true;
-                let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
-                let noop: dusk_capnp::dusk_capnp::stream::Client =
-                    capnp_rpc::new_client(NoopStream::new());
-                spawn_sh_exec_task(
-                    &self.ctx,
-                    interpreter,
-                    script?,
-                    noop,
-                    self.state.clone(),
-                )
-                .map_err(|e| anyhow::anyhow!("failed to spawn detached script: {e}"))?;
-            }
-        }
-        self.state.borrow_mut().args_get_reply = Some(get_reply);
+        self.state.borrow_mut().interpreter = Some(Interpreter::new(
+            client,
+            sh_args_server,
+            self.function_table.clone(),
+        ));
 
-        if !ready_sent {
+        if is_detached {
+            ready.sender().send(true);
+            let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
+            let noop: dusk_capnp::dusk_capnp::stream::Client =
+                capnp_rpc::new_client(NoopStream::new());
+            // Re-read the data slot to pull out the script reader and spawn
+            // it on a discard sink.
+            self.ctx
+                .program_args
+                .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
+                    if let sh_capnp::sh_args::data::Which::DetachedScript(script) = data.which()? {
+                        spawn_sh_exec_task(
+                            &self.ctx,
+                            interpreter.clone(),
+                            script?,
+                            noop.clone(),
+                            self.state.clone(),
+                        )?;
+                    }
+                    Ok(())
+                })?;
+        } else {
             ready.sender().send(true);
         }
 
@@ -394,38 +422,40 @@ impl sh_capnp::output_portal::Server for Portal {
     ) -> capnp::capability::Promise<(), capnp::Error> {
         pry!(results.set_pipeline());
         let stream = pry!(pry!(params.get()).get_stream());
-        let get_reply = pry!(
-            self.process
-                .state
-                .borrow_mut()
-                .args_get_reply
-                .take()
-                .ok_or_else(|| { capnp::Error::failed("args reply not available".into()) })
-        );
         let state_cell = self.process.state.clone();
         let ctx = self.process.ctx.clone();
         Promise::from_future(async move {
-            let reply = get_reply.get()?;
-            let options = reply.get_options()?;
-            match options.which()? {
-                sh_capnp::sh_options::Which::Script(script) => {
-                    let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
-                    spawn_sh_exec_task(&ctx, interpreter, script?, stream, state_cell.clone())?;
-                }
-                sh_capnp::sh_options::Which::DetachedScript(_) => {
-                    // The script has already been executed in `main` against a
-                    // discard sink. Daemonize by returning without calling
-                    // `done` on the caller's stream — the caller treats a
-                    // missing `done` as "the process intends to keep running"
-                    // and skips the kill.
-                }
-                sh_capnp::sh_options::Which::Server(()) => {
-                    let mut request = stream.send_request();
-                    let value_builder = request.get().init_value();
-                    Value::Text("running in server mode".to_string())
-                        .write_to_builder(value_builder)?;
-                    request.send().await?;
-                }
+            let is_server = ctx
+                .program_args
+                .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| match data.which()? {
+                    sh_capnp::sh_args::data::Which::Server(_) => Ok(true),
+                    sh_capnp::sh_args::data::Which::Script(script) => {
+                        let interpreter =
+                            state_cell.borrow().interpreter.as_ref().unwrap().clone();
+                        spawn_sh_exec_task(
+                            &ctx,
+                            interpreter,
+                            script?,
+                            stream.clone(),
+                            state_cell.clone(),
+                        )?;
+                        Ok(false)
+                    }
+                    sh_capnp::sh_args::data::Which::DetachedScript(_) => {
+                        // Already ran in `main` against a discard sink.
+                        // Daemonize by returning without calling `done` on
+                        // the caller's stream — the caller treats a missing
+                        // `done` as "the process intends to keep running"
+                        // and skips the kill.
+                        Ok(false)
+                    }
+                })?;
+            if is_server {
+                let mut request = stream.send_request();
+                let value_builder = request.get().init_value();
+                Value::Text("running in server mode".to_string())
+                    .write_to_builder(value_builder)?;
+                request.send().await?;
             }
             Ok(())
         })

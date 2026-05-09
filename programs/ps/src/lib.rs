@@ -19,21 +19,27 @@ dusk_program_proc::metadata!("ps", VERSION, ps_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
-    pub client: dusk::Client,
+    #[data]
+    pub data: capnp::message::TypedBuilder<ps_capnp::ps_args::data::Owned>,
+}
+
+impl Args {
+    pub fn new() -> Self {
+        let mut data =
+            capnp::message::TypedBuilder::<ps_capnp::ps_args::data::Owned>::new_default();
+        data.init_root();
+        Args { data }
+    }
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
-impl Args {
-    fn get(
-        &mut self,
-        _params: ps_capnp::ps_args::GetParams,
-        mut results: ps_capnp::ps_args::GetResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_client(self.client.clone());
-        results.get().init_options();
-        Promise::ok(())
-    }
-}
+impl Args {}
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -93,13 +99,7 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let program_args = capnp::capability::FromClientHook::cast_to::<ps_capnp::ps_args::Client>(
-            self.ctx.program_args.clone(),
-        );
-
-        let get_reply = program_args.get_request().send().promise.await?;
-        let client = get_reply.get()?.get_client()?;
-        let _options = get_reply.get()?.get_options()?;
+        let client = dusk_core::local_client(self.namespace().clone()).await;
 
         let ps_reply = client.ps_request().send().promise.await?;
         let process_entries = ps_reply.get()?.get_process_entries()?;

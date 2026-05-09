@@ -1,9 +1,11 @@
 extern crate linkme;
 
 use super::*;
+use crate::ShMode;
 use crate::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry, StaticShEntriesBuilder};
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
+use dusk_program::program_args::ProgramArgs;
 use linkme::distributed_slice;
 use std::rc::Rc;
 
@@ -22,31 +24,14 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
         &self,
         client: dusk::Client,
         args: &[&str],
-    ) -> anyhow::Result<dusk_capnp::dusk_capnp::program_args::Client> {
+    ) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
-        let mut options = capnp::message::Builder::new_default();
-        match cli.command {
-            None => {
-                options
-                    .init_root::<crate::sh_capnp::sh_options::Builder>()
-                    .set_server(());
-            }
-            Some(cmd) => {
-                let mut parser = crate::parser::Parser::new();
-                let opts = options.init_root::<crate::sh_capnp::sh_options::Builder>();
-                if cli.detach {
-                    parser.parse(&cmd, opts.init_detached_script())?;
-                } else {
-                    parser.parse(&cmd, opts.init_script())?;
-                }
-            }
-        }
-        let sh_client: sh_capnp::sh_args::Client = capnp_rpc::new_client(ShArgs {
-            client,
-            options,
-            sh_entries_builder: StaticShEntriesBuilder::default(),
-        });
-        Ok(sh_client.cast_to::<dusk_capnp::dusk_capnp::program_args::Client>())
+        let mode = match cli.command {
+            None => ShMode::Server,
+            Some(command) if cli.detach => ShMode::DetachedScript(command),
+            Some(command) => ShMode::Script(command),
+        };
+        Ok(ShArgs::new(client, StaticShEntriesBuilder::default(), mode)?.as_program_args()?)
     }
 }
 

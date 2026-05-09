@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use assert_cmd::assert::OutputAssertExt;
-use dusk_tests::{DuskNixImpl, LISTEN_ADDR, gen_port};
+use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use lazy_static::lazy_static;
 use predicates::prelude::*;
 use rexpect::process::wait::WaitStatus;
@@ -27,12 +27,12 @@ pub fn get_dusk_cli_bin() -> &'static std::path::Path {
 #[test]
 fn test_run_ps() {
     let port = gen_port();
-    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
 
     let bin_path = get_dusk_cli_bin();
 
     let mut cmd = Command::new(bin_path);
-    cmd.arg(format!("{}:{}", LISTEN_ADDR, port))
+    cmd.arg(format!("{}:{}", LISTEN_ADDRESS, port))
         .arg("ps")
         .assert()
         .success()
@@ -44,7 +44,7 @@ fn test_run_ps() {
 #[test]
 fn test_multiple_ps_calls() {
     let port = gen_port();
-    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
 
     let bin_path = get_dusk_cli_bin();
 
@@ -52,7 +52,7 @@ fn test_multiple_ps_calls() {
     for i in 0..3 {
         let mut cmd = Command::new(bin_path);
         let output = cmd
-            .arg(format!("{}:{}", LISTEN_ADDR, port))
+            .arg(format!("{}:{}", LISTEN_ADDRESS, port))
             .arg("ps")
             .assert()
             .success()
@@ -87,7 +87,7 @@ fn test_multiple_ps_calls() {
 #[test]
 fn test_concurrent_connections() {
     let port = gen_port();
-    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
 
     let bin_path = get_dusk_cli_bin();
 
@@ -96,7 +96,7 @@ fn test_concurrent_connections() {
         .map(|_| {
             thread::spawn(move || {
                 let mut cmd = Command::new(bin_path);
-                cmd.arg(format!("{}:{}", LISTEN_ADDR, port))
+                cmd.arg(format!("{}:{}", LISTEN_ADDRESS, port))
                     .arg("ps")
                     .assert()
                     .success();
@@ -112,7 +112,7 @@ fn test_concurrent_connections() {
     // After concurrent connections, verify state is still consistent
     let mut cmd = Command::new(bin_path);
     let output = cmd
-        .arg(format!("{}:{}", LISTEN_ADDR, port))
+        .arg(format!("{}:{}", LISTEN_ADDRESS, port))
         .arg("ps")
         .assert()
         .success()
@@ -134,13 +134,13 @@ fn test_concurrent_connections() {
 #[test]
 fn test_ps_output_structure() {
     let port = gen_port();
-    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
 
     let bin_path = get_dusk_cli_bin();
 
     let mut cmd = Command::new(bin_path);
     let output = cmd
-        .arg(format!("{}:{}", LISTEN_ADDR, port))
+        .arg(format!("{}:{}", LISTEN_ADDRESS, port))
         .arg("ps")
         .assert()
         .success()
@@ -187,7 +187,7 @@ fn test_multiple_servers_parallel_connections() {
     let servers: Vec<_> = (0..3)
         .map(|_| {
             let port = gen_port();
-            let server = DuskNixImpl::new(LISTEN_ADDR, port);
+            let server = DuskNixImpl::new(LISTEN_ADDRESS, port);
             (server, port)
         })
         .collect();
@@ -204,7 +204,7 @@ fn test_multiple_servers_parallel_connections() {
                 // Run ps command on each server
                 let mut cmd = Command::new(bin_path);
                 let output = cmd
-                    .arg(format!("{}:{}", LISTEN_ADDR, port))
+                    .arg(format!("{}:{}", LISTEN_ADDRESS, port))
                     .arg("ps")
                     .assert()
                     .success()
@@ -252,7 +252,7 @@ fn test_multiple_servers_parallel_connections() {
             thread::spawn(move || {
                 let mut cmd = Command::new(bin_path);
                 let output = cmd
-                    .arg(format!("{}:{}", LISTEN_ADDR, port))
+                    .arg(format!("{}:{}", LISTEN_ADDRESS, port))
                     .arg("ps")
                     .assert()
                     .success()
@@ -282,13 +282,13 @@ fn test_multiple_servers_parallel_connections() {
 #[test]
 fn test_interactive_shell() {
     let port = gen_port();
-    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
 
     let bin_path = get_dusk_cli_bin();
 
     // Spawn interactive shell with PTY using rexpect
     let mut p = spawn(
-        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDRESS, port),
         Some(5000),
     )
     .expect("Failed to spawn interactive shell");
@@ -315,19 +315,19 @@ fn test_interactive_shell() {
 #[test]
 fn test_two_clients_same_server() {
     let port = gen_port();
-    let _dusk = DuskNixImpl::new(LISTEN_ADDR, port);
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
 
     let bin_path = get_dusk_cli_bin();
 
     // Spawn two clients connecting to the same server
     let mut client1 = spawn(
-        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDRESS, port),
         Some(5000),
     )
     .expect("Failed to spawn first client");
 
     let mut client2 = spawn(
-        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+        &format!("{} {}:{}", bin_path.display(), LISTEN_ADDRESS, port),
         Some(5000),
     )
     .expect("Failed to spawn second client");
@@ -368,7 +368,7 @@ fn test_multiple_interactive_shells_parallel() {
     let servers: Vec<_> = (0..3)
         .map(|_| {
             let port = gen_port();
-            let server = DuskNixImpl::new(LISTEN_ADDR, port);
+            let server = DuskNixImpl::new(LISTEN_ADDRESS, port);
             (server, port)
         })
         .collect();
@@ -380,7 +380,7 @@ fn test_multiple_interactive_shells_parallel() {
         .iter()
         .map(|(_server, port)| {
             spawn(
-                &format!("{} {}:{}", bin_path.display(), LISTEN_ADDR, port),
+                &format!("{} {}:{}", bin_path.display(), LISTEN_ADDRESS, port),
                 Some(5000),
             )
             .expect("Failed to spawn interactive shell")
