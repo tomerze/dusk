@@ -325,8 +325,6 @@ impl dusk_program::process::ProcessMixin for Process {
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
             let noop: dusk_capnp::dusk_capnp::stream::Client =
                 capnp_rpc::new_client(NoopStream::new());
-            // Re-read the data slot to pull out the script reader and spawn
-            // it on a discard sink.
             self.ctx
                 .program_args
                 .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
