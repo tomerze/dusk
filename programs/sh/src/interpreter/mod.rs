@@ -30,7 +30,7 @@ pub(crate) type CompiledFunctions = Rc<RefCell<HashMap<String, Arc<Frame>>>>;
 #[derive(Clone)]
 pub struct Interpreter {
     client: dusk::Client,
-    sh_args: sh_capnp::sh_args::Client,
+    sh_args_client: sh_capnp::sh_args::server::Client,
     function_table: FunctionTable,
     compiled_functions: CompiledFunctions,
 }
@@ -38,12 +38,12 @@ pub struct Interpreter {
 impl Interpreter {
     pub(crate) fn new(
         client: dusk::Client,
-        sh_args: sh_capnp::sh_args::Client,
+        sh_args_client: sh_capnp::sh_args::server::Client,
         function_table: FunctionTable,
     ) -> Self {
         Interpreter {
             client,
-            sh_args,
+            sh_args_client,
             function_table,
             compiled_functions: Rc::new(RefCell::new(HashMap::new())),
         }
@@ -56,7 +56,7 @@ impl Interpreter {
         compiler::compile_function(
             &self.function_table,
             &self.compiled_functions,
-            self.sh_args.clone(),
+            self.sh_args_client.clone(),
             symbol,
         )
         .await
@@ -70,7 +70,7 @@ impl Interpreter {
     ) -> Result<()> {
         let symbols: HashSet<String> =
             self.function_table.lock().await.keys().cloned().collect();
-        let frame = compiler::compile(script, self.sh_args.clone(), symbols).await?;
+        let frame = compiler::compile(script, self.sh_args_client.clone(), symbols).await?;
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
             "script frame disassembly"
@@ -166,7 +166,7 @@ impl Interpreter {
                             if let Err(e) = compiler::compile_function(
                                 &self.function_table,
                                 &self.compiled_functions,
-                                self.sh_args.clone(),
+                                self.sh_args_client.clone(),
                                 &symbol,
                             )
                             .await

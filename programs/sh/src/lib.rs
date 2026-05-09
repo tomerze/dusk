@@ -294,7 +294,7 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let sh_args_server = self
+        let sh_args_client = self
             .ctx
             .program_args
             .server_as::<sh_capnp::sh_args::server::Client>()?;
@@ -316,7 +316,7 @@ impl dusk_program::process::ProcessMixin for Process {
 
         self.state.borrow_mut().interpreter = Some(Interpreter::new(
             client,
-            sh_args_server,
+            sh_args_client,
             self.function_table.clone(),
         ));
 
