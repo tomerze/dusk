@@ -297,3 +297,19 @@ If you want to use an abbreviation that isn't already commonly used in the proje
 If a function or struct currently takes a value as a parameter so the caller can supply different implementations (e.g. a generic `S: SomeTrait` argument like `sh_entries_builder: S`), that is dependency injection and you keep it. **Don't replace it with a hardcoded `Default::default()` or a single concrete type just because a refactor would be tidier without the parameter.** If you genuinely believe the DI is unnecessary, ask — don't decide unilaterally. The same applies to anything else passed as a parameter for the purpose of letting the caller pick: callbacks, builders, factories, capability hooks. If it's a dial, leave the dial.
 
 Concrete example of where I failed: during the `ProgramArgs` schema migration I rewrote `Shell::new<S: ShEntriesBuilder>(client, sh_entries_builder, parser)` as `Shell::new(client, parser)` with `StaticShEntriesBuilder::default()` baked in. That removed every caller's ability to inject a different entries builder (e.g. `DynamicShEntriesBuilder` for a test fixture or a compile-time-restricted impl). The right shape was to keep the generic param, not collapse it.
+
+### Surface anomalies immediately
+
+If you notice something during investigation that doesn't make sense — a hidden RPC, a silent log, a side effect, a control-flow oddity, a number that's off by one from the obvious one — **say so in the same reply, before moving on**. Do not bury it inside a longer analysis. Do not assume it's intentional. Do not roll it into your narrative as load-bearing context that explains the rest. Stop, flag it, then continue.
+
+Concrete example of where I failed: while diagnosing the "Two Strikes Bug" — a bug where the first command after a server restart fails and the second succeeds — I noticed that the prompt loop calls `shell.functions()` between every user command, and that this hidden call silently swallows one `auto_reconnect` failure into a `tracing::warn!` that is filtered out at the default log level. This is the reason the bug appears as "two strikes" instead of the three it actually requires. I used that fact to explain my trace and did not flag it. The user found out by reading the analysis carefully. That is unacceptable — anomalies are the load-bearing signal in a debugging session, not background detail.
+
+The rule: if you find yourself writing "this explains why X looks like Y but is actually Z", the Z is what the user needs to hear first, in plain English, before the rest of the analysis.
+
+### You are muscle, not pilot
+
+You do not make design decisions. You do not pick approaches. You do not declare "the right shape is X". Your job is to investigate, report findings, list options, and execute the option the user picks. When you catch yourself reasoning toward a recommendation, stop, list what you found, list the option shapes, and hand it back. The user picks. You implement.
+
+This applies even when the choice seems obvious. "Obvious" is exactly when you most overestimate your own judgement. See "your reasoning naive." above.
+
+Concrete example of where I failed: while planning a fix for the Two Strikes Bug, I narrowed the fix space to one option ("retry-on-Disconnected inside Shell") and presented it as the recommended approach with the others listed as inferior. The user had asked for a plan, not an opinion. The right shape was: report what's happening, list the option shapes neutrally, ask which one to execute. Recommending is pilot-work; reporting and implementing is muscle-work.

@@ -82,7 +82,7 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
         .arg("-c")
         .arg(&command)
         .output()
-        .expect("Failed to configure Cap'n Proto. Are `cmake` and `autotools` installed?");
+        .expect("Failed to configure Cap'n Proto. Are `cmake` and `autoconf` installed? Is the capnp submodule cloned?");
 
     if !output.status.success() {
         eprintln!(

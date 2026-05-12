@@ -6,12 +6,19 @@ use dusk_program_sh::entry::ShEntriesBuilder;
 use dusk_program_sh::sh_capnp::sh_portal;
 use dusk_program_sh::{ShArgs, ShMode, parser::Parser};
 use std::future::Future;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
+
+pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
 pub struct Shell {
     client: dusk::Client,
     parser: Parser,
+    keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
+    pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
 }
@@ -24,15 +31,33 @@ impl Shell {
         let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
             .map_err(|err| capnp::Error::failed(format!("{err:?}")))?;
         let program_args = sh_args.as_program_args()?;
-        let mut process_request = client.process_request();
-        program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
-        let process_reply = process_request.send().promise.await?;
-        let process = process_reply.get()?.get_result()?;
 
-        let mut run_request = client.run_request();
-        run_request.get().set_process(process.clone());
-        let _run_reply = run_request.send().promise.await?;
-        Ok(process)
+        // capnp auto_reconnect returns the first call's Disconnected error while
+        // refreshing its current capability in the background; the next call uses
+        // the refreshed client. Retry once so the outer sh_process auto_reconnect
+        // resolves its placeholder on first poll instead of leaving a hidden
+        // strike for the next caller.
+        let mut attempts_left = 2;
+        loop {
+            let mut process_request = client.process_request();
+            program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
+            match process_request.send().promise.await {
+                Ok(process_reply) => {
+                    let process = process_reply.get()?.get_result()?;
+                    let mut run_request = client.run_request();
+                    run_request.get().set_process(process.clone());
+                    let _run_reply = run_request.send().promise.await?;
+                    return Ok(process);
+                }
+                Err(err)
+                    if err.kind == capnp::ErrorKind::Disconnected && attempts_left > 1 =>
+                {
+                    attempts_left -= 1;
+                    continue;
+                }
+                Err(err) => return Err(err),
+            }
+        }
     }
 
     async fn create_sh_process<S: ShEntriesBuilder>(
@@ -51,6 +76,30 @@ impl Shell {
         Ok(process)
     }
 
+
+    fn spawn_keepalive_task(sh_process: process::Client, rtt_handle: RttHandle) -> JoinHandle<()> {
+        const MIN_INTERVAL: Duration = Duration::from_millis(50);
+        const MAX_INTERVAL: Duration = Duration::from_secs(10);
+        tokio::task::spawn_local(async move {
+            loop {
+                let start = Instant::now();
+                let result = sh_process.pid_request().send().promise.await;
+                let elapsed = start.elapsed();
+                let sleep_for = match result {
+                    Ok(_) => {
+                        *rtt_handle.lock().unwrap() = Some(elapsed);
+                        (elapsed / 2).clamp(MIN_INTERVAL, MAX_INTERVAL)
+                    }
+                    Err(_) => {
+                        *rtt_handle.lock().unwrap() = None;
+                        MIN_INTERVAL
+                    }
+                };
+                tokio::time::sleep(sleep_for).await;
+            }
+        })
+    }
+
     pub async fn new<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
@@ -63,12 +112,18 @@ impl Shell {
 
         let pid_reply = sh_process.pid_request().send().promise.await?;
         let sh_pid = pid_reply.get()?.get_result();
+
+        let rtt_handle: RttHandle = Arc::new(Mutex::new(None));
+        let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());
+
         Ok(Shell {
             client: client.clone(),
             parser,
             sh_process,
             hostname: hostname.into(),
             sh_pid,
+            rtt_handle,
+            keepalive_task,
         })
     }
 
@@ -139,6 +194,7 @@ impl Shell {
     /// Kill the shell process, must be called to clean up resources.
     /// Isn't in Drop to allow async cleanup.
     pub async fn kill(self) -> Result<()> {
+        self.keepalive_task.abort();
         let client = self.client.clone();
         let sh_process = self.sh_process.clone();
         let pid = sh_process

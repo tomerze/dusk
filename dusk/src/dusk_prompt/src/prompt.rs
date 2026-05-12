@@ -29,28 +29,51 @@ use std::io::stdout;
 
 use crate::display_engine::DisplayEngine;
 use crate::highlighter::CustomHighlighter;
-use dusk_shell::shell::Shell;
+use dusk_shell::shell::{RttHandle, Shell};
 
 #[derive(Clone)]
-struct ReedlinePrompt<'s> {
-    left_prompt: Cow<'s, str>,
+struct ReedlinePrompt {
+    status_template: String,
+    indicator_line: String,
     right_prompt: Cell<Duration>,
+    rtt_handle: RttHandle,
 }
 
-impl<'s> ReedlinePrompt<'s> {
-    pub fn new(prompt_str: &'s str) -> Self {
+impl ReedlinePrompt {
+    pub fn new(status_template: String, indicator_line: String, rtt_handle: RttHandle) -> Self {
         ReedlinePrompt {
-            left_prompt: Cow::Owned(prompt_str.to_string()),
+            status_template,
+            indicator_line,
             right_prompt: Cell::new(Duration::zero()),
+            rtt_handle,
         }
     }
 }
 
 static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
-impl<'s> reedline::Prompt for ReedlinePrompt<'s> {
+fn render_keepalive_suffix(rtt_handle: &RttHandle) -> String {
+    match *rtt_handle.lock().unwrap() {
+        Some(rtt) => Style::new()
+            .fg(Color::DarkGray)
+            .paint(format!(" ⇄ {}ms", rtt.as_millis()))
+            .to_string(),
+        None => Style::new()
+            .fg(Color::Red)
+            .bold()
+            .paint(" disconnected")
+            .to_string(),
+    }
+}
+
+impl reedline::Prompt for ReedlinePrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
-        Cow::Owned(self.left_prompt.to_string())
+        Cow::Owned(format!(
+            "{}{}\n{}",
+            self.status_template,
+            render_keepalive_suffix(&self.rtt_handle),
+            self.indicator_line
+        ))
     }
 
     fn render_prompt_right(&self) -> Cow<'_, str> {
@@ -502,7 +525,7 @@ Program ID: `{program_id}`
             function_names.clone(),
         )?;
 
-        let status_line: String = format!(
+        let status_template: String = format!(
             "{}{}{}{}",
             Style::new().fg(Color::Yellow).bold().paint("dusk "),
             Style::new().fg(Color::Cyan).paint(dusk_capnp::VERSION),
@@ -510,12 +533,28 @@ Program ID: `{program_id}`
             Style::new().fg(Color::Cyan).paint(&self.shell.hostname),
         );
 
-        let prompt_string = format!(
-            "{}\n{}",
-            status_line,
-            Style::new().fg(Color::DarkGray).paint("○"),
+        let indicator_line: String =
+            Style::new().fg(Color::DarkGray).paint("○").to_string();
+        let mut prompt = ReedlinePrompt::new(
+            status_template.clone(),
+            indicator_line,
+            self.shell.rtt_handle.clone(),
         );
-        let prompt = ReedlinePrompt::new(&prompt_string);
+
+        let rtt_handle_for_idle = self.shell.rtt_handle.clone();
+        line_editor = line_editor
+            .with_poll_interval(std::time::Duration::from_millis(50))
+            .with_idle_callback(Box::new(move || {
+                use std::io::Write as _;
+                let payload = format!(
+                    "\x1b[s\x1b[1F\x1b[2K{}{}\x1b[u",
+                    status_template,
+                    render_keepalive_suffix(&rtt_handle_for_idle)
+                );
+                let mut handle = stdout().lock();
+                let _ = handle.write_all(payload.as_bytes());
+                let _ = handle.flush();
+            }));
 
         loop {
             // Refresh the live function list before each prompt so the highlighter
@@ -524,7 +563,17 @@ Program ID: `{program_id}`
                 Ok(symbols) => *function_names.lock().unwrap() = symbols,
                 Err(e) => tracing::warn!(error = %e, "failed to fetch shell functions"),
             }
-            let sig = line_editor.read_line(&prompt)?;
+            // Run reedline on a worker thread so the LocalSet keeps polling
+            // the background keepalive task while reedline blocks in
+            // `event::poll`.
+            let read_line_result;
+            (line_editor, prompt, read_line_result) = tokio::task::spawn_blocking(move || {
+                let result = line_editor.read_line(&prompt);
+                (line_editor, prompt, result)
+            })
+            .await
+            .inspect_err(|err| tracing::error!("reedline task failed: {err}"))?;
+            let sig = read_line_result?;
             match sig {
                 Signal::Success(buffer) => {
                     if !buffer.is_empty() {
@@ -567,6 +616,9 @@ Program ID: `{program_id}`
                 Signal::CtrlD | Signal::CtrlC => {
                     break;
                 }
+                signal => {
+                    tracing::warn!("unhandled signal from reedline: {:?}", signal);
+                },
             }
         }
 
