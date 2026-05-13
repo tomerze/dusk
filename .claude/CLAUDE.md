@@ -269,6 +269,14 @@ If a task is going to introduce more than a couple of new functions, types, modu
 
 The default is: solve the problem inside the existing design. Don't refactor neighbouring code, don't rename things, don't introduce a new abstraction "while you're here". If you genuinely think the design needs to change to solve the task, **say so and ask** — don't unilaterally restructure. The user explicitly stating "redesign / refactor X" is the only green light.
 
+### Tunnel vision — execute the spirit, not just the letter
+
+When the user asks for a small, surgical change ("remove that warn", "delete this field", "kill that branch"), do not stop at the literal token. Look at what surrounds the thing you removed and ask: *is anything else here only justified by what I just deleted?* If yes, that's now dead code and it is part of the same task. The user does not want a clean-line-removal that leaves behind a now-pointless control structure, scaffolding variable, or import. They want the thing gone and the surrounding code in its post-removal shape.
+
+The check is: re-read the function top-to-bottom after the edit. Anything whose only reason to exist was the thing you just deleted goes too. This is not "redesigning" — that section forbids unilateral structural changes. This is "finishing the change the user actually asked for".
+
+Concrete example of where I failed: when asked to remove a redundant `tracing::warn!("detached sh script failed")` inside a `select` arm in `programs/sh/src/lib.rs`, I deleted the warn line and left behind: the `detached_completion: Option<Rc<Signal<…>>>` local, the `select(signal_receiver.receive(), completion.wait())` in the main loop, the `Either::First`/`Either::Second` match arms, and a now-pointless `info!("detached sh script completed")` whose only purpose had been to keep the success arm symmetric with the (now-deleted) failure arm. The entire `select` scaffolding existed only to watch the detached completion so it could be logged — once the logging was redundant, the scaffolding was redundant too, and the loop should have collapsed back to a plain `signal_receiver.receive().await`. I shipped the surgical diff, declared it done, and the user had to come back furious to point out the dead code. The right move was: after removing the warn, re-read the function, notice the `select`/`detached_completion` only existed for the log I just deleted, and rip them out in the same edit.
+
 ### Don't write near-duplicate functions
 
 If two functions you are about to write differ in a single field or a single line of body, that's not two functions, that's one function with a parameter or a small wrapper. Stop, unify, then continue. Copy-pasting an existing task / handler / helper and tweaking one identifier is the failure mode here.

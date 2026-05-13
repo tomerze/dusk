@@ -304,25 +304,15 @@ impl dusk_program::process::ProcessMixin for Process {
             self.function_table.clone(),
         ));
 
-        let mut detached_completion: Option<
-            Rc<
-                dusk_program::embassy_sync::signal::Signal<
-                    CriticalSectionRawMutex,
-                    anyhow::Result<()>,
-                >,
-            >,
-        > = None;
         if is_detached {
-            ready.sender().send(true);
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
             let noop: dusk_capnp::dusk_capnp::stream::Client =
                 capnp_rpc::new_client(NoopStream::new());
-            detached_completion = self
-                .ctx
+            self.ctx
                 .program_args
                 .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
                     if let sh_capnp::sh_args::data::Which::DetachedScript(script) = data.which()? {
-                        let completion = spawn_sh_exec_task(
+                        spawn_sh_exec_task(
                             &self.ctx,
                             interpreter.clone(),
                             script?,
@@ -330,34 +320,14 @@ impl dusk_program::process::ProcessMixin for Process {
                             self.state.clone(),
                             Rc::new(Stop::new()),
                         )?;
-                        Ok(Some(completion))
-                    } else {
-                        Ok(None)
                     }
+                    Ok(())
                 })?;
-        } else {
-            ready.sender().send(true);
         }
+        ready.sender().send(true);
 
         loop {
-            let signal = if let Some(completion) = detached_completion.as_ref() {
-                match select(signal_receiver.receive(), completion.wait()).await {
-                    Either::First(signal) => signal,
-                    Either::Second(result) => {
-                        match &result {
-                            Ok(()) => tracing::info!("detached sh script completed"),
-                            Err(error) => {
-                                tracing::warn!(error = %error, "detached sh script failed")
-                            }
-                        }
-                        detached_completion = None;
-                        continue;
-                    }
-                }
-            } else {
-                signal_receiver.receive().await
-            };
-            match signal {
+            match signal_receiver.receive().await {
                 Signal::Terminate => {
                     for stop in self.state.borrow().active_stops.iter() {
                         stop.signal(());
