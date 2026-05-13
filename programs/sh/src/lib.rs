@@ -7,8 +7,8 @@ extern crate alloc;
 extern crate capnp;
 
 use alloc::rc::Rc;
-use core::cell::{Cell, RefCell};
 use alloc::sync::Arc;
+use core::cell::{Cell, RefCell};
 
 use anyhow::Context;
 use dusk_capnp::pry;
@@ -59,11 +59,7 @@ pub struct ShArgs<S: entry::ShEntriesBuilder> {
 
 #[cfg(feature = "client")]
 impl<S: entry::ShEntriesBuilder> ShArgs<S> {
-    pub fn new(
-        client: dusk::Client,
-        sh_entries_builder: S,
-        mode: ShMode,
-    ) -> anyhow::Result<Self> {
+    pub fn new(client: dusk::Client, sh_entries_builder: S, mode: ShMode) -> anyhow::Result<Self> {
         let mut data =
             capnp::message::TypedBuilder::<sh_capnp::sh_args::data::Owned>::new_default();
         {
@@ -123,9 +119,7 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
                         .context("program args builder failed")
                         .into_capnp()
                 );
-                pry!(
-                    program_args.with_reader(|reader| results.get().set_program_args(reader))
-                );
+                pry!(program_args.with_reader(|reader| results.get().set_program_args(reader)));
                 return capnp::capability::Promise::ok(());
             }
         }
@@ -175,7 +169,9 @@ async fn sh_exec_task(
     output: dusk_capnp::dusk_capnp::stream::Client,
     stop: Rc<Stop>,
     state: Rc<RefCell<State>>,
-    completion: Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
+    completion: Rc<
+        dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>,
+    >,
 ) {
     use tracing::Instrument;
     let span = tracing::info_span!("sh_exec", task_id = task_id.get(), pid);
@@ -263,8 +259,11 @@ impl dusk_program::process::ProcessMixin for Process {
     where
         Self: Sized,
     {
-        Ok(Self::with_context_and_function_table(ctx, Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new()))).await?)
-
+        Ok(Self::with_context_and_function_table(
+            ctx,
+            Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new())),
+        )
+        .await?)
     }
 
     fn portal(&self) -> portal::Client {
@@ -460,8 +459,7 @@ impl sh_capnp::output_portal::Server for Portal {
                     request.send().await?;
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
-                    let interpreter =
-                        state_cell.borrow().interpreter.as_ref().unwrap().clone();
+                    let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
                     let completion = spawn_sh_exec_task(
                         &ctx,
                         interpreter,

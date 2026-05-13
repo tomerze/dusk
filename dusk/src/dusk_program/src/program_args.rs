@@ -41,7 +41,10 @@ impl ProgramArgs {
         reader: program_args::Reader<'_, any_pointer::Owned, any_pointer::Owned>,
     ) -> capnp::Result<Rc<Self>> {
         let owned = Self::new();
-        owned.inner.borrow_mut().set_root::<AnyProgramArgs>(reader)?;
+        owned
+            .inner
+            .borrow_mut()
+            .set_root::<AnyProgramArgs>(reader)?;
         Ok(Rc::new(owned))
     }
 

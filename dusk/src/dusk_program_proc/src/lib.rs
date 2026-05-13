@@ -40,12 +40,9 @@ pub fn derive_args(item: TokenStream) -> TokenStream {
             }
         },
         _ => {
-            return syn::Error::new_spanned(
-                &input.ident,
-                "Args can only be derived for structs",
-            )
-            .to_compile_error()
-            .into();
+            return syn::Error::new_spanned(&input.ident, "Args can only be derived for structs")
+                .to_compile_error()
+                .into();
         }
     };
 

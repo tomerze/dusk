@@ -17,7 +17,10 @@ pub enum Inst {
     ProgramArgs(Rc<ProgramArgs>),
     Call(String),
     TailCall(String),
-    DefineFunction { symbol: String, body: Arc<ScriptWrapper> },
+    DefineFunction {
+        symbol: String,
+        body: Arc<ScriptWrapper>,
+    },
     JumpIfOk(usize),
     JumpIfError(usize),
 }

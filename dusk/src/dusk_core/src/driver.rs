@@ -63,10 +63,7 @@ pub fn hostname() -> Result<String> {
     unsafe { _dusk_hostname() }
 }
 
-pub fn process(
-    namespace: Rc<Namespace>,
-    program_args: Rc<ProgramArgs>,
-) -> FutureProcessResult {
+pub fn process(namespace: Rc<Namespace>, program_args: Rc<ProgramArgs>) -> FutureProcessResult {
     unsafe { _dusk_process(namespace, program_args) }
 }
 

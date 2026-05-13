@@ -110,9 +110,9 @@ impl dusk::Server for DuskServer {
         let program_args_reader = pry!(pry!(params.get()).get_program_args());
         // Copy the incoming reader (and its capability table) into an owned
         // message so it outlives this RPC call.
-        let program_args = pry!(
-            dusk_program::program_args::ProgramArgs::from_reader(program_args_reader)
-        );
+        let program_args = pry!(dusk_program::program_args::ProgramArgs::from_reader(
+            program_args_reader
+        ));
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {

@@ -30,11 +30,7 @@ struct KillCli {
 struct KillProgramArgsBuilder {}
 
 impl ProgramArgsBuilder for KillProgramArgsBuilder {
-    fn build(
-        &self,
-        _client: dusk::Client,
-        args: &[&str],
-    ) -> anyhow::Result<Rc<ProgramArgs>> {
+    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = KillCli::try_parse_from(args)?;
         Ok(Args::new(cli.pid, cli.signal).as_program_args()?)
     }

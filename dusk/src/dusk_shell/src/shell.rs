@@ -67,9 +67,7 @@ impl Shell {
                     let _run_reply = run_request.send().promise.await?;
                     return Ok(process);
                 }
-                Err(err)
-                    if err.kind == capnp::ErrorKind::Disconnected && attempts_left > 1 =>
-                {
+                Err(err) if err.kind == capnp::ErrorKind::Disconnected && attempts_left > 1 => {
                     attempts_left -= 1;
                     continue;
                 }
@@ -93,7 +91,6 @@ impl Shell {
 
         Ok(process)
     }
-
 
     fn spawn_keepalive_task(sh_process: process::Client, rtt_handle: RttHandle) -> JoinHandle<()> {
         const MIN_INTERVAL: Duration = Duration::from_millis(50);

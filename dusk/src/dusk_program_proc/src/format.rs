@@ -73,7 +73,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                 }
             };
         }
-        
+
         macro_rules! __derive_args {
             (
                 $(#[$meta:meta])*

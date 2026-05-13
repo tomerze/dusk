@@ -1,5 +1,5 @@
-use alloc::sync::Arc;
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
 use dusk_program::anyhow::{Result, anyhow};
@@ -8,8 +8,8 @@ use hashbrown::HashSet;
 use crate::sh_capnp;
 use crate::sh_capnp::script;
 
-use super::{CompiledFunctions, FunctionTable};
 use super::inst::{self, Frame, Inst, ScriptWrapper};
+use super::{CompiledFunctions, FunctionTable};
 
 pub(super) async fn compile(
     script: script::Reader<'_>,
@@ -68,8 +68,13 @@ pub(super) fn compile_function<'a>(
             .collect();
         for dep in dep_symbols {
             // Ignore errors / missing bodies — runtime resolve will surface them.
-            let _ = compile_function(function_table, compiled_functions, sh_args_client.clone(), &dep)
-                .await;
+            let _ = compile_function(
+                function_table,
+                compiled_functions,
+                sh_args_client.clone(),
+                &dep,
+            )
+            .await;
         }
 
         let frame = Arc::new(frame);
@@ -116,8 +121,7 @@ async fn compile_statement<'a>(
             let def = def?;
             let symbol = def.get_symbol()?.to_str()?.to_string();
             functions.insert(symbol.clone());
-            let mut message =
-                capnp::message::Builder::new(capnp::message::HeapAllocator::new());
+            let mut message = capnp::message::Builder::new(capnp::message::HeapAllocator::new());
             message.set_root(def.get_body()?)?;
             output_frame.push(Inst::DefineFunction {
                 symbol,
@@ -149,10 +153,9 @@ fn compile_expr<'a>(
                     let mut request = sh_args_client.build_program_args_request();
                     request.get().set_command(text);
                     let reply = request.send().promise.await?;
-                    let program_args =
-                        dusk_program::program_args::ProgramArgs::from_reader(
-                            reply.get()?.get_program_args()?,
-                        )?;
+                    let program_args = dusk_program::program_args::ProgramArgs::from_reader(
+                        reply.get()?.get_program_args()?,
+                    )?;
                     output_frame.push(Inst::ProgramArgs(program_args));
                 }
                 Ok(())

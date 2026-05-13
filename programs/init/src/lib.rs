@@ -79,13 +79,15 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let (address, port) = self.ctx.program_args.with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
-            let address = data.get_address()?.to_string()?;
-            let port = data.get_port();
-            Ok((address, port))
-        })?;
-        let listener =
-            async_net::TcpListener::bind(format!("{}:{}", address, port)).await?;
+        let (address, port) = self
+            .ctx
+            .program_args
+            .with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
+                let address = data.get_address()?.to_string()?;
+                let port = data.get_port();
+                Ok((address, port))
+            })?;
+        let listener = async_net::TcpListener::bind(format!("{}:{}", address, port)).await?;
         ready.sender().send(true);
 
         loop {

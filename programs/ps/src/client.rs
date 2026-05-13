@@ -15,11 +15,7 @@ struct PsCli {}
 struct PsProgramArgsBuilder {}
 
 impl ProgramArgsBuilder for PsProgramArgsBuilder {
-    fn build(
-        &self,
-        _client: dusk::Client,
-        args: &[&str],
-    ) -> anyhow::Result<Rc<ProgramArgs>> {
+    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let _cli = PsCli::try_parse_from(args)?;
         Ok(Args::new().as_program_args()?)
     }

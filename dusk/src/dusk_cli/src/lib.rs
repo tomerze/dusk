@@ -27,11 +27,7 @@ struct Cli {
     debug_console: bool,
 }
 
-async fn single_command(
-    shell: &mut Shell,
-    command: String,
-    stop_signal: Rc<Notify>,
-) -> Result<()> {
+async fn single_command(shell: &mut Shell, command: String, stop_signal: Rc<Notify>) -> Result<()> {
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
     let (json_stream, done_receiver) =

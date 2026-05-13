@@ -1,6 +1,6 @@
 use alloc::rc::Rc;
-use alloc::sync::Arc;
 use alloc::string::String;
+use alloc::sync::Arc;
 use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
@@ -14,8 +14,8 @@ use crate::sh_capnp::script;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
-pub use execution::Stop;
 use execution::ExecutionError;
+pub use execution::Stop;
 use inst::{Frame, Inst, ScriptWrapper};
 
 mod compiler;
@@ -68,8 +68,7 @@ impl Interpreter {
         output: stream::Client,
         stop: &Stop,
     ) -> Result<()> {
-        let symbols: HashSet<String> =
-            self.function_table.lock().await.keys().cloned().collect();
+        let symbols: HashSet<String> = self.function_table.lock().await.keys().cloned().collect();
         let frame = compiler::compile(script, self.sh_args_client.clone(), symbols).await?;
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
@@ -104,11 +103,9 @@ impl Interpreter {
                 }
                 match &current_frame[pc] {
                     Inst::ProgramArgs(program_args) => {
-                        let exec = execution::Execution::new(
-                            self.client.clone(),
-                            output.clone(),
-                        );
-                        result_register = match exec.program_args(program_args.clone(), stop).await {
+                        let exec = execution::Execution::new(self.client.clone(), output.clone());
+                        result_register = match exec.program_args(program_args.clone(), stop).await
+                        {
                             Ok(()) => Ok(()),
                             Err(ExecutionError::Runtime(e)) => {
                                 tracing::error!(pc, error = %e, "runtime error during program execution");

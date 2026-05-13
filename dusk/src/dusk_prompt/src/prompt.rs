@@ -407,9 +407,7 @@ Program ID: `{program_id}`
             let example = "// defines foo function which just calls itself\nfoo() {\n    foo\n}";
             let highlighter = CustomHighlighter {
                 external_commands: Vec::new(),
-                functions: std::sync::Arc::new(std::sync::Mutex::new(vec![
-                    "foo".to_string(),
-                ])),
+                functions: std::sync::Arc::new(std::sync::Mutex::new(vec!["foo".to_string()])),
             };
             let highlighted: String = example
                 .lines()
@@ -423,16 +421,11 @@ Program ID: `{program_id}`
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            println!(
-                "no functions defined, you can define one like this:\n{highlighted}"
-            );
+            println!("no functions defined, you can define one like this:\n{highlighted}");
             return Ok(());
         }
         let mut table = NuTable::new(functions.len() + 1, 1);
-        table.set_row(
-            0,
-            vec![NuRecordsValue::new("function name".into())],
-        );
+        table.set_row(0, vec![NuRecordsValue::new("function name".into())]);
         for (i, name) in functions.iter().enumerate() {
             table.set_row(
                 i + 1,
@@ -449,7 +442,10 @@ Program ID: `{program_id}`
         table.set_theme(TableTheme::rounded());
         table.set_structure(false, true, false);
         let width = crossterm::terminal::size()?.0 as usize;
-        println!("{}", table.draw(width).unwrap_or("[cannot fit]".to_string()));
+        println!(
+            "{}",
+            table.draw(width).unwrap_or("[cannot fit]".to_string())
+        );
         Ok(())
     }
 
@@ -533,8 +529,7 @@ Program ID: `{program_id}`
             Style::new().fg(Color::Cyan).paint(&self.shell.hostname),
         );
 
-        let indicator_line: String =
-            Style::new().fg(Color::DarkGray).paint("○").to_string();
+        let indicator_line: String = Style::new().fg(Color::DarkGray).paint("○").to_string();
         let mut prompt = ReedlinePrompt::new(
             status_template.clone(),
             indicator_line,
@@ -618,7 +613,7 @@ Program ID: `{program_id}`
                 }
                 signal => {
                     tracing::warn!("unhandled signal from reedline: {:?}", signal);
-                },
+                }
             }
         }
 

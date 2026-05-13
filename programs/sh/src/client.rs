@@ -20,11 +20,7 @@ struct ShCli {
 struct ShProgramArgsBuilder {}
 
 impl ProgramArgsBuilder for ShProgramArgsBuilder {
-    fn build(
-        &self,
-        client: dusk::Client,
-        args: &[&str],
-    ) -> anyhow::Result<Rc<ProgramArgs>> {
+    fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
         let mode = match cli.command {
             None => ShMode::Server,

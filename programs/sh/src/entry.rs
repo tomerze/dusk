@@ -16,11 +16,7 @@ pub struct ProgramInfo {
 }
 
 pub trait ProgramArgsBuilder {
-    fn build(
-        &self,
-        client: dusk::Client,
-        args: &[&str],
-    ) -> anyhow::Result<Rc<ProgramArgs>>;
+    fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>>;
 }
 
 #[derive(Clone)]
