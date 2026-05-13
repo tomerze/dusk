@@ -1,15 +1,33 @@
 use anyhow::Result;
-use capnp::capability::FromClientHook;
+use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::sh_portal;
+use dusk_program_sh::sh_capnp::{sh_portal, sh_stop};
 use dusk_program_sh::{ShArgs, ShMode, parser::Parser};
-use std::future::Future;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, oneshot};
 use tokio::task::JoinHandle;
+
+struct Stop {
+    notify: Rc<Notify>,
+}
+
+impl sh_stop::Server for Stop {
+    fn stop(
+        &mut self,
+        _: sh_stop::StopParams,
+        _: sh_stop::StopResults,
+    ) -> Promise<(), capnp::Error> {
+        let notify = self.notify.clone();
+        Promise::from_future(async move {
+            notify.notified().await;
+            Ok(())
+        })
+    }
+}
 
 pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
@@ -127,17 +145,12 @@ impl Shell {
         })
     }
 
-    /// Run `script` against the shell process. Returns once the output stream signals done.
-    ///
-    /// `stop_signal` is awaited concurrently; if it resolves before the command finishes, the
-    /// returned `ShStop` capability is invoked and `sh` then waits for done. Pass
-    /// `std::future::pending()` if the caller has no way to ask for a stop.
     pub async fn sh(
         &mut self,
         script: &str,
         stream: stream::Client,
         done_receiver: oneshot::Receiver<()>,
-        stop_signal: impl Future<Output = ()>,
+        stop_signal: Rc<Notify>,
     ) -> Result<()> {
         let sh_process = self.sh_process.clone();
 
@@ -150,25 +163,18 @@ impl Shell {
                 .cast_to::<sh_portal::Client>())
         });
 
+        let stop_cap: sh_stop::Client = capnp_rpc::new_client(Stop {
+            notify: stop_signal,
+        });
+
         let mut sh_request = sh_portal.sh_request();
         let script_builder = sh_request.get().init_script();
         self.parser.parse(script, script_builder)?;
-
         sh_request.get().set_output(stream);
-        let sh_reply = sh_request.send().promise.await?;
-        let stop = sh_reply.get()?.get_stop()?;
-        // sh returns immediately; the command keeps running until done is called on the output
-        // stream. Race done against the caller's stop signal — if stop wins, ask the sh process
-        // to stop and then wait for done so we don't return while it's still finishing.
-        let mut done_receiver = done_receiver;
-        let stop_signal = std::pin::pin!(stop_signal);
-        tokio::select! {
-            result = &mut done_receiver => result?,
-            _ = stop_signal => {
-                stop.stop_request().send().promise.await?;
-                done_receiver.await?;
-            }
-        }
+        sh_request.get().set_stop(stop_cap);
+
+        sh_request.send().promise.await?;
+        let _ = done_receiver.await;
         Ok(())
     }
 

@@ -14,6 +14,7 @@ use anyhow::Context;
 use dusk_capnp::pry;
 #[cfg(feature = "client")]
 use dusk_program::IntoCapnp;
+use dusk_program::embassy_futures::select::{Either, select};
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::mutex::Mutex;
 use dusk_program::ready::Ready;
@@ -165,22 +166,6 @@ struct State {
     active_stops: alloc::vec::Vec<Rc<Stop>>,
 }
 
-struct StopServer {
-    stop: Rc<Stop>,
-}
-
-impl sh_capnp::sh_stop::Server for StopServer {
-    fn stop(
-        &mut self,
-        _params: sh_capnp::sh_stop::StopParams,
-        _results: sh_capnp::sh_stop::StopResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        self.stop.signal(());
-        capnp::capability::Promise::ok(())
-    }
-}
-
-
 #[embassy_executor::task(pool_size = 16)]
 async fn sh_exec_task(
     task_id: Rc<Cell<u32>>,
@@ -190,28 +175,21 @@ async fn sh_exec_task(
     output: dusk_capnp::dusk_capnp::stream::Client,
     stop: Rc<Stop>,
     state: Rc<RefCell<State>>,
+    completion: Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 ) {
     use tracing::Instrument;
     let span = tracing::info_span!("sh_exec", task_id = task_id.get(), pid);
     async move {
-        let reader = match script_msg.get_root_as_reader::<sh_capnp::script::Reader>() {
-            Ok(reader) => reader,
-            Err(e) => {
-                tracing::error!(error = %e, "failed to read script root");
-                state
-                    .borrow_mut()
-                    .active_stops
-                    .retain(|s| !Rc::ptr_eq(s, &stop));
-                return;
-            }
-        };
-        if let Err(e) = interpreter.exec(reader, output, &stop).await {
-            tracing::error!(error = %e, "script execution failed");
+        let result: anyhow::Result<()> = async {
+            let reader = script_msg.get_root_as_reader::<sh_capnp::script::Reader>()?;
+            interpreter.exec(reader, output, &stop).await
         }
+        .await;
         state
             .borrow_mut()
             .active_stops
             .retain(|s| !Rc::ptr_eq(s, &stop));
+        completion.signal(result);
     }
     .instrument(span)
     .await;
@@ -223,12 +201,18 @@ fn spawn_sh_exec_task(
     script: sh_capnp::script::Reader<'_>,
     output: dusk_capnp::dusk_capnp::stream::Client,
     state: Rc<RefCell<State>>,
-) -> capnp::Result<Rc<Stop>> {
+    stop: Rc<Stop>,
+) -> capnp::Result<
+    Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
+> {
     let mut script_msg = capnp::message::Builder::new_default();
     script_msg.set_root::<sh_capnp::script::Owned>(script)?;
 
-    let stop = Rc::new(Stop::new());
     state.borrow_mut().active_stops.push(stop.clone());
+
+    let completion: Rc<
+        dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>,
+    > = Rc::new(dusk_program::embassy_sync::signal::Signal::new());
 
     let task_id = Rc::new(Cell::new(0u32));
     let token = sh_exec_task(
@@ -237,13 +221,14 @@ fn spawn_sh_exec_task(
         interpreter,
         script_msg,
         output,
-        stop.clone(),
+        stop,
         state,
+        completion.clone(),
     )
     .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
     task_id.set(token.id());
     ctx.namespace.spawner.spawn(token);
-    Ok(stop)
+    Ok(completion)
 }
 
 #[derive(Clone, dusk_program_proc::Process)]
@@ -320,31 +305,59 @@ impl dusk_program::process::ProcessMixin for Process {
             self.function_table.clone(),
         ));
 
+        let mut detached_completion: Option<
+            Rc<
+                dusk_program::embassy_sync::signal::Signal<
+                    CriticalSectionRawMutex,
+                    anyhow::Result<()>,
+                >,
+            >,
+        > = None;
         if is_detached {
             ready.sender().send(true);
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
             let noop: dusk_capnp::dusk_capnp::stream::Client =
                 capnp_rpc::new_client(NoopStream::new());
-            self.ctx
+            detached_completion = self
+                .ctx
                 .program_args
                 .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
                     if let sh_capnp::sh_args::data::Which::DetachedScript(script) = data.which()? {
-                        spawn_sh_exec_task(
+                        let completion = spawn_sh_exec_task(
                             &self.ctx,
                             interpreter.clone(),
                             script?,
                             noop.clone(),
                             self.state.clone(),
+                            Rc::new(Stop::new()),
                         )?;
+                        Ok(Some(completion))
+                    } else {
+                        Ok(None)
                     }
-                    Ok(())
                 })?;
         } else {
             ready.sender().send(true);
         }
 
         loop {
-            let signal = signal_receiver.receive().await;
+            let signal = if let Some(completion) = detached_completion.as_ref() {
+                match select(signal_receiver.receive(), completion.wait()).await {
+                    Either::First(signal) => signal,
+                    Either::Second(result) => {
+                        match &result {
+                            Ok(()) => tracing::info!("detached sh script completed"),
+                            Err(error) => {
+                                tracing::warn!(error = %error, "detached sh script failed")
+                            }
+                        }
+                        detached_completion = None;
+                        continue;
+                    }
+                }
+            } else {
+                signal_receiver.receive().await
+            };
             match signal {
                 Signal::Terminate => {
                     for stop in self.state.borrow().active_stops.iter() {
@@ -368,7 +381,7 @@ impl Portal {
     fn sh(
         &mut self,
         params: sh_capnp::sh_portal::ShParams,
-        mut results: sh_capnp::sh_portal::ShResults,
+        _results: sh_capnp::sh_portal::ShResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let interpreter = self
             .process
@@ -381,17 +394,29 @@ impl Portal {
         let params = pry!(params.get());
         let script = pry!(params.get_script());
         let output = pry!(params.get_output());
+        let stop_client = pry!(params.get_stop());
 
-        let stop = pry!(spawn_sh_exec_task(
+        let stop = Rc::new(Stop::new());
+        let completion = pry!(spawn_sh_exec_task(
             &self.process.ctx,
             interpreter,
             script,
             output,
             self.process.state.clone(),
+            stop.clone(),
         ));
-        let stop_client: sh_capnp::sh_stop::Client = capnp_rpc::new_client(StopServer { stop });
-        results.get().set_stop(stop_client);
-        capnp::capability::Promise::ok(())
+        Promise::from_future(async move {
+            let listen = async {
+                let _ = stop_client.stop_request().send().promise.await;
+                stop.signal(());
+                core::future::pending::<()>().await
+            };
+            let result = match select(completion.wait(), listen).await {
+                Either::First(result) => result,
+                Either::Second(()) => unreachable!(),
+            };
+            result.map_err(|error| capnp::Error::failed(format!("{error:?}")))
+        })
     }
 
     fn functions(
@@ -423,37 +448,40 @@ impl sh_capnp::output_portal::Server for Portal {
         let state_cell = self.process.state.clone();
         let ctx = self.process.ctx.clone();
         Promise::from_future(async move {
-            let is_server = ctx
+            let data = ctx
                 .program_args
-                .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| match data.which()? {
-                    sh_capnp::sh_args::data::Which::Server(_) => Ok(true),
-                    sh_capnp::sh_args::data::Which::Script(script) => {
-                        let interpreter =
-                            state_cell.borrow().interpreter.as_ref().unwrap().clone();
-                        spawn_sh_exec_task(
-                            &ctx,
-                            interpreter,
-                            script?,
-                            stream.clone(),
-                            state_cell.clone(),
-                        )?;
-                        Ok(false)
-                    }
-                    sh_capnp::sh_args::data::Which::DetachedScript(_) => {
-                        // Already ran in `main` against a discard sink.
-                        // Daemonize by returning without calling `done` on
-                        // the caller's stream — the caller treats a missing
-                        // `done` as "the process intends to keep running"
-                        // and skips the kill.
-                        Ok(false)
-                    }
-                })?;
-            if is_server {
-                let mut request = stream.send_request();
-                let value_builder = request.get().init_value();
-                Value::Text("running in server mode".to_string())
-                    .write_to_builder(value_builder)?;
-                request.send().await?;
+                .data_owned::<sh_capnp::sh_args::data::Owned>()?;
+            match data.get_root_as_reader()?.which()? {
+                sh_capnp::sh_args::data::Which::Server(_) => {
+                    let mut request = stream.send_request();
+                    let value_builder = request.get().init_value();
+                    Value::Text("running in server mode".to_string())
+                        .write_to_builder(value_builder)?;
+                    request.send().await?;
+                }
+                sh_capnp::sh_args::data::Which::Script(script) => {
+                    let interpreter =
+                        state_cell.borrow().interpreter.as_ref().unwrap().clone();
+                    let completion = spawn_sh_exec_task(
+                        &ctx,
+                        interpreter,
+                        script?,
+                        stream.clone(),
+                        state_cell.clone(),
+                        Rc::new(Stop::new()),
+                    )?;
+                    completion
+                        .wait()
+                        .await
+                        .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
+                }
+                sh_capnp::sh_args::data::Which::DetachedScript(_) => {
+                    // Already ran in `main` against a discard sink.
+                    // Daemonize by returning without calling `done` on the
+                    // caller's stream — the caller treats a missing `done`
+                    // as "the process intends to keep running" and skips
+                    // the kill.
+                }
             }
             Ok(())
         })

@@ -68,6 +68,20 @@ impl ProgramArgs {
         f(data.get_as::<<T as Owned>::Reader<'_>>()?)
     }
 
+    pub fn data_owned<T: Owned>(&self) -> capnp::Result<capnp::message::TypedBuilder<T>> {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        let data_reader = root
+            .into_reader()
+            .get_args()
+            .get_data()?
+            .get_as::<<T as Owned>::Reader<'_>>()?;
+        let mut owned = capnp::message::TypedBuilder::<T>::new_default();
+        owned.set_root(data_reader)?;
+        Ok(owned)
+    }
+
     /// Extract `args.server` as the capability type `T`.
     pub fn server_as<T: FromClientHook>(&self) -> capnp::Result<T> {
         let mut message_builder = self.inner.borrow_mut();
@@ -91,6 +105,10 @@ impl ProgramArgs {
         let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
             message_builder.get_root()?;
         f(root.into_reader())
+    }
+
+    pub fn reader_owned(&self) -> capnp::Result<Rc<Self>> {
+        self.with_reader(Self::from_reader)
     }
 }
 

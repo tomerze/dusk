@@ -3,8 +3,9 @@ use dusk_capnp::dusk_capnp::stream;
 use dusk_program::anyhow::Result;
 use dusk_program::value::Value;
 use pyo3::prelude::*;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
 
 use crate::SHELL_OUTPUT_BUFFER_SIZE;
 
@@ -124,9 +125,10 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
             }
         };
 
-        // No external stop source in the Python embedding; let the command run to completion.
+        // No external stop source in the Python embedding; a fresh Notify that
+        // nothing ever fires keeps the server's stop_cap.stop() pending forever.
         let result = shell
-            .sh(&command, stream_client, done_rx, std::future::pending())
+            .sh(&command, stream_client, done_rx, Rc::new(Notify::new()))
             .await;
 
         // Kill the shell now that the command has completed

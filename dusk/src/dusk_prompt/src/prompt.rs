@@ -498,7 +498,7 @@ Program ID: `{program_id}`
                 let (stream, done_receiver) = self.get_stream(is_raw);
                 if let Err(e) = self
                     .shell
-                    .sh(line, stream, done_receiver, self.stop_signal.notified())
+                    .sh(line, stream, done_receiver, self.stop_signal.clone())
                     .await
                 {
                     tracing::error!("{:?} exited with error:\n{:?}", first_word, e);

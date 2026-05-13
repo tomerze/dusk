@@ -30,7 +30,7 @@ struct Cli {
 async fn single_command(
     shell: &mut Shell,
     command: String,
-    stop_signal: &Notify,
+    stop_signal: Rc<Notify>,
 ) -> Result<()> {
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
@@ -41,7 +41,7 @@ async fn single_command(
             command.as_str(),
             capnp_rpc::new_client(json_stream),
             done_receiver,
-            stop_signal.notified(),
+            stop_signal,
         )
         .await?;
     Ok(())
@@ -108,7 +108,7 @@ async fn run(cli: Cli) {
                     .await?;
                     let session_result = match cli.command {
                         Some(command) => {
-                            single_command(&mut shell, command, &stop_signal).await
+                            single_command(&mut shell, command, stop_signal.clone()).await
                         }
                         None => {
                             interactive_prompt(&mut shell, sh_entries_builder, stop_signal.clone())

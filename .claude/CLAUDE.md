@@ -313,3 +313,63 @@ You do not make design decisions. You do not pick approaches. You do not declare
 This applies even when the choice seems obvious. "Obvious" is exactly when you most overestimate your own judgement. See "your reasoning naive." above.
 
 Concrete example of where I failed: while planning a fix for the Two Strikes Bug, I narrowed the fix space to one option ("retry-on-Disconnected inside Shell") and presented it as the recommended approach with the others listed as inferior. The user had asked for a plan, not an opinion. The right shape was: report what's happening, list the option shapes neutrally, ask which one to execute. Recommending is pilot-work; reporting and implementing is muscle-work.
+
+### Don't write or run tests unless told
+
+Do not add tests as part of an implementation task. Do not run the test suite (`cargo test`, `cargo nextest`, integration tests, etc.) unless the user explicitly asks. `cargo check` for type-checking is fine. Tests are a separate workstream the user drives.
+
+### Don't add comments everywhere — especially not on code you didn't edit
+
+Default to writing no comments. Add one only when the WHY is non-obvious — a hidden constraint, a workaround for a specific bug, behaviour that would surprise a reader. **Never** add explanatory comments to code you didn't change in this task. If a comment is just describing what the code does, or restating the diff in prose, delete it.
+
+### Naming routine — your names are placeholders
+
+You are bad at naming. Any name you invent — `struct`, `enum`, `enum variant`, `type alias`, `fn`, `method`, `module`, `instruction variant`, anything — is a placeholder. Treat your own names as if they were random 128-bit hex strings the user has to translate.
+
+The routine:
+
+1. When you need a new identifier mid-task, pick something workable and move on. Don't stall to ask.
+2. **Note every name you introduce in a running list as you go** (file path + identifier + one-line role).
+3. **At the end of the task, before claiming done, surface the full list and ask the user for the real names.** Then apply the renames they pick.
+
+Do not unilaterally settle on a name. The exception is mechanical renames where the user already picked a name and you are applying it across the codebase.
+
+### API boundaries to downstream authors are ship-once contracts
+
+The dusk crate graph has three load-bearing boundaries. They are not internal seams — they are public Cargo dependencies that downstream authors build against, and the people building against them **cannot ship PRs back to dusk** to fix gaps. They fork, work around, or walk away. None of those is acceptable.
+
+The three boundaries:
+
+1. **`dusk_core` ↔ programs.** Programs depend on `dusk_program` (re-exporting parts of `dusk_capnp` and `dusk_core`) to implement `Process` / `Launcher`, build `ProgramArgs`, write `stream::Client`, signal `Ready`, etc. A new program crate sees only this surface.
+2. **`dusk_core` ↔ impls.** Impls implement the `Driver` trait via `dusk_driver_impl!`, host the executor, accept connections, build per-namespace `LauncherSet`s. A new impl crate (e.g. porting dusk to RP2040, ESP32, a different POSIX, a different RTOS) sees only this surface.
+3. **impls ↔ programs.** Impls statically link programs in via `LauncherSetBuilder`. Programs do not depend on impls; impls depend on programs. A program author and an impl author may be different people in different orgs.
+
+The downstream authors are not on this codebase's slack, not in this conversation, and not allowed to iterate the boundary with you. **They need the API surface complete the first time it ships.** Think of them as monks on a mountain — they get the artifact and that's it.
+
+When designing or extending anything that crosses one of these boundaries, do the work comprehensively *before* the artifact ships. Specifically:
+
+- Every closure-style read accessor needs an **owned partner** when a caller might plausibly hold the value across `.await`. Always ask: "if a downstream wanted to spawn or await something between two reads, do they have a path?"
+- Every read accessor that returns a borrow needs an **owned variant** considered. The closure pattern is not enough on its own.
+- Every read needs its write partner where mutation is plausible. Every sync API needs its async partner where the call site might cross an `.await`.
+- Errors must propagate. **Never swallow at a boundary** — downstream cannot diagnose what they cannot see.
+- Types crossing the boundary must be ergonomic for the consumer: hide internal `RefCell` guards, internal naming, raw capnp wrappers. The downstream author should not need to know the trick (`with_reader(|r| Self::from_reader(r))?`-style) to get an owned snapshot.
+- Document who depends on what and which traits are the contract.
+
+If you catch yourself working around a boundary API's gap inside a call site, **stop and extend the API upstream.** The gap is a future-compat bug the downstream author pays for forever — fix it where it belongs.
+
+Concrete example of where I failed (twice in a row): implementing `OutputPortal::output` in `programs/sh/src/lib.rs`, I needed to read `args.data` and then spawn + `await` the script's completion. `ProgramArgs::with_data` only supported synchronous closures (the typed capnp reader can't escape the borrow). I papered over the gap with a `Mode` enum and tag-and-dispatch outside the closure. When the user pointed at the gap, I added `data_owned<T>()` — and even then, when asked to audit the rest of the surface, I dismissed `reader_owned()` as having "no current use case." That was the village-idiot moment: there is no "current use case" inside *this* repo, but `ProgramArgs` is a boundary type between `dusk_core` and every program ever written, and downstream authors will absolutely hit "snapshot the args, then await, then read more" — and they cannot patch `dusk_program` to fix it. The right move was to ship `data_owned<T>()` **and** `reader_owned()` together, without prompting and without iteration. At boundaries, complete the surface BEFORE shipping. Anything else is a future-compat bug paid by people who cannot patch you back. Things have to work — in time, on demand, without back-and-forth.
+
+### Code must be diagnosable after the fact
+
+Every meaningful state transition, task completion, or boundary call needs a log **somewhere — exactly once**. Not just errors; successes too, when the success is a noteworthy lifecycle event (task done, process exited, connection up/down). When the one-in-a-million bug hits a user in production, there is no reproduction. The log is the only forensic trace, and it has to already be in place before the bug fires. You cannot retrofit logs after the incident.
+
+Rules:
+
+- **Log where the result would otherwise be lost — not everywhere.** If a caller awaits a result and bubbles it through an RPC / a `Result` return, that path is already diagnosable; do NOT also log inside the producer. Logging inside a generic task that is called by both awaited and fire-and-forget callers double-logs the awaited cases.
+- Every fire-and-forget spawn needs the completion logged at the call site, **or** via a dedicated watcher task that awaits the completion signal and logs the outcome under its own span. Attach the watcher only to the orphan path, not to the producer.
+- Every dropped error needs a `tracing::warn!` / `tracing::error!` alongside it. **Never `let _ = …` on an `anyhow::Result` / `capnp::Result` without an explicit log.** The `_` is a forensic black hole.
+- Log levels: `error` unrecoverable; `warn` recoverable failures and dropped errors; `info` lifecycle events (task start/done, process spawn/exit, connection up/down); `debug` high-frequency flow.
+- Use `tracing` spans with the established structured fields — `task_id`, `pid`, `namespace_id`, `program_id`, `program_name` — so logs are filterable across an impl with many concurrent processes.
+- When in doubt, log it. Disk is cheap; a missing log during a production incident is not.
+
+Concrete example of where I failed (multiple strikes): in `programs/sh/src/lib.rs`, the detached-script branch of `Process::main` spawned an exec task with `let _ = spawn_sh_exec_task(…)?;` and discarded the completion signal entirely. A detached daemon could run for hours, exit cleanly, or fail with a real error, and the operator would have **zero** record of any of it. My first attempted fix was to log inside the generic `sh_exec_task` itself — wrong, because that double-logs the awaited callers (`Portal::sh`, `OutputPortal::output`) that already surface errors through their RPC return. My second attempted fix was to spawn a dedicated `#[embassy_executor::task]` whose only job was to await the completion signal and log — also wrong, because `Process::main` is already a long-lived task with its own signal-receive loop, so the right shape was to fold the completion-watch into that existing loop via `embassy_futures::select(signal_receiver.receive(), completion.wait())`. The principle: log where the result would otherwise be lost, but reach for the lightest-weight site that gets you there — an existing loop you already control beats a new task.
