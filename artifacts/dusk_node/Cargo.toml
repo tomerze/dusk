@@ -14,3 +14,5 @@ dusk_program_sh = { path = "../../programs/sh" }
 dusk_program_ps = { path = "../../programs/ps" }
 dusk_program_kill = { path = "../../programs/kill" }
 dusk_program_init = { path = "../../programs/init" }
+dusk_program_true = { path = "../../programs/true" }
+dusk_program_false = { path = "../../programs/false" }

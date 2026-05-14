@@ -14,3 +14,5 @@ anyhow = "1.0"
 # Add dusk programs here as needed
 dusk_program_ps = { path = "../../programs/ps", features = ["client"] }
 dusk_program_kill = { path = "../../programs/kill", features = ["client"] }
+dusk_program_true = { path = "../../programs/true", features = ["client"] }
+dusk_program_false = { path = "../../programs/false", features = ["client"] }

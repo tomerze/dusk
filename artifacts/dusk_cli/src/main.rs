@@ -7,5 +7,7 @@ fn main() -> Result<()> {
 
     black_box(dusk_program_ps::client::sh_entry);
     black_box(dusk_program_kill::client::sh_entry);
+    black_box(dusk_program_true::client::sh_entry);
+    black_box(dusk_program_false::client::sh_entry);
     dusk_cli::main()
 }

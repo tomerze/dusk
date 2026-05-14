@@ -49,11 +49,13 @@ impl Execution {
         Ok(process)
     }
 
-    async fn portal_process_and_pipe_output(
+    pub async fn program_args(
         &self,
-        process: process::Client,
-    ) -> Result<bool, ExecutionError> {
-        // Portal acquisition — runtime errors
+        program_args: Rc<ProgramArgs>,
+        stop: &Stop,
+    ) -> Result<(), ExecutionError> {
+        let process = self.execute_process(program_args).await?;
+
         let portal_reply = process
             .portal_request()
             .send()
@@ -74,67 +76,64 @@ impl Execution {
             .get()
             .set_stream(capnp_rpc::new_client(undone_stream));
 
-        // Script execution — program errors
-        output_request
-            .send()
-            .promise
-            .await
-            .map_err(|e| ExecutionError::Program(e.into()))?;
-
-        // Done signaling — sender drop is acceptable.
-        Ok(done_receiver.await.is_ok())
-    }
-
-    pub async fn program_args(
-        &self,
-        program_args: Rc<ProgramArgs>,
-        stop: &Stop,
-    ) -> Result<(), ExecutionError> {
-        let process = self.execute_process(program_args).await?;
-
-        let done = match select(
-            self.portal_process_and_pipe_output(process.clone()),
+        // Race output completion against external cancellation. Either path
+        // produces a (done, program_error) pair so the cleanup logic below
+        // runs regardless of how `output` finished.
+        let (done, program_error) = match select(
+            output_request.send().promise,
             stop.wait(),
         )
         .await
         {
-            Either::First(result) => result?,
+            Either::First(result) => {
+                // `output` returned. Drain `done_receiver` unconditionally —
+                // `UndoneStream`'s sender is dropped when `output` ends, so
+                // this resolves either to `Ok(())` (program called `done`)
+                // or `Err(_)` (program declared itself a daemon). `done` is
+                // orthogonal to whether `output` returned `Ok` or `Err`.
+                let done = done_receiver.await.is_ok();
+                let error = result.err().map(|e| ExecutionError::Program(e.into()));
+                (done, error)
+            }
             Either::Second(()) => {
                 // Re-signal so callers up the stack also observe the stop.
                 stop.signal(());
-                true
+                (true, None)
             }
         };
 
-        // No done signal → the process daemonized itself by returning from
-        // `output` without acking. Leave it running and report success.
-        if !done {
-            return Ok(());
+        // `done == false` is the wire-level signal for intentional
+        // daemonization. Leave the process running and skip cleanup.
+        if done {
+            let pid = process
+                .pid_request()
+                .send()
+                .promise
+                .await
+                .map_err(|e| ExecutionError::Runtime(e.into()))?
+                .get()
+                .map_err(|e| ExecutionError::Runtime(e.into()))?
+                .get_result();
+
+            let mut kill_request = self.client.kill_request();
+            kill_request.get().set_pid(pid);
+            kill_request.get().set_signal(15);
+            let _ = kill_request.send().promise.await;
+
+            let mut waitpid_request = self.client.waitpid_request();
+            waitpid_request.get().set_pid(pid);
+            waitpid_request
+                .send()
+                .promise
+                .await
+                .map_err(|e| ExecutionError::Program(e.into()))?;
         }
 
-        let pid = process
-            .pid_request()
-            .send()
-            .promise
-            .await
-            .map_err(|e| ExecutionError::Runtime(e.into()))?
-            .get()
-            .map_err(|e| ExecutionError::Runtime(e.into()))?
-            .get_result();
-
-        let mut kill_request = self.client.kill_request();
-        kill_request.get().set_pid(pid);
-        kill_request.get().set_signal(15);
-        let _ = kill_request.send().promise.await;
-
-        let mut waitpid_request = self.client.waitpid_request();
-        waitpid_request.get().set_pid(pid);
-        waitpid_request
-            .send()
-            .promise
-            .await
-            .map_err(|e| ExecutionError::Program(e.into()))?;
-
+        // Propagate the program error after cleanup so failed processes that
+        // ack'd `done` don't leak.
+        if let Some(e) = program_error {
+            return Err(e);
+        }
         Ok(())
     }
 }
