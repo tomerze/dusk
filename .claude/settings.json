@@ -1,0 +1,6 @@
+{
+    "spinnerVerbs": {
+        "mode": "replace",
+        "verbs": ["Twilighting", "Nightfalling", "Dusking"]
+    }
+}
