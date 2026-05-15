@@ -132,7 +132,7 @@ impl dyn Process {
             if let Some(ready) = ps_ready_map.get_mut(&self.pid()) {
                 ready.sender().send(true);
             } else {
-                tracing::error!("failed to ensure process is ready after main exited");
+                tracing::error!("couldn't ensure process is ready after main exited");
             }
             ps_ready_map.remove(&self.pid());
         }

@@ -94,7 +94,7 @@ impl Execution {
                     let done = done_receiver.await.is_ok();
                     let error = result.err().map(|e| {
                         ExecutionError::Program(
-                            anyhow::Error::from(e).context("output portal error"),
+                            anyhow::Error::from(e).context("program output portal returned error"),
                         )
                     });
                     (done, error)
@@ -118,7 +118,7 @@ impl Execution {
             let mut waitpid_request = self.client.waitpid_request();
             waitpid_request.get().set_pid(pid);
             let waitpid_error = waitpid_request.send().promise.await.err().map(|e| {
-                ExecutionError::Program(anyhow::Error::from(e).context("waitpid error"))
+                ExecutionError::Program(anyhow::Error::from(e).context("program exited with error"))
             });
 
             // Portal error takes precedence over waitpid error.

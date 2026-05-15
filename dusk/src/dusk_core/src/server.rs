@@ -51,7 +51,7 @@ impl DuskServer {
             registered.wait().await;
             Ok(())
         } else {
-            Err(capnp::Error::failed("Process not found".to_string()))
+            Err(capnp::Error::failed("process not found".to_string()))
         }
     }
 
@@ -196,7 +196,7 @@ impl dusk::Server for DuskServer {
                     Ok(())
                 }
                 None => Err(capnp::Error::failed(
-                    "failed to find signal channel for process".to_string(),
+                    "couldn't find signal channel for process".to_string(),
                 )),
             }
         })
@@ -215,12 +215,12 @@ impl dusk::Server for DuskServer {
             let exit_watch = namespace.ps_exit_map.lock().await.get(&pid).cloned();
             let Some(exit_watch) = exit_watch else {
                 return Err(capnp::Error::failed(
-                    "failed to find exit watch for process".to_string(),
+                    "couldn't find exit watch for process".to_string(),
                 ));
             };
 
             let mut receiver = exit_watch.receiver().ok_or_else(|| {
-                capnp::Error::failed("failed to acquire receiver for process exit watch, maximum amount of receivers reached".into())
+                capnp::Error::failed("couldn't acquire receiver for process exit watch, maximum amount of receivers reached".into())
             })?;
 
             let mut changed = false;
@@ -253,7 +253,7 @@ impl dusk::Server for DuskServer {
         let hostname = match driver::hostname() {
             Ok(id) => id,
             Err(err) => {
-                error!("failed to receive hostname from driver: `{err:#?}`");
+                error!("didn't receive hostname from driver: `{err:#?}`");
                 String::from("error")
             }
         };

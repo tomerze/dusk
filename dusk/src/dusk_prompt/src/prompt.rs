@@ -497,7 +497,7 @@ Program ID: `{program_id}`
                     .sh(line, stream, done_receiver, self.stop_signal.clone())
                     .await
                 {
-                    tracing::error!("{:?} exited with error:\n{:?}", first_word, e);
+                    tracing::error!("{:?} error:\n{:?}", first_word, e);
                 }
             }
         };

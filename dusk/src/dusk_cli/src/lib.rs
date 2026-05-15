@@ -78,7 +78,7 @@ async fn stop_on_ctrl_c(stop_signal: Rc<Notify>) {
     loop {
         if signal::ctrl_c().await.is_err() {
             // SIGINT listener registration failed; park so the work arm drives shutdown.
-            error!("failed to listen for ctrl+c");
+            error!("couldn't register listener for ctrl+c");
             std::future::pending::<()>().await;
         }
         stop_signal.notify_waiters();

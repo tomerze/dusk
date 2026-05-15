@@ -53,7 +53,7 @@ impl<D: DisplayEngine> stream::Server for DisplayStream<D> {
             pry!(
                 done_sender
                     .send(())
-                    .map_err(|_| capnp::Error::failed("failed to send done signal".to_string()))
+                    .map_err(|_| capnp::Error::failed("done signal not sent".to_string()))
             );
             Promise::ok(())
         } else {
