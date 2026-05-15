@@ -56,49 +56,33 @@ impl Execution {
     ) -> Result<(), ExecutionError> {
         let process = self.execute_process(program_args).await?;
 
-        let portal_reply = process
-            .portal_request()
-            .send()
-            .promise
-            .await
-            .map_err(|e| ExecutionError::Runtime(e.into()))?;
-        let portal = portal_reply
-            .get()
-            .map_err(|e| ExecutionError::Runtime(e.into()))?
-            .get_result()
-            .map_err(|e| ExecutionError::Runtime(e.into()))?
-            .cast_to::<sh_capnp::output_portal::Client>();
+        let (done, program_error) = 'output: {
+            let portal_reply = match process.portal_request().send().promise.await {
+                Ok(reply) => reply,
+                Err(_) => break 'output (true, None),
+            };
+            let portal = match portal_reply.get().and_then(|r| r.get_result()) {
+                Ok(portal) => portal.cast_to::<sh_capnp::output_portal::Client>(),
+                Err(_) => break 'output (true, None),
+            };
 
-        let (undone_stream, done_receiver) =
-            UndoneStream::new_with_done_receiver(self.output.clone());
-        let mut output_request = portal.output_request();
-        output_request
-            .get()
-            .set_stream(capnp_rpc::new_client(undone_stream));
+            let (undone_stream, done_receiver) =
+                UndoneStream::new_with_done_receiver(self.output.clone());
+            let mut output_request = portal.output_request();
+            output_request
+                .get()
+                .set_stream(capnp_rpc::new_client(undone_stream));
 
-        // Race output completion against external cancellation. Either path
-        // produces a (done, program_error) pair so the cleanup logic below
-        // runs regardless of how `output` finished.
-        let (done, program_error) = match select(
-            output_request.send().promise,
-            stop.wait(),
-        )
-        .await
-        {
-            Either::First(result) => {
-                // `output` returned. Drain `done_receiver` unconditionally —
-                // `UndoneStream`'s sender is dropped when `output` ends, so
-                // this resolves either to `Ok(())` (program called `done`)
-                // or `Err(_)` (program declared itself a daemon). `done` is
-                // orthogonal to whether `output` returned `Ok` or `Err`.
-                let done = done_receiver.await.is_ok();
-                let error = result.err().map(|e| ExecutionError::Program(e.into()));
-                (done, error)
-            }
-            Either::Second(()) => {
-                // Re-signal so callers up the stack also observe the stop.
-                stop.signal(());
-                (true, None)
+            match select(output_request.send().promise, stop.wait()).await {
+                Either::First(result) => {
+                    let done = done_receiver.await.is_ok();
+                    let error = result.err().map(|e| ExecutionError::Program(e.into()));
+                    (done, error)
+                }
+                Either::Second(()) => {
+                    stop.signal(());
+                    (true, None)
+                }
             }
         };
 
