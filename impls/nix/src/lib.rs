@@ -50,7 +50,7 @@ async fn init_wrapper(
 
 pub fn bootstrap_logging() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .with_target(false)
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
         .init();

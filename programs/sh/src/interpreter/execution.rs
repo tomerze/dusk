@@ -56,14 +56,30 @@ impl Execution {
     ) -> Result<(), ExecutionError> {
         let process = self.execute_process(program_args).await?;
 
-        let (done, program_error) = 'output: {
+        let pid = process
+            .pid_request()
+            .send()
+            .promise
+            .await
+            .map_err(|e| ExecutionError::Runtime(e.into()))?
+            .get()
+            .map_err(|e| ExecutionError::Runtime(e.into()))?
+            .get_result();
+        
+        let (done, portal_error) = 'output: {
             let portal_reply = match process.portal_request().send().promise.await {
                 Ok(reply) => reply,
-                Err(_) => break 'output (true, None),
+                Err(err) => {
+                    tracing::error!(pid = pid, error = err.to_string(), "failed to get process portal");
+                    break 'output (true, None)
+                },
             };
             let portal = match portal_reply.get().and_then(|r| r.get_result()) {
                 Ok(portal) => portal.cast_to::<sh_capnp::output_portal::Client>(),
-                Err(_) => break 'output (true, None),
+                Err(err) => {
+                    tracing::error!(pid = pid, error = err.to_string(), "failed to get process portal reply");
+                    break 'output (true, None)
+                },
             };
 
             let (undone_stream, done_receiver) =
@@ -76,11 +92,16 @@ impl Execution {
             match select(output_request.send().promise, stop.wait()).await {
                 Either::First(result) => {
                     let done = done_receiver.await.is_ok();
-                    let error = result.err().map(|e| ExecutionError::Program(e.into()));
+                    let error = result.err().map(|e| {
+                        ExecutionError::Program(
+                            anyhow::Error::from(e).context("output portal error"),
+                        )
+                    });
                     (done, error)
                 }
                 Either::Second(()) => {
                     stop.signal(());
+                    tracing::info!(?pid, "stop signal sent to process");
                     (true, None)
                 }
             }
@@ -88,17 +109,7 @@ impl Execution {
 
         // `done == false` is the wire-level signal for intentional
         // daemonization. Leave the process running and skip cleanup.
-        if done {
-            let pid = process
-                .pid_request()
-                .send()
-                .promise
-                .await
-                .map_err(|e| ExecutionError::Runtime(e.into()))?
-                .get()
-                .map_err(|e| ExecutionError::Runtime(e.into()))?
-                .get_result();
-
+        let program_error = if done {
             let mut kill_request = self.client.kill_request();
             kill_request.get().set_pid(pid);
             kill_request.get().set_signal(15);
@@ -106,18 +117,16 @@ impl Execution {
 
             let mut waitpid_request = self.client.waitpid_request();
             waitpid_request.get().set_pid(pid);
-            waitpid_request
-                .send()
-                .promise
-                .await
-                .map_err(|e| ExecutionError::Program(e.into()))?;
-        }
+            let waitpid_error = waitpid_request.send().promise.await.err().map(|e| {
+                ExecutionError::Program(anyhow::Error::from(e).context("waitpid error"))
+            });
 
-        // Propagate the program error after cleanup so failed processes that
-        // ack'd `done` don't leak.
-        if let Some(e) = program_error {
-            return Err(e);
-        }
-        Ok(())
+            // Portal error takes precedence over waitpid error.
+            portal_error.or(waitpid_error)
+        } else {
+            portal_error
+        };
+
+        program_error.map_or(Ok(()), Err)
     }
 }
