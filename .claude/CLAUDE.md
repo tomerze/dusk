@@ -39,7 +39,7 @@ Container for all processes in one execution context. Not `Send`/`Sync` — exec
 Factory compiled into the impl. Given a `ProcessContext` (pid, namespace, program_args), produces a `Box<dyn Process>`. `LauncherSet` dispatches by calling `program_args.program_id()` over RPC and matching against launcher vec. Use `basic_launcher!(Struct, PROGRAM_ID, ProcessType, ArgsType)` for the common case.
 
 ### Driver
-`Send + Sync` trait. OS-specific hooks supplied by the impl: `hostname()`, `process(namespace, program_args)`, `now() -> Instant`, `set_alarm(at)`. Registered once per impl via `dusk_driver_impl!`, which defines `#[no_mangle]` extern functions that `dusk_core::driver` calls through `unsafe extern "Rust"`. Link-time dispatch — `dusk_core` is `no_std` and has no knowledge of the impl.
+`Send + Sync` trait. OS-specific hooks supplied by the impl: `hostname()`, `process(namespace, program_args)`, `now() -> Instant`. Registered once per impl via `dusk_driver_impl!`, which defines `#[no_mangle]` extern functions that `dusk_core::driver` calls through `unsafe extern "Rust"`. Link-time dispatch — `dusk_core` is `no_std` and has no knowledge of the impl.
 
 ### Portal
 Cap'n Proto capability extending `Dusk.Portal`. Public API of a running process. `process.portal()` blocks until the process signals readiness, then returns the capability. Portals carry typed streams (`Dusk.Stream` / `Dusk.Value`) as stdin/stdout.
@@ -56,7 +56,7 @@ Every program is five parts:
 
 ## Driver registration (the extern-shim pattern)
 
-`dusk_driver_impl!` defines a `lazy_static` singleton for the driver struct plus `#[no_mangle]` extern Rust functions: `_dusk_hostname`, `_dusk_process`, `_dusk_now`, `_dusk_set_alarm`. `dusk_core::driver` declares those symbols as `unsafe extern "Rust"` and calls through them. The driver is resolved at link time; `dusk_core` depends on no impl; the impl satisfies the symbols.
+`dusk_driver_impl!` defines a `lazy_static` singleton for the driver struct plus `#[no_mangle]` extern Rust functions: `_dusk_hostname`, `_dusk_process`, `_dusk_now`. `dusk_core::driver` declares those symbols as `unsafe extern "Rust"` and calls through them. The driver is resolved at link time; `dusk_core` depends on no impl; the impl satisfies the symbols.
 
 ### Drivers do not call themselves
 
@@ -70,15 +70,12 @@ The reverse rule: callers in `dusk_core`, programs, or other no_std crates **nev
 
 ## Time driver
 
-`embassy_time::Timer` needs an `embassy-time-driver` providing `_embassy_time_now` and `_embassy_time_schedule_wake`. Dusk's shim lives in **`dusk_core::time_driver`** (no_std):
+`embassy_time::Timer` needs an `embassy-time-driver` providing `_embassy_time_now` and `_embassy_time_schedule_wake`. **`dusk_core` does not provide one.** Each impl pulls in an embassy-time driver appropriate for its platform — there is no dusk-specific abstraction over it.
 
-- `now()` forwards to `dusk_core::driver::now()`.
-- The pending-waker queue (`BTreeMap<u64, Vec<Waker>>` behind a `blocking_mutex` + `CriticalSectionRawMutex`) lives **in `dusk_core`** — not in the impl. `schedule_wake(at, waker)` enqueues, and calls `dusk_core::driver::set_alarm(at)` only when the new deadline is earlier than the currently-armed one.
-- Impls expose exactly one primitive: `Driver::set_alarm(at)` — "wake me up at tick `at`". When the impl's alarm fires it calls back into `dusk_core::time_driver::on_alarm()`, which drains due wakers and re-arms via `set_alarm` for the next deadline (if any).
+- `dusk_nix` enables `embassy-time/std`, which ships a ready POSIX driver (`CLOCK_MONOTONIC` via `std::time::Instant` plus a single alarm thread internal to embassy-time).
+- A future MCU impl would enable the embassy-time driver provided by its HAL (`embassy-stm32/time-driver-tim2`, `embassy-rp/time-driver`, etc).
 
-On nix, `set_alarm` is implemented with a `timerfd_create(CLOCK_REALTIME)` fd registered against the `async-io` reactor that's already running for the TCP server — no dedicated thread. A small embassy task (`time_driver_task`) selects between a re-arm `Signal` and `Async<TimerFd>::readable()`, arming with `TFD_TIMER_ABSTIME`. On MCUs, the equivalent is a hardware timer + ISR. Either way the impl side is ~70 lines.
-
-Adding a new impl means: implement `Driver::set_alarm` and arrange to call `dusk_core::time_driver::on_alarm()` when the alarm fires. Nothing else changes.
+`Driver::now()` is independent from embassy-time's clock — it's the dusk platform's wall-clock-ish read for any caller that wants to go through the dusk abstraction. Programs that just want to sleep should use `embassy_time::Timer::after(...)` directly.
 
 ## Launcher registration
 
