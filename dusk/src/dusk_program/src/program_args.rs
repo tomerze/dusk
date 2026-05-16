@@ -57,8 +57,7 @@ impl ProgramArgs {
     }
 
     /// Read the `args.data` slot as the typed reader of `T` and feed it into
-    /// `f`. Mirrors [`Self::server_as`] but for the data slot, so processes
-    /// can pull pure-data parameters out without an RPC roundtrip.
+    /// `f`. 
     pub fn with_data<T, R, F>(&self, f: F) -> capnp::Result<R>
     where
         T: Owned,
