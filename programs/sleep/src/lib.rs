@@ -1,18 +1,19 @@
 #![allow(internal_features)]
 #![feature(prelude_import)]
-#![cfg_attr(not(feature = "client"), no_std)]
-
-use dusk_program::{ready::Ready, signal::SignalReceiver};
 
 extern crate alloc;
 extern crate capnp;
+
+use dusk_program::embassy_futures::select::{Either, select};
+use dusk_program::embassy_time::{Duration, Timer};
+use dusk_program::{ready::Ready, signal::SignalReceiver};
 
 #[cfg(feature = "client")]
 pub mod client;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-dusk_program_proc::metadata!("true", VERSION, true_capnp::PROGRAM_ID);
+dusk_program_proc::metadata!("sleep", VERSION, sleep_capnp::PROGRAM_ID);
 
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
@@ -21,21 +22,16 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn new() -> Self {
+    pub fn duration_ms(milliseconds: u64) -> Self {
         let mut data = ArgsDataBuilder::new_default();
-        data.init_root();
+        data.init_root().set_duration_ms(milliseconds);
         Args { data }
-    }
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
 impl Args {}
+
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -43,6 +39,12 @@ pub struct Launcher;
 impl Launcher {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for Launcher {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -64,7 +66,7 @@ pub struct Process {
 
 #[async_trait::async_trait(?Send)]
 impl dusk_program::process::ProcessMixin for Process {
-    async fn with_context(ctx: dusk_program::process::ProcessContext) -> anyhow::Result<Self>
+    async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -72,7 +74,7 @@ impl dusk_program::process::ProcessMixin for Process {
     }
 
     fn portal(&self) -> portal::Client {
-        let client: true_capnp::true_portal::Client = capnp_rpc::new_client(Portal {
+        let client: sleep_capnp::sleep_portal::Client = capnp_rpc::new_client(Portal {
             process: self.clone(),
         });
         client.cast_to::<portal::Client>()
@@ -83,14 +85,27 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        ready.sender().send(true);
-        loop {
-            let signal = signal_receiver.receive().await;
-            match signal {
-                Signal::Terminate => return Ok(()),
-                Signal::Unknown(_signal) => {}
+        let duration_ms = self
+            .ctx
+            .program_args
+            .with_data::<sleep_capnp::sleep_args::data::Owned, _, _>(|data| {
+                Ok(data.get_duration_ms())
+            })?;
+
+        let timer = Timer::after(Duration::from_millis(duration_ms));
+        let terminate = async {
+            loop {
+                match signal_receiver.receive().await {
+                    Signal::Terminate => return,
+                    Signal::Unknown(_) => continue,
+                }
             }
+        };
+        match select(timer, terminate).await {
+            Either::First(_) => ready.sender().send(true),
+            Either::Second(_) => {}
         }
+        Ok(())
     }
 }
 

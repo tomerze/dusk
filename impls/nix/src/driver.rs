@@ -92,12 +92,12 @@ impl Driver for NixDriver {
                 >,
             >
     }
+
     fn now(&self) -> Result<dusk_program::embassy_time::Instant> {
-        Ok(dusk_program::embassy_time::Instant::from_micros(
-            nix::time::clock_gettime(nix::time::ClockId::CLOCK_REALTIME)?
-                .num_microseconds()
-                .try_into()
-                .map_err(|err| anyhow!("system time is set before unix epoch: `{err}`"))?,
-        ))
+        let millis: u64 = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC)?
+            .num_milliseconds()
+            .try_into()
+            .map_err(|err| anyhow!("CLOCK_MONOTONIC returned a negative value: `{err}`"))?;
+        Ok(dusk_program::embassy_time::Instant::from_millis(millis))
     }
 }

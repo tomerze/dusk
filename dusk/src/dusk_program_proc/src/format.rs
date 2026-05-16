@@ -56,6 +56,11 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         #[allow(unused)]
         pub use #capnp_mod_name::PROGRAM_ID;
 
+        /// Owned, in-memory builder for this program's `args.data` capnp
+        /// struct. 
+        #[allow(unused)]
+        pub type ArgsDataBuilder = dusk_program::dusk_capnp::capnp::message::TypedBuilder<#data_owned>;
+
         #[allow(unused)]
         pub use dusk_program::dusk_capnp::dusk_capnp::portal;
         #[allow(unused)]

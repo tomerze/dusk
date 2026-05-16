@@ -19,6 +19,7 @@ members = [
     "programs/sh",
     "programs/false",
     "programs/true",
+    "programs/sleep",
     "tests/api",
     "tests/cli",
     "tests/common",

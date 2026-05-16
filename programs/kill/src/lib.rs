@@ -17,13 +17,12 @@ dusk_program_proc::metadata!("kill", VERSION, kill_capnp::PROGRAM_ID);
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
-    pub data: capnp::message::TypedBuilder<kill_capnp::kill_args::data::Owned>,
+    pub data: ArgsDataBuilder,
 }
 
 impl Args {
     pub fn new(pid: u64, signal: u64) -> Self {
-        let mut data =
-            capnp::message::TypedBuilder::<kill_capnp::kill_args::data::Owned>::new_default();
+        let mut data = ArgsDataBuilder::new_default();
         {
             let mut root = data.init_root();
             root.set_pid(pid);

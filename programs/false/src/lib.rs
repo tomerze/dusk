@@ -17,13 +17,12 @@ dusk_program_proc::metadata!("false", VERSION, false_capnp::PROGRAM_ID);
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
-    pub data: capnp::message::TypedBuilder<false_capnp::false_args::data::Owned>,
+    pub data: ArgsDataBuilder,
 }
 
 impl Args {
     pub fn new() -> Self {
-        let mut data =
-            capnp::message::TypedBuilder::<false_capnp::false_args::data::Owned>::new_default();
+        let mut data = ArgsDataBuilder::new_default();
         data.init_root();
         Args { data }
     }

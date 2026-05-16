@@ -7,7 +7,7 @@ use dusk_program::{namespace::Namespace, process::Process};
 
 pub type FutureProcessResult = Pin<Box<dyn Future<Output = Result<Box<dyn Process>>>>>;
 
-/// Dusk driver
+/// Dusk driver.
 #[async_trait::async_trait]
 pub trait Driver: Send + Sync + 'static {
     fn hostname(&self) -> Result<String>;
@@ -18,6 +18,7 @@ pub trait Driver: Send + Sync + 'static {
         program_args: Rc<ProgramArgs>,
     ) -> FutureProcessResult;
 
+    /// The current time. Monotonic clock.
     fn now(&self) -> Result<dusk_program::embassy_time::Instant>;
 }
 
@@ -41,6 +42,7 @@ macro_rules! dusk_driver_impl {
         ) -> FutureProcessResult {
             <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
         }
+
         #[unsafe(no_mangle)]
         fn _dusk_now() -> Result<dusk_program::embassy_time::Instant> {
             <$t as $crate::driver::Driver>::now(&$name)

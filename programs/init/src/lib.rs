@@ -15,13 +15,12 @@ dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
-    pub data: capnp::message::TypedBuilder<init_capnp::init_args::data::Owned>,
+    pub data: ArgsDataBuilder,
 }
 
 impl Args {
     pub fn new(address: &str, port: u16) -> Self {
-        let mut data =
-            capnp::message::TypedBuilder::<init_capnp::init_args::data::Owned>::new_default();
+        let mut data = ArgsDataBuilder::new_default();
         {
             let mut root = data.init_root();
             root.set_address(address);

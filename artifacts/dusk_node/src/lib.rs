@@ -14,6 +14,7 @@ pub extern "C" fn dusk_node_run() {
             Box::new(dusk_program_kill::Launcher::new()),
             Box::new(dusk_program_true::Launcher::new()),
             Box::new(dusk_program_false::Launcher::new()),
+            Box::new(dusk_program_sleep::Launcher::new()),
         ])),
         init_program_args,
     );

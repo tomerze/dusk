@@ -52,7 +52,7 @@ pub enum ShMode {
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs<S: entry::ShEntriesBuilder> {
     #[data]
-    pub data: capnp::message::TypedBuilder<sh_capnp::sh_args::data::Owned>,
+    pub data: ArgsDataBuilder,
     pub client: dusk::Client,
     pub sh_entries_builder: S,
 }
@@ -60,8 +60,7 @@ pub struct ShArgs<S: entry::ShEntriesBuilder> {
 #[cfg(feature = "client")]
 impl<S: entry::ShEntriesBuilder> ShArgs<S> {
     pub fn new(client: dusk::Client, sh_entries_builder: S, mode: ShMode) -> anyhow::Result<Self> {
-        let mut data =
-            capnp::message::TypedBuilder::<sh_capnp::sh_args::data::Owned>::new_default();
+        let mut data = ArgsDataBuilder::new_default();
         {
             let mut data_builder = data.init_root();
             match mode {
