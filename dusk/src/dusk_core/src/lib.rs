@@ -28,8 +28,6 @@ pub mod server;
 pub mod trace;
 pub use dusk_capnp;
 
-mod tls;
-
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub async fn local_client(
@@ -61,11 +59,10 @@ pub async fn session(
 
     span.in_scope(|| info!("session started"));
 
-    let (tls_reader, tls_writer) = tls::wrap_with_tls(reader, writer).await;
     let dusk_client = local_client(namespace).await;
     let network = twoparty::VatNetwork::new(
-        tls_reader,
-        tls_writer,
+        reader,
+        writer,
         rpc_twoparty_capnp::Side::Server,
         Default::default(),
     );
