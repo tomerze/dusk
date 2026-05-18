@@ -20,6 +20,7 @@ members = [
     "programs/false",
     "programs/true",
     "programs/sleep",
+    "programs/date",
     "tests/api",
     "tests/cli",
     "tests/common",

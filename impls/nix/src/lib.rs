@@ -68,8 +68,7 @@ pub fn run(
 
     executor.run(|spawner| {
         // And so it begins
-        let namespace_id = rand::random::<u64>();
-        let root = Rc::new(Namespace::new(namespace_id, spawner, SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).ok()));
+        let root = Rc::new(Namespace::new(rand::random::<u128>(), spawner, SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).ok()));
 
         driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
         let task_id = Rc::new(Cell::new(0));

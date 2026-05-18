@@ -13,6 +13,10 @@ use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use hashbrown::HashMap;
 use nohash_hasher::BuildNoHashHasher;
+use rand_chacha::ChaCha20Rng;
+use rand_core::{RngCore, SeedableRng};
+use sha2::{Sha256, Digest};
+
 use tracing::info;
 
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
@@ -37,6 +41,7 @@ pub type PsExitMap = HashMap<u64, ExitWatch, BuildNoHashHasher<u64>>;
 pub struct Namespace {
     pub id: u64, // Random namespace id
     pub creation_time: AtomicU64, // Timestamp in which this namespace was created. Unix time in miliseconds.
+    pub rng: Mutex<CriticalSectionRawMutex, ChaCha20Rng>,
     pub spawner: Spawner,
     pub ps_server_set: Mutex<CriticalSectionRawMutex, PsCapabilityServerSet>,
     pub ps_map: Mutex<CriticalSectionRawMutex, PsMap>,
@@ -46,7 +51,14 @@ pub struct Namespace {
 }
 
 impl Namespace {
-    pub fn new(id: u64, spawner: Spawner, unix_time_ms: Option<u64>) -> Self {
+    pub fn new(random_seed: u128, spawner: Spawner, unix_time_ms: Option<u64>) -> Self {
+        let entropy = Sha256::new()
+        .chain_update(random_seed.to_le_bytes())
+        .chain_update(unix_time_ms.unwrap_or(0).to_le_bytes())
+        .finalize()
+        .into();
+        let mut rng = ChaCha20Rng::from_seed(entropy);
+        let id = rng.next_u64();
         info!(
             namespace_id = id,
             unix_time_ms = unix_time_ms,
@@ -69,6 +81,7 @@ impl Namespace {
             id,
             spawner,
             creation_time: AtomicU64::new(unix_time_ms.unwrap_or(0)),
+            rng: Mutex::<_, _>::new(rng),
             ps_server_set,
             ps_map,
             ps_signal_channel_map,

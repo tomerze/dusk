@@ -1,0 +1,23 @@
+[package]
+name = "dusk_program_date"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true }
+dusk_program = { path = "../../dusk/src/dusk_program", public = true }
+dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
+dusk_program_sh = { path = "../sh", public = true }
+dusk_core = { path = "../../dusk/src/dusk_core/" }
+anyhow = { version = "1.0", public = true }
+# Declared for macro use, versions taken from dusk_program
+capnp = { version = "0.21", public = false }
+linkme = { version = "*", optional = true, public = false }
+clap = { version = "4", features = ["derive"], optional = true }
+chrono = { version = "0.4", optional = true }
+
+[build-dependencies]
+dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
+
+[features]
+client = ["linkme", "dusk_program_sh/client", "clap", "chrono"]

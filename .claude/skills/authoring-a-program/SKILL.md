@@ -38,6 +38,64 @@ Reading `programs/kill/src/lib.rs` top-to-bottom is the fastest way to internali
 
 ---
 
+## `no_std` is non-negotiable — read this before writing anything
+
+The server side of every program is `no_std`. This is the **first** thing you put into `lib.rs`, and the **first** thing you check when adding a dep. Two enforcement points:
+
+1. **Crate header.** Every program's `lib.rs` starts with:
+   ```rust
+   #![allow(internal_features)]
+   #![feature(prelude_import)]
+   #![cfg_attr(not(feature = "client"), no_std)]   // <-- mandatory
+
+   extern crate alloc;
+   extern crate capnp;
+   ```
+   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl — the workspace `cargo check` still passes, but you've broken the portability contract. The only exception is `init`, which is unconditionally `std` because `async-net::TcpListener` needs it. If you are unsure whether your program needs `std` unconditionally, it doesn't — write the `cfg_attr`.
+
+2. **Every dep in the unconditional `[dependencies]` block must be no_std-clean.** That means:
+   - The crate ships a `no_std` mode (check its docs / `[features]` block).
+   - You declare it `default-features = false`, with only no_std-safe features re-enabled (typically `alloc`).
+   - Anything that needs `std` (clap, chrono with formatting, linkme, async-net, …) goes in as `optional = true` and is pulled in by the `client` feature, **not** by the unconditional block.
+
+   Before adding a dep, look it up. If it doesn't advertise `no_std` support, it's a client-only dep. No exceptions.
+
+   Concretely, when you add a client-only dep:
+   ```toml
+   [dependencies]
+   # …
+   chrono = { version = "0.4", optional = true }     # std-only formatting/parsing
+   linkme = { version = "*",   optional = true, public = false }
+   clap   = { version = "4",   features = ["derive"], optional = true }
+
+   [features]
+   client = ["linkme", "dusk_program_sh/client", "clap", "chrono"]
+   ```
+
+If a dep you genuinely need on the **server** side is std-only with no no_std support at all, stop and ask — don't try to smuggle it through.
+
+## Common no_std failure modes
+
+These are the exact mistakes that have shipped. Don't repeat them.
+
+| Mistake | What breaks | Fix |
+|---|---|---|
+| Forgetting `#![cfg_attr(not(feature = "client"), no_std)]` on a new program crate | The program compiles `std` into the dusk impl. No surface symptom — `cargo check` still passes. | Add the cfg_attr line as part of the initial skeleton. Audit existing programs with `head -4 programs/*/src/lib.rs` when in doubt. |
+| Adding a std-only dep (`chrono`, `clap`, `linkme`, …) to the unconditional `[dependencies]` block | Server crate stops being no_std-clean. | Mark it `optional = true` and add it to the `client` feature list. |
+| `use alloc::format;` or `use alloc::string::String;` at the top of `lib.rs` | Conflicts with names that `dusk_program_proc::metadata!` brings into scope — you'll see `the name 'format' is defined multiple times` / `the name 'String' is defined multiple times`. | Use full paths inline: `alloc::format!(...)`, `alloc::string::String`. Do not re-import the alloc prelude in a file that invokes `metadata!`. |
+| Adding a `use std::…` line into `lib.rs` because it autocompleted | Breaks the no_std build. | `std::` is allowed only inside `client.rs` or other `#[cfg(feature = "client")]`-gated modules. Inside `lib.rs`, `std::` is a bug. |
+| Using `format!(...)` macros in server code without a path qualifier | Resolution may succeed via the `metadata!`-injected prelude, but you're now relying on injected names that can move. | Use `alloc::format!(...)`. Don't print from server code — emit through `tracing` or a `Stream`. |
+
+A sanity grep before declaring done:
+
+```
+grep -rn "std::\|use std" programs/<your-program>/src/ --include="*.rs"
+```
+
+The only hits should be in `client.rs` or other `#[cfg(feature = "client")]`-gated files.
+
+---
+
 ## Crate layout
 
 ```

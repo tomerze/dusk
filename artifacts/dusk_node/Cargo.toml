@@ -17,3 +17,4 @@ dusk_program_init = { path = "../../programs/init" }
 dusk_program_true = { path = "../../programs/true" }
 dusk_program_false = { path = "../../programs/false" }
 dusk_program_sleep = { path = "../../programs/sleep" }
+dusk_program_date = { path = "../../programs/date" }

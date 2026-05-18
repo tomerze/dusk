@@ -17,3 +17,4 @@ dusk_program_kill = { path = "../../programs/kill", features = ["client"] }
 dusk_program_true = { path = "../../programs/true", features = ["client"] }
 dusk_program_false = { path = "../../programs/false", features = ["client"] }
 dusk_program_sleep = { path = "../../programs/sleep", features = ["client"] }
+dusk_program_date = { path = "../../programs/date", features = ["client"] }
