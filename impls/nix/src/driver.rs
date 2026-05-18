@@ -7,7 +7,7 @@ use dusk_core::driver::{Driver, FutureProcessResult};
 use dusk_program::anyhow::{Ok, Result, anyhow};
 use dusk_program::launcher_set::{LauncherSet, LauncherSetBuilder};
 use dusk_program::{namespace::Namespace, process::Process};
-use nix::{sys::time::TimeValLike, unistd::gethostname};
+use nix::unistd::gethostname;
 use rand::RngCore;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -91,13 +91,5 @@ impl Driver for NixDriver {
                         + 'static,
                 >,
             >
-    }
-
-    fn now(&self) -> Result<dusk_program::embassy_time::Instant> {
-        let millis: u64 = nix::time::clock_gettime(nix::time::ClockId::CLOCK_MONOTONIC)?
-            .num_milliseconds()
-            .try_into()
-            .map_err(|err| anyhow!("CLOCK_MONOTONIC returned a negative value: `{err}`"))?;
-        Ok(dusk_program::embassy_time::Instant::from_millis(millis))
     }
 }

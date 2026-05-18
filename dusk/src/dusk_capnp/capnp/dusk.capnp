@@ -63,4 +63,6 @@ interface Dusk {
     kill @4 (pid: UInt64, signal: UInt64) -> ();
     hostname @3 () -> (result :Text);
     waitpid @5 (pid: UInt64) -> ();
+    time @6 () -> (unix_time_ms :UInt64);
+    settime @7 (unix_time_ms: UInt64) -> ();
 }

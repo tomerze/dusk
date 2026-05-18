@@ -260,4 +260,33 @@ impl dusk::Server for DuskServer {
         results.get().set_result(&hostname[..]);
         Promise::ok(())
     }
+
+    fn time(
+        &mut self,
+        _params: dusk::TimeParams,
+        mut results: dusk::TimeResults,
+    ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.time", "rpc call");
+        let time = self
+            .namespace
+            .creation_time
+            .load(core::sync::atomic::Ordering::Relaxed)
+            + dusk_program::embassy_time::Instant::now().as_millis();
+        results.get().set_unix_time_ms(time);
+        Promise::ok(())
+    }
+
+    fn settime(
+        &mut self,
+        params: dusk::SettimeParams,
+        _results: dusk::SettimeResults,
+    ) -> Promise<(), capnp::Error> {
+        let unix_time_ms = pry!(params.get()).get_unix_time_ms();
+        debug!(method = "Dusk.settime", ?unix_time_ms, "rpc call");
+        self.namespace.creation_time.store(
+            unix_time_ms - dusk_program::embassy_time::Instant::now().as_millis(),
+            core::sync::atomic::Ordering::Relaxed,
+        );
+        Promise::ok(())
+    }
 }

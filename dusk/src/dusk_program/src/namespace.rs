@@ -3,6 +3,7 @@ use crate::ready::Ready;
 use crate::signal;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
+use core::sync::atomic::AtomicU64;
 use dusk_capnp::GIT_REV;
 use dusk_capnp::capnp_rpc::CapabilityServerSet;
 use dusk_capnp::dusk_capnp::process;
@@ -34,7 +35,8 @@ pub type PsExitMap = HashMap<u64, ExitWatch, BuildNoHashHasher<u64>>;
 /// It is not `Send` or `Sync` and is intended to be used within a single thread or executor context.
 /// The mutexes are used to allow interior mutability.
 pub struct Namespace {
-    pub id: u64,
+    pub id: u64, // Random namespace id
+    pub creation_time: AtomicU64, // Timestamp in which this namespace was created. Unix time in miliseconds.
     pub spawner: Spawner,
     pub ps_server_set: Mutex<CriticalSectionRawMutex, PsCapabilityServerSet>,
     pub ps_map: Mutex<CriticalSectionRawMutex, PsMap>,
@@ -44,9 +46,10 @@ pub struct Namespace {
 }
 
 impl Namespace {
-    pub fn new(id: u64, spawner: Spawner) -> Self {
+    pub fn new(id: u64, spawner: Spawner, unix_time_ms: Option<u64>) -> Self {
         info!(
             namespace_id = id,
+            unix_time_ms = unix_time_ms,
             version = dusk_capnp::VERSION,
             git_rev = GIT_REV,
             "namespace created"
@@ -65,6 +68,7 @@ impl Namespace {
         Namespace {
             id,
             spawner,
+            creation_time: AtomicU64::new(unix_time_ms.unwrap_or(0)),
             ps_server_set,
             ps_map,
             ps_signal_channel_map,

@@ -1,7 +1,6 @@
-use chrono::Duration;
 use dusk_program::anyhow::{Result, anyhow};
 use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
-use std::{borrow::Cow, cell::Cell, rc::Rc};
+use std::{borrow::Cow, rc::Rc};
 use tokio::sync::Notify;
 
 use crossterm::{
@@ -11,7 +10,6 @@ use crossterm::{
 use nu_ansi_term::{Color, Style};
 use nu_color_config::TextStyle;
 use nu_table::{NuRecordsValue, NuTable, TableTheme};
-use pretty_duration::pretty_duration;
 use reedline::{
     ColumnarMenu, DefaultCompleter, DefaultHinter, DefaultValidator, EditCommand, Highlighter,
     Keybindings, ListMenu, MenuBuilder, PromptEditMode, PromptHistorySearch,
@@ -23,6 +21,7 @@ use reedline::CursorConfig;
 
 use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
 use crossterm::style::{Color as CrosstermColor, Print, ResetColor, SetForegroundColor};
+use crossterm::terminal::{Clear, ClearType};
 use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
@@ -35,7 +34,6 @@ use dusk_shell::shell::{RttHandle, Shell};
 struct ReedlinePrompt {
     status_template: String,
     indicator_line: String,
-    right_prompt: Cell<Duration>,
     rtt_handle: RttHandle,
 }
 
@@ -44,7 +42,6 @@ impl ReedlinePrompt {
         ReedlinePrompt {
             status_template,
             indicator_line,
-            right_prompt: Cell::new(Duration::zero()),
             rtt_handle,
         }
     }
@@ -77,13 +74,7 @@ impl reedline::Prompt for ReedlinePrompt {
     }
 
     fn render_prompt_right(&self) -> Cow<'_, str> {
-        match self.right_prompt.get().to_std() {
-            Ok(duration) => {
-                let duration_str = pretty_duration(&duration, None);
-                Cow::Owned(format!("[{duration_str}]"))
-            }
-            Err(_err) => Cow::Owned(String::from("[error]")),
-        }
+        Cow::Borrowed("")
     }
 
     fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
@@ -528,6 +519,11 @@ Program ID: `{program_id}`
             Style::new().fg(Color::Yellow).bold().paint(" @"),
             Style::new().fg(Color::Cyan).paint(&self.shell.hostname),
         );
+        let status_plain_width: u16 = {
+            use unicode_width::UnicodeWidthStr;
+            let plain = format!("dusk {} @{}", dusk_capnp::VERSION, self.shell.hostname);
+            UnicodeWidthStr::width(plain.as_str()) as u16
+        };
 
         let indicator_line: String = Style::new().fg(Color::DarkGray).paint("○").to_string();
         let mut prompt = ReedlinePrompt::new(
@@ -571,6 +567,15 @@ Program ID: `{program_id}`
             let sig = read_line_result?;
             match sig {
                 Signal::Success(buffer) => {
+                    // Strip the RTT suffix from the now-historical status line.
+                    execute!(
+                        stdout(),
+                        MoveUp(2),
+                        MoveToColumn(status_plain_width),
+                        Clear(ClearType::UntilNewLine),
+                        MoveDown(2),
+                        MoveToColumn(0)
+                    )?;
                     if !buffer.is_empty() {
                         line_editor.update_last_command_context(
                             &|mut history_item: reedline::HistoryItem| {
@@ -578,7 +583,7 @@ Program ID: `{program_id}`
                                 history_item
                             },
                         )?;
-                        // Immediately after Enter is pressed, go to start of line and replace circle
+                        // Swap the indicator circle to mark this prompt as historical.
                         execute!(
                             stdout(),
                             MoveUp(1),
@@ -598,7 +603,6 @@ Program ID: `{program_id}`
                     }
 
                     let duration = start_timestamp.elapsed();
-                    prompt.right_prompt.set(Duration::from_std(duration)?);
 
                     if !buffer.is_empty() {
                         line_editor.update_last_command_context(&|mut history_item| {

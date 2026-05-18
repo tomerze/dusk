@@ -17,9 +17,6 @@ pub trait Driver: Send + Sync + 'static {
         namespace: Rc<Namespace>,
         program_args: Rc<ProgramArgs>,
     ) -> FutureProcessResult;
-
-    /// The current time. Monotonic clock.
-    fn now(&self) -> Result<dusk_program::embassy_time::Instant>;
 }
 
 /// Set the dusk Driver implementation.
@@ -42,11 +39,6 @@ macro_rules! dusk_driver_impl {
         ) -> FutureProcessResult {
             <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
         }
-
-        #[unsafe(no_mangle)]
-        fn _dusk_now() -> Result<dusk_program::embassy_time::Instant> {
-            <$t as $crate::driver::Driver>::now(&$name)
-        }
     };
 }
 
@@ -57,8 +49,6 @@ unsafe extern "Rust" {
         namespace: Rc<Namespace>,
         program_args: Rc<ProgramArgs>,
     ) -> FutureProcessResult;
-
-    fn _dusk_now() -> Result<dusk_program::embassy_time::Instant>;
 }
 
 pub fn hostname() -> Result<String> {
@@ -67,8 +57,4 @@ pub fn hostname() -> Result<String> {
 
 pub fn process(namespace: Rc<Namespace>, program_args: Rc<ProgramArgs>) -> FutureProcessResult {
     unsafe { _dusk_process(namespace, program_args) }
-}
-
-pub fn now() -> Result<dusk_program::embassy_time::Instant> {
-    unsafe { _dusk_now() }
 }
