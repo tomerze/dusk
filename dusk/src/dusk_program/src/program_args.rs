@@ -119,3 +119,21 @@ impl Default for ProgramArgs {
         Self::new()
     }
 }
+
+impl core::fmt::Debug for ProgramArgs {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut message_builder = match self.inner.try_borrow_mut() {
+            Ok(builder) => builder,
+            Err(_) => return formatter.write_str("ProgramArgs { <borrowed> }"),
+        };
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            match message_builder.get_root() {
+                Ok(root) => root,
+                Err(error) => {
+                    return formatter
+                        .write_fmt(format_args!("ProgramArgs {{ <error: {error}> }}"));
+                }
+            };
+        core::fmt::Debug::fmt(&root.into_reader(), formatter)
+    }
+}

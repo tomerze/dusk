@@ -31,6 +31,17 @@ pub struct ProcessContext {
     >,
 }
 
+impl core::fmt::Debug for ProcessContext {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let name = self.name.lock(|name| name.borrow().clone());
+        formatter
+            .debug_struct("ProcessContext")
+            .field("pid", &self.pid)
+            .field("program_args", &self.program_args)
+            .finish_non_exhaustive()
+    }
+}
+
 // You are probably wondering how processes are run.
 // There are two ways, inside a task of their own or inside the session task.
 // A process running inside a task of its own doesn't depend on the session it was created from, essentially making it a daemon.
@@ -106,13 +117,13 @@ impl dyn Process {
             registered.signal(());
         }
 
-        tracing::info!("main called");
+        tracing::info!("main run");
         let result = self
             .main(signal_receiver, ready)
             .instrument(tracing::Span::current())
             .await;
         let error = result.as_ref().err().map(|e| e.to_string());
-        tracing::info!(error = error, "main exited");
+        tracing::info!(error = error, "main exit");
 
         {
             let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
