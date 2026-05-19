@@ -30,3 +30,5 @@ termimad = { version = "0.20", public = true}
 colored_json = "5.0.0"
 base64 = "0.22.1"
 unicode-width = "0.2"
+mistralrs = "0.8.1"
+libc = "0.2"

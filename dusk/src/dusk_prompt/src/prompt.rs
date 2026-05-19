@@ -1,23 +1,10 @@
-use dusk_program::anyhow::{Result, anyhow};
+use dusk_program::anyhow::Result;
 use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
-use std::{borrow::Cow, rc::Rc};
+use std::rc::Rc;
 use tokio::sync::Notify;
 
-use crossterm::{
-    cursor::SetCursorStyle,
-    event::{KeyCode, KeyModifiers},
-};
 use nu_ansi_term::{Color, Style};
-use nu_color_config::TextStyle;
-use nu_table::{NuRecordsValue, NuTable, TableTheme};
-use reedline::{
-    ColumnarMenu, DefaultCompleter, DefaultHinter, DefaultValidator, EditCommand, Highlighter,
-    Keybindings, ListMenu, MenuBuilder, PromptEditMode, PromptHistorySearch,
-    PromptHistorySearchStatus, Reedline, ReedlineEvent, ReedlineMenu, Vi,
-    default_vi_insert_keybindings, default_vi_normal_keybindings,
-};
-
-use reedline::CursorConfig;
+use reedline::{EditCommand, Reedline};
 
 use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
 use crossterm::style::{Color as CrosstermColor, Print, ResetColor, SetForegroundColor};
@@ -26,191 +13,11 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
+use crate::builtins;
 use crate::display_engine::DisplayEngine;
-use crate::highlighter::CustomHighlighter;
-use dusk_shell::shell::{RttHandle, Shell};
-
-#[derive(Clone)]
-struct ReedlinePrompt {
-    status_template: String,
-    indicator_line: String,
-    rtt_handle: RttHandle,
-}
-
-impl ReedlinePrompt {
-    pub fn new(status_template: String, indicator_line: String, rtt_handle: RttHandle) -> Self {
-        ReedlinePrompt {
-            status_template,
-            indicator_line,
-            rtt_handle,
-        }
-    }
-}
-
-static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
-
-fn render_keepalive_suffix(rtt_handle: &RttHandle) -> String {
-    match *rtt_handle.lock().unwrap() {
-        Some(rtt) => Style::new()
-            .fg(Color::DarkGray)
-            .paint(format!(" ⇄ {}ms", rtt.as_millis()))
-            .to_string(),
-        None => Style::new()
-            .fg(Color::Red)
-            .bold()
-            .paint(" disconnected")
-            .to_string(),
-    }
-}
-
-impl reedline::Prompt for ReedlinePrompt {
-    fn render_prompt_left(&self) -> Cow<'_, str> {
-        Cow::Owned(format!(
-            "{}{}\n{}",
-            self.status_template,
-            render_keepalive_suffix(&self.rtt_handle),
-            self.indicator_line
-        ))
-    }
-
-    fn render_prompt_right(&self) -> Cow<'_, str> {
-        Cow::Borrowed("")
-    }
-
-    fn render_prompt_indicator(&self, _edit_mode: PromptEditMode) -> Cow<'_, str> {
-        Cow::Owned(format!(
-            " {} ",
-            Style::new().fg(Color::LightGreen).paint("❯")
-        ))
-    }
-
-    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
-        Cow::Borrowed(DEFAULT_MULTILINE_INDICATOR)
-    }
-
-    fn render_prompt_history_search_indicator(
-        &self,
-        history_search: PromptHistorySearch,
-    ) -> Cow<'_, str> {
-        let prefix = match history_search.status {
-            PromptHistorySearchStatus::Passing => "",
-            PromptHistorySearchStatus::Failing => "failing ",
-        };
-
-        Cow::Owned(format!(
-            " ({}reverse-search: {}) ",
-            prefix, history_search.term
-        ))
-    }
-
-    fn right_prompt_on_last_line(&self) -> bool {
-        false
-    }
-}
-
-fn get_line_editor(
-    commands: Vec<String>,
-    functions: crate::highlighter::FunctionNames,
-) -> Result<Reedline> {
-    let history = Box::new(
-        reedline::SqliteBackedHistory::with_file("history.sqlite3".into(), None, None)
-            .map_err(|_err| anyhow!("failed to open history db"))?,
-    );
-
-    let completer = Box::new(DefaultCompleter::new_with_wordlen(commands.clone(), 2));
-
-    let cursor_config = CursorConfig {
-        vi_insert: Some(SetCursorStyle::BlinkingBar),
-        vi_normal: Some(SetCursorStyle::SteadyBlock),
-        emacs: None,
-    };
-
-    let highlighter = CustomHighlighter {
-        external_commands: commands,
-        functions,
-    };
-    let mut line_editor = Reedline::create()
-        .with_history_session_id(None)
-        .with_history(history)
-        .with_history_exclusion_prefix(Some(" ".to_string()))
-        .with_completer(completer)
-        .with_quick_completions(true)
-        .with_partial_completions(true)
-        .with_cursor_config(cursor_config)
-        .with_highlighter(Box::new(highlighter))
-        .with_hinter(Box::new(
-            DefaultHinter::default().with_style(Style::new().fg(Color::DarkGray)),
-        ))
-        .with_validator(Box::new(DefaultValidator))
-        .with_ansi_colors(true)
-        .with_menu(ReedlineMenu::EngineCompleter(Box::new(
-            ColumnarMenu::default().with_name("completion_menu"),
-        )))
-        .with_menu(ReedlineMenu::HistoryMenu(Box::new(
-            ListMenu::default().with_name("history_menu"),
-        )))
-        .use_bracketed_paste(true);
-
-    let mut normal_keybindings = default_vi_normal_keybindings();
-    let mut insert_keybindings = default_vi_insert_keybindings();
-
-    add_menu_keybindings(&mut normal_keybindings);
-    add_menu_keybindings(&mut insert_keybindings);
-
-    add_newline_keybinding(&mut insert_keybindings);
-
-    let edit_mode = Vi::new(insert_keybindings, normal_keybindings);
-
-    line_editor = line_editor.with_edit_mode(Box::new(edit_mode));
-
-    line_editor = line_editor.with_buffer_editor(
-        std::process::Command::new("vi"),
-        std::env::temp_dir().join("tmp"),
-    );
-
-    Ok(line_editor)
-}
-
-fn add_menu_keybindings(keybindings: &mut Keybindings) {
-    keybindings.add_binding(
-        KeyModifiers::CONTROL,
-        KeyCode::Char('r'),
-        ReedlineEvent::UntilFound(vec![
-            ReedlineEvent::Menu("history_menu".to_string()),
-            ReedlineEvent::MenuPageNext,
-        ]),
-    );
-
-    keybindings.add_binding(
-        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-        KeyCode::Char('x'),
-        ReedlineEvent::MenuPagePrevious,
-    );
-
-    keybindings.add_binding(
-        KeyModifiers::NONE,
-        KeyCode::Tab,
-        ReedlineEvent::UntilFound(vec![
-            ReedlineEvent::Menu("completion_menu".to_string()),
-            ReedlineEvent::Edit(vec![EditCommand::Complete]),
-        ]),
-    );
-
-    keybindings.add_binding(
-        KeyModifiers::SHIFT,
-        KeyCode::BackTab,
-        ReedlineEvent::MenuPrevious,
-    );
-}
-
-fn add_newline_keybinding(keybindings: &mut Keybindings) {
-    // This doesn't work for macOS
-    keybindings.add_binding(
-        KeyModifiers::ALT,
-        KeyCode::Enter,
-        ReedlineEvent::Edit(vec![EditCommand::InsertNewline]),
-    );
-}
+use crate::reedline::{ReedlinePrompt, get_line_editor, render_keepalive_suffix};
+use crate::translator::LLMTranslator;
+use dusk_shell::shell::Shell;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
 
@@ -233,6 +40,7 @@ where
     stream_factory: F,
     /// Fired by the caller (e.g. on ctrl+c) to ask the running command to stop.
     stop_signal: Rc<Notify>,
+    translator: LLMTranslator,
 }
 
 impl<'a, D, F> Prompt<'a, D, F>
@@ -240,45 +48,6 @@ where
     D: DisplayEngine + Clone + 'static,
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
 {
-    const BUILTIN_COMMANDS: [ProgramInfo; 4] = [
-        ProgramInfo {
-            name: "clear",
-            version: "builtin",
-            program_id: None,
-            short_description: "clear the screen",
-            long_description: r#"Example,
-`clear`"#,
-        },
-        ProgramInfo {
-            name: "exit",
-            version: "builtin",
-            program_id: None,
-            short_description: "exit the shell",
-            long_description: r#"Example,
-`exit`"#,
-        },
-        ProgramInfo {
-            name: "help",
-            version: "builtin",
-            program_id: None,
-            short_description: "help, try `help help`",
-            long_description: r#"
-The `help` command displays information about available commands.
-* Use `help` to list all available commands.
-* Use `help <command>` to get more information about a specific command.
-"#,
-        },
-        ProgramInfo {
-            name: "functions",
-            version: "builtin",
-            program_id: None,
-            short_description: "list all defined shell functions",
-            long_description: r#"
-The `functions` command lists all functions defined in any shell
-"#,
-        },
-    ];
-
     pub async fn new(
         shell: &'a mut Shell,
         get_available_programs_info: impl GetAvailableProgramsInfo,
@@ -286,7 +55,7 @@ The `functions` command lists all functions defined in any shell
         stream_factory: F,
         stop_signal: Rc<Notify>,
     ) -> Result<Self> {
-        let mut available_programs_info = Self::BUILTIN_COMMANDS.to_vec();
+        let mut available_programs_info = builtins::BUILTIN_COMMANDS.to_vec();
 
         available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 
@@ -296,148 +65,8 @@ The `functions` command lists all functions defined in any shell
             display_engine,
             stream_factory,
             stop_signal,
+            translator: LLMTranslator::new(),
         })
-    }
-
-    fn get_available_commands_table(&self) -> Result<String> {
-        let mut table = NuTable::new(self.available_programs_info.len() + 1, 3);
-        let headers = vec![
-            NuRecordsValue::new("Command".into()),
-            NuRecordsValue::new("Description".into()),
-            NuRecordsValue::new("Local Version".into()),
-        ];
-        table.set_row(0, headers);
-        for (i, command) in self.available_programs_info.iter().enumerate() {
-            let row = vec![
-                NuRecordsValue::new(
-                    self.display_engine
-                        .render_markdown_inline(format!("**{}**", command.name).as_str()),
-                ),
-                NuRecordsValue::new(
-                    self.display_engine
-                        .render_markdown_inline(command.short_description),
-                ),
-                NuRecordsValue::new(
-                    self.display_engine
-                        .render_markdown_inline(format!("`{}`", command.version).as_str()),
-                ),
-            ];
-            table.set_row(i + 1, row);
-        }
-
-        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::DarkGray)));
-        table.set_header_style(
-            TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
-        );
-        table.set_theme(TableTheme::rounded());
-        table.set_structure(false, true, false);
-        let width = crossterm::terminal::size()?.0 as usize;
-        let table_str = table.draw(width).unwrap_or("[cannot fit]".to_string());
-        Ok(table_str)
-    }
-
-    fn get_program_info_markdown(&self, program_name: &str) -> Result<Option<String>> {
-        let program_info = self
-            .available_programs_info
-            .iter()
-            .find(|p| p.name == program_name);
-
-        let markdown = r#"# {name}
-## Info:
-Local version: `{version}`
-Program ID: `{program_id}`
-## Description:
-**{short_description}**{long_description}
-```"#;
-
-        let program_info = if let Some(program_info) = program_info {
-            program_info
-        } else {
-            return Ok(None);
-        };
-        let program_id = program_info
-            .program_id
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| "N/A".to_string());
-        let formatted_markdown = markdown
-            .replace("{name}", program_info.name)
-            .replace("{version}", program_info.version)
-            .replace("{program_id}", &program_id)
-            .replace("{short_description}", program_info.short_description)
-            .replace(
-                "{long_description}",
-                format!("\n{}", program_info.long_description).as_str(),
-            );
-
-        Ok(Some(
-            self.display_engine
-                .render_markdown(formatted_markdown.as_str()),
-        ))
-    }
-
-    fn help(&self, line: &str) -> Result<()> {
-        let command = line.split_whitespace().nth(1);
-        let draw = if let Some(command) = command {
-            if let Some(markdown) = self.get_program_info_markdown(command)? {
-                markdown
-            } else {
-                format!("No help found for command: {}", command)
-            }
-        } else {
-            self.get_available_commands_table()?
-        };
-
-        println!("{}", draw);
-
-        Ok(())
-    }
-
-    async fn print_functions(&self) -> Result<()> {
-        let functions = self.shell.functions().await?;
-        if functions.is_empty() {
-            let example = "// defines foo function which just calls itself\nfoo() {\n    foo\n}";
-            let highlighter = CustomHighlighter {
-                external_commands: Vec::new(),
-                functions: std::sync::Arc::new(std::sync::Mutex::new(vec!["foo".to_string()])),
-            };
-            let highlighted: String = example
-                .lines()
-                .map(|line| {
-                    highlighter
-                        .highlight(line, 0)
-                        .buffer
-                        .iter()
-                        .map(|(style, text)| style.paint(text).to_string())
-                        .collect::<String>()
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            println!("no functions defined, you can define one like this:\n{highlighted}");
-            return Ok(());
-        }
-        let mut table = NuTable::new(functions.len() + 1, 1);
-        table.set_row(0, vec![NuRecordsValue::new("function name".into())]);
-        for (i, name) in functions.iter().enumerate() {
-            table.set_row(
-                i + 1,
-                vec![NuRecordsValue::new(
-                    self.display_engine
-                        .render_markdown_inline(format!("**{}**", name).as_str()),
-                )],
-            );
-        }
-        table.set_data_style(TextStyle::basic_left().style(Style::new().fg(Color::DarkGray)));
-        table.set_header_style(
-            TextStyle::basic_center().style(Style::new().fg(Color::Yellow).bold()),
-        );
-        table.set_theme(TableTheme::rounded());
-        table.set_structure(false, true, false);
-        let width = crossterm::terminal::size()?.0 as usize;
-        println!(
-            "{}",
-            table.draw(width).unwrap_or("[cannot fit]".to_string())
-        );
-        Ok(())
     }
 
     fn get_stream(&self, is_raw: bool) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver) {
@@ -454,7 +83,7 @@ Program ID: `{program_id}`
     /// That is mainly being able to clear the prompt.
     ///
     /// Return true when prompt should exit.
-    async fn process_line(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
+    async fn execute_command(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
         let stripped = dusk_program_sh::parser::strip_comments(line);
         let mut line = stripped.as_str();
         let first_word = match line.split_whitespace().next() {
@@ -464,13 +93,13 @@ Program ID: `{program_id}`
         match first_word {
             "exit" => return Ok(true),
             "clear" => {
-                line_editor.clear_screen()?;
+                builtins::clear(line_editor)?;
             }
             "help" => {
-                self.help(line)?;
+                builtins::help(line, &self.available_programs_info, &self.display_engine)?;
             }
             "functions" => {
-                self.print_functions().await?;
+                builtins::print_functions(self.shell, &self.display_engine).await?;
             }
             _sh_entry_name => {
                 // get last word of line
@@ -496,12 +125,91 @@ Program ID: `{program_id}`
         Ok(false)
     }
 
-    pub async fn run(mut self) -> Result<()> {
-        self.run_inner().await?;
-        Ok(())
+    /// Handle a single accepted line from reedline. Returns `true` when the prompt should exit.
+    async fn process_line(
+        &mut self,
+        buffer: &str,
+        line_editor: &mut Reedline,
+        status_plain_width: u16,
+    ) -> Result<bool> {
+        // Strip the RTT suffix from the now-historical status line.
+        execute!(
+            stdout(),
+            MoveUp(2),
+            MoveToColumn(status_plain_width),
+            Clear(ClearType::UntilNewLine),
+            MoveDown(2),
+            MoveToColumn(0)
+        )?;
+
+        if let Some(natural_language) = buffer.strip_prefix('%') {
+            let natural_language = natural_language.trim();
+            if !natural_language.is_empty() {
+                match self.translator.translate(natural_language).await {
+                    Ok(translation) => {
+                        println!(
+                            "{} {}",
+                            Style::new().fg(Color::DarkGray).paint("→"),
+                            Style::new().fg(Color::LightGreen).paint(&translation),
+                        );
+                        line_editor.run_edit_commands(&[
+                            EditCommand::Clear,
+                            EditCommand::InsertString(translation),
+                        ]);
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "translation failed");
+                        println!(
+                            "{} {}",
+                            Style::new().fg(Color::Red).paint("translation failed:"),
+                            error,
+                        );
+                    }
+                }
+                return Ok(false);
+            }
+        }
+
+        if !buffer.is_empty() {
+            line_editor.update_last_command_context(
+                &|mut history_item: reedline::HistoryItem| {
+                    history_item.start_timestamp = Some(chrono::Utc::now());
+                    history_item
+                },
+            )?;
+            // Swap the indicator circle to mark this prompt as historical.
+            execute!(
+                stdout(),
+                MoveUp(1),
+                MoveToColumn(0),
+                SetForegroundColor(CrosstermColor::Cyan),
+                Print("●"),
+                ResetColor,
+                MoveDown(1),
+                MoveToColumn(0)
+            )?;
+        }
+        let start_timestamp = std::time::Instant::now();
+
+        let should_exit = self.execute_command(buffer, line_editor).await?;
+        if should_exit {
+            return Ok(true);
+        }
+
+        let duration = start_timestamp.elapsed();
+
+        if !buffer.is_empty() {
+            line_editor.update_last_command_context(&|mut history_item| {
+                history_item.duration = Some(duration);
+                history_item.exit_status = Some(0);
+                history_item
+            })?;
+        }
+
+        Ok(false)
     }
 
-    async fn run_inner(&mut self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         let function_names: crate::highlighter::FunctionNames =
             std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut line_editor = get_line_editor(
@@ -567,49 +275,11 @@ Program ID: `{program_id}`
             let sig = read_line_result?;
             match sig {
                 Signal::Success(buffer) => {
-                    // Strip the RTT suffix from the now-historical status line.
-                    execute!(
-                        stdout(),
-                        MoveUp(2),
-                        MoveToColumn(status_plain_width),
-                        Clear(ClearType::UntilNewLine),
-                        MoveDown(2),
-                        MoveToColumn(0)
-                    )?;
-                    if !buffer.is_empty() {
-                        line_editor.update_last_command_context(
-                            &|mut history_item: reedline::HistoryItem| {
-                                history_item.start_timestamp = Some(chrono::Utc::now());
-                                history_item
-                            },
-                        )?;
-                        // Swap the indicator circle to mark this prompt as historical.
-                        execute!(
-                            stdout(),
-                            MoveUp(1),
-                            MoveToColumn(0),
-                            SetForegroundColor(CrosstermColor::Cyan),
-                            Print("●"),
-                            ResetColor,
-                            MoveDown(1),
-                            MoveToColumn(0)
-                        )?;
-                    }
-                    let start_timestamp = std::time::Instant::now();
-
-                    let should_exit = self.process_line(&buffer, &mut line_editor).await?;
-                    if should_exit {
+                    if self
+                        .process_line(&buffer, &mut line_editor, status_plain_width)
+                        .await?
+                    {
                         return Ok(());
-                    }
-
-                    let duration = start_timestamp.elapsed();
-
-                    if !buffer.is_empty() {
-                        line_editor.update_last_command_context(&|mut history_item| {
-                            history_item.duration = Some(duration);
-                            history_item.exit_status = Some(0);
-                            history_item
-                        })?;
                     }
                 }
                 Signal::CtrlD | Signal::CtrlC => {

@@ -48,10 +48,11 @@ impl LauncherSet {
         let program_id = process_context.program_args.program_id()?;
         for launcher in launchers.iter_mut() {
             if launcher.program_id() == program_id {
-                let process_context_string = alloc::format!("{:?}", process_context);
+                let pid = process_context.pid;
                 let result = launcher.launch(process_context).await;
                 tracing::info!(
-                    process_context = %process_context_string,
+                    process_context.pid = pid,
+                    process_context.program_args.program_id = program_id,
                     error = result.as_ref().err().map(tracing::field::debug),
                     "process launch",
                 );
