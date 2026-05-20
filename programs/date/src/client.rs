@@ -26,6 +26,9 @@ struct DateCli {
         value_parser = parse_ntp_server,
     )]
     ntp: Option<SocketAddr>,
+    /// Read the wall clock on the client and set the server clock to match it.
+    #[arg(long = "sync", group = "action")]
+    sync: bool,
 }
 
 fn parse_ntp_server(input: &str) -> Result<SocketAddr, String> {
@@ -46,8 +49,8 @@ struct DateProgramArgsBuilder {}
 impl ProgramArgsBuilder for DateProgramArgsBuilder {
     fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = DateCli::try_parse_from(args)?;
-        let args = match (cli.set, cli.ntp) {
-            (Some(set_to), _) => {
+        let args = match (cli.set, cli.ntp, cli.sync) {
+            (Some(set_to), _, _) => {
                 let naive = chrono::NaiveDateTime::parse_from_str(&set_to, FORMAT).map_err(
                     |err| anyhow::anyhow!("failed to parse `{set_to}` as `{FORMAT}`: {err}"),
                 )?;
@@ -58,11 +61,21 @@ impl ProgramArgsBuilder for DateProgramArgsBuilder {
                     .map_err(|_| anyhow::anyhow!("timestamp out of range"))?;
                 Args::set_to(unix_time_ms)
             }
-            (_, Some(server)) => Args::set_to(query_ntp(server)?),
+            (_, Some(server), _) => Args::set_to(query_ntp(server)?),
+            (_, _, true) => Args::set_to(client_unix_time_ms()?),
             _ => Args::show(),
         };
         Ok(args.as_program_args()?)
     }
+}
+
+fn client_unix_time_ms() -> anyhow::Result<u64> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| anyhow::anyhow!("client clock is before the Unix epoch: {err}"))?;
+    u64::try_from(elapsed.as_millis())
+        .map_err(|_| anyhow::anyhow!("client unix time in ms does not fit in u64"))
 }
 
 fn query_ntp(server: SocketAddr) -> anyhow::Result<u64> {
@@ -94,6 +107,7 @@ Show or set the current time.
 * Use `date` to print the current time in the format "`YYYY-MM-DD HH:MM:SS` (UTC)".
 * Use `date -s "YYYY-MM-DD HH:MM:SS"` to set the clock to that UTC timestamp.
 * Use `date --ntp <HOST[:PORT]>` (for example `pool.ntp.org`) to query an NTP server and set the clock to its reported time. Port defaults to 123.
+* Use `date --sync` to copy the wall clock from the client and set the server clock to match it.
 "#,
             version: VERSION,
         },

@@ -6,7 +6,7 @@ use tokio::sync::Notify;
 use nu_ansi_term::{Color, Style};
 use reedline::{EditCommand, Reedline};
 
-use crossterm::cursor::{MoveDown, MoveToColumn, MoveUp};
+use crossterm::cursor::{MoveDown, MoveTo, MoveToColumn, MoveUp, position as cursor_position};
 use crossterm::style::{Color as CrosstermColor, Print, ResetColor, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{event::DisableBracketedPaste, execute};
@@ -15,8 +15,11 @@ use std::io::stdout;
 
 use crate::builtins;
 use crate::display_engine::DisplayEngine;
-use crate::reedline::{ReedlinePrompt, get_line_editor, render_keepalive_suffix};
-use crate::translator::LLMTranslator;
+use crate::llm::{Llm, build_system_prompt};
+use crate::reedline::{
+    CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
+    render_keepalive_suffix,
+};
 use dusk_shell::shell::Shell;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
@@ -40,8 +43,10 @@ where
     stream_factory: F,
     /// Fired by the caller (e.g. on ctrl+c) to ask the running command to stop.
     stop_signal: Rc<Notify>,
-    translator: LLMTranslator,
+    llm: Llm,
+    mode: PromptModeFlag,
 }
+
 
 impl<'a, D, F> Prompt<'a, D, F>
 where
@@ -59,13 +64,17 @@ where
 
         available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 
+        let system_prompt = build_system_prompt(&available_programs_info);
+        let llm = Llm::new(system_prompt);
+
         Ok(Prompt {
             shell,
             available_programs_info,
             display_engine,
             stream_factory,
             stop_signal,
-            translator: LLMTranslator::new(),
+            llm,
+            mode: PromptModeFlag::default(),
         })
     }
 
@@ -125,6 +134,50 @@ where
         Ok(false)
     }
 
+    /// Number of visual lines `buffer` occupies in the prompt — used by
+    /// the relative post-`read_line` edits to climb back over the
+    /// buffer to the indicator / status rows. Multi-line buffers (via
+    /// Alt+Enter) get counted by literal newlines; we don't try to
+    /// guess at terminal-width wrapping.
+    fn buffer_visual_lines(buffer: &str) -> u16 {
+        (buffer.matches('\n').count() + 1) as u16
+    }
+
+    /// Strip the live-RTT suffix from the now-historical status line so
+    /// scrollback doesn't keep a stale latency readout. Cursor sits at
+    /// the line below the buffer after `read_line` returns, so we walk
+    /// up `buffer_lines + 1` rows to reach the status row.
+    fn strip_rtt_suffix(buffer: &str, status_plain_width: u16) -> Result<()> {
+        let up = Self::buffer_visual_lines(buffer) + 1;
+        execute!(
+            stdout(),
+            MoveUp(up),
+            MoveToColumn(status_plain_width),
+            Clear(ClearType::UntilNewLine),
+            MoveDown(up),
+            MoveToColumn(0),
+        )?;
+        Ok(())
+    }
+
+    /// Swap the dim `○` indicator at the start of the indicator row for
+    /// a solid coloured `●`, marking the prompt as historical. The
+    /// indicator row sits `buffer_lines` above current cursor.
+    fn mark_indicator_historical(buffer: &str) -> Result<()> {
+        let up = Self::buffer_visual_lines(buffer);
+        execute!(
+            stdout(),
+            MoveUp(up),
+            MoveToColumn(0),
+            SetForegroundColor(CrosstermColor::Cyan),
+            Print("●"),
+            ResetColor,
+            MoveDown(up),
+            MoveToColumn(0),
+        )?;
+        Ok(())
+    }
+
     /// Handle a single accepted line from reedline. Returns `true` when the prompt should exit.
     async fn process_line(
         &mut self,
@@ -132,43 +185,7 @@ where
         line_editor: &mut Reedline,
         status_plain_width: u16,
     ) -> Result<bool> {
-        // Strip the RTT suffix from the now-historical status line.
-        execute!(
-            stdout(),
-            MoveUp(2),
-            MoveToColumn(status_plain_width),
-            Clear(ClearType::UntilNewLine),
-            MoveDown(2),
-            MoveToColumn(0)
-        )?;
-
-        if let Some(natural_language) = buffer.strip_prefix('%') {
-            let natural_language = natural_language.trim();
-            if !natural_language.is_empty() {
-                match self.translator.translate(natural_language).await {
-                    Ok(translation) => {
-                        println!(
-                            "{} {}",
-                            Style::new().fg(Color::DarkGray).paint("→"),
-                            Style::new().fg(Color::LightGreen).paint(&translation),
-                        );
-                        line_editor.run_edit_commands(&[
-                            EditCommand::Clear,
-                            EditCommand::InsertString(translation),
-                        ]);
-                    }
-                    Err(error) => {
-                        tracing::warn!(%error, "translation failed");
-                        println!(
-                            "{} {}",
-                            Style::new().fg(Color::Red).paint("translation failed:"),
-                            error,
-                        );
-                    }
-                }
-                return Ok(false);
-            }
-        }
+        Self::strip_rtt_suffix(buffer, status_plain_width)?;
 
         if !buffer.is_empty() {
             line_editor.update_last_command_context(
@@ -177,17 +194,7 @@ where
                     history_item
                 },
             )?;
-            // Swap the indicator circle to mark this prompt as historical.
-            execute!(
-                stdout(),
-                MoveUp(1),
-                MoveToColumn(0),
-                SetForegroundColor(CrosstermColor::Cyan),
-                Print("●"),
-                ResetColor,
-                MoveDown(1),
-                MoveToColumn(0)
-            )?;
+            Self::mark_indicator_historical(buffer)?;
         }
         let start_timestamp = std::time::Instant::now();
 
@@ -207,6 +214,21 @@ where
         }
 
         Ok(false)
+    }
+
+    async fn chat_submit(&mut self, natural_language: &str) -> Option<String> {
+        let reply = self.llm.ask(natural_language).await?;
+        println!(
+            "{} {}",
+            Style::new().fg(Color::White).paint("●"),
+            Style::new().fg(Color::White).paint(&reply.explanation),
+        );
+        let command = reply.command.trim().to_string();
+        if command.is_empty() {
+            None
+        } else {
+            Some(command)
+        }
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -234,10 +256,11 @@ where
         };
 
         let indicator_line: String = Style::new().fg(Color::DarkGray).paint("○").to_string();
-        let mut prompt = ReedlinePrompt::new(
+        let mut prompt = CommandPrompt::new(
             status_template.clone(),
             indicator_line,
             self.shell.rtt_handle.clone(),
+            self.mode.clone(),
         );
 
         let rtt_handle_for_idle = self.shell.rtt_handle.clone();
@@ -262,6 +285,8 @@ where
                 Ok(symbols) => *function_names.lock().unwrap() = symbols,
                 Err(e) => tracing::warn!(error = %e, "failed to fetch shell functions"),
             }
+
+            let (_, prompt_start_row) = cursor_position()?;
             // Run reedline on a worker thread so the LocalSet keeps polling
             // the background keepalive task while reedline blocks in
             // `event::poll`.
@@ -274,9 +299,33 @@ where
             .inspect_err(|err| tracing::error!("reedline task failed: {err}"))?;
             let sig = read_line_result?;
             match sig {
+                Signal::Success(buffer) if buffer == TOGGLE_CHAT_HOST_COMMAND => {
+                    self.mode.toggle();
+                    execute!(
+                        stdout(),
+                        MoveTo(0, prompt_start_row),
+                        Clear(ClearType::FromCursorDown),
+                    )?;
+                }
+                Signal::Success(buffer) if self.mode.is_chat() => {
+                    Self::strip_rtt_suffix(&buffer, status_plain_width)?;
+                    if !buffer.is_empty() {
+                        Self::mark_indicator_historical(&buffer)?;
+                    }
+                    let command = self.chat_submit(&buffer).await;
+                    self.mode.set_command();
+                    line_editor.run_edit_commands(&[EditCommand::Clear]);
+                    if let Some(command) = command {
+                        line_editor.run_edit_commands(&[EditCommand::InsertString(command)]);
+                    }
+                }
                 Signal::Success(buffer) => {
                     if self
-                        .process_line(&buffer, &mut line_editor, status_plain_width)
+                        .process_line(
+                            &buffer,
+                            &mut line_editor,
+                            status_plain_width,
+                        )
                         .await?
                     {
                         return Ok(());

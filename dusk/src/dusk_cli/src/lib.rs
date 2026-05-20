@@ -148,11 +148,20 @@ pub async fn main() -> Result<()> {
     if cli.debug_console {
         console_subscriber::init();
     } else {
-        tracing_subscriber::fmt::init();
+        use tracing_subscriber::EnvFilter;
+
+        let env_filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info"))
+            .add_directive("llama-cpp-2=off".parse().expect("static directive"))
+            .add_directive("ggml=off".parse().expect("static directive"))
+            .add_directive("llama-cpp=off".parse().expect("static directive"));
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .init();
     }
 
     info!("connecting to {}", cli.address);
     run(cli).await;
 
-    Ok(())
+    std::process::exit(0);
 }
