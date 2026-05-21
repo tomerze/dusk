@@ -5,6 +5,8 @@
 
 extern crate alloc;
 extern crate capnp;
+#[cfg(feature = "client")]
+extern crate self as dusk_program_sh;
 
 use alloc::rc::Rc;
 use alloc::sync::Arc;

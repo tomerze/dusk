@@ -1,11 +1,9 @@
-extern crate linkme;
 
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
-use linkme::distributed_slice;
+use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::rc::Rc;
 
 fn parse_hex_or_decimal(s: &str) -> Result<u64, String> {
@@ -36,10 +34,10 @@ impl ProgramArgsBuilder for KillProgramArgsBuilder {
     }
 }
 
-#[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
+#[dusk_program_sh_proc::sh_entry]
 pub fn sh_entry() -> ShEntry {
     ShEntry {
-        info: ProgramInfo {
+        info: EntryInfo {
             program_id: Some(kill_capnp::PROGRAM_ID),
             name: "kill",
             short_description: "send a signal to a process",

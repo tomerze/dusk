@@ -11,6 +11,7 @@ dusk_core = { path = "../../dusk/src/dusk_core/" }
 slab = { version = "0.4.11", public = true }
 anyhow = { version = "1.0.88", public = true }
 dusk_program_sh = { path = "../sh", public = true }
+dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
 tracing = { version = "0.1.41", default-features = false }
 # Declared for macro use, versions taken from dusk_program
@@ -21,4 +22,4 @@ linkme = { version = "*", optional = true, public = false }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}
 
 [features]
-client = ["linkme", "dusk_program_sh/client", "clap"] 
+client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]

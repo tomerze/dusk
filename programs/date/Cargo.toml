@@ -8,6 +8,7 @@ dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true }
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_program_sh = { path = "../sh", public = true }
+dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 anyhow = { version = "1.0", public = true }
 # Declared for macro use, versions taken from dusk_program
@@ -22,4 +23,4 @@ sntpc-net-std = { version = "1.2", optional = true }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
 
 [features]
-client = ["linkme", "dusk_program_sh/client", "clap", "chrono", "sntpc", "sntpc-net-std"]
+client = ["linkme", "dusk_program_sh/client", "clap", "chrono", "sntpc", "sntpc-net-std", "dusk_program_sh_proc"]

@@ -1,11 +1,9 @@
-extern crate linkme;
 
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
-use linkme::distributed_slice;
+use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::rc::Rc;
 
@@ -95,10 +93,10 @@ fn query_ntp(server: SocketAddr) -> anyhow::Result<u64> {
     Ok(result.sec() as u64 * 1000 + (result.sec_fraction() as u64 * 1000) / (1u64 << 32))
 }
 
-#[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
+#[dusk_program_sh_proc::sh_entry]
 pub fn sh_entry() -> ShEntry {
     ShEntry {
-        info: ProgramInfo {
+        info: EntryInfo {
             program_id: Some(date_capnp::PROGRAM_ID),
             name: "date",
             short_description: "show or set the current time",

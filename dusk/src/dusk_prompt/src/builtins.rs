@@ -1,5 +1,5 @@
 use dusk_program::anyhow::Result;
-use dusk_program_sh::entry::ProgramInfo;
+use dusk_program_sh::entry::EntryInfo;
 use nu_ansi_term::{Color, Style};
 use nu_color_config::TextStyle;
 use nu_table::{NuRecordsValue, NuTable, TableTheme};
@@ -9,8 +9,8 @@ use crate::display_engine::DisplayEngine;
 use crate::highlighter::CustomHighlighter;
 use dusk_shell::shell::Shell;
 
-pub(crate) const BUILTIN_COMMANDS: [ProgramInfo; 4] = [
-    ProgramInfo {
+pub(crate) const BUILTIN_COMMANDS: [EntryInfo; 4] = [
+    EntryInfo {
         name: "clear",
         version: "builtin",
         program_id: None,
@@ -18,7 +18,7 @@ pub(crate) const BUILTIN_COMMANDS: [ProgramInfo; 4] = [
         long_description: r#"Example,
 `clear`"#,
     },
-    ProgramInfo {
+    EntryInfo {
         name: "exit",
         version: "builtin",
         program_id: None,
@@ -26,7 +26,7 @@ pub(crate) const BUILTIN_COMMANDS: [ProgramInfo; 4] = [
         long_description: r#"Example,
 `exit`"#,
     },
-    ProgramInfo {
+    EntryInfo {
         name: "help",
         version: "builtin",
         program_id: None,
@@ -37,7 +37,7 @@ The `help` command displays information about available commands.
 * Use `help <command>` to get more information about a specific command.
 "#,
     },
-    ProgramInfo {
+    EntryInfo {
         name: "functions",
         version: "builtin",
         program_id: None,
@@ -55,7 +55,7 @@ pub(crate) fn clear(line_editor: &mut Reedline) -> Result<()> {
 
 pub(crate) fn help<D: DisplayEngine>(
     line: &str,
-    available_programs_info: &[ProgramInfo],
+    available_programs_info: &[EntryInfo],
     display_engine: &D,
 ) -> Result<()> {
     let command = line.split_whitespace().nth(1);
@@ -125,7 +125,7 @@ pub(crate) async fn print_functions<D: DisplayEngine>(
 }
 
 fn get_available_commands_table<D: DisplayEngine>(
-    available_programs_info: &[ProgramInfo],
+    available_programs_info: &[EntryInfo],
     display_engine: &D,
 ) -> Result<String> {
     let mut table = NuTable::new(available_programs_info.len() + 1, 3);
@@ -159,7 +159,7 @@ fn get_available_commands_table<D: DisplayEngine>(
 
 fn get_program_info_markdown<D: DisplayEngine>(
     program_name: &str,
-    available_programs_info: &[ProgramInfo],
+    available_programs_info: &[EntryInfo],
     display_engine: &D,
 ) -> Result<Option<String>> {
     let program_info = available_programs_info

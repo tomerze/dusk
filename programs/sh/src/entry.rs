@@ -7,7 +7,7 @@ use dusk_program::anyhow;
 use dusk_program::program_args::ProgramArgs;
 
 #[derive(Copy, Clone)]
-pub struct ProgramInfo {
+pub struct EntryInfo {
     pub program_id: Option<u64>,
     pub name: &'static str,
     pub short_description: &'static str,
@@ -21,7 +21,7 @@ pub trait ProgramArgsBuilder {
 
 #[derive(Clone)]
 pub struct ShEntry {
-    pub info: ProgramInfo,
+    pub info: EntryInfo,
     pub program_args_builder: Rc<dyn ProgramArgsBuilder>,
 }
 
@@ -33,7 +33,7 @@ pub trait ShEntriesBuilder: Clone + 'static {
 }
 
 pub trait GetAvailableProgramsInfo {
-    fn get_available_programs_info(&self) -> anyhow::Result<Vec<ProgramInfo>>;
+    fn get_available_programs_info(&self) -> anyhow::Result<Vec<EntryInfo>>;
 }
 
 #[derive(Clone, Default)]
@@ -57,7 +57,7 @@ impl ShEntriesBuilder for DynamicShEntriesBuilder {
 }
 
 impl<T: ShEntriesBuilder> GetAvailableProgramsInfo for T {
-    fn get_available_programs_info(&self) -> anyhow::Result<Vec<ProgramInfo>> {
+    fn get_available_programs_info(&self) -> anyhow::Result<Vec<EntryInfo>> {
         Ok(self.get_entries().into_iter().map(|e| e.info).collect())
     }
 }

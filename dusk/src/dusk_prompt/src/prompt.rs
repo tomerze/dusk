@@ -1,5 +1,5 @@
 use dusk_program::anyhow::Result;
-use dusk_program_sh::entry::{GetAvailableProgramsInfo, ProgramInfo};
+use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo};
 use std::rc::Rc;
 use tokio::sync::Notify;
 
@@ -38,7 +38,7 @@ where
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
 {
     shell: &'a mut Shell,
-    available_programs_info: Vec<ProgramInfo>,
+    available_entries_info: Vec<EntryInfo>,
     display_engine: D,
     stream_factory: F,
     /// Fired by the caller (e.g. on ctrl+c) to ask the running command to stop.
@@ -69,7 +69,7 @@ where
 
         Ok(Prompt {
             shell,
-            available_programs_info,
+            available_entries_info: available_programs_info,
             display_engine,
             stream_factory,
             stop_signal,
@@ -105,7 +105,7 @@ where
                 builtins::clear(line_editor)?;
             }
             "help" => {
-                builtins::help(line, &self.available_programs_info, &self.display_engine)?;
+                builtins::help(line, &self.available_entries_info, &self.display_engine)?;
             }
             "functions" => {
                 builtins::print_functions(self.shell, &self.display_engine).await?;
@@ -235,7 +235,7 @@ where
         let function_names: crate::highlighter::FunctionNames =
             std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut line_editor = get_line_editor(
-            self.available_programs_info
+            self.available_entries_info
                 .iter()
                 .map(|p| p.name.to_string())
                 .collect(),

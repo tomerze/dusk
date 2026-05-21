@@ -17,7 +17,7 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use dusk_program::anyhow::{Context, Result, anyhow};
-use dusk_program_sh::entry::ProgramInfo;
+use dusk_program_sh::entry::EntryInfo;
 use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::context::params::{KvCacheType, LlamaContextParams};
 use llama_cpp_2::llama_backend::LlamaBackend;
@@ -553,7 +553,7 @@ fn locate_model_file() -> Result<PathBuf> {
 /// dusk's grammar, the JSON envelope rule, and a one-line summary of
 /// each available program. No long-form help text, no per-example JSON
 /// pairs.
-pub fn build_system_prompt(available_programs_info: &[ProgramInfo]) -> String {
+pub fn build_system_prompt(available_programs_info: &[EntryInfo]) -> String {
     let mut buffer = String::from(
         "You are Duck, the assistant for the dusk shell. dusk uses POSIX-sh syntax for \
          control flow, but its programs are NOT GNU/coreutils — only the flags listed \

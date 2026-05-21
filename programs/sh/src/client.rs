@@ -1,12 +1,10 @@
-extern crate linkme;
 
 use super::*;
 use crate::ShMode;
-use crate::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry, StaticShEntriesBuilder};
+use crate::entry::{EntryInfo, ProgramArgsBuilder, ShEntry, StaticShEntriesBuilder};
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
-use linkme::distributed_slice;
 use std::rc::Rc;
 
 #[derive(clap::Parser)]
@@ -31,10 +29,10 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
     }
 }
 
-#[distributed_slice(crate::entry::SH_ENTRIES)]
+#[dusk_program_sh_proc::sh_entry]
 pub fn sh_entry() -> ShEntry {
     ShEntry {
-        info: ProgramInfo {
+        info: EntryInfo {
             program_id: Some(sh_capnp::PROGRAM_ID),
             name: "sh",
             short_description: "run a shell command",

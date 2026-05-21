@@ -1,11 +1,9 @@
-extern crate linkme;
 
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
-use linkme::distributed_slice;
+use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::rc::Rc;
 
 #[derive(clap::Parser)]
@@ -21,10 +19,10 @@ impl ProgramArgsBuilder for FalseProgramArgsBuilder {
     }
 }
 
-#[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
+#[dusk_program_sh_proc::sh_entry]
 pub fn sh_entry() -> ShEntry {
     ShEntry {
-        info: ProgramInfo {
+        info: EntryInfo {
             program_id: Some(false_capnp::PROGRAM_ID),
             name: "false",
             short_description: "do nothing, unsuccessfully",
