@@ -1,4 +1,4 @@
-use dusk_program_init::Args as InitArgs;
+use dusk_base::dusk_program_init::Args as InitArgs;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn dusk_node_run() {
@@ -8,14 +8,14 @@ pub extern "C" fn dusk_node_run() {
         .expect("build init program_args");
     dusk_nix::run(
         dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(vec![
-            Box::new(dusk_program_init::Launcher::new()),
-            Box::new(dusk_program_sh::Launcher::new()),
-            Box::new(dusk_program_ps::Launcher::new()),
-            Box::new(dusk_program_kill::Launcher::new()),
-            Box::new(dusk_program_true::Launcher::new()),
-            Box::new(dusk_program_false::Launcher::new()),
-            Box::new(dusk_program_sleep::Launcher::new()),
-            Box::new(dusk_program_date::Launcher::new()),
+            Box::new(dusk_base::dusk_program_init::Launcher::new()),
+            Box::new(dusk_base::dusk_program_sh::Launcher::new()),
+            Box::new(dusk_base::dusk_program_ps::Launcher::new()),
+            Box::new(dusk_base::dusk_program_kill::Launcher::new()),
+            Box::new(dusk_base::dusk_program_true::Launcher::new()),
+            Box::new(dusk_base::dusk_program_false::Launcher::new()),
+            Box::new(dusk_base::dusk_program_sleep::Launcher::new()),
+            Box::new(dusk_base::dusk_program_date::Launcher::new()),
         ])),
         init_program_args,
     );

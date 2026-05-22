@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use dusk_program_sh::{
+use dusk_base::dusk_program_sh::{
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
     parser::Parser as ShParser,
 };

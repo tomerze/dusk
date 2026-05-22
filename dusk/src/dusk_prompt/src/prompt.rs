@@ -1,6 +1,8 @@
 use dusk_program::anyhow::Result;
-use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo};
+use dusk_base::dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo};
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Notify;
 
 use nu_ansi_term::{Color, Style};
@@ -15,8 +17,9 @@ use std::io::stdout;
 
 use crate::builtins;
 use crate::display_engine::DisplayEngine;
-use crate::llm::{Llm, build_system_prompt};
-use crate::reedline::{
+use crate::llm::Llm;
+use crate::ui::spinner::with_spinner;
+use crate::ui::{
     CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
     render_keepalive_suffix,
 };
@@ -64,8 +67,7 @@ where
 
         available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 
-        let system_prompt = build_system_prompt(&available_programs_info);
-        let llm = Llm::new(system_prompt);
+        let llm = Llm::new();
 
         Ok(Prompt {
             shell,
@@ -93,7 +95,7 @@ where
     ///
     /// Return true when prompt should exit.
     async fn execute_command(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
-        let stripped = dusk_program_sh::parser::strip_comments(line);
+        let stripped = dusk_base::dusk_program_sh::parser::strip_comments(line);
         let mut line = stripped.as_str();
         let first_word = match line.split_whitespace().next() {
             Some(word) => word,
@@ -217,18 +219,44 @@ where
     }
 
     async fn chat_submit(&mut self, natural_language: &str) -> Option<String> {
-        let reply = self.llm.ask(natural_language).await?;
+        let natural_language = natural_language.trim();
+        if natural_language.is_empty() {
+            return None;
+        }
+
+        let token_count = Arc::new(AtomicUsize::new(0));
+        let writer = token_count.clone();
+        let reader = token_count.clone();
+        let result = with_spinner(
+            self.llm.ask(natural_language, move |n| writer.store(n, Ordering::Relaxed)),
+            move || {
+                let count = reader.load(Ordering::Relaxed);
+                format!(
+                    "{} {}",
+                    Style::new().fg(Color::Yellow).paint("Dusking…"),
+                    Style::new()
+                        .fg(Color::DarkGray)
+                        .paint(format!("· ↓ {count} tokens")),
+                )
+            },
+        )
+        .await;
+
+        let reply = match result {
+            Ok(reply) => reply,
+            Err(error) => {
+                tracing::warn!(error = ?error, "chat request failed");
+                return None;
+            }
+        };
+
         println!(
             "{} {}",
             Style::new().fg(Color::White).paint("●"),
             Style::new().fg(Color::White).paint(&reply.explanation),
         );
         let command = reply.command.trim().to_string();
-        if command.is_empty() {
-            None
-        } else {
-            Some(command)
-        }
+        if command.is_empty() { None } else { Some(command) }
     }
 
     pub async fn run(mut self) -> Result<()> {

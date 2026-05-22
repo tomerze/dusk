@@ -59,7 +59,9 @@ theme:
 nav:
   - Home: index.md
   - Crates: crates.md
-  - Development: development.md
+  - Development:
+      - development/index.md
+      - Ask Dusk: development/ask_dusk.md
   - Concepts:
       - Programs: concepts/programs.md
       - Shell: concepts/shell.md

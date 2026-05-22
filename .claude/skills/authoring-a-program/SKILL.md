@@ -948,14 +948,11 @@ If your program should be invocable from the dusk shell prompt (`ps`, `kill <pid
 ### `src/client.rs`
 
 ```rust
-extern crate linkme;
-
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_sh::entry::{ProgramArgsBuilder, ProgramInfo, ShEntry};
-use linkme::distributed_slice;
+use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::rc::Rc;
 
 #[derive(clap::Parser)]
@@ -975,10 +972,10 @@ impl ProgramArgsBuilder for <Name>ProgramArgsBuilder {
     }
 }
 
-#[distributed_slice(dusk_program_sh::entry::SH_ENTRIES)]
+#[dusk_program_sh_proc::sh_entry]
 pub fn sh_entry() -> ShEntry {
     ShEntry {
-        info: ProgramInfo {
+        info: EntryInfo {
             program_id: Some(<name>_capnp::PROGRAM_ID),
             name: "<name>",
             short_description: "one-line description",
@@ -999,7 +996,7 @@ Multi-line help text shown by `help <name>` in the shell.
 - Defaults belong in clap (`#[arg(long, default_value_t = 15)]`), not in the program logic, when they're user-facing.
 - Long descriptions are raw strings (`r#"…"#`) so they can contain backticks and quotes for in-prompt help formatting.
 
-The `#[distributed_slice]` collects `sh_entry()` functions from every program into a static array at link time — there is no central registry to update.
+The `#[dusk_program_sh_proc::sh_entry]` attribute (1) registers `sh_entry()` into the `SH_ENTRIES` `#[distributed_slice]` so the shell discovers it at link time, and (2) drops a JSON sidecar describing the entry at `<target>/.dusk_sh_entries/<crate>__sh_entry.json` for the compile-time LLM warm-up pipeline to consume. There is no central registry to update — adding a new program is purely additive.
 
 ---
 
@@ -1124,8 +1121,8 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] State: `Rc<RefCell<…>>` for per-process, `Arc<Mutex<…>>` (embassy_sync) for cross-task
 - [ ] Spawned tasks have `info_span!("task_name", task_id = …, …)` and `.instrument(span).await`
 - [ ] Errors that would otherwise be silent are logged via `tracing::warn!` / `tracing::error!`
-- [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[distributed_slice(SH_ENTRIES)] pub fn sh_entry()`
-- [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "clap"]` feature if shell-invocable
+- [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES` and writes the sidecar JSON)
+- [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "dusk_program_sh_proc", "clap"]` feature if shell-invocable, with `dusk_program_sh_proc = { path = "../sh/proc", optional = true }` in `[dependencies]`. `linkme` stays as a dep — the attribute expands to `::linkme::distributed_slice(...)`, so it's load-bearing even though no source mentions it.
 - [ ] `artifacts/dusk_node/Cargo.toml` lists the new crate as a path dep (no features)
 - [ ] `artifacts/dusk_node/src/lib.rs` registers `Box::new(dusk_program_<name>::Launcher::new())` in the launcher vec
 - [ ] If the program is shell-invocable: `artifacts/dusk_cli/Cargo.toml` lists the new crate as a path dep with `features = ["client"]`, and `artifacts/dusk_cli/src/main.rs` adds `black_box(dusk_program_<name>::client::sh_entry);` (without the `black_box` reference, linkme will silently drop the entry)

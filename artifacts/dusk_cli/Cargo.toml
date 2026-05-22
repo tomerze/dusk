@@ -11,10 +11,4 @@ path = "src/main.rs"
 dusk_cli = { path = "../../dusk/src/dusk_cli" }
 anyhow = "1.0"
 
-# Add dusk programs here as needed
-dusk_program_ps = { path = "../../programs/ps", features = ["client"] }
-dusk_program_kill = { path = "../../programs/kill", features = ["client"] }
-dusk_program_true = { path = "../../programs/true", features = ["client"] }
-dusk_program_false = { path = "../../programs/false", features = ["client"] }
-dusk_program_sleep = { path = "../../programs/sleep", features = ["client"] }
-dusk_program_date = { path = "../../programs/date", features = ["client"] }
+dusk_base = { path = "../../dusk/src/dusk_base", features = ["client"] }

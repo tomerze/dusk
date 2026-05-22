@@ -1,0 +1,25 @@
+[package]
+name = "dusk_base"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dusk_program_date = { path = "../../../programs/date", public = true }
+dusk_program_false = { path = "../../../programs/false", public = true }
+dusk_program_init = { path = "../../../programs/init", public = true }
+dusk_program_kill = { path = "../../../programs/kill", public = true }
+dusk_program_ps = { path = "../../../programs/ps", public = true }
+dusk_program_sh = { path = "../../../programs/sh", public = true }
+dusk_program_sleep = { path = "../../../programs/sleep", public = true }
+dusk_program_true = { path = "../../../programs/true", public = true }
+
+[features]
+client = [
+    "dusk_program_date/client",
+    "dusk_program_false/client",
+    "dusk_program_kill/client",
+    "dusk_program_ps/client",
+    "dusk_program_sh/client",
+    "dusk_program_sleep/client",
+    "dusk_program_true/client",
+]

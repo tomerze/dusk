@@ -25,7 +25,7 @@ pub fn sh_entry(attr: TokenStream, item: TokenStream) -> TokenStream {
     let crate_name = std::env::var("CARGO_PKG_NAME")
         .expect("CARGO_PKG_NAME must be set during proc-macro expansion");
     let fn_name = input.sig.ident.to_string();
-    write_sidecar(&crate_name, &fn_name, &fields);
+    write_entries_info(&crate_name, &fn_name, &fields);
 
     let body = &input;
     quote! {
@@ -140,7 +140,7 @@ fn take_string_literal(
 
 use std::path::{Path, PathBuf};
 
-fn resolve_sidecar_dir() -> PathBuf {
+fn resolve_entries_info_dir() -> PathBuf {
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
         let target = Path::new(&out_dir)
             .ancestors()
@@ -157,10 +157,10 @@ fn resolve_sidecar_dir() -> PathBuf {
     );
 }
 
-fn write_sidecar(crate_name: &str, fn_name: &str, fields: &EntryInfoLiterals) {
-    let sidecar_dir = resolve_sidecar_dir();
-    std::fs::create_dir_all(&sidecar_dir).unwrap_or_else(|error| {
-        panic!("sh_entry: create {}: {error}", sidecar_dir.display())
+fn write_entries_info(crate_name: &str, fn_name: &str, fields: &EntryInfoLiterals) {
+    let entries_info_dir = resolve_entries_info_dir();
+    std::fs::create_dir_all(&entries_info_dir).unwrap_or_else(|error| {
+        panic!("sh_entry: create {}: {error}", entries_info_dir.display())
     });
 
     let payload = serde_json::json!({
@@ -171,8 +171,8 @@ fn write_sidecar(crate_name: &str, fn_name: &str, fields: &EntryInfoLiterals) {
     let body = serde_json::to_vec_pretty(&payload)
         .expect("sh_entry: serde_json cannot fail on a Value built from owned strings");
 
-    let final_path = sidecar_dir.join(format!("{crate_name}__{fn_name}.json"));
-    let temp_path = sidecar_dir.join(format!("{crate_name}__{fn_name}.json.tmp"));
+    let final_path = entries_info_dir.join(format!("{crate_name}__{fn_name}.json"));
+    let temp_path = entries_info_dir.join(format!("{crate_name}__{fn_name}.json.tmp"));
     std::fs::write(&temp_path, &body)
         .unwrap_or_else(|error| panic!("sh_entry: write {}: {error}", temp_path.display()));
     std::fs::rename(&temp_path, &final_path).unwrap_or_else(|error| {

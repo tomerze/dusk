@@ -1,5 +1,5 @@
 use dusk_program::anyhow::Result;
-use dusk_program_sh::entry::EntryInfo;
+use dusk_base::dusk_program_sh::entry::EntryInfo;
 use nu_ansi_term::{Color, Style};
 use nu_color_config::TextStyle;
 use nu_table::{NuRecordsValue, NuTable, TableTheme};

@@ -10,11 +10,4 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 dusk_nix = { path = "../../impls/nix" }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program/" }
-dusk_program_sh = { path = "../../programs/sh" }
-dusk_program_ps = { path = "../../programs/ps" }
-dusk_program_kill = { path = "../../programs/kill" }
-dusk_program_init = { path = "../../programs/init" }
-dusk_program_true = { path = "../../programs/true" }
-dusk_program_false = { path = "../../programs/false" }
-dusk_program_sleep = { path = "../../programs/sleep" }
-dusk_program_date = { path = "../../programs/date" }
+dusk_base = { path = "../../dusk/src/dusk_base" }
