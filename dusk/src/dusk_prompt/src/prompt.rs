@@ -1,5 +1,5 @@
-use dusk_program::anyhow::Result;
 use dusk_base::dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo};
+use dusk_program::anyhow::Result;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -49,7 +49,6 @@ where
     llm: Llm,
     mode: PromptModeFlag,
 }
-
 
 impl<'a, D, F> Prompt<'a, D, F>
 where
@@ -228,7 +227,9 @@ where
         let writer = token_count.clone();
         let reader = token_count.clone();
         let result = with_spinner(
-            self.llm.ask(natural_language, move |n| writer.store(n, Ordering::Relaxed)),
+            self.llm.ask(natural_language, move |n| {
+                writer.store(n, Ordering::Relaxed)
+            }),
             move || {
                 let count = reader.load(Ordering::Relaxed);
                 format!(
@@ -256,7 +257,11 @@ where
             Style::new().fg(Color::White).paint(&reply.explanation),
         );
         let command = reply.command.trim().to_string();
-        if command.is_empty() { None } else { Some(command) }
+        if command.is_empty() {
+            None
+        } else {
+            Some(command)
+        }
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -349,11 +354,7 @@ where
                 }
                 Signal::Success(buffer) => {
                     if self
-                        .process_line(
-                            &buffer,
-                            &mut line_editor,
-                            status_plain_width,
-                        )
+                        .process_line(&buffer, &mut line_editor, status_plain_width)
                         .await?
                     {
                         return Ok(());

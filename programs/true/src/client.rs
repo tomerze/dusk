@@ -1,4 +1,3 @@
-
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;

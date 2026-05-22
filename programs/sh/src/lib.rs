@@ -1,4 +1,5 @@
 #![allow(internal_features)]
+#![allow(clippy::too_many_arguments)]
 #![feature(prelude_import)]
 #![feature(impl_trait_in_assoc_type)]
 #![cfg_attr(not(feature = "client"), no_std)]
@@ -133,6 +134,12 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher {
     function_table: FunctionTable,
+}
+
+impl Default for Launcher {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Launcher {

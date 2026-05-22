@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use dusk_program::anyhow::{Context, Result, anyhow};
 use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::LlamaModel;
+use llama_cpp_2::model::params::LlamaModelParams;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -45,6 +45,12 @@ enum State {
 // owns raw llama.cpp handles). See the same-shaped `unsafe impl Send`
 // in `session.rs` for the reasoning.
 unsafe impl Send for State {}
+
+impl Default for Llm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Llm {
     pub fn new() -> Self {
@@ -143,4 +149,3 @@ impl Llm {
         Ok(Session::new(context, model, backend, SNAPSHOT_TOKENS))
     }
 }
-

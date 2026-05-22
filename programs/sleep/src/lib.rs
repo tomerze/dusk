@@ -33,7 +33,6 @@ impl Args {
 #[dusk_program_proc::impl_args_rpc_server]
 impl Args {}
 
-
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 

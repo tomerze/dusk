@@ -22,6 +22,7 @@ pub(super) async fn compile(
     Ok(output_frame)
 }
 
+#[allow(clippy::arc_with_non_send_sync)]
 pub(super) fn compile_function<'a>(
     function_table: &'a FunctionTable,
     compiled_functions: &'a CompiledFunctions,

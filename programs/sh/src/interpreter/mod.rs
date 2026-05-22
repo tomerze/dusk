@@ -62,6 +62,7 @@ impl Interpreter {
         .await
     }
 
+    #[allow(clippy::arc_with_non_send_sync)]
     pub async fn exec(
         &self,
         script: script::Reader<'_>,

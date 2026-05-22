@@ -15,7 +15,7 @@ use hashbrown::HashMap;
 use nohash_hasher::BuildNoHashHasher;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{RngCore, SeedableRng};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use tracing::info;
 
@@ -39,7 +39,7 @@ pub type PsExitMap = HashMap<u64, ExitWatch, BuildNoHashHasher<u64>>;
 /// It is not `Send` or `Sync` and is intended to be used within a single thread or executor context.
 /// The mutexes are used to allow interior mutability.
 pub struct Namespace {
-    pub id: u64, // Random namespace id
+    pub id: u64,                  // Random namespace id
     pub creation_time: AtomicU64, // Timestamp in which this namespace was created. Unix time in miliseconds.
     pub rng: Mutex<CriticalSectionRawMutex, ChaCha20Rng>,
     pub spawner: Spawner,
@@ -53,10 +53,10 @@ pub struct Namespace {
 impl Namespace {
     pub fn new(random_seed: u128, spawner: Spawner, unix_time_ms: Option<u64>) -> Self {
         let entropy = Sha256::new()
-        .chain_update(random_seed.to_le_bytes())
-        .chain_update(unix_time_ms.unwrap_or(0).to_le_bytes())
-        .finalize()
-        .into();
+            .chain_update(random_seed.to_le_bytes())
+            .chain_update(unix_time_ms.unwrap_or(0).to_le_bytes())
+            .finalize()
+            .into();
         let mut rng = ChaCha20Rng::from_seed(entropy);
         let id = rng.next_u64();
         info!(

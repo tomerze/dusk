@@ -5,13 +5,13 @@ extern crate alloc;
 
 use alloc::rc::Rc;
 use core::cell::Cell;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 use dusk_program::anyhow::Result;
 use dusk_program::embassy_executor::Executor;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use dusk_program::program_args::ProgramArgs;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use tracing::Instrument;
 use tracing::error;
 
@@ -68,7 +68,14 @@ pub fn run(
 
     executor.run(|spawner| {
         // And so it begins
-        let root = Rc::new(Namespace::new(rand::random::<u128>(), spawner, SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).ok()));
+        let root = Rc::new(Namespace::new(
+            rand::random::<u128>(),
+            spawner,
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .ok(),
+        ));
 
         driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
         let task_id = Rc::new(Cell::new(0));

@@ -1,15 +1,15 @@
 include!("src/llm/params.rs");
 
 use anyhow::{Context, Result, bail};
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel};
+use std::env;
+use std::fs;
 use std::num::NonZeroU32;
+use std::path::{Path, PathBuf};
 
 #[derive(serde::Deserialize, Clone)]
 struct ShEntrySpec {
@@ -33,8 +33,8 @@ fn main() -> Result<()> {
     let model_path = locate_model()?;
     println!("cargo:rerun-if-changed={}", model_path.display());
 
-    let (state_bytes, token_count) = run_warmup(&model_path, &system_prompt)
-        .context("running build-time warm-up")?;
+    let (state_bytes, token_count) =
+        run_warmup(&model_path, &system_prompt).context("running build-time warm-up")?;
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").context("OUT_DIR not set")?);
     let state_path = out_dir.join("model.state");
@@ -94,16 +94,16 @@ fn run_warmup(model_path: &Path, system_prompt: &str) -> Result<(Vec<u8>, usize)
             .add(*token, position, &[0], offset == last_index)
             .context("adding warm-up token to batch")?;
     }
-    context.decode(&mut batch).context("decoding warm-up batch")?;
+    context
+        .decode(&mut batch)
+        .context("decoding warm-up batch")?;
 
     let state_size = context.get_state_size();
     let mut buffer = vec![0u8; state_size];
     // SAFETY: buffer has state_size bytes allocated; copy_state_data writes at most that many.
     let written = unsafe { context.copy_state_data(buffer.as_mut_ptr()) };
     if written > state_size {
-        bail!(
-            "copy_state_data wrote {written} bytes into a {state_size}-byte buffer (corruption)"
-        );
+        bail!("copy_state_data wrote {written} bytes into a {state_size}-byte buffer (corruption)");
     }
     buffer.truncate(written);
     Ok((buffer, tokens.len()))
@@ -120,9 +120,7 @@ fn collect_sh_entries_info() -> Result<Vec<ShEntrySpec>> {
     println!("cargo:rerun-if-changed={}", dir.display());
 
     let mut sh_entries_info: Vec<ShEntrySpec> = Vec::new();
-    for entry in fs::read_dir(&dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-    {
+    for entry in fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
@@ -130,10 +128,10 @@ fn collect_sh_entries_info() -> Result<Vec<ShEntrySpec>> {
         }
         println!("cargo:rerun-if-changed={}", path.display());
 
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let spec: ShEntrySpec = serde_json::from_str(&text)
-            .with_context(|| format!("parsing {}", path.display()))?;
+        let text =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let spec: ShEntrySpec =
+            serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
         sh_entries_info.push(spec);
     }
     sh_entries_info.sort_by(|a, b| a.name.cmp(&b.name));
@@ -192,18 +190,21 @@ fn locate_model() -> Result<PathBuf> {
     if let Some(path) = env::var_os("DUSK_MODEL_PATH") {
         let path = PathBuf::from(path);
         if !path.exists() {
-            bail!("DUSK_MODEL_PATH points at {} which does not exist", path.display());
+            bail!(
+                "DUSK_MODEL_PATH points at {} which does not exist",
+                path.display()
+            );
         }
         return Ok(path);
     }
     let home = env::var_os("HOME").context("HOME not set")?;
     let dir = PathBuf::from(home).join("git/model");
-    for entry in fs::read_dir(&dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-    {
+    for entry in fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
         if name.starts_with("gemma") && path.extension().and_then(|e| e.to_str()) == Some("gguf") {
             return Ok(path);
         }

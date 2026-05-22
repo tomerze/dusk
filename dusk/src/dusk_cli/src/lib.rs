@@ -155,9 +155,7 @@ pub async fn main() -> Result<()> {
             .add_directive("llama-cpp-2=off".parse().expect("static directive"))
             .add_directive("ggml=off".parse().expect("static directive"))
             .add_directive("llama-cpp=off".parse().expect("static directive"));
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
 
     info!("connecting to {}", cli.address);

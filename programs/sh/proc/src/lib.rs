@@ -8,12 +8,9 @@ use syn::spanned::Spanned;
 #[proc_macro_attribute]
 pub fn sh_entry(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {
-        return syn::Error::new_spanned(
-            TokenStream2::from(attr),
-            "sh_entry takes no arguments",
-        )
-        .to_compile_error()
-        .into();
+        return syn::Error::new_spanned(TokenStream2::from(attr), "sh_entry takes no arguments")
+            .to_compile_error()
+            .into();
     }
 
     let input = syn::parse_macro_input!(item as syn::ItemFn);
@@ -103,10 +100,7 @@ fn extract_entry_info_literals(function: &syn::ItemFn) -> syn::Result<EntryInfoL
     })
 }
 
-fn take_string_literal(
-    struct_expr: &syn::ExprStruct,
-    field_name: &str,
-) -> syn::Result<String> {
+fn take_string_literal(struct_expr: &syn::ExprStruct, field_name: &str) -> syn::Result<String> {
     let field = struct_expr
         .fields
         .iter()
@@ -159,9 +153,8 @@ fn resolve_entries_info_dir() -> PathBuf {
 
 fn write_entries_info(crate_name: &str, fn_name: &str, fields: &EntryInfoLiterals) {
     let entries_info_dir = resolve_entries_info_dir();
-    std::fs::create_dir_all(&entries_info_dir).unwrap_or_else(|error| {
-        panic!("sh_entry: create {}: {error}", entries_info_dir.display())
-    });
+    std::fs::create_dir_all(&entries_info_dir)
+        .unwrap_or_else(|error| panic!("sh_entry: create {}: {error}", entries_info_dir.display()));
 
     let payload = serde_json::json!({
         "name": fields.name,

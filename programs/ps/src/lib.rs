@@ -40,7 +40,7 @@ impl Default for Args {
 #[dusk_program_proc::impl_args_rpc_server]
 impl Args {}
 
-#[derive(dusk_program_proc::Launcher)]
+#[derive(dusk_program_proc::Launcher, Default)]
 pub struct Launcher;
 
 impl Launcher {

@@ -115,7 +115,7 @@ impl Session {
         let mut count: usize = 0;
         let mut batch = LlamaBatch::new(1, 1);
         for _ in 0..MAX_RESPONSE_TOKENS {
-            let token = self.sampler.sample(&mut self.context, sample_idx);
+            let token = self.sampler.sample(&self.context, sample_idx);
             self.sampler.accept(token);
             if self.model.is_eog_token(token) {
                 break;

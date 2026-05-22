@@ -1,4 +1,3 @@
-
 use super::*;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
@@ -49,9 +48,10 @@ impl ProgramArgsBuilder for DateProgramArgsBuilder {
         let cli = DateCli::try_parse_from(args)?;
         let args = match (cli.set, cli.ntp, cli.sync) {
             (Some(set_to), _, _) => {
-                let naive = chrono::NaiveDateTime::parse_from_str(&set_to, FORMAT).map_err(
-                    |err| anyhow::anyhow!("failed to parse `{set_to}` as `{FORMAT}`: {err}"),
-                )?;
+                let naive =
+                    chrono::NaiveDateTime::parse_from_str(&set_to, FORMAT).map_err(|err| {
+                        anyhow::anyhow!("failed to parse `{set_to}` as `{FORMAT}`: {err}")
+                    })?;
                 let unix_time_ms: u64 = naive
                     .and_utc()
                     .timestamp_millis()

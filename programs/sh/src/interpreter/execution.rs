@@ -65,21 +65,29 @@ impl Execution {
             .get()
             .map_err(|e| ExecutionError::Runtime(e.into()))?
             .get_result();
-        
+
         let (done, portal_error) = 'output: {
             let portal_reply = match process.portal_request().send().promise.await {
                 Ok(reply) => reply,
                 Err(err) => {
-                    tracing::error!(pid = pid, error = err.to_string(), "failed to get process portal");
-                    break 'output (true, None)
-                },
+                    tracing::error!(
+                        pid = pid,
+                        error = err.to_string(),
+                        "failed to get process portal"
+                    );
+                    break 'output (true, None);
+                }
             };
             let portal = match portal_reply.get().and_then(|r| r.get_result()) {
                 Ok(portal) => portal.cast_to::<sh_capnp::output_portal::Client>(),
                 Err(err) => {
-                    tracing::error!(pid = pid, error = err.to_string(), "failed to get process portal reply");
-                    break 'output (true, None)
-                },
+                    tracing::error!(
+                        pid = pid,
+                        error = err.to_string(),
+                        "failed to get process portal reply"
+                    );
+                    break 'output (true, None);
+                }
             };
 
             let (undone_stream, done_receiver) =

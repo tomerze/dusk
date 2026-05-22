@@ -34,12 +34,11 @@ pub(super) fn parse_reply(text: &str) -> Result<LlmReply> {
 /// integer; otherwise falls back to `std::thread::available_parallelism()`,
 /// and finally 1 if even that fails.
 pub(super) fn inference_threads() -> i32 {
-    if let Ok(value) = std::env::var("DUSK_LLM_THREADS_COUNT") {
-        if let Ok(parsed) = value.parse::<i32>() {
-            if parsed > 0 {
-                return parsed;
-            }
-        }
+    if let Ok(value) = std::env::var("DUSK_LLM_THREADS_COUNT")
+        && let Ok(parsed) = value.parse::<i32>()
+        && parsed > 0
+    {
+        return parsed;
     }
     std::thread::available_parallelism()
         .ok()
@@ -50,12 +49,14 @@ pub(super) fn inference_threads() -> i32 {
 pub(super) fn locate_model_file() -> Result<PathBuf> {
     let home = std::env::var_os("HOME").ok_or_else(|| anyhow!("HOME is not set"))?;
     let directory = PathBuf::from(home).join(MODEL_DIRECTORY);
-    for entry in std::fs::read_dir(&directory)
-        .with_context(|| format!("reading {}", directory.display()))?
+    for entry in
+        std::fs::read_dir(&directory).with_context(|| format!("reading {}", directory.display()))?
     {
         let entry = entry.with_context(|| format!("listing {}", directory.display()))?;
         let path = entry.path();
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else { continue };
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
         if name.starts_with(MODEL_FILE_PREFIX)
             && path.extension().and_then(|e| e.to_str()) == Some(MODEL_FILE_EXTENSION)
         {

@@ -57,7 +57,7 @@ impl ProgramArgs {
     }
 
     /// Read the `args.data` slot as the typed reader of `T` and feed it into
-    /// `f`. 
+    /// `f`.
     pub fn with_data<T, R, F>(&self, f: F) -> capnp::Result<R>
     where
         T: Owned,
@@ -130,8 +130,7 @@ impl core::fmt::Debug for ProgramArgs {
             match message_builder.get_root() {
                 Ok(root) => root,
                 Err(error) => {
-                    return formatter
-                        .write_fmt(format_args!("ProgramArgs {{ <error: {error}> }}"));
+                    return formatter.write_fmt(format_args!("ProgramArgs {{ <error: {error}> }}"));
                 }
             };
         core::fmt::Debug::fmt(&root.into_reader(), formatter)

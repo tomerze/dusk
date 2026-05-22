@@ -37,6 +37,7 @@ impl core::fmt::Debug for ProcessContext {
         formatter
             .debug_struct("ProcessContext")
             .field("pid", &self.pid)
+            .field("name", &name)
             .field("program_args", &self.program_args)
             .finish_non_exhaustive()
     }

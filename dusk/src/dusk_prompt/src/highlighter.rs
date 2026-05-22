@@ -160,7 +160,7 @@ impl Highlighter for CustomHighlighter {
                     chars.next(); // consume the '*'
                     let mut comment = String::from("/*");
                     let mut prev = '\0';
-                    while let Some(next) = chars.next() {
+                    for next in chars.by_ref() {
                         comment.push(next);
                         if prev == '*' && next == '/' {
                             break;
