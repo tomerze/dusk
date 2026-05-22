@@ -13,6 +13,7 @@ use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::cell::{Cell, RefCell};
 
+#[cfg(feature = "client")]
 use anyhow::Context;
 use dusk_capnp::pry;
 #[cfg(feature = "client")]

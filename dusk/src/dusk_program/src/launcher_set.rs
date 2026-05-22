@@ -1,4 +1,4 @@
-use crate::launcher::Launcher;
+use crate::launcher::{Launcher, LauncherMixin};
 use crate::prelude::ProcessContext;
 use crate::process::Process;
 use alloc::boxed::Box;
@@ -60,6 +60,13 @@ impl LauncherSet {
             }
         }
         Err(anyhow!("no launcher found for program id {}", program_id))
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl LauncherMixin for LauncherSet {
+    async fn launch(&mut self, process_context: ProcessContext) -> Result<Box<dyn Process>> {
+        LauncherSet::launch(self, process_context).await
     }
 }
 

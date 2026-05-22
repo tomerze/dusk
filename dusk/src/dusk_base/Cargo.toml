@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dusk_program = { path = "../dusk_program", public = true }
 dusk_program_date = { path = "../../../programs/date", public = true }
 dusk_program_false = { path = "../../../programs/false", public = true }
 dusk_program_init = { path = "../../../programs/init", public = true }
