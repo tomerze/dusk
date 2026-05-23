@@ -17,12 +17,12 @@ use std::io::stdout;
 
 use crate::builtins;
 use crate::display_engine::DisplayEngine;
-use crate::llm::Llm;
 use crate::ui::spinner::with_spinner;
 use crate::ui::{
     CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
     render_keepalive_suffix,
 };
+use dusk_llm::Llm;
 use dusk_shell::shell::Shell;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;

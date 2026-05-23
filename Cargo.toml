@@ -8,6 +8,7 @@ members = [
     "dusk/src/dusk_capnp",
     "dusk/src/dusk_cli",
     "dusk/src/dusk_core",
+    "dusk/src/dusk_llm",
     "dusk/src/dusk_program",
     "dusk/src/dusk_program_proc",
     "dusk/src/dusk_prompt",

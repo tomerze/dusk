@@ -30,13 +30,6 @@ termimad = { version = "0.20", public = true}
 colored_json = "5.0.0"
 base64 = "0.22.1"
 unicode-width = "0.2"
-llama-cpp-2 = "0.1.146"
-encoding_rs = "0.8"
+dusk_llm = { path = "../dusk_llm" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-[build-dependencies]
-llama-cpp-2 = "0.1.146"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-anyhow = "1"

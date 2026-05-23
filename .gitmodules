@@ -2,3 +2,7 @@
 	path = vendor/capnproto
 	url = https://github.com/capnproto/capnproto.git
 	branch = v1.2.0
+[submodule "vendor/llama.cpp"]
+	path = vendor/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp
+	branch = b9283

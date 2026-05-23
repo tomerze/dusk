@@ -152,9 +152,7 @@ pub async fn main() -> Result<()> {
 
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new("info"))
-            .add_directive("llama-cpp-2=off".parse().expect("static directive"))
-            .add_directive("ggml=off".parse().expect("static directive"))
-            .add_directive("llama-cpp=off".parse().expect("static directive"));
+            .add_directive("llama_cpp=off".parse().expect("static directive"));
         tracing_subscriber::fmt().with_env_filter(env_filter).init();
     }
 

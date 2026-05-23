@@ -1,5 +1,9 @@
 [build]
-rustflags = ["--cfg", "tokio_unstable", "-Zmacro-backtrace"]
+# `-C link-arg=-static-libgcc` tells gcc (which rustc uses as the
+# linker driver) to satisfy its default `-lgcc_s` request from
+# libgcc.a / libgcc_eh.a instead of libgcc_s.so. Keeps final binaries
+# free of any libgcc_s.so.1 dynamic dep.
+rustflags = ["--cfg", "tokio_unstable", "-Zmacro-backtrace", "-C", "link-arg=-static-libgcc"]
 
 [unstable]
 public-dependency = true
