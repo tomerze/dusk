@@ -9,7 +9,7 @@ tokio = { version = "1.47.1", features = ["full"] }
 dusk_shell = { path = "../dusk_shell" }
 dusk_capnp = { path = "../dusk_capnp" }
 dusk_program = { path = "../dusk_program" }
-dusk_program_sh = { path = "../../../programs/sh", features = ["client"] }
+dusk_program_sh = { path = "../../../base/sh", features = ["client"] }
 capnp = "0.21.5"
 capnp-rpc = "0.21.0"
 serde-pickle = "1.1"
