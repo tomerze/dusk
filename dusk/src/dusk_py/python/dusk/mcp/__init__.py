@@ -160,6 +160,20 @@ descriptor (a connection handle, formatted host:port#n) that identifies that one
 3. Call the `disconnect` tool with the descriptor when finished.
 
 You may hold several connections to different Nodes at once, each identified by its own descriptor.
+
+Reading program output:
+A program's output is returned as JSON. Sometimes — not always — a program wraps its
+result in a type id. When it does, the output is a JSON object with exactly one top-level
+key: a `0x`-prefixed hexadecimal number (for example `0xcef2c7c974bf44ec`). That key is a
+Cap'n Proto type id — a constant identifying *what kind of result this is*. It is NOT a node
+id, connection descriptor, pid, namespace, session, or any runtime/per-call identifier, and
+it carries no meaning beyond "the value underneath is of this type". The real data is the
+object nested under that key.
+
+Other programs return a plain JSON value instead — a string, object, number, boolean, list, or null —
+with no type-id key, in which case the value itself is the data. So before interpreting any
+output, check its shape: a single `0x…` key means "typed result, read the fields underneath";
+anything else is the data directly. Never invent a meaning for the hex key or present it as data.
             """
         ),
     )
