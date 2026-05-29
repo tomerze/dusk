@@ -53,6 +53,10 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
         #[allow(unused)]
         pub const PROGRAM_NAME: &str = #name;
 
+        /// The git revision of the workspace at this crate's build time.
+        #[allow(unused)]
+        pub const GIT_REV: &str = env!("GIT_REV");
+
         #[allow(unused)]
         pub use #capnp_mod_name::PROGRAM_ID;
 
@@ -138,6 +142,12 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                 impl dusk_program::launcher::Launcher for $user_ty {
                     fn program_id(&self) -> u64 {
                         #program_id
+                    }
+                    fn version(&self) -> alloc::string::String {
+                        alloc::string::String::from(format!("{}", #version))
+                    }
+                    fn git_rev(&self) -> alloc::string::String {
+                        alloc::string::String::from(GIT_REV)
                     }
                 }
             };

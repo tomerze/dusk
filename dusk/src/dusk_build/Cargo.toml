@@ -1,0 +1,7 @@
+[package]
+name = "dusk_build"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dusk_capnp = { path = "../dusk_capnp", public = true }

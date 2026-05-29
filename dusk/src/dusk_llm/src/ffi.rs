@@ -226,6 +226,5 @@ unsafe extern "C" {
         io_funcs: cookie_io_functions_t,
     ) -> *mut FILE;
     pub fn fclose(stream: *mut FILE) -> c_int;
-    pub fn pread(fd: c_int, buf: *mut c_void, count: usize, offset: i64) -> isize;
     pub fn close(fd: c_int) -> c_int;
 }

@@ -94,13 +94,7 @@ impl DuskNixImpl {
                 .as_program_args()
                 .expect("build init program_args");
             dusk_nix::run(
-                dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(
-                    vec![
-                        Box::new(dusk_base::dusk_program_init::Launcher::new()),
-                        Box::new(dusk_base::dusk_program_sh::Launcher::new()),
-                        Box::new(dusk_base::dusk_program_ps::Launcher::new()),
-                    ],
-                )),
+                dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set()),
                 init_program_args,
             );
         });

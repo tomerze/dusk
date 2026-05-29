@@ -20,7 +20,7 @@ sntpc = { version = "0.10.1", default-features = false, features = ["std", "sync
 sntpc-net-std = { version = "1.2", optional = true }
 
 [build-dependencies]
-dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
+dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
 client = ["linkme", "dusk_program_sh/client", "clap", "chrono", "sntpc", "sntpc-net-std", "dusk_program_sh_proc"]

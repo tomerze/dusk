@@ -5,6 +5,7 @@ members = [
     "artifacts/dusk_node_bin",
     "artifacts/dusk_py",
     "dusk/src/dusk_base",
+    "dusk/src/dusk_build",
     "dusk/src/dusk_capnp",
     "dusk/src/dusk_cli",
     "dusk/src/dusk_core",

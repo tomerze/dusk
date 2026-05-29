@@ -1,4 +1,7 @@
+use crate::launcher_set::LauncherSet;
 use crate::process::Process;
+use crate::process::ProcessContext;
+use crate::program_args::ProgramArgs;
 use crate::ready::Ready;
 use crate::signal;
 use alloc::boxed::Box;
@@ -88,5 +91,23 @@ impl Namespace {
             ps_ready_map,
             ps_exit_map,
         }
+    }
+
+    pub async fn process(
+        self: Rc<Self>,
+        launcher_set: LauncherSet,
+        program_args: Rc<ProgramArgs>,
+    ) -> anyhow::Result<Box<dyn Process>> {
+        let pid = self.rng.lock().await.next_u64();
+        launcher_set
+            .launch(ProcessContext {
+                pid,
+                namespace: self.clone(),
+                program_args,
+                name: Rc::new(embassy_sync::blocking_mutex::Mutex::new(
+                    core::cell::RefCell::new(None),
+                )),
+            })
+            .await
     }
 }

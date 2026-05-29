@@ -1055,9 +1055,7 @@ pub fn link_anchors() {
 dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set())
 ```
 
-So adding your `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` is all the server needs — there is no second vec to keep in sync.
-
-The one exception is integration tests: `tests/common/src/lib.rs` builds its **own** deliberately-minimal vec (`init` / `sh` / `ps`) rather than calling `launcher_set()`, so the test harness boots a controlled subset. If your program needs to be reachable from integration tests, add its launcher to that vec explicitly.
+Both the server (`artifacts/dusk_node/src/lib.rs`) and the integration test harness (`tests/common/src/lib.rs`) call `dusk_base::launcher_set()`, so adding your `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` is all that's needed — there is no second vec to keep in sync anywhere.
 
 ### Other deliverables (optional)
 
@@ -1106,7 +1104,6 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | Missing `done` on the output stream | "Not calling `done`" is the wire-level signal for "I have daemonized." The shell will not kill the process. If you want the shell to clean you up, call `done` — **including before returning `Err`**. The only intentional omission is genuine daemonization. |
 | Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::launcher_set()`, so the impl knows nothing about specific programs. |
 | Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` to `dusk_base::link_anchors()` and `"dusk_program_<name>/client"` to `dusk_base`'s `client` feature. |
-| Expecting a program added to `launcher_set()` to show up in integration tests | `tests/common/src/lib.rs` builds its own minimal vec (`init`/`sh`/`ps`), not `launcher_set()`. Add the launcher there too if a test needs it. |
 | Forgetting to add `"base/<name>"` to the workspace `Cargo.toml` `members` list | The crate won't be picked up by workspace-wide `cargo check`. Add the line. |
 
 ---
@@ -1131,9 +1128,8 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES` and writes the sidecar JSON)
 - [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "dusk_program_sh_proc", "clap"]` feature if shell-invocable, with `dusk_program_sh_proc = { path = "../sh/proc", optional = true }` in `[dependencies]`. `linkme` stays as a dep — the attribute expands to `::linkme::distributed_slice(...)`, so it's load-bearing even though no source mentions it.
 - [ ] `dusk/src/dusk_base/Cargo.toml` lists the new crate as a path dep (`path = "../../../base/<name>"`, `public = true`)
-- [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` (this is all the server needs — `artifacts/dusk_node` calls `launcher_set()`)
+- [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` (this is all that's needed — both `artifacts/dusk_node` and `tests/common` call `launcher_set()`)
 - [ ] If the program is shell-invocable: `dusk_base`'s `client` feature lists `"dusk_program_<name>/client"`, and `dusk_base::link_anchors()` adds `black_box(dusk_program_<name>::client::sh_entry);` (without the `black_box` reference, linkme silently drops the entry)
-- [ ] If tested in integration: `tests/common/src/lib.rs` registers the launcher in its own minimal vec
 - [ ] Workspace `Cargo.toml` lists `"base/<name>"` under `[workspace] members`
 - [ ] `cargo check -p dusk_program_<name>` passes
 - [ ] `cargo check -p dusk_base` (and `-p dusk_node` if you touched its vec) passes

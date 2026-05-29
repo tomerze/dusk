@@ -97,7 +97,7 @@ impl Chat {
         let loaded = self.loaded.clone();
         tokio::task::spawn_blocking(move || {
             let mut guard = loaded.blocking_lock();
-            Self::chat_turn(&mut guard, &message, on_token)
+            Self::chat_inner(&mut guard, &message, on_token)
         })
         .await
         .context("llm task panicked")?
@@ -105,7 +105,7 @@ impl Chat {
 
     /// Run one chat turn against `state`. `on_token` fires once per generated
     /// token with the running count.
-    fn chat_turn<F: FnMut(usize)>(
+    fn chat_inner<F: FnMut(usize)>(
         state: &mut LlmState,
         message: &str,
         mut on_token: F,

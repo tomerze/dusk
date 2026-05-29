@@ -9,7 +9,7 @@ use object::ObjectSection;
 use object::read::ReadCache;
 
 use crate::ffi::{
-    FILE, SEEK_CUR, SEEK_END, SEEK_SET, close, cookie_io_functions_t, fclose, fopencookie, pread,
+    FILE, SEEK_CUR, SEEK_END, SEEK_SET, close, cookie_io_functions_t, fclose, fopencookie,
 };
 
 // Embed the GGUF into the binary via `.incbin` in a NON-ALLOC section.
@@ -27,15 +27,13 @@ core::arch::global_asm!(concat!(
 
 pub const GEMMA4E2B_EMBEDDED_GGUF_SECTION: &str = ".llm_gguf";
 
-// ---------------------------------------------------------------------------
-// Embedded GGUF: glibc cookie stream over our own `.llm_gguf` ELF section.
-// llama.cpp sees a 2.9 GB `FILE*` whose offset 0 is the start of the GGUF.
-// ---------------------------------------------------------------------------
-
-#[repr(C)]
 struct GgufCookie {
-    fd: c_int,
-    base: i64,
+    /// Base of the `mmap`ed region (page-aligned) and its length, kept for
+    /// `munmap` at close.
+    mapping: *mut c_void,
+    mapping_len: usize,
+    /// Start of the GGUF bytes within the mapping (`mapping + alignment delta`).
+    data: *const u8,
     size: i64,
     position: i64,
 }
@@ -54,8 +52,10 @@ impl Drop for EmbeddedGgufFile {
 }
 
 /// Open a GGUF embedded in this executable's own ELF as a named section,
-/// returning a glibc `fopencookie` stream over it (no fd → llama's mmap
-/// path is disabled; reads land in our callbacks).
+/// returning a glibc `fopencookie` stream over it. The section is `mmap`ed
+/// once (with `use_mmap=false` on the model so llama reads through this
+/// stream); cookie reads then `memcpy` from the mapping instead of issuing
+/// a syscall per read.
 pub fn load_from_self_exe_section(section_name: &str) -> Result<EmbeddedGgufFile> {
     let exe = File::open("/proc/self/exe").context("opening /proc/self/exe")?;
     let (offset, size) = {
@@ -76,10 +76,46 @@ pub fn load_from_self_exe_section(section_name: &str) -> Result<EmbeddedGgufFile
         bail!("embedded GGUF section `{section_name}` is empty");
     }
 
+    // `mmap` demands a page-aligned file offset, so map from the aligned
+    // offset and skip the leading `delta` bytes to reach the section.
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if page_size <= 0 {
+        bail!("sysconf(_SC_PAGESIZE) returned {page_size}");
+    }
+    let page_size = page_size as i64;
+    let aligned_offset = offset as i64 & !(page_size - 1);
+    let delta = offset as i64 - aligned_offset;
+    let mapping_len = (size + delta as u64) as usize;
+
     let fd = exe.into_raw_fd();
+    let mapping = unsafe {
+        libc::mmap(
+            ptr::null_mut(),
+            mapping_len,
+            libc::PROT_READ,
+            libc::MAP_PRIVATE,
+            fd,
+            aligned_offset,
+        )
+    };
+    // The mapping holds its own reference to the file; the fd is no longer needed.
+    unsafe { close(fd) };
+    if mapping == libc::MAP_FAILED {
+        bail!("mmap of embedded GGUF section `{section_name}` failed");
+    }
+
+    // Kick off async readahead so llama's reads hit warm page cache. Advisory
+    // only — it populates the page cache (no second copy), and a failure just
+    // means no prefetch.
+    let advised = unsafe { libc::madvise(mapping, mapping_len, libc::MADV_WILLNEED) };
+    if advised != 0 {
+        tracing::warn!("madvise(MADV_WILLNEED) on embedded GGUF failed");
+    }
+
     let cookie = Box::into_raw(Box::new(GgufCookie {
-        fd,
-        base: offset as i64,
+        mapping,
+        mapping_len,
+        data: unsafe { (mapping as *const u8).add(delta as usize) },
         size: size as i64,
         position: 0,
     }));
@@ -94,7 +130,7 @@ pub fn load_from_self_exe_section(section_name: &str) -> Result<EmbeddedGgufFile
     let file = unsafe { fopencookie(cookie as *mut c_void, c"rb".as_ptr(), io_funcs) };
     if file.is_null() {
         let cookie = unsafe { Box::from_raw(cookie) };
-        unsafe { close(cookie.fd) };
+        unsafe { libc::munmap(cookie.mapping, cookie.mapping_len) };
         bail!("fopencookie returned null for embedded GGUF");
     }
     Ok(EmbeddedGgufFile { file })
@@ -111,19 +147,15 @@ unsafe extern "C" fn gguf_cookie_read(
     if to_read == 0 {
         return 0;
     }
-    let got = unsafe {
-        pread(
-            cookie.fd,
-            buf as *mut c_void,
+    unsafe {
+        ptr::copy_nonoverlapping(
+            cookie.data.add(cookie.position as usize),
+            buf as *mut u8,
             to_read,
-            cookie.base + cookie.position,
-        )
-    };
-    if got < 0 {
-        return -1;
+        );
     }
-    cookie.position += got as i64;
-    got
+    cookie.position += to_read as i64;
+    to_read as isize
 }
 
 unsafe extern "C" fn gguf_cookie_seek(
@@ -150,5 +182,5 @@ unsafe extern "C" fn gguf_cookie_seek(
 
 unsafe extern "C" fn gguf_cookie_close(cookie: *mut c_void) -> c_int {
     let cookie = unsafe { Box::from_raw(cookie as *mut GgufCookie) };
-    unsafe { close(cookie.fd) }
+    unsafe { libc::munmap(cookie.mapping, cookie.mapping_len) }
 }

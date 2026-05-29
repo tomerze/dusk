@@ -17,7 +17,7 @@ linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
 
 [build-dependencies]
-dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
+dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
 client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]

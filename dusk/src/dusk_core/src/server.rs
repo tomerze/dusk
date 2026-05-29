@@ -116,7 +116,12 @@ impl dusk::Server for DuskServer {
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
-            let process = driver::process(namespace.clone(), program_args)
+            let launcher_set = driver::launchers(namespace.clone())
+                .context("launcher set lookup failed")
+                .into_capnp()?;
+            let process = namespace
+                .clone()
+                .process(launcher_set, program_args)
                 .await
                 .context("process creation failed")
                 .into_capnp()?;

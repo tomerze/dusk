@@ -20,7 +20,7 @@ clap = { version = "4", features = ["derive"], optional = true }
 dusk_program_sh_proc = { path = "proc", optional = true }
 
 [build-dependencies]
-dusk_capnp = { path = "../../dusk/src/dusk_capnp/"}
+dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
 client = ["linkme", "nom", "clap", "dusk_program_sh_proc"]

@@ -1,22 +1,15 @@
-use core::{future::Future, pin::Pin};
-
-use alloc::{rc::Rc, string::String};
+use alloc::rc::Rc;
+use alloc::string::String;
 use dusk_program::anyhow::Result;
-use dusk_program::program_args::ProgramArgs;
-use dusk_program::{namespace::Namespace, process::Process};
-
-pub type FutureProcessResult = Pin<Box<dyn Future<Output = Result<Box<dyn Process>>>>>;
+use dusk_program::launcher_set::LauncherSet;
+use dusk_program::namespace::Namespace;
 
 /// Dusk driver.
 #[async_trait::async_trait]
 pub trait Driver: Send + Sync + 'static {
     fn hostname(&self) -> Result<String>;
 
-    fn process(
-        &self,
-        namespace: Rc<Namespace>,
-        program_args: Rc<ProgramArgs>,
-    ) -> FutureProcessResult;
+    fn launchers(&self, namespace: Rc<Namespace>) -> Result<LauncherSet>;
 }
 
 /// Set the dusk Driver implementation.
@@ -33,11 +26,8 @@ macro_rules! dusk_driver_impl {
         }
 
         #[unsafe(no_mangle)]
-        fn _dusk_process<'a>(
-            namespace: Rc<Namespace>,
-            program_args: Rc<dusk_program::program_args::ProgramArgs>,
-        ) -> FutureProcessResult {
-            <$t as $crate::driver::Driver>::process(&$name, namespace, program_args)
+        fn _dusk_launchers(namespace: Rc<Namespace>) -> Result<LauncherSet> {
+            <$t as $crate::driver::Driver>::launchers(&$name, namespace)
         }
     };
 }
@@ -45,16 +35,13 @@ macro_rules! dusk_driver_impl {
 unsafe extern "Rust" {
     fn _dusk_hostname() -> Result<String>;
 
-    fn _dusk_process<'a>(
-        namespace: Rc<Namespace>,
-        program_args: Rc<ProgramArgs>,
-    ) -> FutureProcessResult;
+    fn _dusk_launchers(namespace: Rc<Namespace>) -> Result<LauncherSet>;
 }
 
 pub fn hostname() -> Result<String> {
     unsafe { _dusk_hostname() }
 }
 
-pub fn process(namespace: Rc<Namespace>, program_args: Rc<ProgramArgs>) -> FutureProcessResult {
-    unsafe { _dusk_process(namespace, program_args) }
+pub fn launchers(namespace: Rc<Namespace>) -> Result<LauncherSet> {
+    unsafe { _dusk_launchers(namespace) }
 }

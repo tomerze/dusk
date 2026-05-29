@@ -1,3 +1,3 @@
 fn main() {
-    dusk_capnp::build_capnp_file("capnp/init.capnp");
+    dusk_build::build("capnp/init.capnp", &[]);
 }

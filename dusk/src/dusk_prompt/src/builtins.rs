@@ -128,14 +128,25 @@ fn get_available_commands_table<D: DisplayEngine>(
     available_programs_info: &[EntryInfo],
     display_engine: &D,
 ) -> Result<String> {
-    let mut table = NuTable::new(available_programs_info.len() + 1, 3);
+    let mut table = NuTable::new(available_programs_info.len() + 1, 4);
     let headers = vec![
         NuRecordsValue::new("Command".into()),
         NuRecordsValue::new("Description".into()),
         NuRecordsValue::new("Local Version".into()),
+        NuRecordsValue::new("Program ID".into()),
     ];
     table.set_row(0, headers);
     for (i, command) in available_programs_info.iter().enumerate() {
+        let program_id = command
+            .program_id
+            .map(|id| {
+                if id > u32::MAX as u64 {
+                    format!("0x{:x}", id)
+                } else {
+                    id.to_string()
+                }
+            })
+            .unwrap_or_else(|| "N/A".to_string());
         let row = vec![
             NuRecordsValue::new(
                 display_engine.render_markdown_inline(format!("**{}**", command.name).as_str()),
@@ -143,6 +154,9 @@ fn get_available_commands_table<D: DisplayEngine>(
             NuRecordsValue::new(display_engine.render_markdown_inline(command.short_description)),
             NuRecordsValue::new(
                 display_engine.render_markdown_inline(format!("`{}`", command.version).as_str()),
+            ),
+            NuRecordsValue::new(
+                display_engine.render_markdown_inline(format!("`{}`", program_id).as_str()),
             ),
         ];
         table.set_row(i + 1, row);

@@ -3,8 +3,10 @@
 
 use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_program::anyhow::Result;
+use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo, StaticShEntriesBuilder};
 use dusk_shell::connection::Connection;
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -29,6 +31,19 @@ pub fn register_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Dusk>()?;
     module.add_class::<shell_output::ShellOutput>()?;
     Ok(())
+}
+
+/// Build a Python dict describing one available program.
+///
+/// Keys: `name`, `version`, `short_description`, `long_description`.
+fn entry_info_to_dict<'py>(py: Python<'py>, info: &EntryInfo) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("name", info.name)?;
+    dict.set_item("version", info.version)?;
+    dict.set_item("short_description", info.short_description)?;
+    dict.set_item("long_description", info.long_description)?;
+    dict.set_item("program_id", info.program_id)?;
+    Ok(dict)
 }
 
 pub(crate) enum Message {
@@ -102,6 +117,40 @@ impl Dusk {
             .clone();
 
         ShellOutput::new(command, &tx).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    }
+
+    /// Look up help for the available programs.
+    ///
+    /// With no `program_name` (or an empty string), returns a list of dicts,
+    /// one per available program. With a program name, returns a single dict
+    /// for that program, or raises `ValueError` if no such program exists.
+    ///
+    /// Each dict has keys `name`, `version`, `short_description`,
+    /// `long_description`, and `program_id` (an int, or `None` for builtins).
+    ///
+    /// The set of available programs is determined at link time on the client
+    /// side, so this is a static method and does not require a connection.
+    #[staticmethod]
+    #[pyo3(signature = (program_name = String::new()))]
+    fn help(py: Python<'_>, program_name: String) -> PyResult<Bound<'_, PyAny>> {
+        let programs = StaticShEntriesBuilder::default()
+            .get_available_programs_info()
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        if program_name.is_empty() {
+            let dicts = programs
+                .iter()
+                .map(|info| entry_info_to_dict(py, info))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(PyList::new(py, dicts)?.into_any())
+        } else {
+            match programs.iter().find(|info| info.name == program_name) {
+                Some(info) => Ok(entry_info_to_dict(py, info)?.into_any()),
+                None => Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "no program named '{program_name}'"
+                ))),
+            }
+        }
     }
 
     fn __del__(&mut self) {
