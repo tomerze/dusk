@@ -56,8 +56,31 @@ fn main() -> Result<()> {
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").context("OUT_DIR not set")?);
     let state_path = out_dir.join("dusk_llm_kv_snapshot");
-    write_warmup_snapshot(&warmup_binary, &model_path, &system_prompt, &state_path)
+    let key_path = out_dir.join("dusk_llm_kv_snapshot.key");
+
+    // Gemma 4 turn token
+    let prompt_text = format!("<|turn>user\n{system_prompt}");
+
+    // Regenerating the snapshot runs the full model over the warm-up
+    // prompt and is the slow part of this build. Skip it when the inputs
+    // that determine its contents are byte-for-byte unchanged: a stale
+    // rerun-if-changed trigger (e.g. an unrelated program recompiling and
+    // touching .dusk_sh_entries) must not force a regeneration.
+    let cache_key = warmup_cache_key(&prompt_text, &model_path)?;
+    let cached = state_path.is_file()
+        && fs::read_to_string(&key_path).ok().as_deref() == Some(cache_key.as_str());
+    if cached {
+        eprintln!(
+            "dusk_llm build.rs: warm-up snapshot {} up to date, skipping regeneration",
+            state_path.display(),
+        );
+        return Ok(());
+    }
+
+    write_warmup_snapshot(&warmup_binary, &model_path, &prompt_text, &state_path)
         .context("producing build-time warm-up snapshot")?;
+    fs::write(&key_path, &cache_key)
+        .with_context(|| format!("writing cache key {}", key_path.display()))?;
 
     eprintln!(
         "dusk_llm build.rs: wrote {} ({} bytes)",
@@ -65,6 +88,37 @@ fn main() -> Result<()> {
         fs::metadata(&state_path)?.len(),
     );
     Ok(())
+}
+
+/// Content key for the warm-up snapshot: changes whenever an input that
+/// affects the snapshot's bytes changes (the exact warm-up prompt, the
+/// context/KV-cache parameters, or the model file's size and mtime).
+/// Used to short-circuit regeneration when a `rerun-if-changed` trigger
+/// fires without any real change. Not cryptographic — collision
+/// resistance is not needed for a same-machine build cache.
+fn warmup_cache_key(prompt_text: &str, model_path: &Path) -> Result<String> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::UNIX_EPOCH;
+
+    let mut hasher = DefaultHasher::new();
+    prompt_text.hash(&mut hasher);
+    CONTEXT_TOKENS.hash(&mut hasher);
+    KV_CACHE_TYPE.hash(&mut hasher);
+
+    let metadata =
+        fs::metadata(model_path).with_context(|| format!("stat {}", model_path.display()))?;
+    metadata.len().hash(&mut hasher);
+    let modified = metadata
+        .modified()
+        .with_context(|| format!("mtime unavailable for {}", model_path.display()))?;
+    let since_epoch = modified
+        .duration_since(UNIX_EPOCH)
+        .context("model mtime is before the unix epoch")?;
+    since_epoch.as_secs().hash(&mut hasher);
+    since_epoch.subsec_nanos().hash(&mut hasher);
+
+    Ok(format!("{:016x}", hasher.finish()))
 }
 
 fn locate_llama_src() -> Result<PathBuf> {
@@ -258,7 +312,7 @@ fn compile_warmup_binary(llama_src: &Path, lib_dir: &Path, include_dir: &Path) -
 fn write_warmup_snapshot(
     warmup_binary: &Path,
     model_path: &Path,
-    system_prompt: &str,
+    prompt_text: &str,
     state_path: &Path,
 ) -> Result<()> {
     if state_path.exists() {
@@ -269,9 +323,6 @@ fn write_warmup_snapshot(
         .ok()
         .map(|count| count.get().to_string())
         .unwrap_or_else(|| String::from("1"));
-
-    // Gemma 4 turn token
-    let prompt_text = format!("<|turn>user\n{system_prompt}");
 
     let args: Vec<OsString> = vec![
         model_path.as_os_str().to_owned(),

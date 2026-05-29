@@ -197,9 +197,10 @@ impl dusk::Server for DuskServer {
                     i.try_into()
                         .map_err(|e: TryFromIntError| capnp::Error::failed(e.to_string()))?,
                 );
+                let program_id = launcher.program_id();
                 let version = launcher.version();
                 let git_revision = launcher.git_rev();
-                entry.set_program_id(launcher.program_id());
+                entry.set_program_id(program_id);
                 entry.set_version(&version[..]);
                 entry.set_git_revision(&git_revision[..]);
             }

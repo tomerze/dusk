@@ -165,6 +165,14 @@ fn write_entries_info(crate_name: &str, fn_name: &str, fields: &EntryInfoLiteral
         .expect("sh_entry: serde_json cannot fail on a Value built from owned strings");
 
     let final_path = entries_info_dir.join(format!("{crate_name}__{fn_name}.json"));
+    // Skip the write when the on-disk content is already identical. A
+    // rename always bumps mtime, and dusk_llm/build.rs has a
+    // rerun-if-changed on these files; rewriting unchanged JSON would
+    // retrigger its (expensive) warm-up snapshot regeneration on every
+    // recompile of any program crate.
+    if std::fs::read(&final_path).is_ok_and(|existing| existing == body) {
+        return;
+    }
     let temp_path = entries_info_dir.join(format!("{crate_name}__{fn_name}.json.tmp"));
     std::fs::write(&temp_path, &body)
         .unwrap_or_else(|error| panic!("sh_entry: write {}: {error}", temp_path.display()));
