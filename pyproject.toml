@@ -11,6 +11,9 @@ dependencies = [
     "click>=8.1.0",
 ]
 
+[project.scripts]
+dusk_mcp = "dusk.mcp.__main__:main"
+
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"

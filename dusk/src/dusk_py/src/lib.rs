@@ -175,15 +175,24 @@ impl Dusk {
 
         rt.block_on(local_set.run_until(async move {
             let (connection, client) = match init(address).await {
-                Ok((connection, client)) => {
-                    let _ = init_tx.send(Ok(()));
-                    (connection, client)
-                }
+                Ok(pair) => pair,
                 Err(e) => {
                     let _ = init_tx.send(Err(e));
                     return Ok(());
                 }
             };
+
+            // The capnp client connects lazily, so `init` returns Ok even
+            // against a server that is down — the refused socket only surfaces
+            // on the first real RPC. Force one round-trip here so connection
+            // setup fails up front, instead of the first command the caller
+            // runs after `Dusk(...)` appears to succeed.
+            if let Err(e) = client.hostname_request().send().promise.await {
+                let _ = connection.disconnect().await;
+                let _ = init_tx.send(Err(e.into()));
+                return Ok(());
+            }
+            let _ = init_tx.send(Ok(()));
 
             loop {
                 match message_rx.recv().await {

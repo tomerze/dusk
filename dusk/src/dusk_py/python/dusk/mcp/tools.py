@@ -10,6 +10,14 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import anyio
+import anyio.to_thread
+
+# Imported at runtime (not only under TYPE_CHECKING) because FastMCP detects the
+# context parameter by resolving the tool's type hints; a string annotation that
+# can't resolve to the real Context class would be treated as a tool input.
+from mcp.server.fastmcp import Context
+
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
@@ -20,8 +28,27 @@ def register_tools(server: "FastMCP", registry: "ConnectionRegistry") -> None:
     """Register every tool onto ``server``."""
     from .. import Dusk
 
-    def connect(host: str, port: int) -> str:
-        return registry.connect(host, port)
+    async def connect(host: str, port: int, context: Context) -> str:
+        # Async so the session-end hook is registered on the event loop that
+        # owns the session; the blocking Dusk connect runs off it in a thread.
+        session = context.session
+        descriptor, is_first_connection = await anyio.to_thread.run_sync(
+            registry.connect, session, host, port
+        )
+        if is_first_connection:
+
+            async def disconnect_session_on_close() -> None:
+                # Runs from BaseSession.__aexit__'s exit-stack unwind, which on
+                # server shutdown happens while this task is already cancelled.
+                # to_thread.run_sync issues a cancellation checkpoint, so without
+                # the shield the CancelledError re-raises mid-unwind and corrupts
+                # anyio's cancel-scope stack ("Attempted to exit a cancel scope
+                # that isn't the current task's current cancel scope").
+                with anyio.CancelScope(shield=True):
+                    await anyio.to_thread.run_sync(registry.disconnect_session, session)
+
+            session._exit_stack.push_async_callback(disconnect_session_on_close)
+        return descriptor
 
     server.add_tool(
         connect,
@@ -32,12 +59,14 @@ def register_tools(server: "FastMCP", registry: "ConnectionRegistry") -> None:
             "Returns a descriptor string (formatted host:port#n) that "
             "identifies this connection; pass it to every program tool and to "
             "the disconnect tool. You may hold several connections at once — "
-            "each call returns a new descriptor."
+            "each call returns a new descriptor. Connections are closed "
+            "automatically when this session ends, but call disconnect when "
+            "you are done with one to free it sooner."
         ),
     )
 
-    def disconnect(descriptor: str) -> str:
-        registry.disconnect(descriptor)
+    def disconnect(descriptor: str, context: Context) -> str:
+        registry.disconnect(context.session, descriptor)
         return f"disconnected {descriptor}"
 
     server.add_tool(
@@ -83,8 +112,8 @@ def _register_program_tool(
     {long_description}
     """
 
-    def run(descriptor: str, arguments: str = "") -> str:
-        connection = registry.get(descriptor)
+    def run(descriptor: str, context: Context, arguments: str = "") -> str:
+        connection = registry.get(context.session, descriptor)
         command = name if not arguments else f"{name} {arguments}"
         return _drain(connection.sh(command))
 
