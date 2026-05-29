@@ -20,11 +20,11 @@
  * `dusk_llm` parses this header at runtime and feeds the trailing KV
  * bytes to `llama_state_set_data`.
  *
- * Tokenization matches the runtime in `session.rs` exactly:
+ * Tokenization matches the runtime in `chat.rs` exactly:
  *   add_special   = true   (BOS prepended)
  *   parse_special = true   (Gemma chat-template markers like
- *                          <start_of_turn> get their dedicated special
- *                          token IDs, not literal text)
+ *                          `<|turn>` / `<turn|>` get their dedicated
+ *                          special token IDs, not literal text)
  *
  * Exits 0 on success; any non-zero exit prints a diagnostic on stderr.
  */

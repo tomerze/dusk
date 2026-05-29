@@ -8,6 +8,7 @@ use std::process::Command;
 const CONTEXT_TOKENS: u32 = 16_384;
 // ggml_type::GGML_TYPE_Q8_0
 const KV_CACHE_TYPE: i32 = 8;
+const MODEL_GGUF_PATH: &str = "models/gemma-4-E2B-it-Q4_K_M.gguf";
 
 #[derive(serde::Deserialize, Clone)]
 struct ShEntrySpec {
@@ -25,7 +26,6 @@ fn main() -> Result<()> {
         "cargo:rerun-if-changed={}/../../../Cargo.lock",
         env!("CARGO_MANIFEST_DIR")
     );
-    println!("cargo:rerun-if-env-changed=DUSK_MODEL_PATH");
 
     let llama_src = locate_llama_src()?;
     println!(
@@ -48,18 +48,14 @@ fn main() -> Result<()> {
 
     let sh_entries_info = collect_sh_entries_info()?;
     let system_prompt = compose_system_prompt(&sh_entries_info);
-    let model_path = locate_model()?;
+    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MODEL_GGUF_PATH);
+    if !model_path.is_file() {
+        bail!("model GGUF not found at {}", model_path.display());
+    }
     println!("cargo:rerun-if-changed={}", model_path.display());
-    // Surface the path to lib.rs so `include_bytes!` can pull the GGUF
-    // into the rlib (and on into dusk_cli) without changing the runtime
-    // load-from-disk path.
-    println!(
-        "cargo:rustc-env=DUSK_MODEL_GGUF_PATH={}",
-        model_path.display()
-    );
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").context("OUT_DIR not set")?);
-    let state_path = out_dir.join("model.state");
+    let state_path = out_dir.join("dusk_llm_kv_snapshot");
     write_warmup_snapshot(&warmup_binary, &model_path, &system_prompt, &state_path)
         .context("producing build-time warm-up snapshot")?;
 
@@ -80,7 +76,7 @@ fn locate_llama_src() -> Result<PathBuf> {
         .join("vendor/llama.cpp");
     if !path.join("CMakeLists.txt").is_file() {
         bail!(
-            "vendor/llama.cpp not initialised at {} — run `git submodule update --init vendor/llama.cpp`",
+            "vendor/llama.cpp not initialised at {}, run `git submodule update --init vendor/llama.cpp`",
             path.display()
         );
     }
@@ -189,9 +185,7 @@ fn locate_static_archive_dir(name: &str) -> Result<PathBuf> {
     let reported = reported.trim();
     if reported == archive_name {
         bail!(
-            "compiler `{cc}` could not locate {archive_name} — install it (Debian/Ubuntu: \
-             `libstdc++-*-dev`, `libgomp1`, or distro equivalent) or disable the relevant \
-             ggml feature in build.rs"
+            "compiler `{cc}` could not locate {archive_name}, install it on the system via your package manager"
         );
     }
     let archive_path = PathBuf::from(reported);
@@ -214,10 +208,6 @@ fn compile_warmup_binary(llama_src: &Path, lib_dir: &Path, include_dir: &Path) -
     let cc = env::var("CC").unwrap_or_else(|_| String::from("cc"));
     let ggml_include = llama_src.join("ggml/include");
 
-    // Locate the static archives the warmup binary needs to swallow:
-    // libstdc++ (llama.cpp is C++), libgcc (compiler support), libgomp
-    // (ggml's OpenMP runtime). Pass them as positional files inside
-    // --start-group so the linker treats them identically.
     let omp_name = openmp_static_lib_name()?;
     let stdcxx_archive = locate_static_archive_dir("stdc++")?.join("libstdc++.a");
     let gcc_archive = locate_static_archive_dir("gcc")?.join("libgcc.a");
@@ -280,12 +270,7 @@ fn write_warmup_snapshot(
         .map(|count| count.get().to_string())
         .unwrap_or_else(|| String::from("1"));
 
-    // The system prompt itself contains the closing `<turn|>` of this
-    // initial user turn plus all the few-shot turn pairs, and ends with
-    // an open `<|turn>user\n` ready for the runtime to append the real
-    // user message. So we just open the first user turn here and let
-    // the prompt carry the rest of the chat structure. Gemma 4 chat
-    // markers: `<|turn>` (token 105) opens, `<turn|>` (token 106) closes.
+    // Gemma 4 turn token
     let prompt_text = format!("<|turn>user\n{system_prompt}");
 
     let args: Vec<OsString> = vec![
@@ -326,7 +311,7 @@ fn collect_sh_entries_info() -> Result<Vec<ShEntrySpec>> {
     let dir = locate_entries_info_dir()?;
     if !dir.exists() {
         bail!(
-            "entries-info dir {} does not exist — are the program crates compiling with `client` enabled?",
+            "could find entries-info {} dir, are there programs compiling with `sh_entry`s emitted?",
             dir.display()
         );
     }
@@ -367,33 +352,6 @@ fn compose_system_prompt(sh_entries_info: &[ShEntrySpec]) -> String {
         }
     }
     template.replace("{{PROGRAMS}}", programs_block.trim_start_matches('\n'))
-}
-
-fn locate_model() -> Result<PathBuf> {
-    if let Some(path) = env::var_os("DUSK_MODEL_PATH") {
-        let path = PathBuf::from(path);
-        if !path.exists() {
-            bail!(
-                "DUSK_MODEL_PATH points at {} which does not exist",
-                path.display()
-            );
-        }
-        return Ok(path);
-    }
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models");
-    for entry in fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if name.starts_with("gemma")
-            && path.extension().and_then(|extension| extension.to_str()) == Some("gguf")
-        {
-            return Ok(path);
-        }
-    }
-    bail!("no `gemma*.gguf` found under {}", dir.display())
 }
 
 fn locate_entries_info_dir() -> Result<PathBuf> {

@@ -24,6 +24,7 @@ members = [
     "base/sh/proc",
     "base/sleep",
     "base/date",
+    "base/logs",
     "tests/api",
     "tests/cli",
     "tests/common",

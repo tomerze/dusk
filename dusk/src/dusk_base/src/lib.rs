@@ -3,6 +3,7 @@ pub use dusk_program_date;
 pub use dusk_program_false;
 pub use dusk_program_init;
 pub use dusk_program_kill;
+pub use dusk_program_logs;
 pub use dusk_program_ps;
 pub use dusk_program_sh;
 pub use dusk_program_sleep;
@@ -13,6 +14,7 @@ use dusk_program::launcher_set::LauncherSet;
 /// LauncherSet with launchers for al programs in base
 pub fn launcher_set() -> LauncherSet {
     LauncherSet::from_launchers(vec![
+        Box::new(dusk_program_logs::Launcher::new()),
         Box::new(dusk_program_date::Launcher::new()),
         Box::new(dusk_program_false::Launcher::new()),
         Box::new(dusk_program_init::Launcher::new()),
@@ -32,6 +34,7 @@ pub fn launcher_set() -> LauncherSet {
 #[cfg(feature = "client")]
 pub fn link_anchors() {
     use std::hint::black_box;
+    black_box(dusk_program_logs::client::sh_entry);
     black_box(dusk_program_date::client::sh_entry);
     black_box(dusk_program_false::client::sh_entry);
     black_box(dusk_program_kill::client::sh_entry);

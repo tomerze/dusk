@@ -22,7 +22,7 @@ use crate::ui::{
     CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
     render_keepalive_suffix,
 };
-use dusk_llm::Llm;
+use dusk_llm::{Chat, GEMMA4E2B_EMBEDDED_GGUF_SECTION, load_from_self_exe_section};
 use dusk_shell::shell::Shell;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
@@ -46,7 +46,7 @@ where
     stream_factory: F,
     /// Fired by the caller (e.g. on ctrl+c) to ask the running command to stop.
     stop_signal: Rc<Notify>,
-    llm: Llm,
+    llm_chat: Option<Chat>,
     mode: PromptModeFlag,
 }
 
@@ -66,15 +66,13 @@ where
 
         available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 
-        let llm = Llm::new();
-
         Ok(Prompt {
             shell,
             available_entries_info: available_programs_info,
             display_engine,
             stream_factory,
             stop_signal,
-            llm,
+            llm_chat: None,
             mode: PromptModeFlag::default(),
         })
     }
@@ -223,11 +221,34 @@ where
             return None;
         }
 
+        if self.llm_chat.is_none() {
+            let loaded = with_spinner(
+                tokio::task::spawn_blocking(|| {
+                    let embedded = load_from_self_exe_section(GEMMA4E2B_EMBEDDED_GGUF_SECTION)?;
+                    Chat::new(embedded)
+                }),
+                || Style::new().fg(Color::Yellow).paint("Waking…").to_string(),
+            )
+            .await;
+            match loaded {
+                Ok(Ok(chat)) => self.llm_chat = Some(chat),
+                Ok(Err(error)) => {
+                    tracing::warn!(error = ?error, "llm load failed");
+                    return None;
+                }
+                Err(error) => {
+                    tracing::warn!(error = ?error, "llm load task panicked");
+                    return None;
+                }
+            }
+        }
+        let llm_chat = self.llm_chat.as_ref().expect("just loaded");
+
         let token_count = Arc::new(AtomicUsize::new(0));
         let writer = token_count.clone();
         let reader = token_count.clone();
         let result = with_spinner(
-            self.llm.ask(natural_language, move |n| {
+            llm_chat.chat(natural_language, move |n| {
                 writer.store(n, Ordering::Relaxed)
             }),
             move || {

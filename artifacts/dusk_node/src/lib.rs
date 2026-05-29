@@ -7,16 +7,7 @@ pub extern "C" fn dusk_node_run() {
         .as_program_args()
         .expect("build init program_args");
     dusk_nix::run(
-        dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(vec![
-            Box::new(dusk_base::dusk_program_init::Launcher::new()),
-            Box::new(dusk_base::dusk_program_sh::Launcher::new()),
-            Box::new(dusk_base::dusk_program_ps::Launcher::new()),
-            Box::new(dusk_base::dusk_program_kill::Launcher::new()),
-            Box::new(dusk_base::dusk_program_true::Launcher::new()),
-            Box::new(dusk_base::dusk_program_false::Launcher::new()),
-            Box::new(dusk_base::dusk_program_sleep::Launcher::new()),
-            Box::new(dusk_base::dusk_program_date::Launcher::new()),
-        ])),
+        dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set()),
         init_program_args,
     );
 }

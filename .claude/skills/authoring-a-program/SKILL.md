@@ -1,13 +1,13 @@
 ---
 name: authoring-a-program
-description: Use when authoring a new Dusk program (a crate under programs/), designing its Cap'n Proto schema, picking how its args / portal / launcher / process are shaped, deciding between one-shot and long-running and daemonized lifecycles, adding state to a process, handling signals, registering it as a shell entry, or wiring it into a Dusk impl. Covers crate layout, schema authoring, build.rs, the five-part contract (program_id / Args / Launcher / Process / Portal), state, daemonization, streams and Records, span/log conventions, and integration with dusk_node.
+description: Use when authoring a new Dusk program (a crate under base/), designing its Cap'n Proto schema, picking how its args / portal / launcher / process are shaped, deciding between one-shot and long-running and daemonized lifecycles, adding state to a process, handling signals, registering it as a shell entry, or wiring it into a Dusk impl. Covers crate layout, schema authoring, build.rs, the five-part contract (program_id / Args / Launcher / Process / Portal), state, daemonization, streams and Records, span/log conventions, and integration with dusk_node.
 ---
 
 # Authoring a Dusk Program
 
-A Dusk program is a Rust crate under `programs/<name>/` that gets statically linked into a Dusk impl. It is **not** a separate binary that gets loaded at runtime — there is no `exec`, no `dlopen`. The crate exposes a `Launcher` that the impl registers once at startup; from then on, calls to `Dusk.process(args)` dispatch to that launcher by `program_id` and produce a `Process` that runs on the impl's executor.
+A Dusk program is a Rust crate under `base/<name>/` that gets statically linked into a Dusk impl. It is **not** a separate binary that gets loaded at runtime — there is no `exec`, no `dlopen`. The crate exposes a `Launcher` that the impl registers once at startup; from then on, calls to `Dusk.process(args)` dispatch to that launcher by `program_id` and produce a `Process` that runs on the impl's executor.
 
-The four reference programs are `programs/init`, `programs/sh`, `programs/ps`, `programs/kill`. They cover the full spectrum. Use this table to find the right precedent before writing anything:
+The four reference programs are `base/init`, `base/sh`, `base/ps`, `base/kill`. They cover the full spectrum. Use this table to find the right precedent before writing anything:
 
 | Existing program | Best example for | Distinctive idiom |
 |---|---|---|
@@ -34,7 +34,7 @@ Every program has the same shape:
 4. **`Process`** — the running program. Holds a `#[process_context] pub ctx: ProcessContext`, plus any state. Derived `Process` trait gives boilerplate (`program_id`, `name`, `version`, `pid`, `namespace`, `clone_box`); author writes `impl ProcessMixin` for `with_context`, `portal`, and `main`.
 5. **`Portal`** — the RPC capability that other processes get from `process.portal()`. Holds the `Process` so portal methods can reach into program state. `#[derive(dusk_program_proc::Portal)]` implements the base `Dusk.Portal.programId` method; `#[dusk_program_proc::impl_portal_rpc_server] impl Portal { … }` is where the author adds program-specific RPC methods.
 
-Reading `programs/kill/src/lib.rs` top-to-bottom is the fastest way to internalise this shape — it's 132 lines and uses every macro exactly once.
+Reading `base/kill/src/lib.rs` top-to-bottom is the fastest way to internalise this shape — it's 132 lines and uses every macro exactly once.
 
 ---
 
@@ -80,7 +80,7 @@ These are the exact mistakes that have shipped. Don't repeat them.
 
 | Mistake | What breaks | Fix |
 |---|---|---|
-| Forgetting `#![cfg_attr(not(feature = "client"), no_std)]` on a new program crate | The program compiles `std` into the dusk impl. No surface symptom — `cargo check` still passes. | Add the cfg_attr line as part of the initial skeleton. Audit existing programs with `head -4 programs/*/src/lib.rs` when in doubt. |
+| Forgetting `#![cfg_attr(not(feature = "client"), no_std)]` on a new program crate | The program compiles `std` into the dusk impl. No surface symptom — `cargo check` still passes. | Add the cfg_attr line as part of the initial skeleton. Audit existing programs with `head -4 base/*/src/lib.rs` when in doubt. |
 | Adding a std-only dep (`chrono`, `clap`, `linkme`, …) to the unconditional `[dependencies]` block | Server crate stops being no_std-clean. | Mark it `optional = true` and add it to the `client` feature list. |
 | `use alloc::format;` or `use alloc::string::String;` at the top of `lib.rs` | Conflicts with names that `dusk_program_proc::metadata!` brings into scope — you'll see `the name 'format' is defined multiple times` / `the name 'String' is defined multiple times`. | Use full paths inline: `alloc::format!(...)`, `alloc::string::String`. Do not re-import the alloc prelude in a file that invokes `metadata!`. |
 | Adding a `use std::…` line into `lib.rs` because it autocompleted | Breaks the no_std build. | `std::` is allowed only inside `client.rs` or other `#[cfg(feature = "client")]`-gated modules. Inside `lib.rs`, `std::` is a bug. |
@@ -89,7 +89,7 @@ These are the exact mistakes that have shipped. Don't repeat them.
 A sanity grep before declaring done:
 
 ```
-grep -rn "std::\|use std" programs/<your-program>/src/ --include="*.rs"
+grep -rn "std::\|use std" base/<your-program>/src/ --include="*.rs"
 ```
 
 The only hits should be in `client.rs` or other `#[cfg(feature = "client")]`-gated files.
@@ -99,7 +99,7 @@ The only hits should be in `client.rs` or other `#[cfg(feature = "client")]`-gat
 ## Crate layout
 
 ```
-programs/<name>/
+base/<name>/
 ├── Cargo.toml
 ├── build.rs
 ├── capnp/
@@ -115,7 +115,7 @@ Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currentl
 
 ## Step 1 — Author the schema
 
-File: `programs/<name>/capnp/<name>.capnp`
+File: `base/<name>/capnp/<name>.capnp`
 
 ```capnp
 @0x<unique-16-hex-digits>;            # schema file id
@@ -173,14 +173,14 @@ Most programs only extend `Dusk.Portal` and optionally `Sh.OutputPortal`.
 
 - `interface Foo { … }` → module `foo` with `foo::Client`, `foo::Server` trait, and per-method `FooParams`/`FooResults` types.
 - `struct Bar { … }` → module `bar` with `bar::Reader<'_>`, `bar::Builder<'_>`, `bar::Owned`.
-- `extends(A, B)` → the Rust server type implements **both** `a::Server` and `b::Server`. See `programs/ps/src/lib.rs:148-210` and `programs/kill/src/lib.rs:117-131` for portals that extend `Sh.OutputPortal` alongside `Dusk.Portal`.
+- `extends(A, B)` → the Rust server type implements **both** `a::Server` and `b::Server`. See `base/ps/src/lib.rs:148-210` and `base/kill/src/lib.rs:117-131` for portals that extend `Sh.OutputPortal` alongside `Dusk.Portal`.
 - A `union { … }` (or implicit unnamed union) → `.which()?` returns a Rust enum.
 
 ---
 
 ## Step 2 — `Cargo.toml`
 
-Mirror `programs/kill/Cargo.toml` for a typical program with a client feature:
+Mirror `base/kill/Cargo.toml` for a typical program with a client feature:
 
 ```toml
 [package]
@@ -242,7 +242,7 @@ fn main() {
 }
 ```
 
-The `schema_ids` array is the **file IDs** (`@0x…;` at line 1 of each `.capnp`), not the `programId` constants. See `programs/ps/build.rs:1-10` and `programs/kill/build.rs:1-10` for live examples.
+The `schema_ids` array is the **file IDs** (`@0x…;` at line 1 of each `.capnp`), not the `programId` constants. See `base/ps/build.rs:1-10` and `base/kill/build.rs:1-10` for live examples.
 
 The generated module lands at `$OUT_DIR/capnp/<name>_capnp.rs`. **You do not include it manually** — `metadata!` does it for you (see Step 4).
 
@@ -385,7 +385,7 @@ The body of `main` is where your program actually does its work. The shape depen
 
 ### Pattern A — Read args, do a one-shot RPC, then sit on the signal channel
 
-This is the `kill` pattern (`programs/kill/src/lib.rs:80-106`):
+This is the `kill` pattern (`base/kill/src/lib.rs:80-106`):
 
 ```rust
 async fn main(
@@ -418,7 +418,7 @@ Why sit on the signal channel after the RPC is done? Because the *caller* keeps 
 
 ### Pattern B — Walk the namespace, materialise state, expose via portal
 
-This is the `ps` pattern (`programs/ps/src/lib.rs:97-138`):
+This is the `ps` pattern (`base/ps/src/lib.rs:97-138`):
 
 ```rust
 async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
@@ -444,11 +444,11 @@ async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
 }
 ```
 
-The state goes into `Rc<RefCell<PsResult>>` held on the `Process` struct; the portal reads it in `output()` to build the streamed table. See `programs/ps/src/lib.rs:64-95`.
+The state goes into `Rc<RefCell<PsResult>>` held on the `Process` struct; the portal reads it in `output()` to build the streamed table. See `base/ps/src/lib.rs:64-95`.
 
 ### Pattern C — Accept incoming connections in a `select!` loop
 
-This is the `init` pattern (`programs/init/src/lib.rs:77-119`):
+This is the `init` pattern (`base/init/src/lib.rs:77-119`):
 
 ```rust
 async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
@@ -488,23 +488,23 @@ Use `select!` whenever `main` has to *concurrently* watch the signal channel and
 
 ### Pattern D — Multi-mode args + daemonized fire-and-forget
 
-This is the `sh` pattern (`programs/sh/src/lib.rs:276-340`). See **Daemonization** below for the full breakdown.
+This is the `sh` pattern (`base/sh/src/lib.rs:276-340`). See **Daemonization** below for the full breakdown.
 
 ### Reading from `program_args`
 
 There are three accessors on `ProgramArgs`, all in `dusk_program::program_args`:
 
 - **`with_data::<T, _, _>(|reader| …)`** — synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure.
-- **`data_owned::<T>() -> capnp::Result<capnp::message::TypedBuilder<T>>`** — copies the data into an owned typed builder. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this (`programs/sh/src/lib.rs:420-423`) because the script needs to outlive the closure.
+- **`data_owned::<T>() -> capnp::Result<capnp::message::TypedBuilder<T>>`** — copies the data into an owned typed builder. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this (`base/sh/src/lib.rs:420-423`) because the script needs to outlive the closure.
 - **`reader_owned() -> capnp::Result<Rc<ProgramArgs>>`** — clone the whole args message. Rare; reach for it when you need the untyped reader to outlive the closure.
 
-To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. The `sh` process does this at `programs/sh/src/lib.rs:281-284` to retrieve `sh_args::server::Client`.
+To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. The `sh` process does this at `base/sh/src/lib.rs:281-284` to retrieve `sh_args::server::Client`.
 
 ### When to call `ready.sender().send(true)`
 
 The instant your portal can answer calls. For most programs this is **after** all initial setup but **before** the signal loop. `Dusk.process(args)` resolves as soon as the process is registered, and callers will start asking for `process.portal()` — `portal()` blocks server-side until `ready` fires. Sending `ready` too early means callers receive a portal that calls into half-initialised state.
 
-`init` is the cleanest example: bind the listener, then `ready`, then enter the `select!` loop (`programs/init/src/lib.rs:90-91`).
+`init` is the cleanest example: bind the listener, then `ready`, then enter the `select!` loop (`base/init/src/lib.rs:90-91`).
 
 ---
 
@@ -534,9 +534,9 @@ fn <method_name>(
 
 ### The `done` contract on `output()` — read this first
 
-The shell's interpreter (`programs/sh/src/interpreter/execution.rs:52-138`) wraps the caller's stream in an `UndoneStream` before passing it to your `output()`. When your code calls `stream.done_request().send().promise.await?`, the `UndoneStream` fires a private oneshot — and **only then** does the shell run the kill+waitpid path that cleans your process up.
+The shell's interpreter (`base/sh/src/interpreter/execution.rs:52-138`) wraps the caller's stream in an `UndoneStream` before passing it to your `output()`. When your code calls `stream.done_request().send().promise.await?`, the `UndoneStream` fires a private oneshot — and **only then** does the shell run the kill+waitpid path that cleans your process up.
 
-If your `output()` returns *without* having called `done` on the stream, the shell treats your process as **intentionally daemonized**. It does not kill you; you stay parked on your signal channel until the namespace tears down. This is how `sh` itself implements detached scripts (`programs/sh/src/lib.rs:446-452`).
+If your `output()` returns *without* having called `done` on the stream, the shell treats your process as **intentionally daemonized**. It does not kill you; you stay parked on your signal channel until the namespace tears down. This is how `sh` itself implements detached scripts (`base/sh/src/lib.rs:446-452`).
 
 The rule:
 
@@ -569,7 +569,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
 }
 ```
 
-`kill`'s portal uses the same shape (`programs/kill/src/client.rs`-adjacent; `programs/kill/src/lib.rs:117-131`) — it has already done its work in `main` and just needs to release the shell.
+`kill`'s portal uses the same shape (`base/kill/src/client.rs`-adjacent; `base/kill/src/lib.rs:117-131`) — it has already done its work in `main` and just needs to release the shell.
 
 #### Minimal no-output failure — the `false` idiom
 
@@ -582,7 +582,7 @@ Promise::from_future(async move {
 })
 ```
 
-The `done` call **must** come before the `Err`. Skipping it means the shell treats your process as an intentional daemon and never kills it — every invocation accumulates a parked process. With `done` called first, the shell (`programs/sh/src/interpreter/execution.rs`) runs its kill+waitpid path *then* propagates your error, so the cleanup happens cleanly and the failure still surfaces to the caller.
+The `done` call **must** come before the `Err`. Skipping it means the shell treats your process as an intentional daemon and never kills it — every invocation accumulates a parked process. With `done` called first, the shell (`base/sh/src/interpreter/execution.rs`) runs its kill+waitpid path *then* propagates your error, so the cleanup happens cleanly and the failure still surfaces to the caller.
 
 ### Pumping a typed `Record` into a `Stream` — the `ps` idiom
 
@@ -649,7 +649,7 @@ Promise::from_future(async move {
 })
 ```
 
-See `programs/sh/src/lib.rs:350-389`. The `pending` future after signalling `stop` is intentional: we only want to surface the *completion* result, not "you cancelled" as the return.
+See `base/sh/src/lib.rs:350-389`. The `pending` future after signalling `stop` is intentional: we only want to surface the *completion* result, not "you cancelled" as the return.
 
 ---
 
@@ -701,7 +701,7 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 }
 ```
 
-See `programs/sh/src/lib.rs:132-156` for the live example.
+See `base/sh/src/lib.rs:132-156` for the live example.
 
 ---
 
@@ -709,7 +709,7 @@ See `programs/sh/src/lib.rs:132-156` for the live example.
 
 A "daemonized" Dusk program is one whose `Process::main` spawns a background Embassy task that outlives any single RPC call. The process itself stays parked on the signal channel; the work happens in the spawned task.
 
-The pattern, distilled from `programs/sh/src/lib.rs:194-228, 307-340`:
+The pattern, distilled from `base/sh/src/lib.rs:194-228, 307-340`:
 
 ### 1. A `Stop` type for cancellation
 
@@ -922,7 +922,7 @@ async move {
 }.instrument(span).await;
 ```
 
-`task_id` is always the **first** span field. Domain-specific fields follow — common ones: `pid`, `namespace_id`, `program_id`, `program_name`. See `programs/sh/src/lib.rs:177` for the canonical example.
+`task_id` is always the **first** span field. Domain-specific fields follow — common ones: `pid`, `namespace_id`, `program_id`, `program_name`. See `base/sh/src/lib.rs:177` for the canonical example.
 
 ### Log levels
 
@@ -991,8 +991,9 @@ Multi-line help text shown by `help <name>` in the shell.
 
 ### CLI conventions
 
-- `#[command(name = "<name>", no_binary_name = true)]` — the `no_binary_name` is required because args arrive without argv[0].
-- Use `value_parser = parse_hex_or_decimal` for `u64` PIDs and IDs that users type in both forms. See `programs/kill/src/client.rs:11-17` for the helper.
+- The **shell entry name is independent of the program name.** `EntryInfo.name` (and the matching `#[command(name = …)]`) is the token the user types at the prompt; it does not have to equal the `metadata!("<name>", …)` program name or the crate name. A program named `log` can register its entry as `logs`, for example. Keep them aligned unless you have a reason not to.
+- `#[command(name = "<entry-name>", no_binary_name = true)]` — the `no_binary_name` is required because args arrive without argv[0].
+- Use `value_parser = parse_hex_or_decimal` for `u64` PIDs and IDs that users type in both forms. See `base/kill/src/client.rs:11-17` for the helper.
 - Defaults belong in clap (`#[arg(long, default_value_t = 15)]`), not in the program logic, when they're user-facing.
 - Long descriptions are raw strings (`r#"…"#`) so they can contain backticks and quotes for in-prompt help formatting.
 
@@ -1002,64 +1003,69 @@ The `#[dusk_program_sh_proc::sh_entry]` attribute (1) registers `sh_entry()` int
 
 ## Step 8 — Register with the impl and the clients
 
-Registration has **two sides** and both must be done. The server side teaches the impl how to launch the program; the client side teaches `dusk` (the shell) that the name `<name>` is a known command.
+The base programs are aggregated by the `dusk_base` crate (`dusk/src/dusk_base`). That crate re-exports every base program, holds the canonical `launcher_set()`, and holds `link_anchors()` (the linker-keep-alive for shell entries). The deliverables (`artifacts/dusk_node`, `artifacts/dusk_cli`, `artifacts/dusk_py`) depend on `dusk_base` rather than on individual program crates. Adding a program means editing `dusk_base` — **and**, because of the duplication described below, the live server's launcher vec too.
 
-### Server side — `artifacts/dusk_node`
+### `dusk/src/dusk_base/Cargo.toml`
 
-Add the crate to `artifacts/dusk_node/Cargo.toml` as a path dependency (no features needed — the runtime side is feature-less):
-
-```toml
-dusk_program_<name> = { path = "../../programs/<name>" }
-```
-
-Add the launcher to `artifacts/dusk_node/src/lib.rs`:
-
-```rust
-dusk_nix::BasicLauncherSetBuilder::new(dusk_nix::LauncherSet::from_launchers(vec![
-    Box::new(dusk_program_init::Launcher::new()),
-    Box::new(dusk_program_sh::Launcher::new()),
-    Box::new(dusk_program_ps::Launcher::new()),
-    Box::new(dusk_program_kill::Launcher::new()),
-    Box::new(dusk_program_<name>::Launcher::new()),  // <-- add this line
-])),
-```
-
-### Client side — `artifacts/dusk_cli`
-
-Even after the server registers your launcher, typing `<name>` at the dusk shell prompt will fail with `no sh entry found for '<name>'` until the CLI binary statically links your `sh_entry`.
-
-Add the crate as a dependency **with the `client` feature** in `artifacts/dusk_cli/Cargo.toml`:
+Add a path dependency (note the `../../../base/<name>` depth — `dusk_base` lives two levels under `dusk/src/`):
 
 ```toml
-dusk_program_<name> = { path = "../../programs/<name>", features = ["client"] }
+dusk_program_<name> = { path = "../../../base/<name>", public = true }
 ```
 
-Add a `black_box` reference in `artifacts/dusk_cli/src/main.rs`:
+If the program is shell-invocable, also add its client feature to `dusk_base`'s `client` feature list:
+
+```toml
+[features]
+client = [
+    # …existing…
+    "dusk_program_<name>/client",
+]
+```
+
+### `dusk/src/dusk_base/src/lib.rs`
+
+Three edits:
 
 ```rust
-fn main() -> Result<()> {
-    // Unfortunately we need to trick the linker into including all
-    // crates that register sh entries.
-    black_box(dusk_program_ps::client::sh_entry);
-    black_box(dusk_program_kill::client::sh_entry);
-    black_box(dusk_program_<name>::client::sh_entry);   // <-- add this line
-    dusk_cli::main()
+pub use dusk_program_<name>;                                  // re-export
+
+pub fn launcher_set() -> LauncherSet {
+    LauncherSet::from_launchers(vec![
+        // …existing…
+        Box::new(dusk_program_<name>::Launcher::new()),       // launcher
+    ])
+}
+
+#[cfg(feature = "client")]
+pub fn link_anchors() {
+    use std::hint::black_box;
+    // …existing…
+    black_box(dusk_program_<name>::client::sh_entry);         // linker keep-alive
 }
 ```
 
-`linkme::distributed_slice` works by emitting a static symbol into a custom linker section. If nothing in the dependency graph references that symbol, modern linkers drop it as dead code — and your `sh_entry()` silently vanishes. The `black_box(…::sh_entry)` line gives the linker an excuse to keep it. **Skip this and the program will compile and be launchable by program_id, but will not appear in the shell.**
+`link_anchors()` is the linkme keep-alive: `linkme::distributed_slice` emits a static symbol into a custom linker section, and if nothing references it modern linkers drop it as dead code — your `sh_entry()` silently vanishes. `artifacts/dusk_cli/src/main.rs` and `artifacts/dusk_py` call `dusk_base::link_anchors()`, so adding your `black_box(…)` line there is what makes the program appear in the shell. **Skip it and the program compiles and is launchable by program_id, but the shell prints `no sh entry found for '<name>'`.**
+
+### The server launches whatever `launcher_set()` returns
+
+`artifacts/dusk_node/src/lib.rs` builds its launcher set by calling `dusk_base::launcher_set()`:
+
+```rust
+dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set())
+```
+
+So adding your `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` is all the server needs — there is no second vec to keep in sync.
+
+The one exception is integration tests: `tests/common/src/lib.rs` builds its **own** deliberately-minimal vec (`init` / `sh` / `ps`) rather than calling `launcher_set()`, so the test harness boots a controlled subset. If your program needs to be reachable from integration tests, add its launcher to that vec explicitly.
 
 ### Other deliverables (optional)
 
-`artifacts/dusk_py` mirrors the same pattern (path dep with `client` feature + `black_box`). It currently registers a minimal set of programs (`ps` only). Mirror your program there only if Python callers should see it.
-
-### Integration tests
-
-If you want the program available in integration tests, mirror the launcher registration in `tests/common/src/lib.rs:97-103`.
+`artifacts/dusk_py` also calls `dusk_base::link_anchors()` for the client side; for the launcher side it has its own wiring. Mirror your program there only if Python callers should see it.
 
 ### Why explicit?
 
-There is **no** macro or helper for any of these steps — every program is registered explicitly per deliverable. That's intentional: a program ships only when a specific deliverable opts in to it.
+There is **no** macro that auto-registers a program into a deliverable. A program ships only when `dusk_base` re-exports it and a deliverable opts its launcher in.
 
 See [[adding-a-driver-method]] for the analogous wiring on the driver side when your program needs new OS-level primitives.
 
@@ -1098,15 +1104,16 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | Spawning a task without an `info_span!` and `.instrument()` | Required for observability. Use the `task_id` then domain-fields pattern. |
 | Adding `basic_launcher!` because CLAUDE.md mentions it | It doesn't exist. Write `impl LauncherMixin` by hand. |
 | Missing `done` on the output stream | "Not calling `done`" is the wire-level signal for "I have daemonized." The shell will not kill the process. If you want the shell to clean you up, call `done` — **including before returning `Err`**. The only intentional omission is genuine daemonization. |
-| Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `artifacts/dusk_node/src/lib.rs` (server) and `artifacts/dusk_cli/{Cargo.toml,src/main.rs}` (client). The impl knows nothing about specific programs. |
-| Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` in `artifacts/dusk_cli/src/main.rs` and `features = ["client"]` to the dep in its `Cargo.toml`. |
-| Forgetting to add `"programs/<name>"` to the workspace `Cargo.toml` `members` list | The crate won't be picked up by workspace-wide `cargo check`. Add the line. |
+| Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::launcher_set()`, so the impl knows nothing about specific programs. |
+| Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` to `dusk_base::link_anchors()` and `"dusk_program_<name>/client"` to `dusk_base`'s `client` feature. |
+| Expecting a program added to `launcher_set()` to show up in integration tests | `tests/common/src/lib.rs` builds its own minimal vec (`init`/`sh`/`ps`), not `launcher_set()`. Add the launcher there too if a test needs it. |
+| Forgetting to add `"base/<name>"` to the workspace `Cargo.toml` `members` list | The crate won't be picked up by workspace-wide `cargo check`. Add the line. |
 
 ---
 
 ## Checklist
 
-- [ ] `programs/<name>/` directory with `Cargo.toml`, `build.rs`, `capnp/<name>.capnp`, `src/lib.rs`
+- [ ] `base/<name>/` directory with `Cargo.toml`, `build.rs`, `capnp/<name>.capnp`, `src/lib.rs`
 - [ ] `Cargo.toml` lists `dusk_program`, `dusk_capnp`, `dusk_program_proc`, `dusk_core` as path deps with `public = true` where appropriate
 - [ ] `capnp/<name>.capnp` declares a fresh file-level `@0x…;` ID and a `const programId :UInt64 = 0x…;` (both generated with `capnp id`, never hand-typed)
 - [ ] `build.rs` calls `dusk_capnp::build_capnp_file(...)` or `dusk_capnp::build_capnp(..., deps)`
@@ -1123,10 +1130,10 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] Errors that would otherwise be silent are logged via `tracing::warn!` / `tracing::error!`
 - [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES` and writes the sidecar JSON)
 - [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "dusk_program_sh_proc", "clap"]` feature if shell-invocable, with `dusk_program_sh_proc = { path = "../sh/proc", optional = true }` in `[dependencies]`. `linkme` stays as a dep — the attribute expands to `::linkme::distributed_slice(...)`, so it's load-bearing even though no source mentions it.
-- [ ] `artifacts/dusk_node/Cargo.toml` lists the new crate as a path dep (no features)
-- [ ] `artifacts/dusk_node/src/lib.rs` registers `Box::new(dusk_program_<name>::Launcher::new())` in the launcher vec
-- [ ] If the program is shell-invocable: `artifacts/dusk_cli/Cargo.toml` lists the new crate as a path dep with `features = ["client"]`, and `artifacts/dusk_cli/src/main.rs` adds `black_box(dusk_program_<name>::client::sh_entry);` (without the `black_box` reference, linkme will silently drop the entry)
-- [ ] If tested in integration: `tests/common/src/lib.rs` registers the launcher
-- [ ] Workspace `Cargo.toml` lists `"programs/<name>"` under `[workspace] members`
+- [ ] `dusk/src/dusk_base/Cargo.toml` lists the new crate as a path dep (`path = "../../../base/<name>"`, `public = true`)
+- [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` (this is all the server needs — `artifacts/dusk_node` calls `launcher_set()`)
+- [ ] If the program is shell-invocable: `dusk_base`'s `client` feature lists `"dusk_program_<name>/client"`, and `dusk_base::link_anchors()` adds `black_box(dusk_program_<name>::client::sh_entry);` (without the `black_box` reference, linkme silently drops the entry)
+- [ ] If tested in integration: `tests/common/src/lib.rs` registers the launcher in its own minimal vec
+- [ ] Workspace `Cargo.toml` lists `"base/<name>"` under `[workspace] members`
 - [ ] `cargo check -p dusk_program_<name>` passes
-- [ ] `cargo check -p dusk_node` passes
+- [ ] `cargo check -p dusk_base` (and `-p dusk_node` if you touched its vec) passes
