@@ -24,16 +24,22 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn new() -> Self {
+    pub fn new(pid: Option<u64>) -> Self {
         let mut data = ArgsDataBuilder::new_default();
-        data.init_root();
+        {
+            let mut root = data.init_root();
+            match pid {
+                Some(pid) => root.set_pid(pid),
+                None => root.set_all(()),
+            }
+        }
         Args { data }
     }
 }
 
 impl Default for Args {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
@@ -98,12 +104,27 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
+        let pid_filter = self
+            .ctx
+            .program_args
+            .with_data::<ps_capnp::ps_args::data::Owned, _, _>(|data| {
+                Ok(match data.which()? {
+                    ps_capnp::ps_args::data::Which::All(()) => None,
+                    ps_capnp::ps_args::data::Which::Pid(pid) => Some(pid),
+                })
+            })?;
+
         let client = dusk_core::local_client(self.namespace().clone()).await;
 
         let ps_reply = client.ps_request().send().promise.await?;
         let process_entries = ps_reply.get()?.get_process_entries()?;
 
         for entry in process_entries.iter() {
+            if let Some(pid_filter) = pid_filter
+                && entry.get_pid() != pid_filter
+            {
+                continue;
+            }
             self.result.borrow_mut().pids.push(entry.get_pid());
 
             let process = entry.get_process()?;

@@ -11,6 +11,7 @@
 /tests/cli/history.sqlite3-shm
 /tests/cli/history.sqlite3-wal
 /vendor/capnproto
+/vendor/llama.cpp
 /build
 /docs/site
 /**/__pycache__

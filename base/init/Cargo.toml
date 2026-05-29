@@ -10,6 +10,7 @@ dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 async-net = "2.0.0"
 futures = { version = "0.3.31", features = ["async-await"] }
+tracing = { version = "0.1.41", default-features = false }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "0.21", public = false }
 

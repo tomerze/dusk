@@ -15,7 +15,7 @@ async fn test_process_lifecycle() {
             let connection = Connection::connect(address).await.unwrap();
             let client = connection.client().await;
 
-            let ps_program_args = PsArgs::new().as_program_args().unwrap();
+            let ps_program_args = PsArgs::new(None).as_program_args().unwrap();
 
             // Dusk.process — create the process
             let mut process_request = client.process_request();

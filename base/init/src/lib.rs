@@ -89,6 +89,18 @@ impl dusk_program::process::ProcessMixin for Process {
         let listener = async_net::TcpListener::bind(format!("{}:{}", address, port)).await?;
         ready.sender().send(true);
 
+        let dusk_client = dusk_core::local_client(self.namespace().clone()).await;
+        let programs_response = dusk_client.programs_request().send().promise.await?;
+        let program_entries = programs_response.get()?.get_program_entries()?;
+        for entry in program_entries.iter() {
+            tracing::info!(
+                program_id = entry.get_program_id(),
+                version = entry.get_version()?.to_str()?,
+                git_revision = entry.get_git_revision()?.to_str()?,
+                "available program",
+            );
+        }
+
         loop {
             futures::select! {
                 accept_result = listener.accept().fuse() => {

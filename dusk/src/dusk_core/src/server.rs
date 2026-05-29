@@ -179,6 +179,34 @@ impl dusk::Server for DuskServer {
         })
     }
 
+    fn programs(
+        &mut self,
+        _params: dusk::ProgramsParams,
+        mut results: dusk::ProgramsResults,
+    ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.programs", "rpc call");
+        let namespace = self.namespace.clone();
+        Promise::from_future(async move {
+            let launcher_set = driver::launchers(namespace.clone())
+                .context("couldn't get launcher set from driver")
+                .into_capnp()?;
+            let launchers = launcher_set.launchers.lock().await;
+            let mut program_entries = results.get().init_program_entries(launchers.len() as u32);
+            for (i, launcher) in launchers.iter().enumerate() {
+                let mut entry = program_entries.reborrow().get(
+                    i.try_into()
+                        .map_err(|e: TryFromIntError| capnp::Error::failed(e.to_string()))?,
+                );
+                let version = launcher.version();
+                let git_revision = launcher.git_rev();
+                entry.set_program_id(launcher.program_id());
+                entry.set_version(&version[..]);
+                entry.set_git_revision(&git_revision[..]);
+            }
+            Ok(())
+        })
+    }
+
     fn kill(
         &mut self,
         params: dusk::KillParams,

@@ -12,7 +12,7 @@ type LauncherVec = Vec<Box<dyn Launcher + Send>>;
 
 #[derive(Clone)]
 pub struct LauncherSet {
-    launchers: Arc<Mutex<CriticalSectionRawMutex, LauncherVec>>,
+    pub launchers: Arc<Mutex<CriticalSectionRawMutex, LauncherVec>>,
 }
 
 impl Default for LauncherSet {
