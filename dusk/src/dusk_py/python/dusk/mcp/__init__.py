@@ -1,13 +1,14 @@
 """MCP server exposing a dusk server's shell commands as tools.
 
-Started via ``Dusk.mcp(ip, port)`` from the native extension. This is a
-*gateway* server: it holds no dusk connection of its own. A connected MCP
-client opens connections with the ``connect`` tool, receives a human-readable
-descriptor, and reuses that descriptor on the per-program tools and on
-``disconnect``.
+Run it with ``dusk.mcp.serve(ip, port)`` (or build the ASGI app with
+:func:`app` and serve it yourself). This is a *gateway* server: it holds no
+dusk connection of its own. A connected MCP client opens connections with the
+``connect`` tool, receives a human-readable descriptor, and reuses that
+descriptor on the per-program tools and on ``disconnect``.
 
-Requires the optional ``mcp`` extra (``pip install dusk[mcp]``); the SDK is
-imported lazily inside :func:`serve` so plain ``import dusk`` never needs it.
+The ``mcp`` SDK and ``uvicorn`` are regular dependencies of the wheel, imported
+at this module's top. The package is only imported on demand, so plain
+``import dusk`` does not load them.
 """
 
 from __future__ import annotations
