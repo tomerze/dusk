@@ -40,7 +40,7 @@
 #include "ggml.h"
 #include "llama.h"
 
-#define EXIT_USAGE   2
+#define EXIT_USAGE 2
 #define EXIT_FAILURE_DUSK 1
 
 static int parse_u32(const char *text, uint32_t *out) {
@@ -58,7 +58,8 @@ static int parse_i32(const char *text, int32_t *out) {
     char *end = NULL;
     errno = 0;
     long value = strtol(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || value < INT32_MIN || value > INT32_MAX) {
+    if (errno != 0 || end == text || *end != '\0' || value < INT32_MIN ||
+        value > INT32_MAX) {
         return -1;
     }
     *out = (int32_t)value;
@@ -66,7 +67,7 @@ static int parse_i32(const char *text, int32_t *out) {
 }
 
 static void usage(void) {
-    fputs(
+    (void)fputs(
         "usage: dusk_warmup MODEL_PATH N_CTX KV_TYPE N_THREADS OUTPUT_PATH PROMPT\n",
         stderr);
 }
@@ -86,19 +87,20 @@ int main(int argc, char **argv) {
     int32_t n_threads = 0;
 
     if (parse_u32(argv[2], &n_ctx) != 0) {
-        fprintf(stderr, "dusk_warmup: N_CTX %s is not a u32\n", argv[2]);
+        (void)fprintf(stderr, "dusk_warmup: N_CTX %s is not a u32\n", argv[2]);
         return EXIT_USAGE;
     }
     if (n_ctx == 0) {
-        fputs("dusk_warmup: N_CTX must be > 0\n", stderr);
+        (void)fputs("dusk_warmup: N_CTX must be > 0\n", stderr);
         return EXIT_USAGE;
     }
     if (parse_i32(argv[3], &kv_type_int) != 0) {
-        fprintf(stderr, "dusk_warmup: KV_TYPE %s is not an i32\n", argv[3]);
+        (void)fprintf(stderr, "dusk_warmup: KV_TYPE %s is not an i32\n", argv[3]);
         return EXIT_USAGE;
     }
     if (parse_i32(argv[4], &n_threads) != 0 || n_threads <= 0) {
-        fprintf(stderr, "dusk_warmup: N_THREADS %s is not a positive i32\n", argv[4]);
+        (void)fprintf(stderr, "dusk_warmup: N_THREADS %s is not a positive i32\n",
+                      argv[4]);
         return EXIT_USAGE;
     }
 
@@ -114,8 +116,9 @@ int main(int argc, char **argv) {
     struct llama_model_params model_params = llama_model_default_params();
     model = llama_model_load_from_file(model_path, model_params);
     if (model == NULL) {
-        fprintf(stderr, "dusk_warmup: llama_model_load_from_file(\"%s\") returned NULL\n",
-                model_path);
+        (void)fprintf(stderr,
+                      "dusk_warmup: llama_model_load_from_file(\"%s\") returned NULL\n",
+                      model_path);
         goto cleanup;
     }
 
@@ -132,7 +135,7 @@ int main(int argc, char **argv) {
 
     context = llama_init_from_model(model, context_params);
     if (context == NULL) {
-        fputs("dusk_warmup: llama_init_from_model returned NULL\n", stderr);
+        (void)fputs("dusk_warmup: llama_init_from_model returned NULL\n", stderr);
         goto cleanup;
     }
 
@@ -145,37 +148,37 @@ int main(int argc, char **argv) {
                                    /*tokens=*/NULL, /*n_tokens_max=*/0,
                                    /*add_special=*/true, /*parse_special=*/true);
     if (probe == INT32_MIN) {
-        fputs("dusk_warmup: llama_tokenize probe overflowed i32\n", stderr);
+        (void)fputs("dusk_warmup: llama_tokenize probe overflowed i32\n", stderr);
         goto cleanup;
     }
     if (probe >= 0) {
-        fprintf(stderr,
-                "dusk_warmup: probe call returned %" PRId32
-                " (expected a negative slot-count); empty prompt?\n",
-                probe);
+        (void)fprintf(stderr,
+                      "dusk_warmup: probe call returned %" PRId32
+                      " (expected a negative slot-count); empty prompt?\n",
+                      probe);
         goto cleanup;
     }
     const int32_t n_tokens = -probe;
     if ((uint32_t)n_tokens > n_ctx) {
-        fprintf(stderr,
-                "dusk_warmup: prompt tokenises to %" PRId32
-                " tokens but N_CTX is %" PRIu32 "\n",
-                n_tokens, n_ctx);
+        (void)fprintf(stderr,
+                      "dusk_warmup: prompt tokenises to %" PRId32
+                      " tokens but N_CTX is %" PRIu32 "\n",
+                      n_tokens, n_ctx);
         goto cleanup;
     }
 
     tokens = (llama_token *)malloc((size_t)n_tokens * sizeof(llama_token));
     if (tokens == NULL) {
-        fputs("dusk_warmup: malloc for token buffer failed\n", stderr);
+        (void)fputs("dusk_warmup: malloc for token buffer failed\n", stderr);
         goto cleanup;
     }
     int32_t written = llama_tokenize(vocab, prompt, prompt_length, tokens, n_tokens,
                                      /*add_special=*/true, /*parse_special=*/true);
     if (written != n_tokens) {
-        fprintf(stderr,
-                "dusk_warmup: second llama_tokenize wrote %" PRId32
-                " tokens, expected %" PRId32 "\n",
-                written, n_tokens);
+        (void)fprintf(stderr,
+                      "dusk_warmup: second llama_tokenize wrote %" PRId32
+                      " tokens, expected %" PRId32 "\n",
+                      written, n_tokens);
         goto cleanup;
     }
 
@@ -196,14 +199,15 @@ int main(int argc, char **argv) {
 
     int32_t decode_status = llama_decode(context, batch);
     if (decode_status != 0) {
-        fprintf(stderr, "dusk_warmup: llama_decode returned %" PRId32 "\n", decode_status);
+        (void)fprintf(stderr, "dusk_warmup: llama_decode returned %" PRId32 "\n",
+                      decode_status);
         goto cleanup;
     }
 
     if (!llama_state_save_file(context, output_path, tokens, (size_t)n_tokens)) {
-        fprintf(stderr,
-                "dusk_warmup: llama_state_save_file(\"%s\") returned false\n",
-                output_path);
+        (void)fprintf(stderr,
+                      "dusk_warmup: llama_state_save_file(\"%s\") returned false\n",
+                      output_path);
         goto cleanup;
     }
 

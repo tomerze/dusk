@@ -4,8 +4,27 @@ repos:
       hooks:
       -   id: fmt
       -   id: clippy
+  -   repo: https://github.com/pre-commit/mirrors-clang-format
+      rev: v19.1.7
+      hooks:
+      -   id: clang-format
+          files: ^(dusk/src/dusk_llm/warmup/|artifacts/dusk_node/include/).*\.(c|h)$
   -   repo: local
       hooks:
+      -   id: clang-tidy
+          name: clang-tidy
+          entry: clang-tidy
+          language: python
+          additional_dependencies: ["clang-tidy==19.1.0"]
+          pass_filenames: false
+          files: ^dusk/src/dusk_llm/warmup/.*\.c$
+          args:
+          -   --quiet
+          -   dusk/src/dusk_llm/warmup/main.c
+          -   --
+          -   -std=c11
+          -   -Ivendor/llama.cpp/include
+          -   -Ivendor/llama.cpp/ggml/include
       -   id: ruff-check
           name: ruff (lint)
           entry: uvx ruff check --force-exclude

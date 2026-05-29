@@ -267,6 +267,7 @@ name = "dusk"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
     { name = "maturin" },
     { name = "mcp" },
     { name = "pre-commit" },
@@ -275,6 +276,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "click", specifier = ">=8.1.0" },
     { name = "maturin", specifier = ">=1.10.2" },
     { name = "mcp", specifier = ">=1.9.0" },
     { name = "pre-commit", specifier = ">=4.3.0" },

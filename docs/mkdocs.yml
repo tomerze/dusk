@@ -65,3 +65,4 @@ nav:
   - Concepts:
       - Programs: concepts/programs.md
       - Shell: concepts/shell.md
+      - MCP: concepts/mcp.md
