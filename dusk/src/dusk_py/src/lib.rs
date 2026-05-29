@@ -58,7 +58,7 @@ pub(crate) enum Message {
 // * The connection to the Dusk server is established in this thread
 // * A mpsc channel is used to send messages to this thread for executing actions
 // * The thread listens for messages and processes them accordingly
-#[pyclass(unsendable)]
+#[pyclass]
 struct Dusk {
     thread_handle: Arc<Mutex<Option<JoinHandle<Result<()>>>>>,
     message_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Message>>>>,

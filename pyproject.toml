@@ -6,6 +6,8 @@ readme = "README.md"
 dependencies = [
     "maturin>=1.10.2",
     "pre-commit>=4.3.0",
+    "mcp>=1.9.0",
+    "uvicorn>=0.30.0",
 ]
 
 [build-system]
@@ -15,11 +17,26 @@ build-backend = "maturin"
 [tool.maturin]
 manifest-path = "artifacts/dusk_py/Cargo.toml"
 module-name = "dusk"
-python-source = "."
-include = ["dusk/__init__.py"]
-exclude = ["dusk/src/**"]
+python-source = "dusk/src/dusk_py/python"
+include = ["dusk/src/dusk_py/python/dusk/dusk.pyi"]
 
 [tool.uv.workspace]
 members = [
     "docs",
 ]
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.pyright]
+include = [
+    "dusk/src/dusk_py/python/dusk/mcp",
+    "dusk/src/dusk_py/python/dusk/__init__.py",
+]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"

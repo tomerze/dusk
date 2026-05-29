@@ -133,14 +133,27 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
 }
 
 fn main() {
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .expect("failed to execute git");
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(args)
+            .output()
+            .expect("failed to execute git")
+    };
 
-    let git_hash = String::from_utf8(output.stdout).unwrap();
-
+    let git_hash = String::from_utf8(git(&["rev-parse", "HEAD"]).stdout).unwrap();
     println!("cargo:rustc-env=GIT_REV={}", &git_hash.trim()[..16]);
+
+    let git_dir = String::from_utf8(git(&["rev-parse", "--absolute-git-dir"]).stdout).unwrap();
+    let git_dir = git_dir.trim();
+    println!("cargo:rerun-if-changed={git_dir}/HEAD");
+    let head_ref = git(&["symbolic-ref", "--quiet", "HEAD"]);
+    if head_ref.status.success() {
+        let head_ref = String::from_utf8(head_ref.stdout).unwrap();
+        let ref_path = format!("{}/{}", git_dir, head_ref.trim());
+        if Path::new(&ref_path).exists() {
+            println!("cargo:rerun-if-changed={ref_path}");
+        }
+    }
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let capnp_root = Path::new(&out_dir).join("capnproto");

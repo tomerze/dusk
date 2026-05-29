@@ -4,5 +4,26 @@ repos:
       hooks:
       -   id: fmt
       -   id: clippy
+  -   repo: local
+      hooks:
+      -   id: ruff-check
+          name: ruff (lint)
+          entry: uvx ruff check --force-exclude
+          language: system
+          types_or: [python, pyi]
+          files: ^dusk/src/dusk_py/python/
+      -   id: ruff-format
+          name: ruff (format)
+          entry: uvx ruff format --force-exclude
+          language: system
+          types_or: [python, pyi]
+          files: ^dusk/src/dusk_py/python/
+      -   id: pyright
+          name: pyright
+          entry: uvx pyright
+          language: system
+          types_or: [python, pyi]
+          files: ^dusk/src/dusk_py/python/
+          pass_filenames: false
 
 fail_fast: true
