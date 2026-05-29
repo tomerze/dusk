@@ -61,6 +61,7 @@ nav:
   - Crates: crates.md
   - Development:
       - development/index.md
+      - Shell: development/shell.md
       - Ask Dusk: development/ask_dusk.md
   - Concepts:
       - Programs: concepts/programs.md

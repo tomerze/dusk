@@ -26,6 +26,7 @@ members = [
     "base/sleep",
     "base/date",
     "base/logs",
+    "base/hostname",
     "tests/api",
     "tests/cli",
     "tests/common",

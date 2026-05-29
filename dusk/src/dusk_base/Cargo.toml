@@ -7,6 +7,7 @@ edition = "2024"
 dusk_program = { path = "../dusk_program", public = true }
 dusk_program_date = { path = "../../../base/date", public = true }
 dusk_program_false = { path = "../../../base/false", public = true }
+dusk_program_hostname = { path = "../../../base/hostname", public = true }
 dusk_program_init = { path = "../../../base/init", public = true }
 dusk_program_kill = { path = "../../../base/kill", public = true }
 dusk_program_logs = { path = "../../../base/logs", public = true }
@@ -19,6 +20,7 @@ dusk_program_true = { path = "../../../base/true", public = true }
 client = [
     "dusk_program_date/client",
     "dusk_program_false/client",
+    "dusk_program_hostname/client",
     "dusk_program_kill/client",
     "dusk_program_logs/client",
     "dusk_program_ps/client",

@@ -1,6 +1,7 @@
 pub use dusk_program;
 pub use dusk_program_date;
 pub use dusk_program_false;
+pub use dusk_program_hostname;
 pub use dusk_program_init;
 pub use dusk_program_kill;
 pub use dusk_program_logs;
@@ -17,6 +18,7 @@ pub fn launcher_set() -> LauncherSet {
         Box::new(dusk_program_logs::Launcher::new()),
         Box::new(dusk_program_date::Launcher::new()),
         Box::new(dusk_program_false::Launcher::new()),
+        Box::new(dusk_program_hostname::Launcher::new()),
         Box::new(dusk_program_init::Launcher::new()),
         Box::new(dusk_program_kill::Launcher::new()),
         Box::new(dusk_program_ps::Launcher::new()),
@@ -37,6 +39,7 @@ pub fn link_anchors() {
     black_box(dusk_program_logs::client::sh_entry);
     black_box(dusk_program_date::client::sh_entry);
     black_box(dusk_program_false::client::sh_entry);
+    black_box(dusk_program_hostname::client::sh_entry);
     black_box(dusk_program_kill::client::sh_entry);
     black_box(dusk_program_ps::client::sh_entry);
     black_box(dusk_program_sleep::client::sh_entry);
