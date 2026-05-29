@@ -337,7 +337,7 @@ where
             // marks function names that have been defined / undefined since.
             match self.shell.functions().await {
                 Ok(symbols) => *function_names.lock().unwrap() = symbols,
-                Err(e) => tracing::warn!(error = %e, "failed to fetch shell functions"),
+                Err(e) => tracing::trace!(error = %e, "failed to fetch shell functions"),
             }
 
             let (_, prompt_start_row) = cursor_position()?;
