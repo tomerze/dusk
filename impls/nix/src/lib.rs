@@ -1,53 +1,22 @@
-#![feature(impl_trait_in_assoc_type)]
-
 extern crate alloc;
 
 use alloc::rc::Rc;
-use core::cell::Cell;
-use dusk_program::anyhow::Result;
 use dusk_program::embassy_executor::Executor;
 use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use dusk_program::program_args::ProgramArgs;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use tracing::Instrument;
-use tracing::error;
 
 pub use dusk_program::launcher_set::BasicLauncherSetBuilder;
 pub use dusk_program::launcher_set::LauncherSet;
 pub use dusk_program::launcher_set::LauncherSetBuilder;
-use tracing::info_span;
 
 mod driver;
 
-async fn init(namespace: Rc<Namespace>, init_program_args: Rc<ProgramArgs>) -> Result<()> {
-    let client = dusk_core::local_client(namespace.clone()).await;
-    let mut process_request = client.process_request();
-    init_program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
-    let process_response = process_request.send().promise.await?;
-    let process = process_response.get()?;
-    let mut run_request = client.run_request();
-    run_request.get().set_process(process.get_result()?);
-    run_request.send().promise.await?;
-
-    Ok(())
-}
-
-#[embassy_executor::task(pool_size = 16)]
-async fn init_wrapper(
-    task_id: Rc<Cell<u32>>,
-    namespace: Rc<Namespace>,
-    init_program_args: Rc<ProgramArgs>,
-) {
-    let span = info_span!("init", task_id = task_id.get(), namespace_id = namespace.id);
-    if let Err(err) = init(namespace, init_program_args)
-        .instrument(span.clone())
-        .await
-    {
-        span.in_scope(|| error!("init task crashed: {err:#?}"));
-    };
-}
+/// Panic payload `Driver::exit` raises to unwind the executor, carrying the
+/// requested exit code so `run` can recover and return it.
+pub(crate) struct ExitCode(pub(crate) i32);
 
 pub fn bootstrap_logging() {
     tracing_subscriber::fmt()
@@ -60,36 +29,46 @@ pub fn bootstrap_logging() {
 pub fn run(
     launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
     init_program_args: Rc<ProgramArgs>,
-) -> ! {
-    // The executor lives for 'static because this function never returns
-    // Using Box::leak is explicit about this intent
+) -> i32 {
+    // Keep the exit-code panic out of the default panic output so a clean
+    // exit() doesn't look like a crash. Real panics still print normally.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        if panic_info.payload().is::<ExitCode>() {
+            return;
+        }
+        default_hook(panic_info);
+    }));
+
+    // Box::leak gives the executor a 'static borrow, as Executor::run requires.
     let executor = Box::leak(Box::new(Executor::new()));
 
-    executor.run(|spawner| {
-        // And so it begins
-        let root = Rc::new(Namespace::new(
-            rand::random::<u128>(),
-            spawner,
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .ok(),
-        ));
+    // Normally executor.run() blocks forever, so this returns only when a
+    // process unwinds it via panic (e.g. Driver::exit).
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        executor.run(|spawner| {
+            // And so it begins
+            let root = Rc::new(Namespace::new(
+                rand::random::<u128>(),
+                spawner,
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .ok(),
+            ));
 
-        driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
-        let task_id = Rc::new(Cell::new(0));
-        match init_wrapper(task_id.clone(), root, init_program_args) {
-            Ok(spawn_token) => {
-                task_id.set(spawn_token.id());
-                spawner.spawn(spawn_token);
-            }
-            Err(err) => error!("failed to create init task: {err:#?}"),
-        }
-    });
+            driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
+            dusk_core::init::init(root, init_program_args);
+        });
+    }));
 
-    // This function never returns - executor.run() blocks forever
-    #[allow(unreachable_code)]
-    {
-        unreachable!("executor.run() should never return")
+    match outcome {
+        Ok(()) => unreachable!("executor.run() should never return"),
+        Err(payload) => match payload.downcast::<ExitCode>() {
+            Ok(exit_code) => exit_code.0,
+            // Not our exit code — a real panic. Return -1 rather than
+            // resume_unwind: unwinding across an extern "C" caller is UB.
+            Err(_payload) => -1,
+        },
     }
 }

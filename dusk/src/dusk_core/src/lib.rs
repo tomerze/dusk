@@ -23,6 +23,7 @@ use futures_io::{AsyncRead, AsyncWrite};
 use tracing::Instrument;
 
 pub mod driver;
+pub mod init;
 pub mod server;
 pub mod trace;
 pub use dusk_capnp;

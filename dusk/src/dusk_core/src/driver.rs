@@ -9,6 +9,8 @@ use dusk_program::namespace::Namespace;
 pub trait Driver: Send + Sync + 'static {
     fn hostname(&self) -> Result<String>;
 
+    fn exit(&self, exit_code: i32);
+
     fn launchers(&self, namespace: Rc<Namespace>) -> Result<LauncherSet>;
 }
 
@@ -26,6 +28,11 @@ macro_rules! dusk_driver_impl {
         }
 
         #[unsafe(no_mangle)]
+        fn _dusk_exit(exit_code: i32) {
+            <$t as $crate::driver::Driver>::exit(&$name, exit_code)
+        }
+
+        #[unsafe(no_mangle)]
         fn _dusk_launchers(namespace: Rc<Namespace>) -> Result<LauncherSet> {
             <$t as $crate::driver::Driver>::launchers(&$name, namespace)
         }
@@ -35,11 +42,17 @@ macro_rules! dusk_driver_impl {
 unsafe extern "Rust" {
     fn _dusk_hostname() -> Result<String>;
 
+    fn _dusk_exit(exit_code: i32);
+
     fn _dusk_launchers(namespace: Rc<Namespace>) -> Result<LauncherSet>;
 }
 
 pub fn hostname() -> Result<String> {
     unsafe { _dusk_hostname() }
+}
+
+pub fn exit(exit_code: i32) {
+    unsafe { _dusk_exit(exit_code) }
 }
 
 pub fn launchers(namespace: Rc<Namespace>) -> Result<LauncherSet> {

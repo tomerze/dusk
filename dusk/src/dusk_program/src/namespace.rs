@@ -6,6 +6,7 @@ use crate::ready::Ready;
 use crate::signal;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
 use dusk_capnp::GIT_REV;
 use dusk_capnp::capnp_rpc::CapabilityServerSet;
@@ -109,5 +110,21 @@ impl Namespace {
                 )),
             })
             .await
+    }
+
+    /// Send SIGTERM to every process in the namespace, yielding between each so
+    /// the signalled processes get a chance to run their termination paths.
+    pub async fn terminate(&self) {
+        // Clone the channels out from under the lock before awaiting on the
+        // sends, so the map isn't held across `.await`.
+        let channels: Vec<Rc<SignalChannel>> = {
+            let ps_signal_channel_map = self.ps_signal_channel_map.lock().await;
+            ps_signal_channel_map.values().cloned().collect()
+        };
+
+        for channel in channels {
+            channel.sender().send(signal::Signal::Terminate).await;
+            embassy_futures::yield_now().await;
+        }
     }
 }

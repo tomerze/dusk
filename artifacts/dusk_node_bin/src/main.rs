@@ -1,3 +1,3 @@
 fn main() {
-    dusk_node::dusk_node_run()
+    std::process::exit(dusk_node::dusk_node_run());
 }

@@ -43,6 +43,12 @@ impl Driver for NixDriver {
             .map_err(|os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"))?)
     }
 
+    fn exit(&self, exit_code: i32) {
+        let mut launcher_set_builders = self.launcher_set_builders.lock().unwrap();
+        launcher_set_builders.clear();
+        std::panic::panic_any(crate::ExitCode(exit_code));
+    }
+
     fn launchers(&self, namespace: Rc<Namespace>) -> Result<LauncherSet> {
         let launcher_set_builders = self.launcher_set_builders.lock().unwrap();
         let launcher_set_builder = launcher_set_builders.get(&namespace.id).ok_or_else(|| {
