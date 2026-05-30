@@ -147,7 +147,7 @@ impl Dusk {
             match programs.iter().find(|info| info.name == program_name) {
                 Some(info) => Ok(entry_info_to_dict(py, info)?.into_any()),
                 None => Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "no program named '{program_name}'"
+                    "no sh entry named '{program_name}'"
                 ))),
             }
         }
