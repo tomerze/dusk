@@ -61,4 +61,11 @@ Statement separators (`;`, newline) do not short-circuit — every statement run
 
 `sh -d <command>` runs `<command>` as a fire-and-forget background script. Output is discarded and the resulting `sh` process **daemonizes** — it keeps running after the script finishes and is only torn down when something explicitly kills it. Use this when you want a command sequence to outlive the caller.
 
-See [Daemonization](programs.md#daemonization) for how a process opts into this behaviour.
+## Daemonization
+
+Daemonization is a shell concept, not a core process behaviour. When the shell runs a command, it drives that command's `output(stream)` portal method and watches whether the command finishes the stream with `done`:
+
+- If the command calls `done`, the shell reaps it (kill + `waitpid`).
+- If the command returns from `output` **without** calling `done`, the shell treats that as "this process intends to keep running" and leaves it alive. The process has daemonized.
+
+The shell installs a wrapper (`UndoneStream`) between itself and the command so the command's `done` is read as a private "you may reap me" signal rather than ending the shell's own output stream. `sh -d` is the canonical case: it runs its command against a discard sink at startup and then omits the `done` ack, so the `sh` process daemonizes. Nothing in Dusk Core inspects or acts on the stream's done state — the policy lives entirely in the shell.

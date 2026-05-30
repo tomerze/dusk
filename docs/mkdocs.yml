@@ -1,8 +1,11 @@
-site_name: Dusk Documentation
+site_name: Dusk
 site_description: Documentation for the Dusk framework
 repo_name: Dusk
 repo_url: https://github.com/tomerze/dusk
+copyright: "© Dusk 2026"
 markdown_extensions:
+  - attr_list
+  - md_in_html
   - pymdownx.highlight:
       anchor_linenums: true
       pygments_lang_class: true
@@ -22,8 +25,6 @@ theme:
     - content.tooltips
     - navigation.footer
     - navigation.indexes
-    - navigation.sections
-    - navigation.tabs
     - navigation.top
     - navigation.tracking
     - search.highlight
@@ -31,39 +32,67 @@ theme:
     - search.suggest
     - toc.follow
   palette:
-    - media: "(prefers-color-scheme)"
+    - scheme: default
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/link
-        name: Switch to light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/toggle-switch
+        icon: material/weather-sunny
         name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: black
-      accent: indigo
+    - scheme: slate
+      primary: custom
+      accent: custom
       toggle:
-        icon: material/toggle-switch-off
-        name: Switch to system preference
+        icon: material/weather-night
+        name: Switch to light mode
   font:
-    text: Roboto
+    text: Inter
     code: Roboto Mono
   favicon: assets/.icons/icon.svg
   icon:
     logo: icon
     repo: fontawesome/brands/github
+extra_css:
+  - assets/stylesheets/extra.css
 nav:
-  - Home: index.md
-  - Crates: crates.md
+  - Introduction: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/guides/installation.md
+      - Quickstart: getting-started/guides/quickstart.md
+      - Connect a client: getting-started/guides/connect-a-client.md
+      - Run a standalone node: getting-started/guides/run-a-node.md
+  - Embedding:
+      - embedding/index.md
+      - The C library: getting-started/guides/embed.md
+  - Features:
+      - Analytics: features/analytics.md
+      - Diagnosis: features/diagnosis.md
+      - Shell: features/shell.md
+      - MCP: features/mcp.md
+  - Customize:
+      - customize/index.md
+      - Concepts:
+          - Programs: getting-started/concepts/programs.md
+          - Namespaces: getting-started/concepts/namespaces.md
+          - Processes: getting-started/concepts/processes.md
+          - Launchers: getting-started/concepts/launchers.md
+          - Portals & Streams: getting-started/concepts/portals-and-streams.md
+          - Drivers & Impls: getting-started/concepts/drivers-and-impls.md
+          - Base: getting-started/concepts/base.md
+      - Write a program: getting-started/guides/first-program.md
+      - Build a custom impl: getting-started/guides/custom-impl.md
   - Development:
       - development/index.md
+      - Architecture: development/architecture.md
       - Shell: development/shell.md
       - Ask Dusk: development/ask_dusk.md
-  - Concepts:
-      - Programs: concepts/programs.md
-      - Shell: concepts/shell.md
-      - MCP: concepts/mcp.md
+      - Contributing: development/contributing.md
+  - SDK Reference:
+      - Crates: sdk-reference/crates.md
+      - Cap'n Proto schemas: sdk-reference/capnp-schemas.md
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/tomerze/dusk
+      name: Dusk on GitHub

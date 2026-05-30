@@ -32,12 +32,13 @@ cargo nextest run
 
 Make sure you have `make` `cmake` and `autotools` installed.
 
-### Run example Dusk Impl
+### Run a node
 
-This is by default the Dusk Nix impl, which listens on tcp port `9090`
+This starts a `dusk_node` server, which listens on tcp port `9090` (it uses the
+Dusk Nix impl by default).
 
 ```bash
-cargo run --bin dusk_impl
+cargo run --bin dusk_node
 ```
 
 ### Run example Dusk CLI
@@ -66,7 +67,7 @@ The basic flow of using the Dusk framework is as follows:
 
 * Write your own dusk programs and or dusk impl using the dusk crates found in `/dusk`
 * Copy over the example deliverable artifacts in `/artifacts`
-* Make them your own by adding your programs to them and or changing the underlying impl of `dusk_impl`
+* Make them your own by adding your programs to them and or changing the underlying impl that `dusk_node` links
 * Compile and deliver 
 
 ## Docs

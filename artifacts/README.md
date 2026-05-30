@@ -1,9 +1,14 @@
-This folder includes example deliverable artifacts using the Dusk framework.
+This folder holds example deliverable artifacts built with the Dusk framework.
+Copy them as templates: add your own programs, swap the underlying impl, and ship.
 
-- `dusk_cli`: Uses the `dusk/dusk_cli` crate to create an executable Dusk CLI binary.
-- `dusk_py`: Uses the `dusk/dusk_py` crate to create a python library which exposes Dusk's Python API
-- `dusk_impl`: Uses the `impls/nix` crate to create an executable Dusk implementation binary. 
-Which listens on tcp port `9090` without encryption for incoming Dusk connections. 
-
-All of these examples artifacts are meant to be used as a template for your own Dusk
-artifacts. Copy their code. Add your programs and or change the underlying impl.
+- `dusk_node`: the Dusk **server**. Built from `dusk_base` (the programs) plus the
+  `impls/nix` impl, it runs a node listening on port `9090`. Its crate type is
+  `rlib` + `staticlib` + `cdylib`, so it can be used
+  three ways: as a C library exposing `int32_t dusk_node_run(void)` (see
+  `dusk_node/include/dusk.h`), as a Rust rlib (`dusk_node::dusk_node_run()`), or
+  as the `dusk_node` binary via `dusk_node_bin`.
+- `dusk_node_bin`: wraps `dusk_node` as the runnable `dusk_node` executable.
+- `dusk_cli`: builds the `dusk` CLI binary (from `dusk/src/dusk_cli`) — an
+  interactive shell, or a one-shot `dusk <addr> "<command>"`.
+- `dusk_py`: builds a Python extension (from `dusk/src/dusk_py`) exposing Dusk's
+  Python API.

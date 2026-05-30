@@ -1,89 +1,400 @@
 # Dusk
 
-Dusk is a Rust framework for building embedded operating systems. Process management, namespace isolation, Cap'n Proto RPC. Programs are linked statically into a dusk impl — no dynamic loading.
+Dusk is a platform for managing **fleets** — collections of machines you operate
+as one, anywhere from tiny microcontrollers to supercomputers. Every machine in
+the fleet runs a small Dusk **node**, and you drive a node the same way no matter
+what hardware it is: connect to it, see what's running, start and stop work, and
+read results back.
 
-## Layout
+That single interface spans such different hardware because almost all of Dusk is
+platform-agnostic. A node is a portable core plus a thin, per-platform **impl**
+that supplies only what the hardware forces — a clock, a way to spawn work, a
+hostname. The programs you run on a node are written once and run on every impl.
+
+If you're new here, the user-facing docs under `docs/` are the gentle
+introduction. This file is the orientation map for working *in* the codebase.
+
+## The big picture
+
+Dusk has three layers, plus the clients that drive it:
+
+- **Dusk Core** (`dusk/src/`) — the portable runtime and the SDK that programs
+  and impls build against. Knows nothing about any specific platform.
+- **Programs** (`base/`) — the units of work a node can run: the shell `sh`,
+  `ps`, `kill`, `sleep`, and so on. Each is written against Dusk Core and is
+  platform-independent.
+- **Impls** (`impls/`) — platform backends. `dusk_nix` is the Linux impl;
+  packaged as the `dusk_node` server, it's what you actually deploy.
+- **Clients** — the `dusk` CLI, the `dusk_py` Python extension, and an MCP
+  gateway. Each connects to a node over Cap'n Proto RPC and drives it.
+
+The boundaries between these layers are real public contracts — see
+[API boundaries](#api-boundaries-to-downstream-authors-are-ship-once-contracts)
+in the working agreements.
+
+## Repository layout
 
 ```
-dusk/src/          # Core crates (dusk_core, dusk_capnp, dusk_program, dusk_program_proc, dusk_prompt, dusk_shell, dusk_cli)
-programs/          # Built-in programs (sh, ps, kill, init, sleep, true, false)
-impls/nix/         # Linux impl (Embassy executor, TCP server on :9090)
-artifacts/         # Deliverables (dusk_node server, dusk CLI, dusk_py Python ext)
-tests/             # Integration tests
-docs/              # MkDocs
-vendor/            # Vendored Cap'n Proto compiler source
+dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
+               dusk_program, dusk_program_proc, dusk_prompt, dusk_shell,
+               dusk_cli, dusk_py, dusk_build, dusk_program_sh*)
+base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
+               true, false, init, logs)
+impls/nix/     The Linux impl (Embassy executor, the NixDriver, TCP listener)
+artifacts/     Deliverables you ship: dusk_node (server), dusk (CLI), dusk_py
+docs/          The user-facing documentation site (MkDocs)
+vendor/        Vendored Cap'n Proto compiler source
 ```
 
-## Crates
+## The crates
 
 | Crate | Role |
 |-------|------|
-| `dusk_capnp` | Cap'n Proto schemas (`dusk.capnp`, `stream.capnp`) — the wire format |
-| `dusk_program` | Core traits: `Process`, `Launcher`, `Namespace`, `Signal`, `Ready` |
-| `dusk_program_proc` | Proc macros: `#[derive(Launcher)]`, `basic_launcher!`, `metadata!`, `impl_args_rpc_server` |
-| `dusk_core` | `DuskServer`, `Driver` trait, embassy-time-driver shim |
-| `dusk_nix` | Linux impl: Embassy executor, TLS sessions, `dusk_driver_impl!` |
-| `dusk_prompt` | Shell prompt that connects to a dusk server |
-| `dusk_cli` | CLI binary wrapping `dusk_prompt` |
-| `dusk_py` | PyO3 bindings (maturin) |
+| `dusk_capnp` | The Cap'n Proto schemas (`dusk.capnp`, `stream.capnp`) — the wire format every client and node speaks. |
+| `dusk_program` | The SDK a program implements: the `ProcessMixin` / `LauncherMixin` traits, `Namespace`, `ProgramArgs`, `Signal`, `Ready`, and the stream helpers. |
+| `dusk_program_proc` | The proc macros that remove the boilerplate: `metadata!`, `derive(Args)`, `impl_args_rpc_server`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, `impl_portal_rpc_server`. |
+| `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. |
+| `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
+| `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
+| `dusk_prompt` / `dusk_shell` | The interactive shell client — the prompt UI and the `Shell`/`Connection` that drive a long-lived `sh` process. |
+| `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
+| `dusk_py` | The Python extension (the `dusk` module, built with maturin). |
+| `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
 
-## Abstractions
+The deployable server is `dusk_node` (package `dusk_node_bin`, bin `dusk_node`),
+which links Dusk Core, the Base programs, and one impl.
 
-### Namespace
-Container for all processes in one execution context. Not `Send`/`Sync` — executor-local. Holds the Embassy spawner, PID map, the Cap'n Proto server set, signal channels, and readiness watches.
+## Core concepts
 
-### Process
-`#[async_trait(?Send)]`. Override `main(signal_receiver, ready)` for program logic and `portal()` to expose a capability. Never call `main` directly — go through `bootstrap`, which registers/cleans up the namespace maps.
+### Nodes and namespaces
 
-### Launcher
-Factory compiled into the impl. Given a `ProcessContext` (pid, namespace, program_args), produces a `Box<dyn Process>`. `LauncherSet` dispatches by calling `program_args.program_id()` over RPC and matching against launcher vec. Use `basic_launcher!(Struct, PROGRAM_ID, ProcessType, ArgsType)` for the common case.
+A **node** is one running Dusk server — one machine in the fleet. Internally a
+node is exactly one **namespace**: the execution context that holds everything
+running on it. A node creates its namespace once at startup, and **every client
+session shares it** — two clients connected to the same node see the same
+processes. There is no per-connection isolation; you isolate workloads by running
+them on separate nodes.
 
-### Driver
-`Send + Sync` trait. OS-specific hooks supplied by the impl: `hostname()`, `process(namespace, program_args)`, `now() -> Instant`. Registered once per impl via `dusk_driver_impl!`, which defines `#[no_mangle]` extern functions that `dusk_core::driver` calls through `unsafe extern "Rust"`. Link-time dispatch — `dusk_core` is `no_std` and has no knowledge of the impl.
+A namespace is executor-local: it's held as an `Rc<Namespace>`, owns the Embassy
+spawner, and guards its internal tables with `embassy_sync` mutexes
+(`CriticalSectionRawMutex`). It is not `Send`/`Sync`, and all access happens on
+the node's single executor.
 
-### Portal
-Cap'n Proto capability extending `Dusk.Portal`. Public API of a running process. `process.portal()` blocks until the process signals readiness, then returns the capability. Portals carry typed streams (`Dusk.Stream` / `Dusk.Value`) as stdin/stdout.
+### Programs and processes
 
-## Program structure
+A **program** is a static unit of work compiled into a node — there is no dynamic
+loading. A **process** is a running instance of a program. `ps` lists the
+processes running on the node you're connected to; `kill` signals one by pid;
+`waitpid` waits for one to exit.
 
-Every program is five parts:
+### The `Dusk` capability
 
-1. **Program ID** — `u64` constant, usually in the `.capnp` file.
-2. **Args** — capnp interface extending `Dusk.ProgramArgs`; startup data + client-side callbacks.
-3. **Launcher** — instantiates the process from args.
-4. **Process** — async `main`.
-5. **Portal** — capnp interface clients use to drive the running process.
+When a client connects, it receives a `Dusk` capability — the node's whole API:
+
+| Method | What it does |
+|--------|--------------|
+| `process(programArgs)` | Build a process from its args; returns a `Process` handle. |
+| `run(process)` | Spawn a process as its own task (a daemon that outlives the session). |
+| `ps()` | List the processes on the node. |
+| `kill(pid, signal)` | Send a signal to a process. |
+| `waitpid(pid)` | Wait for a process to exit. |
+| `hostname()` | The node's hostname. |
+| `time()` / `settime(ms)` | Read or set the node's wall-clock. |
+| `programs()` | Enumerate the programs the node can run. |
+
+### Portals and streams
+
+A running process exposes its API through a **portal** — a typed Cap'n Proto
+capability. At the core, `Dusk.Portal` carries only the program id; each program
+**extends** it with the methods clients actually call. A client calls
+`process.portal()` (which resolves once the process is ready), reads the program
+id, and downcasts to the concrete portal type.
+
+Processes move data over **streams** (`Dusk.Stream`), which carry `Value`s — a
+schemaless-but-typed union (`uint`, `string`, `text`/Markdown, `bytes`, `bool`,
+`list`, `record`). A `Record` carries a type id plus `(key, value)` fields, which
+is how a program returns structured, tabular output without a compiled schema on
+the wire. `Stream`, `Value`, and `Record` all live in `dusk.capnp`;
+`stream.capnp` holds only the `StreamResult` streaming shim.
+
+### The driver
+
+Everything platform-specific lives behind the `Driver` trait
+(`Send + Sync`), which an impl implements:
+
+- `hostname()` — the node's hostname.
+- `exit(exit_code)` — halt the node.
+- `launchers(namespace)` — build the node's `LauncherSet` (the set of programs it
+  can run) for a namespace.
+
+An impl registers its driver once with `dusk_driver_impl!`. See
+[Driver registration](#driver-registration-the-extern-shim-pattern).
+
+## Anatomy of a program
+
+Every program is five parts, tied together by a one-line `metadata!`:
+
+```rust
+dusk_program_proc::metadata!("sleep", VERSION, sleep_capnp::PROGRAM_ID);
+```
+
+1. **Program id** — a `u64` constant in the program's `.capnp` file. It's the
+   dispatch key the `LauncherSet` matches on.
+2. **Args** — a capnp struct with a nested `Data` (startup data) and a `Server`
+   interface (client-side callbacks). These become the `D` and `S` of the core
+   `ProgramArgs(D, S)`. In Rust: `#[derive(Args)]` with a `#[data]` field, and
+   `#[impl_args_rpc_server]` to host the `Server`.
+3. **Launcher** — the factory. `#[derive(Launcher)]` generates its identity
+   (`program_id`, `version`, `git_rev`); you write `LauncherMixin::launch`, which
+   takes a `ProcessContext` and returns a `Box<dyn Process>`.
+4. **Process** — the async runtime. A struct with a `#[process_context]` field
+   and `#[derive(Process)]`, plus a `ProcessMixin` impl providing `with_context`,
+   `main(signal_receiver, ready)`, and `portal()`.
+5. **Portal** — the typed capability, a capnp interface extending `Dusk.Portal`.
+   In Rust: `#[derive(Portal)]` plus `#[impl_portal_rpc_server]`.
+
+A process's `main` does its work, sends `true` on its `ready` watch when it can
+accept portal calls, then waits on `signal_receiver` (a `DynamicReceiver<Signal>`)
+— returning on `Signal::Terminate` (wire value 15).
+
+To make a program runnable from the shell by name, its client side adds a
+`#[dusk_program_sh_proc::sh_entry] pub fn sh_entry() -> ShEntry` with the command
+name and help text. (See `base/sleep` for a clean, complete example.)
+
+## Calling back into the client
+
+A program's args are `ProgramArgs(D, S)`, and the `S` half is how a running
+program **calls back into the client**. `data` is one-way startup data the client
+sends in; `server` is a live capability **hosted on the client** that the program
+can invoke from the node. Server-side, a program pulls it out of its
+`ProcessContext` and calls it like any capability — each call is an RPC that runs
+back on the client:
+
+```rust
+let server: my_capnp::my_args::server::Client =
+    process_context.program_args.server_as()?;
+// server.some_method_request()… runs on the client
+```
+
+`#[impl_args_rpc_server]` is what hosts that `Server` interface on the client
+side. So data flows through a process in both directions:
+
+- **client → program** — the typed [portal](#portals-and-streams) and its streams.
+- **program → client** — the `Server` capability carried in the args.
+
+The shell is the clearest example. `ShArgs.Server` exposes
+`buildProgramArgs(command)`; when the `sh` interpreter on a node compiles a
+command word, it calls *back to the client* to build that command's
+`ProgramArgs` — because the program registry and each command's client-side
+capabilities live on the client. A `Script` running on the node therefore
+resolves every command against the connected client. This callback channel is
+also why the connection has to stay live while a script runs.
 
 ## Driver registration (the extern-shim pattern)
 
-`dusk_driver_impl!` defines a `lazy_static` singleton for the driver struct plus `#[no_mangle]` extern Rust functions: `_dusk_hostname`, `_dusk_process`, `_dusk_now`. `dusk_core::driver` declares those symbols as `unsafe extern "Rust"` and calls through them. The driver is resolved at link time; `dusk_core` depends on no impl; the impl satisfies the symbols.
+`dusk_core` is `no_std` and depends on no impl, yet it must call into one. It does
+so through a link-time shim. `dusk_driver_impl!` defines a `lazy_static` singleton
+for the driver plus `#[no_mangle]` extern functions — `_dusk_hostname`,
+`_dusk_exit`, `_dusk_launchers`. `dusk_core::driver` declares those same symbols
+as `unsafe extern "Rust"` and calls through them. The linker resolves them to
+whichever impl is in the final binary.
 
-### Drivers do not call themselves
+**Callers in `dusk_core`, programs, and other `no_std` crates never name an
+impl** — they go through `dusk_core::driver::*` and get whatever impl is linked.
+That's what lets a program like `sleep` be a single crate that runs under nix
+today and an MCU impl tomorrow.
 
-If you are inside a Driver impl (e.g. `NixDriver::now`) and you reach for `dusk_core::driver::now()`, **stop** — that call round-trips through the extern shim straight back into your own crate. Call the underlying OS / hardware primitive directly. The shim exists for callers in `dusk_core` and other no_std code to reach the impl; the impl is the destination, not the route.
+**Drivers do not call themselves.** Inside a `Driver` impl, do not reach for
+`dusk_core::driver::*` — that round-trips through the shim straight back into your
+own crate. The shim is the route *into* the impl for `no_std` callers; the impl is
+the destination. Call the OS/hardware primitive directly.
 
-The reverse rule: callers in `dusk_core`, programs, or other no_std crates **never** name an impl. They go through `dusk_core::driver::*` and get whatever impl is linked. This is what lets `sleep` be a single program crate that works under nix today, esp32 tomorrow, anything else later.
+**Impls stay lean.** `dusk_core` owns every piece of policy that can be
+platform-agnostic. An impl owns only what the platform forces: the hostname, how
+to halt, the program set to launch, and the platform's `embassy-time` driver and
+`critical-section` implementation. A queue, scheduler, or state machine sneaking
+into an impl is a sign the logic belongs in `dusk_core` behind a thinner
+primitive.
 
-### Impls stay lean
+## How a command runs
 
-`dusk_core` owns every piece of policy that can be platform-agnostic. Impls own only the primitives the platform forces them to: clock reads, alarm arming, process spawning, hostname lookup. If you find yourself adding a queue, a scheduler, or any non-trivial state machine to an impl, ask whether it belongs in `dusk_core` with a thinner primitive exposed through `Driver`.
+**A client session.** When a client connects, the node's `init` process accepts
+the connection and spawns a `session` task that shares the node's single
+namespace and hands the client a `Dusk` capability (a `DuskServer` exposed as the
+Cap'n Proto bootstrap capability). The transport underneath is being reworked, so
+don't lean on its specifics.
 
-## Time driver
+**`Dusk.process` → run.** `Dusk.process(programArgs)` asks the driver for the
+node's `LauncherSet` (`driver::launchers(namespace)`) and dispatches: it reads
+`program_args.program_id()` — a **local** read of the in-memory args message, not
+a network call — and runs the matching launcher's `launch`, which returns a
+`Box<dyn Process>`. The client then chooses the process's lifetime:
 
-`embassy_time::Timer` needs an `embassy-time-driver` providing `_embassy_time_now` and `_embassy_time_schedule_wake`. **`dusk_core` does not provide one.** Each impl pulls in an embassy-time driver appropriate for its platform — there is no dusk-specific abstraction over it.
+- `Dusk.run(process)` spawns it as its own task — it outlives the session.
+- `process.run()` runs it inside the calling session.
 
-- `dusk_nix` enables `embassy-time/std`, which ships a ready POSIX driver (`CLOCK_MONOTONIC` via `std::time::Instant` plus a single alarm thread internal to embassy-time).
-- A future MCU impl would enable the embassy-time driver provided by its HAL (`embassy-stm32/time-driver-tim2`, `embassy-rp/time-driver`, etc).
+Either way the process is entered through `bootstrap`, which registers it in the
+namespace and cleans it up when `main` returns.
 
-`Driver::now()` is independent from embassy-time's clock — it's the dusk platform's wall-clock-ish read for any caller that wants to go through the dusk abstraction. Programs that just want to sleep should use `embassy_time::Timer::after(...)` directly.
+**Portals and kill.** `process.portal()` waits for the process's `Ready` watch,
+then returns the portal for the client to downcast. `Dusk.kill(pid, signal)` looks
+up the process's signal channel in the namespace and sends the signal, which the
+process receives on its `signal_receiver`.
 
-## Launcher registration
+**Startup.** `dusk_node_run()` calls into `dusk_nix::run`, which creates the
+`Namespace`, registers the impl's `LauncherSet` builder, and spawns `init`. `init`
+binds the listener and accepts connections.
 
-`BasicLauncherSetBuilder` clones a pre-built `LauncherSet` per call (cheap — the inner `Vec` is behind an `Arc`). Dispatch in `LauncherSet::launch` does one RPC round-trip to read `program_args.program_id()`, then iterates the launcher vec for a match. Keep launcher vecs short; there is no indexing.
+The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
+process) lives in `docs/docs/development/shell.md`.
 
-## Tracing / spans
+## The shell is a program
 
-Every Embassy task:
+`sh` is just another program — but it's where a lot of behaviour that people
+mistake for "core" actually lives. **Daemonization** (a process kept alive by
+*not* acknowledging a stream's `done`), the `output(stream)` portal method
+(`OutputPortal`), `sh -d` detached scripts, the shell language and its
+`Script`/function/interpreter machinery, `ShStop`, and the `SH_ENTRIES` registry
+are all part of `sh`, not of Dusk Core. When documenting or reasoning about the
+core process model, keep these on the shell side of the line.
+
+## Artifacts and clients
+
+The crates under `artifacts/` are example **deliverables** — templates you copy,
+add your own programs to, and ship. They're also the answer to "how do I actually
+run and talk to a node."
+
+### `dusk_node` — the server, three ways
+
+`dusk_node` packages Dusk Core, the Base programs, and an impl into a runnable
+node. Its body is tiny — it boots logging and calls `dusk_nix::run` with the Base
+launcher set and an `init` bound to `0.0.0.0:9090`:
+
+```rust
+pub extern "C" fn dusk_node_run() -> i32 {
+    dusk_nix::bootstrap_logging();
+    dusk_nix::run(
+        dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set()),
+        InitArgs::new("0.0.0.0", 9090).as_program_args().unwrap(),
+    )
+}
+```
+
+Because its crate type is `["rlib", "staticlib", "cdylib"]`, you can consume it
+three ways:
+
+- **As a binary** — `dusk_node_bin` wraps it as the `dusk_node` executable
+  (`cargo run --bin dusk_node`).
+- **As a C library** — the `staticlib`/`cdylib` expose one entry point, declared
+  in `artifacts/dusk_node/include/dusk.h`:
+  ```c
+  int32_t dusk_node_run(void);
+  ```
+  Link `libdusk_node` and call `dusk_node_run()` to run a node and get its exit
+  code. Dusk drops into an existing C/C++ program with no Rust on the surface.
+- **As a Rust rlib** — call `dusk_node::dusk_node_run()` directly, or copy its
+  body to assemble your own node (different programs, different impl).
+
+### `dusk` — the CLI
+
+`dusk_cli` builds the `dusk` binary. Point it at a node and either drop into the
+interactive shell or run a single command:
+
+```bash
+dusk 127.0.0.1:9090            # interactive prompt
+dusk 127.0.0.1:9090 "ps"       # run one command and exit
+```
+
+It's a thin layer over the Rust client path: it drives a long-lived `sh` process
+behind an interactive prompt.
+
+### `dusk_py` — the Python extension
+
+`dusk_py` (a cdylib named `dusk`, built with maturin) exposes a node to Python:
+
+```python
+import dusk
+node = dusk.Dusk('127.0.0.1', 9090)   # connects; blocks until the node answers
+print(list(node.sh('ps')))            # sh(command) → iterator of output values
+node.disconnect()
+dusk.Dusk.help()                      # static: enumerate programs, no connection
+```
+
+### The Rust SDK — talking to programs directly
+
+Rust callers can drive a node *below* the shell's text interface. Once you hold
+the node's **`Dusk` capability**, you call the `Dusk` API directly — `process`,
+`run`, `ps`, `kill`, … — and for a rich program you take the process's `portal()`
+and **downcast it to that program's typed portal client** to call its real
+methods (e.g. `ShPortal.sh(...)`) instead of sending command text. Each program
+crate's `client` feature provides the building blocks: typed portal clients, args
+builders, and the client-hosted `Server` [callbacks](#calling-back-into-the-client).
+
+This is the lower-level path for complex programs: hold the `Dusk` capability,
+build typed `ProgramArgs`, call typed portals, and field the program's callbacks —
+the same surface the CLI and Python bindings are built on.
+
+> How a client establishes a connection and obtains that `Dusk` capability is
+> intentionally left undocumented here — the transport/connection layer is slated
+> for rework (encryption among other things), so anything written now would go
+> stale.
+
+## The client / server split (`no_std` vs `std`)
+
+**The server is `no_std`. The client is `std`.** A program crate holds both
+sides, separated by a `client` Cargo feature:
+
+- **Server side** — the unconditional code, compiled into a node. It must be
+  `no_std`-clean: `extern crate alloc`, no `std::` imports, no std-only deps in
+  the unconditional `[dependencies]`. Use `alloc::rc::Rc`, `alloc::vec::Vec`,
+  `alloc::string::String`, `core::cell::*`.
+- **Client side** — anything behind `#[cfg(feature = "client")]` (usually
+  `client.rs`), compiled into the CLI and Python extension. `std`, `clap`, and
+  friends are fine here; std-only deps are `optional = true` and activated by the
+  `client` feature.
+
+The same rule holds for the non-program crates: `dusk_core` and `dusk_program`
+are `no_std`; impls and the client crates (`dusk_prompt`, `dusk_shell`,
+`dusk_cli`) are `std`. A quick sanity check:
+`grep -rn "std::\|use std" base/ --include="*.rs"` should only hit `client.rs`
+files or `#[cfg(feature = "client")]` modules.
+
+## Development
+
+```bash
+rustup show                              # installs the pinned toolchain
+uv run pre-commit install                # install pre-commit hooks
+cargo nextest run                        # run the tests
+cargo run --bin dusk_node                # start a node on :9090
+cargo run --bin dusk -- 127.0.0.1:9090   # connect the CLI
+uv run maturin develop                   # build the Python extension
+cd docs && uv run mkdocs serve           # serve the docs site
+```
+
+Building requires `make`, `cmake`, and `autotools` for the vendored Cap'n Proto
+compiler under `vendor/`.
+
+### Embassy and conventions
+
+Dusk runs on a **single-threaded [Embassy](https://embassy.dev) async executor**.
+That choice is what lets the same runtime work on a bare-metal microcontroller and
+on hosted Linux. A few consequences shape almost everything you write:
+
+- **Executor-local, not multi-threaded.** Futures are `!Send`; the `Process`
+  trait is `#[async_trait(?Send)]`. Shared state uses `Rc` / `RefCell` and
+  `embassy_sync` mutexes (`CriticalSectionRawMutex`), never `Arc` + an OS lock.
+  Concurrency within a node is cooperative — long awaits should yield.
+- **Tasks.** Long-lived activities (sessions, processes) each run as their own
+  Embassy task, spawned through the namespace's `Spawner`.
+- **Time.** Timing comes from `embassy-time`. `dusk_core` ships **no**
+  `embassy-time-driver`; each impl supplies one (nix enables `embassy-time/std`),
+  along with a `critical-section` implementation. To sleep, use
+  `embassy_time::Timer::after(...)`; to read or set a node's wall-clock, use the
+  `Dusk.time` / `Dusk.settime` RPCs.
+
+**Tracing.** Every Embassy task opens a `tracing` span. `task_id` is always the
+first field; domain fields follow (`namespace_id`, `pid`, `program_id`,
+`program_name`), so logs stay filterable across many concurrent processes.
 
 ```rust
 let task_id = Rc::new(Cell::new(0));
@@ -91,82 +402,14 @@ let spawn_token = my_task(task_id.clone(), /* … */);
 task_id.set(spawn_token.id());
 spawner.spawn(spawn_token).unwrap();
 
-// Inside the task:
+// inside the task:
 let span = info_span!("task_name", task_id = task_id.get(), /* … */);
 ```
 
-`task_id` is always the first field. Domain fields follow (`namespace_id`, `pid`, `program_id`, `program_name`).
-
-## Flows
-
-### Client session
-
-Client connects over TCP. The impl spawns a `session` Embassy task: a `DuskServer` is wrapped as a Cap'n Proto bootstrap capability and a `RpcSystem` is started on the stream. The client now holds a `Dusk` capability.
-
-### `Dusk.process` → `Dusk.run`
-
-`Dusk.process(programArgs)`:
-1. `DuskServer::process` → `driver::process(namespace, program_args)` → extern shim → impl's `Driver::process`.
-2. The impl builds a fresh `LauncherSet` and calls `LauncherSet::launch(ProcessContext { pid, namespace, program_args })`.
-3. `launch` calls `program_args.program_id()` back over RPC to the client.
-4. Matching launcher's `launch` returns `Box<dyn Process>`. Registered into `ps_server_set`; `process::Client` returned to caller.
-
-Then either:
-- **`Dusk.run(process)` (daemon)**: `DuskServer::run_inside_task` clones the process and spawns it as its own `process_task`. `bootstrap` registers in namespace maps and calls `main`. The process outlives the client session.
-- **`process.run()` (in-session)**: `bootstrap` + `main` run inside the calling session's task.
-
-### Portal
-
-`process.portal()` waits for the `Ready` watch to fire `true` (set by the process when it can accept calls), then returns the typed portal capability. Client downcasts using the program ID and calls methods (e.g. `ShPortal.sh(command, output_stream)`).
-
-### Kill
-
-`Dusk.kill(pid, signal)` → `DuskServer::kill` → look up the signal channel in `ps_signal_channel_map` → send the signal. The process receives it via the `DynamicReceiver<Signal>` passed to `main`.
-
-### Startup
-
-`dusk_nix::run`:
-1. Create `Namespace` (random id, Embassy spawner).
-2. Register `LauncherSetBuilder` in the driver for that namespace.
-3. Spawn `init_wrapper` task: calls `Dusk.process(init_args)` + `Dusk.run(process)` via a local in-process `Dusk` client.
-
-### End-to-end: `"ps; ps"` from the shell
-
-Reedline → `Prompt::process_line` → `Shell::sh` → compiler parses `ps; ps` to an AST, looks up "ps" in `SH_ENTRIES` (link-time `#[distributed_slice]`), builds a `Script` capnp message with `ps_args::Client` capabilities embedded as `ProgramArgs` fields (live RPC handles, not serialized data) → `sh_portal.sh(script, output_stream)` sent to the server.
-
-Server-side `Interpreter::exec` walks the two statements. For each:
-1. `Dusk.process(program_args)` → driver builds `LauncherSet` → launcher calls `program_args.program_id()` (RPC back to client) → matches `ps::Launcher` → returns `Box<dyn Process>`.
-2. `Dusk.run(process)` → spawns `process_task`.
-3. `ps::Process::main` reads the dusk client from its args, calls `client.ps()`, gathers metadata over RPC for each entry, signals `ready=true`, enters signal-wait loop.
-4. Caller does `process.portal()` (resolves once ready), `portal.output(undone_stream)` → `ps::Portal::output` builds a `Record` (typed with `ps_capnp::RESULT_TYPE_ID`, four `List` fields), sends through the wrapped stream, fires the `done` oneshot — outer display stream is NOT marked done yet.
-5. Caller kills the process with SIGTERM. `main` exits, `bootstrap` cleans up namespace maps.
-
-After both statements: `output.done_request().send()` on the actual display stream fires the receiver `Shell::sh` is awaiting; prompt re-renders.
-
-## Development
-
-```bash
-rustup show                              # installs correct Rust toolchain
-uv run pre-commit install                # install pre-commit hooks
-cargo nextest run                        # tests
-cargo run --bin dusk_impl                # start dusk server on :9090
-cargo run --bin dusk -- 127.0.0.1:9090   # connect CLI
-uv run maturin develop                   # Python ext
-cd docs && uv run mkdocs serve           # docs
-```
-
-Build requires `make`, `cmake`, `autotools` (for the vendored Cap'n Proto compiler).
-
-## no_std and the client / server split
-
-**Server is `no_std`. Client is `std`.** A program crate has both sides in the same crate, separated by a `client` Cargo feature.
-
-- **Server side** — the unconditional code in `lib.rs` plus any module not gated by `#[cfg(feature = "client")]`. Compiled into the dusk impl (e.g. `dusk_node`). Must be `no_std`-clean: `extern crate alloc`, no `std::` imports, no std-only deps in the unconditional `[dependencies]` block. Use `alloc::rc::Rc`, `alloc::vec::Vec`, `alloc::string::String`, `core::cell::*`, etc.
-- **Client side** — anything gated by `#[cfg(feature = "client")]` (typically `client.rs`, sometimes `entry`, `parser`, etc). Compiled into the CLI (`dusk_cli`). `std` is fine and idiomatic here: `use std::rc::Rc`, clap, anything else. Std-only deps go in `[dependencies]` as `optional = true` and are activated by the `client` feature.
-
-Same rule for non-program crates: `dusk_program`, `dusk_core`, and everything they touch are `no_std`. Impls (`dusk_nix`, future MCU impls) and the CLI bits (`dusk_prompt`, `dusk_cli`, `dusk_shell`) are `std`.
-
-A useful sanity grep: `grep -rn "std::\|use std" programs/ --include="*.rs"` should only return hits inside `client.rs` files or `#[cfg(feature = "client")]`-gated modules.
+**Naming and comments.** Spell identifiers out — `request`, not `req`; `address`,
+not `addr` — even for short-lived locals. Default to no comments; add one only
+when the *why* is non-obvious. These and the rest of the behavioural rules live in
+the working agreements below, which take precedence over everything else here.
 
 # Working agreements
 

@@ -1,0 +1,61 @@
+# Embed Dusk in your app
+
+The most common way to use Dusk is to **embed it into an application you already
+ship**. Your app keeps doing what it does; Dusk rides along and turns every device
+running it into a manageable node in a fleet.
+
+## The idea
+
+Dusk's node builds as a C library. You link it into your app and call one
+function — your app is now a Dusk node, and the standard tooling (analytics,
+diagnosis, remote control) works against it. No rewrite, no separate service.
+
+> **TODO:** the end-to-end embed-and-connect experience depends on the
+> connection/transport layer (including encryption and node identity), which is
+> still being built. The integration below — linking the library and starting a
+> node — works today; how a fleet then discovers and securely reaches those nodes
+> is the part still in progress.
+
+## Link the library
+
+`dusk_node` builds as both a static and a shared C library, with a one-function
+header (`artifacts/dusk_node/include/dusk.h`):
+
+```c
+#include "dusk.h"
+
+int32_t dusk_node_run(void);
+```
+
+Link `libdusk_node` and call `dusk_node_run()` — typically on its own thread,
+since it runs the node until shutdown:
+
+```c
+// in your app's startup
+dusk_node_run();   // runs a Dusk node; returns an exit code
+```
+
+From Rust, link the `dusk_node` rlib and call `dusk_node::dusk_node_run()`. From
+any other language, bind the C function. That's the whole integration: one
+library, one call.
+
+> **TODO:** `dusk_node_run()` currently starts a node with the default program
+> set on a fixed address. Configuration — which programs to include, the listen
+> address, node identity, and the encrypted transport — is part of the
+> connection-layer work; this guide will grow as that lands.
+
+## What it gives you
+
+Once your app is a node, point a client at it to get the [analytics and
+diagnosis](../index.md#what-you-get) Dusk is for — see its processes, read its
+logs, and drive it from the [shell](../../features/shell.md), the
+[Python API](connect-a-client.md), or an [MCP agent](../../features/mcp.md).
+Multiply that across every device running your app and you have a managed fleet.
+
+## Make it yours
+
+The default `dusk_node` links the Base programs and the Linux impl. Changing which
+programs ship, targeting a different platform, or adding capabilities of your own
+is the **framework** side of Dusk — see [Write a program](first-program.md) and
+[Build a custom impl](custom-impl.md). It's optional: most integrations run the
+defaults.

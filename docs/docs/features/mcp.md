@@ -1,6 +1,6 @@
 # MCP
 
-Dusk ships an [MCP](https://modelcontextprotocol.io) server that exposes a dusk node's [shell](shell.md) programs as MCP tools. It lets an MCP client (an LLM agent, an IDE, etc.) connect to dusk nodes and run [Base](base.md) programs on them — much like the interactive `dusk` CLI, but driven by a model instead of a person.
+Dusk ships an [MCP](https://modelcontextprotocol.io) server that exposes a dusk node's [shell](shell.md) programs as MCP tools. It lets an MCP client (an LLM agent, an IDE, etc.) connect to dusk nodes and run [Base](../getting-started/concepts/base.md) programs on them — much like the interactive `dusk` CLI, but driven by a model instead of a person.
 
 It lives in the `dusk` Python package (built from `dusk_py`), under `dusk.mcp`.
 
