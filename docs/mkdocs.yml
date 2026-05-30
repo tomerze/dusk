@@ -6,6 +6,9 @@ copyright: "© Dusk 2026"
 markdown_extensions:
   - attr_list
   - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
       pygments_lang_class: true
@@ -68,17 +71,19 @@ nav:
       - Analytics: features/analytics.md
       - Diagnosis: features/diagnosis.md
       - Shell: features/shell.md
+      - Ask Dusk: features/ask-dusk.md
       - MCP: features/mcp.md
+      - Base programs: getting-started/concepts/base.md
   - Customize:
       - customize/index.md
       - Concepts:
           - Programs: getting-started/concepts/programs.md
           - Namespaces: getting-started/concepts/namespaces.md
           - Processes: getting-started/concepts/processes.md
+          - Signals: getting-started/concepts/signals.md
           - Launchers: getting-started/concepts/launchers.md
           - Portals & Streams: getting-started/concepts/portals-and-streams.md
           - Drivers & Impls: getting-started/concepts/drivers-and-impls.md
-          - Base: getting-started/concepts/base.md
       - Write a program: getting-started/guides/first-program.md
       - Build a custom impl: getting-started/guides/custom-impl.md
   - Development:
@@ -89,6 +94,9 @@ nav:
       - Contributing: development/contributing.md
   - SDK Reference:
       - Crates: sdk-reference/crates.md
+      - CLI: sdk-reference/cli.md
+      - Python API: sdk-reference/python-api.md
+      - Proc macros: sdk-reference/proc-macros.md
       - Cap'n Proto schemas: sdk-reference/capnp-schemas.md
 extra:
   generator: false

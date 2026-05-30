@@ -2,12 +2,13 @@
 
 <h1 class="dusk-wordmark">Dusk</h1>
 
-<p class="tagline lead"><span class="emph">The go-to solution for any fleet</span></p>
+<p class="tagline lead"><span class="emph">The solution for any fleet</span></p>
 
-<p class="tagline">Dusk can manage fleets deployed on everything from microcontrollers to supercomputers<span class="punct">;</span> Drop it into applications you already run<span class="punct">,</span> seamlessly<span class="punct">,</span> at any scale<span class="punct">.</span></p>
+<p class="tagline">Dusk can manage fleets deployed on everything from microcontrollers to supercomputers</p>
+<p class="tagline cta-lead">Drop it into applications you already run<span class="punct">,</span> seamlessly<span class="punct">,</span> at any scale<span class="punct">.</span></p>
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/tomerze/dusk){ .md-button }
+[View on   :fontawesome-brands-github:](https://github.com/tomerze/dusk){ .md-button .gh-button title="View on GitHub" }
 
 </div>
 

@@ -21,9 +21,10 @@ layer you embedded, not the host operating system's process table.
   [Python API](../getting-started/guides/connect-a-client.md) and the
   [MCP gateway](mcp.md) do all of the above from a script or an AI agent.
 
-What you can see and do is exactly what the node's programs expose. The Base
-programs cover the Dusk layer itself; to surface something host-specific (a
-sensor, a hardware register, an app-internal metric), that's a
+What you can see and do is exactly what the node's programs expose. The
+[Base programs](../getting-started/concepts/base.md) cover the Dusk layer itself
+(see that page for each command's full usage); to surface something host-specific
+(a sensor, a hardware register, an app-internal metric), that's a
 [program you write](../getting-started/guides/first-program.md).
 
 ## The interfaces

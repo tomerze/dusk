@@ -70,13 +70,14 @@
 /* ---------- Hero ---------- */
 .dusk-hero {
   padding: 0 0 1.5rem;
+  margin-top: -0.8rem;   /* pull the title up toward the top bar */
 }
 .dusk-hero h1 {
   font-size: 3rem;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.6rem;
   color: #a86f12;   /* fallback if background-clip: text is unsupported */
   background: linear-gradient(170deg, #f0b441 0%, #a86f12 100%);
   -webkit-background-clip: text;
@@ -85,6 +86,11 @@
 }
 .dusk-hero h1::after {
   display: none;   /* the hero title skips the gold rule */
+}
+/* Pull the sub-header up under the title: zero its top margin so the gap is
+   just the H1's small bottom margin. */
+.dusk-hero h1 + .tagline {
+  margin-top: 0;
 }
 /* The "D" of "Dusk" is the logo itself (a golden D). Size it to a capital
    letter and sit it on the text baseline next to the gradient "usk". */
@@ -98,13 +104,26 @@
   max-width: 40rem;
   font-size: 1.15rem;
   color: var(--md-default-fg-color--light);
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;   /* gap that separates the pitch from the action block */
+}
+/* Para 2 ("Drop it in…") leads into the buttons, so group it with the CTA by
+   sitting it close to the buttons. Both paragraphs share the same font size. */
+.dusk-hero .tagline.cta-lead {
+  margin-bottom: 0.6rem;
 }
 /* Lead tagline — bigger than the supporting line, and tucked close to it so
    the two read as one grouped pitch. */
 .dusk-hero .tagline.lead {
   font-size: 1.35rem;
-  margin-bottom: 0.5rem;
+  line-height: 1.15;   /* tight, so when it wraps on a phone the two lines sit
+                          closer than the gap up to the title */
+  margin-bottom: 0.6rem;
+}
+/* Pull para 1 up to the sub-header: zero its top margin so the gap is just the
+   sub-header's small bottom margin (otherwise para 1's own top margin dominates
+   the collapse and the gap stays wide). */
+.dusk-hero .tagline.lead + .tagline {
+  margin-top: 0;
 }
 
 /* Muted punctuation in the taglines — light grey so the commas/semicolon
@@ -112,6 +131,12 @@
 .dusk-hero .tagline .punct {
   color: var(--md-default-fg-color--light);
   font-size: 1.2em;
+}
+
+/* Like .punct, but in solid dusk gold. */
+.dusk-hero .tagline .punct-gold {
+  font-size: 1.2em;
+  color: #f0b441;
 }
 
 /* Opening phrase of the lead tagline — bigger and semibold so it anchors the
@@ -127,6 +152,39 @@
 .dusk-hero .md-button {
   border-radius: 0.5rem;
 }
+/* Lay the two buttons out as a flex row (with a clean gap) so they stay
+   side-by-side and only wrap when there's genuinely no room — plain inline
+   layout was wrapping them on phones even when space was available. */
+.dusk-hero > p:last-of-type {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.6rem;
+}
+/* On phones the default 2em side padding + the large GitHub icon make the pair
+   wider than the narrow column, so they wrapped. Trim both so they fit on one
+   row. */
+@media screen and (max-width: 36em) {
+  .dusk-hero .md-button {
+    padding: 0.5em 1.1em;
+  }
+  .dusk-hero .gh-button .twemoji {
+    --md-icon-size: 1.4em;
+  }
+}
+/* GitHub logo in the "View on" button, in the theme's text colour
+   (currentColor) so it blends with the palette. Material sizes icons via the
+   --md-icon-size custom property on .twemoji — setting the svg height does
+   nothing, so drive that variable instead. */
+.dusk-hero .gh-button .twemoji {
+  --md-icon-size: 1.8em;
+  vertical-align: middle;
+  position: relative;
+  top: -0.06em;                    /* nudge up a touch */
+  /* negative top/bottom so the oversized logo overflows instead of making this
+     button taller than "Get started"; left margin is the gap from the text. */
+  margin: -0.5em 0 -0.5em 0.25em;
+}
 /* Ghost button ("View on GitHub"). Material's default .md-button takes its text
    and border from --md-primary-fg-color, which is white in light mode (white
    header) — so it would be invisible on the white page. Pin a visible color. */
@@ -139,6 +197,13 @@
   color: #221a05;
   background-color: #f0b441;
   border-color: #f0b441;
+}
+
+/* ---------- Header: softer seam ---------- */
+/* Material's default header shadow is heavy; tone it down to a faint hairline so
+   the bar meets the content more seamlessly. */
+.md-header--shadow {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 /* ---------- Header: sizing ---------- */
@@ -191,6 +256,19 @@
 [data-md-color-scheme="default"] .md-search__input::placeholder,
 [data-md-color-scheme="default"] .md-search__icon {
   color: #6b6b75;
+}
+
+/* ---------- Footer: keep GitHub on the right ---------- */
+/* Material's footer uses justify-content: space-between and wraps on mobile,
+   which drops the social link to a second row on the left. Keep copyright and
+   the GitHub link on one row, social pinned right. (Both are short, so no
+   overflow.) */
+.md-footer-meta__inner {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.md-social {
+  margin-left: auto;
 }
 
 /* ---------- Card hover: gold edge ---------- */
