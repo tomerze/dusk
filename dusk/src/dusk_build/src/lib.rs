@@ -3,14 +3,17 @@ use std::process::Command;
 
 pub use dusk_capnp::CapnpDep;
 
-/// Run a program crate's full build: emit the git revision, then compile its
-/// Cap'n Proto schema. A program's `build.rs` should be a single call to this.
+/// Run a program crate's full build: emit the git revision, then compile each
+/// of its Cap'n Proto schemas. A program's `build.rs` should be a single call
+/// to this.
 ///
-/// `capnp_file` is the path to the program's `.capnp` schema (relative to the
-/// crate root); `deps` lists any additional schemas it imports.
-pub fn build(capnp_file: &str, deps: &[CapnpDep]) {
+/// Each entry is a `(file, deps)` pair: `file` is the path to a `.capnp` schema
+/// (relative to the crate root) and `deps` lists the schemas it imports.
+pub fn build(schemas: &[(&str, &[CapnpDep])]) {
     emit_git_rev();
-    dusk_capnp::build_capnp(capnp_file, deps);
+    for &(file, deps) in schemas {
+        dusk_capnp::build_capnp(file, deps);
+    }
 }
 
 /// Emit the workspace git revision as a `GIT_REV` rustc env var.

@@ -1,3 +1,3 @@
 fn main() {
-    dusk_build::build("capnp/sh.capnp", &[]);
+    dusk_build::build(&[("capnp/sh.capnp", &[])]);
 }
