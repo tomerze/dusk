@@ -12,10 +12,12 @@ pub use dusk_program_true;
 
 use dusk_program::launcher_set::LauncherSet;
 
-/// LauncherSet with launchers for al programs in base
-pub fn launcher_set() -> LauncherSet {
-    LauncherSet::from_launchers(vec![
-        Box::new(dusk_program_logs::Launcher::new()),
+/// LauncherSet with launchers for all programs in base
+pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
+    Ok(LauncherSet::from_launchers(vec![
+        Box::new(dusk_program_logs::Launcher::new(
+            dusk_program_logs::LogsConfig::default(),
+        )?),
         Box::new(dusk_program_date::Launcher::new()),
         Box::new(dusk_program_false::Launcher::new()),
         Box::new(dusk_program_hostname::Launcher::new()),
@@ -25,7 +27,7 @@ pub fn launcher_set() -> LauncherSet {
         Box::new(dusk_program_sh::Launcher::new()),
         Box::new(dusk_program_sleep::Launcher::new()),
         Box::new(dusk_program_true::Launcher::new()),
-    ])
+    ]))
 }
 
 /// Reference every shell-entry function under `std::hint::black_box`

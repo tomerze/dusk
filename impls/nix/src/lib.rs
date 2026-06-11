@@ -18,14 +18,6 @@ mod driver;
 /// requested exit code so `run` can recover and return it.
 pub(crate) struct ExitCode(pub(crate) i32);
 
-pub fn bootstrap_logging() {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_target(false)
-        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
-        .init();
-}
-
 pub fn run(
     launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
     init_program_args: Rc<ProgramArgs>,

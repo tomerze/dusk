@@ -11,13 +11,36 @@ dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 anyhow = { version = "1.0", public = true }
-# Declared for macro use, versions taken from dusk_program
-capnp = { version = "0.21", public = false }
+capnp = { version = "0.21", public = true }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
+portable-atomic = { version = "1", default-features = false }
+portable-atomic-util = { version = "0.2", default-features = false, features = ["alloc"] }
+tracing = { version = "0.1.41", default-features = false, public = true }
+# Not imported directly — declared so `tracing`'s types in the public surface
+# (Level, the layer's span types — all re-exported from tracing-core) count as a
+# public dependency.
+tracing-core = { version = "0.1", default-features = false, public = true }
+tracing-subscriber = { version = "0.3.22", default-features = false, features = ["alloc"], public = true }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
 
+[dev-dependencies]
+# The critical-section impl the buffer's notify needs under `cargo test`, and the
+# embassy-time driver `enrich` links against (the node gets both from the nix impl).
+critical-section = { version = "1", features = ["std"] }
+embassy-time = { version = "0.5", features = ["std"] }
+
 [features]
 client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
+# Building the logs Launcher installs the global subscriber: the buffer capture
+# layer plus console output at INFO. std-only; without it, compose BufferLayer
+# onto your own subscriber.
+console = [
+    "tracing-subscriber/std",
+    "tracing-subscriber/registry",
+    "tracing-subscriber/fmt",
+    "tracing-subscriber/chrono",
+    "tracing-subscriber/ansi",
+]

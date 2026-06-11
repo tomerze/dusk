@@ -1,18 +1,34 @@
 #![allow(internal_features)]
 #![feature(prelude_import)]
-#![cfg_attr(not(feature = "client"), no_std)]
+#![cfg_attr(not(any(feature = "client", test)), no_std)]
 
 use dusk_program::{ready::Ready, signal::SignalReceiver};
 
 extern crate alloc;
 extern crate capnp;
+#[cfg(test)]
+#[macro_use]
+extern crate std;
 
 #[cfg(feature = "client")]
 pub mod client;
 
+mod buffer;
+mod config;
+mod layer;
+
+pub use buffer::{DropCounts, LogBuffer, LogEntry, Reader, StartPosition, Writer};
+pub use config::{LaneConfig, LogsConfig};
+pub use layer::BufferLayer;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("logs", VERSION, logs_capnp::PROGRAM_ID);
+
+/// OTel/OTLP log record schema, compiled from `capnp/log_record.capnp`.
+pub mod log_record_capnp {
+    include!(concat!(env!("OUT_DIR"), "/capnp/log_record_capnp.rs"));
+}
 
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
@@ -37,12 +53,20 @@ impl Default for Args {
 #[dusk_program_proc::impl_args_rpc_server]
 impl Args {}
 
-#[derive(dusk_program_proc::Launcher, Default)]
-pub struct Launcher;
+#[derive(dusk_program_proc::Launcher)]
+pub struct Launcher {
+    pub buffer: LogBuffer,
+}
 
 impl Launcher {
-    pub fn new() -> Self {
-        Self
+    /// Builds the buffer; with the `console` feature this also installs the
+    /// global tracing subscriber (buffer capture plus console output at INFO),
+    /// unless one is already installed.
+    pub fn new(config: LogsConfig) -> anyhow::Result<Self> {
+        let buffer = LogBuffer::new(config)?;
+        #[cfg(feature = "console")]
+        layer::bootstrap(buffer.clone());
+        Ok(Self { buffer })
     }
 }
 

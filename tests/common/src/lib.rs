@@ -94,7 +94,9 @@ impl DuskNixImpl {
                 .as_program_args()
                 .expect("build init program_args");
             dusk_nix::run(
-                dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set()),
+                dusk_nix::BasicLauncherSetBuilder::new(
+                    dusk_base::default_launcher_set().expect("build the base launcher set"),
+                ),
                 init_program_args,
             );
         });

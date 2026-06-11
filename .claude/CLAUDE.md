@@ -37,13 +37,13 @@ in the working agreements.
 ```
 dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
                dusk_program, dusk_program_proc, dusk_prompt, dusk_shell,
-               dusk_cli, dusk_py, dusk_build, dusk_program_sh*)
+               dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
                true, false, init, logs)
-impls/nix/     The Linux impl (Embassy executor, the NixDriver, TCP listener)
+impls/nix/     The Linux impl (Embassy executor, the NixDriver)
 artifacts/     Deliverables you ship: dusk_node (server), dusk (CLI), dusk_py
-docs/          The user-facing documentation site (MkDocs)
-vendor/        Vendored Cap'n Proto compiler source
+docs/          The documentation site (MkDocs)
+vendor/        External libs submodules
 ```
 
 ## The crates
@@ -267,18 +267,27 @@ run and talk to a node."
 ### `dusk_node` — the server, three ways
 
 `dusk_node` packages Dusk Core, the Base programs, and an impl into a runnable
-node. Its body is tiny — it boots logging and calls `dusk_nix::run` with the Base
-launcher set and an `init` bound to `0.0.0.0:9090`:
+node. Its body is tiny — `default_launcher_set()` builds every Base program at
+its default configuration (building the logs launcher inside it also installs
+the global tracing subscriber, since `dusk_node` enables the logs program's
+`console` feature), and `dusk_nix::run` starts the node with an `init` bound to
+`0.0.0.0:9090`:
 
 ```rust
 pub extern "C" fn dusk_node_run() -> i32 {
-    dusk_nix::bootstrap_logging();
-    dusk_nix::run(
-        dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set()),
-        InitArgs::new("0.0.0.0", 9090).as_program_args().unwrap(),
-    )
+    let Ok(launcher_set) = dusk_base::default_launcher_set() else {
+        return 1;
+    };
+    let Ok(init_args) = InitArgs::new("0.0.0.0", 9090).as_program_args() else {
+        return 1;
+    };
+    dusk_nix::run(dusk_nix::BasicLauncherSetBuilder::new(launcher_set), init_args)
 }
 ```
+
+For custom launcher arguments (e.g. a different `LogsConfig`), skip
+`default_launcher_set` and assemble the set yourself with
+`LauncherSet::from_launchers`.
 
 Because its crate type is `["rlib", "staticlib", "cdylib"]`, you can consume it
 three ways:
