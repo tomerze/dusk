@@ -26,12 +26,15 @@ const MAX_EXAMINED: usize = 256;
 /// credit and withholds otherwise, and while it withholds, the ring gathers
 /// the next batch, so batch sizes follow the client's absorption rate on
 /// their own. A failed send keeps its batch and retries, paced by the
-/// round-trip. Runs until the client answers the `stop` long-poll (the
-/// normal end); only the connection dying ends the stream with an error.
+/// round-trip. With `follow`, runs until the client answers the `stop`
+/// long-poll (the normal end) and only the connection dying ends it with an
+/// error; without `follow`, it also ends — cleanly — once the buffer is
+/// drained, a bounded replay-only snapshot.
 pub(crate) async fn pipe(
     reader: &mut Reader,
     server: &logs_args::server::Client,
     minimum_severity: u16,
+    follow: bool,
 ) -> capnp::Result<()> {
     let stop = server.stop_request().send().promise;
 
@@ -44,7 +47,9 @@ pub(crate) async fn pipe(
             // a yield.
             let mut examined = 0;
             while batch.len() < MAX_BATCH && examined < MAX_EXAMINED {
-                let Some(record) = reader.try_read() else { break };
+                let Some(record) = reader.try_read() else {
+                    break;
+                };
                 examined += 1;
                 if keeps(&record, minimum_severity)? {
                     batch.push(record);
@@ -53,7 +58,12 @@ pub(crate) async fn pipe(
 
             if batch.is_empty() {
                 if examined == 0 {
-                    // Nothing buffered: park for the next record.
+                    if !follow && reader.caught_up_to_subscription() {
+                        // Replay-only: the retained history is drained — the
+                        // bounded snapshot is complete.
+                        return Ok(());
+                    }
+                    // Nothing readable yet: park for the next record.
                     let record = reader.read().await;
                     if keeps(&record, minimum_severity)? {
                         batch.push(record);
@@ -91,6 +101,13 @@ pub(crate) async fn pipe(
             // `send` resolves immediately and the loop would never yield on
             // its own.
             embassy_futures::yield_now().await;
+
+            // Replay-only: stop once the reader has passed the subscription
+            // head, even while the node keeps logging — everything beyond it is
+            // live, not the history this snapshot is for.
+            if !follow && reader.caught_up_to_subscription() {
+                return Ok(());
+            }
         }
     };
 

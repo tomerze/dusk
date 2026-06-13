@@ -1,0 +1,480 @@
+//! End-to-end tests for the node's log streams: drive an in-process node and
+//! assert its log records reach each stream — an HTTP collector, an HTTPS
+//! collector (self-signed), and an OTLP/gRPC collector (all via the
+//! `logs stream <url>` shell path), plus a custom in-memory `LogsArgs.Server`
+//! an external author could write (driven straight through the SDK, since a
+//! custom stream has no url).
+//!
+//! The node's launcher set installs the buffer-capture subscriber (always — the
+//! logs Launcher does it unconditionally), and that subscriber is process-global,
+//! so a `tracing::info!` emitted from the test lands in the node's buffer and
+//! streams out to the stream under test. Each test emits a unique marker and
+//! waits for it to arrive.
+
+use std::net::SocketAddr;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use axum::Router;
+use axum::extract::{Json, State};
+use axum::http::StatusCode;
+use axum::routing::post;
+
+use capnp::capability::FromClientHook as _;
+use capnp::capability::Promise;
+use dusk_capnp::dusk_capnp::stream;
+use dusk_program_logs::client::LogsArgs;
+use dusk_program_logs::log_record_capnp::any_value;
+use dusk_program_logs::logs_args;
+use dusk_program_sh::entry::StaticShEntriesBuilder;
+use dusk_program_sh::parser::Parser;
+use dusk_program_sh::sh_capnp;
+use dusk_shell::connection::Connection;
+use dusk_shell::shell::Shell;
+use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
+
+use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::{
+    LogsService, LogsServiceServer,
+};
+use opentelemetry_proto::tonic::collector::logs::v1::{
+    ExportLogsServiceRequest, ExportLogsServiceResponse,
+};
+use opentelemetry_proto::tonic::logs::v1::LogRecord as OtlpLogRecord;
+
+use tokio::sync::{Notify, oneshot};
+use tokio::task::LocalSet;
+
+/// How long to wait for a record to reach the destination before failing.
+const ARRIVAL_TIMEOUT: Duration = Duration::from_secs(15);
+
+// ---- driving `logs stream` ----
+
+/// The sh result stream. `logs stream` never pushes command output here (it
+/// streams records to the args server instead), so both methods are no-ops —
+/// it only exists because `Shell::sh` requires an output stream.
+struct OutputSink;
+
+impl stream::Server for OutputSink {
+    fn send(&mut self, _params: stream::SendParams) -> Promise<(), capnp::Error> {
+        Promise::ok(())
+    }
+
+    fn done(
+        &mut self,
+        _params: stream::DoneParams,
+        _results: stream::DoneResults,
+    ) -> Promise<(), capnp::Error> {
+        Promise::ok(())
+    }
+}
+
+/// Poll `predicate` until it holds or `timeout` elapses; returns whether it
+/// held.
+async fn wait_until(mut predicate: impl FnMut() -> bool, timeout: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        if predicate() {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Run `command` (a `logs stream <url>`) against the node on `port` while
+/// continuously emitting `marker`, and return whether `predicate` (the
+/// destination having received the marker) became true before the timeout.
+async fn drive_logs_stream(
+    port: u16,
+    command: &str,
+    marker: &'static str,
+    predicate: Box<dyn FnMut() -> bool>,
+) -> bool {
+    let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
+    let connection = Connection::connect(address).await.unwrap();
+    let client = connection.client().await;
+    let mut shell = Shell::new(client, StaticShEntriesBuilder::default(), Parser::new())
+        .await
+        .unwrap();
+
+    // Emit the marker on a loop so the live stream is guaranteed to carry it,
+    // independent of how much history the replay walks first.
+    let marker_task = tokio::task::spawn_local(async move {
+        loop {
+            tracing::info!(target: "dusk_logs_integ", "{marker}");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    // `logs stream` runs until torn down, so its done long-poll never fires and
+    // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
+    let (_done_sender, done_receiver) = oneshot::channel::<()>();
+    let output: stream::Client = capnp_rpc::new_client(OutputSink);
+    let stop_signal = Rc::new(Notify::new());
+
+    let found = tokio::select! {
+        result = shell.sh(command, output, done_receiver, stop_signal) => {
+            // `logs stream` should outlive the wait; if it returned, surface why.
+            result.unwrap();
+            false
+        }
+        found = wait_until(predicate, ARRIVAL_TIMEOUT) => found,
+    };
+
+    marker_task.abort();
+    let _ = shell.kill().await;
+    let _ = connection.disconnect().await;
+    found
+}
+
+// ---- receivers ----
+
+async fn http_handler(
+    State(received): State<Arc<Mutex<Vec<serde_json::Value>>>>,
+    Json(record): Json<serde_json::Value>,
+) -> StatusCode {
+    received.lock().unwrap().push(record);
+    StatusCode::OK
+}
+
+/// An HTTP collector that records each POSTed OTLP/JSON body. Returns the
+/// `http://…` URL and the shared sink.
+async fn spawn_http_collector() -> (String, Arc<Mutex<Vec<serde_json::Value>>>) {
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let app = Router::new()
+        .route("/", post(http_handler))
+        .with_state(received.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{address}/"), received)
+}
+
+/// rustls 0.23 needs a process-wide default crypto provider once more than one
+/// provider is linked (reqwest's client plus axum-server's TLS). Installing it
+/// once is enough; a later attempt returns `Err` and is ignored.
+fn install_crypto_provider() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+
+/// An HTTPS collector with a self-signed certificate. The streaming client
+/// trusts it via the `DUSK_CLIENT_SKIP_TLS_VERIFY' env variable.
+async fn spawn_https_collector() -> (String, Arc<Mutex<Vec<serde_json::Value>>>) {
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let app = Router::new()
+        .route("/", post(http_handler))
+        .with_state(received.clone());
+
+    let certificate =
+        rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string(), "localhost".to_string()])
+            .unwrap();
+    let config = axum_server::tls_rustls::RustlsConfig::from_pem(
+        certificate.cert.pem().into_bytes(),
+        certificate.key_pair.serialize_pem().into_bytes(),
+    )
+    .await
+    .unwrap();
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum_server::from_tcp_rustls(listener, config)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    });
+    (format!("https://{address}/"), received)
+}
+
+/// An OTLP/gRPC log collector. Records every exported log record.
+struct GrpcCollector {
+    received: Arc<Mutex<Vec<OtlpLogRecord>>>,
+}
+
+#[tonic::async_trait]
+impl LogsService for GrpcCollector {
+    async fn export(
+        &self,
+        request: tonic::Request<ExportLogsServiceRequest>,
+    ) -> Result<tonic::Response<ExportLogsServiceResponse>, tonic::Status> {
+        let mut received = self.received.lock().unwrap();
+        for resource_logs in request.into_inner().resource_logs {
+            for scope_logs in resource_logs.scope_logs {
+                received.extend(scope_logs.log_records);
+            }
+        }
+        Ok(tonic::Response::new(ExportLogsServiceResponse {
+            partial_success: None,
+        }))
+    }
+}
+
+/// Stand up the gRPC collector; returns the `otlp://…` URL and the shared sink.
+async fn spawn_grpc_collector() -> (String, Arc<Mutex<Vec<OtlpLogRecord>>>) {
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let collector = GrpcCollector {
+        received: received.clone(),
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
+    tokio::spawn(async move {
+        tonic::transport::Server::builder()
+            .add_service(LogsServiceServer::new(collector))
+            .serve_with_incoming(incoming)
+            .await
+            .unwrap();
+    });
+    (format!("otlp://{address}"), received)
+}
+
+/// A custom in-memory stream: a `LogsArgs.Server` an external author could
+/// write, capturing each streamed record's message body. No file, no collector,
+/// no console — it straps straight onto the stream interface and reads the capnp
+/// records itself.
+struct CaptureStream {
+    captured: Arc<Mutex<Vec<String>>>,
+}
+
+impl logs_args::server::Server for CaptureStream {
+    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+        let entries = match params.get().and_then(|params| params.get_entries()) {
+            Ok(entries) => entries,
+            Err(error) => return Promise::err(error),
+        };
+        let mut captured = self.captured.lock().unwrap();
+        for entry in entries.iter() {
+            let Ok(body) = entry.get_body() else { continue };
+            let Ok(any_value::Which::StringValue(Ok(text))) = body.which() else {
+                continue;
+            };
+            let Ok(text) = text.to_str() else { continue };
+            captured.push(text.to_string());
+        }
+        Promise::ok(())
+    }
+
+    fn stop(
+        &mut self,
+        _params: logs_args::server::StopParams,
+        _results: logs_args::server::StopResults,
+    ) -> Promise<(), capnp::Error> {
+        // Never stop on our own; the test tears the stream down by killing the
+        // process once the marker has arrived.
+        Promise::from_future(std::future::pending::<Result<(), capnp::Error>>())
+    }
+}
+
+// ---- tests ----
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_logs_stream_to_custom_stream() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    LocalSet::new()
+        .run_until(async move {
+            let captured = Arc::new(Mutex::new(Vec::<String>::new()));
+            let marker = "dusk-logs-stream-integ-custom";
+
+            let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
+            let connection = Connection::connect(address).await.unwrap();
+            let client = connection.client().await;
+
+            // Build the program args around our own stream — the SDK path,
+            // since a custom server has no `logs stream <url>` to type.
+            let server: logs_args::server::Client = capnp_rpc::new_client(CaptureStream {
+                captured: captured.clone(),
+            });
+            let program_args = LogsArgs::new(None, logs_args::Mode::ReplayThenFollow, server)
+                .as_program_args()
+                .unwrap();
+
+            let mut process_request = client.process_request();
+            program_args
+                .with_reader(|reader| process_request.get().set_program_args(reader))
+                .unwrap();
+            let process = process_request
+                .send()
+                .promise
+                .await
+                .unwrap()
+                .get()
+                .unwrap()
+                .get_result()
+                .unwrap();
+
+            let pid = process
+                .pid_request()
+                .send()
+                .promise
+                .await
+                .unwrap()
+                .get()
+                .unwrap()
+                .get_result();
+
+            // Run it as its own task (a daemon), then start the stream by
+            // calling its output portal. The logs program streams records to
+            // our args server, never to this output sink.
+            let mut run_request = client.run_request();
+            run_request.get().set_process(process.clone());
+            run_request.send().promise.await.unwrap();
+
+            let portal = process
+                .portal_request()
+                .send()
+                .promise
+                .await
+                .unwrap()
+                .get()
+                .unwrap()
+                .get_result()
+                .unwrap()
+                .cast_to::<sh_capnp::output_portal::Client>();
+
+            let mut output_request = portal.output_request();
+            output_request
+                .get()
+                .set_stream(capnp_rpc::new_client(OutputSink));
+
+            // Emit the marker on a loop so the live stream is guaranteed to
+            // carry it, independent of how much history the replay walks first.
+            let marker_task = tokio::task::spawn_local(async move {
+                loop {
+                    tracing::info!(target: "dusk_logs_integ", "{marker}");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            });
+
+            let captured_for_predicate = captured.clone();
+            let found = tokio::select! {
+                result = output_request.send().promise => {
+                    // The stream should outlive the wait; if it returned, surface why.
+                    result.unwrap();
+                    false
+                }
+                found = wait_until(
+                    move || {
+                        captured_for_predicate
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|body| body.contains(marker))
+                    },
+                    ARRIVAL_TIMEOUT,
+                ) => found,
+            };
+
+            marker_task.abort();
+            let mut kill_request = client.kill_request();
+            kill_request.get().set_pid(pid);
+            kill_request.get().set_signal(15);
+            let _ = kill_request.send().promise.await;
+            let _ = connection.disconnect().await;
+
+            assert!(found, "marker never reached the custom in-memory stream");
+            assert!(
+                !captured.lock().unwrap().is_empty(),
+                "no records captured by the custom stream"
+            );
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_logs_stream_to_http() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    LocalSet::new()
+        .run_until(async move {
+            let (url, received) = spawn_http_collector().await;
+            let marker = "dusk-logs-stream-integ-http";
+
+            let received_for_predicate = received.clone();
+            let found = drive_logs_stream(
+                port,
+                &format!("logs stream {url}"),
+                marker,
+                Box::new(move || {
+                    received_for_predicate
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .any(|record| record.to_string().contains(marker))
+                }),
+            )
+            .await;
+            assert!(found, "marker never POSTed to the http collector");
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_logs_stream_to_https() {
+    install_crypto_provider();
+    // SAFETY: each nextest test runs in its own process; the toggle only makes
+    // the streaming client trust the self-signed collector below.
+    unsafe { std::env::set_var("DUSK_CLIENT_SKIP_TLS_VERIFY", "1") };
+
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    LocalSet::new()
+        .run_until(async move {
+            let (url, received) = spawn_https_collector().await;
+            let marker = "dusk-logs-stream-integ-https";
+
+            let received_for_predicate = received.clone();
+            let found = drive_logs_stream(
+                port,
+                &format!("logs stream {url}"),
+                marker,
+                Box::new(move || {
+                    received_for_predicate
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .any(|record| record.to_string().contains(marker))
+                }),
+            )
+            .await;
+            assert!(found, "marker never POSTed to the https collector");
+        })
+        .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_logs_stream_to_grpc() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    LocalSet::new()
+        .run_until(async move {
+            let (url, received) = spawn_grpc_collector().await;
+            let marker = "dusk-logs-stream-integ-grpc";
+
+            let received_for_predicate = received.clone();
+            let found = drive_logs_stream(
+                port,
+                &format!("logs stream {url}"),
+                marker,
+                Box::new(move || {
+                    received_for_predicate.lock().unwrap().iter().any(|record| {
+                        serde_json::to_string(record)
+                            .map(|json| json.contains(marker))
+                            .unwrap_or(false)
+                    })
+                }),
+            )
+            .await;
+            assert!(found, "marker never exported to the gRPC collector");
+        })
+        .await;
+}

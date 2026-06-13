@@ -20,4 +20,4 @@ dusk_program = { path = "../dusk_program/", public = true}
 [features]
 # The high-frequency executor trace hooks in `trace.rs` (poll, task exec
 # begin/end, idle). Task new/end always trace.
-perf-tracing = []
+tracing = []

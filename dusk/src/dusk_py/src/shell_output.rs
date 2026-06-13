@@ -37,8 +37,14 @@ impl ShellOutput {
     }
 
     fn __next__(&mut self, py: Python) -> Option<PyResult<Py<PyAny>>> {
-        let mut rx = self.rx.lock().ok()?;
-        match rx.blocking_recv() {
+        // Release the GIL while parking on the channel. A never-ending command
+        // (a live `logs stream`) blocks here forever; holding the GIL across it
+        // would freeze every other Python thread — the MCP gateway's whole
+        // event loop — so a concurrent command on the same connection could
+        // never run.
+        let rx = self.rx.clone();
+        let received = py.detach(move || rx.lock().ok()?.blocking_recv());
+        match received {
             Some(Ok(pickle_bytes)) => {
                 // Deserialize pickle bytes to Python object
                 match pyo3::types::PyModule::import(py, "pickle") {

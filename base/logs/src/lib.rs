@@ -1,6 +1,5 @@
 #![allow(internal_features)]
 #![feature(prelude_import)]
-#![feature(impl_trait_in_assoc_type)]
 #![cfg_attr(not(any(feature = "client", test)), no_std)]
 
 use dusk_program::{ready::Ready, signal::SignalReceiver};
@@ -16,7 +15,7 @@ extern crate std;
 mod buffer;
 mod config;
 mod layer;
-mod stream;
+mod pipe;
 
 pub use buffer::{DropCounts, LogBuffer, Reader, StartPosition, Writer};
 pub use config::{LaneConfig, LogsConfig};
@@ -31,10 +30,10 @@ pub mod log_record_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/log_record_capnp.rs"));
 }
 
+pub use logs_capnp::logs_args;
+
 #[cfg(feature = "client")]
 pub mod client;
-#[cfg(feature = "client")]
-mod viewer;
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher {
@@ -42,13 +41,9 @@ pub struct Launcher {
 }
 
 impl Launcher {
-    /// Builds the buffer; with the `console` feature this also installs the
-    /// global tracing subscriber (buffer capture plus console output at INFO),
-    /// unless one is already installed.
     pub fn new(config: LogsConfig) -> anyhow::Result<Self> {
         let buffer = LogBuffer::new(config)?;
-        #[cfg(feature = "console")]
-        layer::bootstrap(buffer.clone());
+        let _ = tracing::subscriber::set_global_default(BufferLayer::new(buffer.clone()));
         Ok(Self { buffer })
     }
 }
@@ -127,18 +122,30 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
             let stream_result = async {
                 let server: logs_capnp::logs_args::server::Client =
                     process.ctx.program_args.server_as()?;
-                let minimum_severity = process
-                    .ctx
-                    .program_args
-                    .with_data::<logs_capnp::logs_args::data::Owned, _, _>(|data| {
-                        // Unknown ordinals (a newer client) act as "no floor".
-                        Ok(data.get_level().map(|level| level as u16).unwrap_or(0))
-                    })?;
+                let (minimum_severity, start_position, follow) =
+                    process
+                        .ctx
+                        .program_args
+                        .with_data::<logs_capnp::logs_args::data::Owned, _, _>(|data| {
+                            // Unknown ordinals (a newer client) act as "no floor".
+                            let minimum_severity =
+                                data.get_level().map(|level| level as u16).unwrap_or(0);
+                            let (start_position, follow) = match data.get_mode() {
+                                Ok(logs_capnp::logs_args::Mode::ReplayOnly) => {
+                                    (StartPosition::Replay, false)
+                                }
+                                Ok(logs_capnp::logs_args::Mode::FollowOnly) => {
+                                    (StartPosition::Live, true)
+                                }
+                                // ReplayThenFollow, or an unknown ordinal from a newer client.
+                                _ => (StartPosition::Replay, true),
+                            };
+                            Ok((minimum_severity, start_position, follow))
+                        })?;
                 let dusk_client = dusk_core::local_client(process.ctx.namespace.clone()).await;
-                let mut reader =
-                    process.buffer.reader(StartPosition::Replay, dusk_client).await?;
+                let mut reader = process.buffer.reader(start_position, dusk_client).await?;
                 let span = tracing::info_span!("logs_stream", pid = process.ctx.pid);
-                let streaming = stream::stream(&mut reader, &server, minimum_severity);
+                let streaming = pipe::pipe(&mut reader, &server, minimum_severity, follow);
                 if let Err(error) = streaming.instrument(span).await {
                     tracing::warn!(error = %error, "the logs stream failed");
                 }

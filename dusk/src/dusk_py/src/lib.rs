@@ -75,7 +75,7 @@ impl Dusk {
     /// Returns:
     ///     A Dusk client instance
     #[new]
-    fn new(_py: Python, address: String, port: u16) -> PyResult<Self> {
+    fn new(py: Python, address: String, port: u16) -> PyResult<Self> {
         let address = std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
             std::net::Ipv4Addr::from_str(&address)
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
@@ -88,8 +88,9 @@ impl Dusk {
         let thread_handle =
             std::thread::spawn(move || Self::connection_thread(address, message_rx, init_tx));
 
-        // Wait for initialization to complete or fail
-        match init_rx.blocking_recv() {
+        // Wait for initialization to complete or fail, releasing the GIL so a
+        // slow connect doesn't freeze other Python threads.
+        match py.detach(|| init_rx.blocking_recv()) {
             Some(Ok(())) => Ok(Dusk {
                 thread_handle: Arc::new(Mutex::new(Some(thread_handle))),
                 message_tx: Arc::new(Mutex::new(Some(message_tx))),
@@ -103,8 +104,8 @@ impl Dusk {
 
     /// Disconnect from the Dusk server.
     /// This should be called when you're done using the client.
-    fn disconnect(&mut self) -> PyResult<()> {
-        self.disconnect_internal()
+    fn disconnect(&mut self, py: Python) -> PyResult<()> {
+        self.disconnect_internal(py)
     }
 
     fn sh(&mut self, _py: Python, command: String) -> PyResult<ShellOutput> {
@@ -153,8 +154,8 @@ impl Dusk {
         }
     }
 
-    fn __del__(&mut self) {
-        let _ = self.disconnect_internal();
+    fn __del__(&mut self, py: Python) {
+        let _ = self.disconnect_internal(py);
     }
 }
 
@@ -231,7 +232,7 @@ impl Dusk {
     // * User calls `disconnect()` which wraps this internal function
     // * A shutdown message is sent to the connection thread
     // * The thread calls `connection.disconnect()`
-    fn disconnect_internal(&mut self) -> PyResult<()> {
+    fn disconnect_internal(&mut self, py: Python) -> PyResult<()> {
         // Take the sender if available
         let tx_opt = self
             .message_tx
@@ -253,18 +254,23 @@ impl Dusk {
 
             // Wait for thread to finish if we have a handle
             if let Some(handle) = handle_opt {
-                let _ = handle.join();
-
-                // Get the shutdown result
-                if let Some(shutdown_result) = result_rx.blocking_recv() {
+                // Release the GIL while joining the connection thread and
+                // waiting for its shutdown result — both block.
+                let shutdown_result = py.detach(move || {
+                    let _ = handle.join();
+                    result_rx.blocking_recv()
+                });
+                if let Some(shutdown_result) = shutdown_result {
                     return shutdown_result
                         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()));
                 }
             }
             Ok(())
         } else if let Some(handle) = handle_opt {
-            // No sender but have handle - just wait for thread
-            let _ = handle.join();
+            // No sender but have handle — just wait for the thread, GIL released.
+            py.detach(move || {
+                let _ = handle.join();
+            });
             Ok(())
         } else {
             // Already disconnected

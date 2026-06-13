@@ -1,9 +1,9 @@
 pub const RPC_TRACE_MESSAGE: &str = "rpc call";
 
 #[unsafe(no_mangle)]
-#[cfg_attr(not(feature = "perf-tracing"), allow(unused_variables))]
+#[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
 fn _embassy_trace_poll_start(executor_id: u32) {
-    #[cfg(feature = "perf-tracing")]
+    #[cfg(feature = "tracing")]
     tracing::trace!(executor_id, "executor poll");
 }
 
@@ -18,16 +18,16 @@ fn _embassy_trace_task_end(executor_id: u32, task_id: u32) {
 }
 
 #[unsafe(no_mangle)]
-#[cfg_attr(not(feature = "perf-tracing"), allow(unused_variables))]
+#[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
 fn _embassy_trace_task_exec_begin(executor_id: u32, task_id: u32) {
-    #[cfg(feature = "perf-tracing")]
+    #[cfg(feature = "tracing")]
     tracing::trace!(executor_id, task_id, "task exec begin");
 }
 
 #[unsafe(no_mangle)]
-#[cfg_attr(not(feature = "perf-tracing"), allow(unused_variables))]
+#[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
 fn _embassy_trace_task_exec_end(executor_id: u32, task_id: u32) {
-    #[cfg(feature = "perf-tracing")]
+    #[cfg(feature = "tracing")]
     tracing::trace!(executor_id, task_id, "task exec end");
 }
 
@@ -42,8 +42,8 @@ fn _embassy_trace_task_ready_begin(_executor_id: u32, _task_id: u32) {
 }
 
 #[unsafe(no_mangle)]
-#[cfg_attr(not(feature = "perf-tracing"), allow(unused_variables))]
+#[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
 fn _embassy_trace_executor_idle(executor_id: u32) {
-    #[cfg(feature = "perf-tracing")]
+    #[cfg(feature = "tracing")]
     tracing::trace!(executor_id, "executor idle")
 }

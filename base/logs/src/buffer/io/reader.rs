@@ -22,6 +22,9 @@ pub struct Reader {
     inner: Arc<LogBufferInner>,
     /// Per-lane next descriptor position to read.
     cursor: Box<[u64]>,
+    /// Per-lane head at subscription: the end of the retained history a
+    /// `Replay` walks. Records logged since are beyond it.
+    subscription_head: Box<[u64]>,
     offset_from_unix_time_ms: u64,
     /// Scratch for the bytes copied out by the last accepted descriptor.
     packed: Vec<u8>,
@@ -42,12 +45,31 @@ impl Reader {
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        let subscription_head = inner
+            .lanes
+            .iter()
+            .map(|lane| lane.descriptors.head.load(Ordering::Acquire))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         Reader {
             inner,
             cursor,
+            subscription_head,
             offset_from_unix_time_ms,
             packed: Vec::new(),
         }
+    }
+
+    /// Whether the reader has yielded every record retained at subscription —
+    /// the end of a `Replay`'s history. Records logged since are beyond this
+    /// boundary, so a replay-only snapshot stops here even while the node keeps
+    /// logging. (Eviction past the boundary also counts as caught up: those
+    /// records are gone.)
+    pub fn caught_up_to_subscription(&self) -> bool {
+        self.cursor
+            .iter()
+            .zip(self.subscription_head.iter())
+            .all(|(cursor, head)| cursor >= head)
     }
 
     /// The next record, parking until one arrives, enriched with its severity

@@ -51,6 +51,25 @@ fn enrich(
         .as_millis()
         .saturating_add(offset_from_unix_time_ms);
 
+    let mut hex_ids: Vec<(u32, String)> = Vec::new();
+    for (index, attribute) in stored_record.get_attributes()?.iter().enumerate() {
+        if !HEX_ID_FIELDS.contains(&attribute.get_key()?.to_str()?) {
+            continue;
+        }
+        // Whether captured as an OTLP int (32-bit-range values) or a decimal
+        // string (wider values, or Debug-formatted fields), re-encode as bare
+        // hex; skip any other shape.
+        let id = match attribute.get_value()?.which()? {
+            any_value::Which::IntValue(integer) => integer as u64,
+            any_value::Which::StringValue(text) => match text?.to_str()?.parse::<u64>() {
+                Ok(id) => id,
+                Err(_) => continue,
+            },
+            _ => continue,
+        };
+        hex_ids.push((index as u32, format!("{id:x}")));
+    }
+
     let mut enriched = Builder::new_default();
     enriched.set_root::<log_record::Owned>(stored_record)?;
     {
@@ -59,6 +78,15 @@ fn enrich(
         record.set_severity_text(level.as_str());
         record.set_time_unix_nano(logged_unix_ms.saturating_mul(1_000_000));
         record.set_observed_time_unix_nano(observed_unix_ms.saturating_mul(1_000_000));
+
+        let mut attributes = record.reborrow().get_attributes()?;
+        for (index, hex) in &hex_ids {
+            attributes
+                .reborrow()
+                .get(*index)
+                .get_value()?
+                .set_string_value(hex.as_str());
+        }
     }
     Ok(enriched)
 }

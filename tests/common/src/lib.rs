@@ -1,9 +1,13 @@
+use capnp::capability::Promise;
 use dusk_base::dusk_program_init::Args as InitArgs;
+use dusk_program_logs::client::LogsArgs;
+use dusk_program_logs::log_record_capnp::{any_value, log_record};
+use dusk_program_logs::logs_args;
+use dusk_shell::connection::Connection;
 use rand::Rng;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use tracing::Level;
-use tracing_subscriber::Layer;
-use tracing_subscriber::layer::SubscriberExt;
+use std::time::Duration;
 
 pub const LISTEN_ADDRESS: &str = "127.0.0.1";
 
@@ -12,85 +16,66 @@ pub fn gen_port() -> u16 {
     rng.random_range(1001..=65535)
 }
 
-#[derive(Clone)]
-struct LogCapture {
-    logs: Arc<Mutex<Vec<(Level, String)>>>,
+/// A `LogsArgs.Server` that records the body of every ERROR-severity entry the
+/// node streams to it — the harness's error monitor, hosted directly rather
+/// than going through `logs stream <url>`.
+struct ErrorCaptureStream {
+    errors: Arc<Mutex<Vec<String>>>,
 }
 
-impl LogCapture {
-    fn new() -> Self {
-        Self {
-            logs: Arc::new(Mutex::new(Vec::new())),
+impl logs_args::server::Server for ErrorCaptureStream {
+    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+        let entries = match params.get().and_then(|params| params.get_entries()) {
+            Ok(entries) => entries,
+            Err(error) => return Promise::err(error),
+        };
+        let mut errors = self.errors.lock().unwrap();
+        for entry in entries.iter() {
+            let is_error = entry
+                .get_severity_text()
+                .ok()
+                .and_then(|text| text.to_str().ok())
+                .is_some_and(|text| text == "ERROR");
+            if is_error {
+                errors.push(body_text(entry));
+            }
         }
+        Promise::ok(())
     }
 
-    fn has_errors(&self) -> bool {
-        self.logs
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|(level, _)| *level == Level::ERROR)
-    }
-
-    fn get_logs(&self) -> Vec<(Level, String)> {
-        self.logs.lock().unwrap().clone()
+    fn stop(
+        &mut self,
+        _params: logs_args::server::StopParams,
+        _results: logs_args::server::StopResults,
+    ) -> Promise<(), capnp::Error> {
+        // Long-poll: the monitor streams for the node's whole lifetime.
+        Promise::from_future(std::future::pending())
     }
 }
 
-impl<S: tracing::Subscriber> Layer<S> for LogCapture {
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        _ctx: tracing_subscriber::layer::Context<'_, S>,
-    ) {
-        let level = *event.metadata().level();
-        let target = event.metadata().target();
-        let mut visitor = MessageVisitor(String::new());
-        event.record(&mut visitor);
-        self.logs
-            .lock()
-            .unwrap()
-            .push((level, format!("{} - {}", target, visitor.0)));
-    }
+/// An entry's body as text, for the failure message; empty when it has none.
+fn body_text(entry: log_record::Reader) -> String {
+    entry
+        .get_body()
+        .ok()
+        .and_then(|body| body.which().ok())
+        .and_then(|which| match which {
+            any_value::Which::StringValue(Ok(text)) => text.to_str().ok().map(str::to_string),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
-
-struct MessageVisitor(String);
-
-impl tracing::field::Visit for MessageVisitor {
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        if field.name() == "message" {
-            self.0 = format!("{:?}", value);
-        } else {
-            self.0.push_str(&format!(" {}={:?}", field.name(), value));
-        }
-    }
-
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == "message" {
-            self.0 = value.to_string();
-        } else {
-            self.0.push_str(&format!(" {}={:?}", field.name(), value));
-        }
-    }
-}
-
 pub struct DuskNixImpl {
-    log_capture: LogCapture,
+    errors: Arc<Mutex<Vec<String>>>,
 }
 
 impl DuskNixImpl {
     pub fn new(address: &str, port: u16) -> Self {
         let address = address.to_string();
-        let log_capture = LogCapture::new();
-        let log_capture_clone = log_capture.clone();
-        let address_clone = address.clone();
 
+        let node_address = address.clone();
         std::thread::spawn(move || {
-            let address = address_clone;
-            let subscriber = tracing_subscriber::registry().with(log_capture_clone);
-            let _ = tracing::subscriber::set_global_default(subscriber);
-
-            let init_program_args = InitArgs::new(&address, port)
+            let init_program_args = InitArgs::new(&node_address, port)
                 .as_program_args()
                 .expect("build init program_args");
             dusk_nix::run(
@@ -102,34 +87,97 @@ impl DuskNixImpl {
         });
 
         // Block until the server is accepting connections.
-        let socket_address = format!("{}:{}", address, port);
+        let socket_address = format!("{address}:{port}");
         loop {
             if std::net::TcpStream::connect(&socket_address).is_ok() {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(10));
         }
 
-        Self { log_capture }
+        let errors = Arc::new(Mutex::new(Vec::new()));
+
+        // Monitor: a `logs` process streaming to our own ErrorCaptureStream for
+        // the node's lifetime.
+        let monitor_errors = errors.clone();
+        let monitor_address = address.clone();
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build the monitor runtime");
+            let local = tokio::task::LocalSet::new();
+            local.block_on(&runtime, async move {
+                let address: SocketAddr = format!("{monitor_address}:{port}")
+                    .parse()
+                    .expect("monitor address");
+                let Ok(connection) = Connection::connect(address).await else {
+                    return;
+                };
+                let client = connection.client().await;
+                let server: logs_args::server::Client = capnp_rpc::new_client(ErrorCaptureStream {
+                    errors: monitor_errors,
+                });
+                let Ok(program_args) =
+                    LogsArgs::new(None, logs_args::Mode::ReplayThenFollow, server)
+                        .as_program_args()
+                else {
+                    return;
+                };
+
+                let mut process_request = client.process_request();
+                if program_args
+                    .with_reader(|reader| process_request.get().set_program_args(reader))
+                    .is_err()
+                {
+                    return;
+                }
+                let process = match process_request.send().promise.await {
+                    Ok(reply) => match reply.get().and_then(|result| result.get_result()) {
+                        Ok(process) => process,
+                        Err(_) => return,
+                    },
+                    Err(_) => return,
+                };
+                let mut run_request = client.run_request();
+                run_request.get().set_process(process);
+                if run_request.send().promise.await.is_err() {
+                    return;
+                }
+
+                // Keep the connection (and the hosted ErrorCaptureStream) alive
+                // for the node's lifetime so the daemon keeps streaming to it.
+                std::future::pending::<()>().await;
+            });
+        });
+
+        Self { errors }
     }
 
-    /// Check if any errors were logged and panic if so
+    /// Fail if any ERROR-severity record reached the monitor. Gives the
+    /// asynchronous stream a moment to drain first, so an error logged just
+    /// before this call is not missed.
     pub fn assert_no_errors(&self) {
-        if self.log_capture.has_errors() {
-            let logs = self.log_capture.get_logs();
-            let mut error_msg = String::from("errors where logged by dusk: \n");
-            for (level, msg) in logs {
-                if level == Level::ERROR {
-                    error_msg.push_str(&format!("[{:5}] {}\n", level, msg));
-                }
+        std::thread::sleep(Duration::from_millis(300));
+        let errors = self.errors.lock().unwrap();
+        if !errors.is_empty() {
+            let mut message = String::from("errors were logged by dusk:\n");
+            for line in errors.iter() {
+                message.push_str(&format!("  {line}\n"));
             }
-            panic!("{}", error_msg);
+            panic!("{message}");
         }
     }
 }
 
 impl Drop for DuskNixImpl {
     fn drop(&mut self) {
+        // A failing test is already unwinding; panicking again here would abort
+        // the process (taking sibling tests with it) and bury the original
+        // failure. Let the in-progress panic carry the real message.
+        if std::thread::panicking() {
+            return;
+        }
         self.assert_no_errors();
     }
 }

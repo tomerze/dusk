@@ -91,6 +91,7 @@ nav:
       - Architecture: development/architecture.md
       - Shell: development/shell.md
       - Log buffer: development/logs.md
+      - Tracing and spans: development/tracing.md
       - Ask Dusk: development/ask_dusk.md
       - Contributing: development/contributing.md
   - SDK Reference:

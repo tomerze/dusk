@@ -179,12 +179,26 @@ output, check its shape: a single `0x…` key means "typed result, read the fiel
 anything else is the data directly. Never invent a meaning for the hex key or present it as data.
 
 Long-running programs:
-Every program tool supports task-augmented invocation (MCP tasks). If a command may run for
-a while — a long `sleep`, a shell script, a `logs` stream — invoke the tool as a task: you
-get a task id back immediately while the program runs in the background, and you can keep
-working; poll the task and fetch its result when the program finishes. Quick commands work
-as plain synchronous calls. Cancelling a task does not kill the program on the node — use
-the `kill` tool for that.
+Every program tool supports task-augmented invocation (MCP tasks). If a command may run for a
+while — a long `sleep`, a shell script, a live `logs` follow — invoke the tool *as an MCP task*
+(this is NOT your client's generic "run in background" flag, which is a different mechanism and
+will just block the call): you get a task id back immediately while the program runs on the
+gateway, and you can keep working. Poll the task and fetch its result when the program finishes;
+a program that never finishes you simply never poll. Quick commands work as plain synchronous
+calls. Cancelling a task does NOT kill the program on the node — use the `kill` tool for that.
+
+Commands on one connection run concurrently: a long-running one (a live `logs` follow you left
+running as a task) does NOT block other commands on the same descriptor. Still prefer a bounded
+read over an endless stream (see Reading logs).
+
+Reading logs:
+To read the current logs and get them back, take a BOUNDED snapshot — never an endless stream.
+Run the `logs` tool with arguments `stream file:///tmp/dusk-logs-<descriptor>.jsonl --replay-only`:
+the `--replay-only` flag replays the buffered history to the file and RETURNS, then you read that
+file. Put your connection descriptor in the path so you don't collide with other models. A plain
+`logs stream <url>` (without --replay-only) NEVER returns and a file target grows without limit —
+do not use it to read logs. If you genuinely need a live follow, stream to
+a named pipe (`mkfifo`) so it stays bounded, invoke it as an MCP task, and `kill` it when done.
             """
         ),
     )

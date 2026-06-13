@@ -13,6 +13,13 @@ struct LogsArgs {
   struct Data {
     # The minimum severity to stream; unspecified streams everything.
     level @0 :LogRecord.SeverityNumber;
+    # Replay retained history, follow new records, or both (the default).
+    mode @1 :Mode;
+  }
+  enum Mode {
+    replayThenFollow @0;
+    replayOnly @1;
+    followOnly @2;
   }
   interface Server {
     # Streams log records to the client. Where they land is the client's
