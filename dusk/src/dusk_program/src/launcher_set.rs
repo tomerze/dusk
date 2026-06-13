@@ -51,8 +51,8 @@ impl LauncherSet {
                 let pid = process_context.pid;
                 let result = launcher.launch(process_context).await;
                 tracing::info!(
-                    process_context.pid = pid,
-                    process_context.program_args.program_id = program_id,
+                    pid,
+                    program_id,
                     error = result.as_ref().err().map(tracing::field::debug),
                     "process launch",
                 );

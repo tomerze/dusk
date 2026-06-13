@@ -109,7 +109,7 @@ impl Execution {
                 }
                 Either::Second(()) => {
                     stop.signal(());
-                    tracing::info!(?pid, "stop signal sent to process");
+                    tracing::info!(pid, "stop signal sent to process");
                     (true, None)
                 }
             }

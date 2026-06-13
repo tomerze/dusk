@@ -83,8 +83,9 @@ impl Writer {
         let descriptor_position = lane.descriptors.head.fetch_add(1, Ordering::AcqRel);
 
         // Reclaim-before-reuse (drop-oldest): advance both tails past what we're
-        // about to overwrite *first*, so a reader still on the old occupants gaps
-        // or rejects its copy. fetch_max keeps concurrent advances monotonic.
+        // about to overwrite *first*, so a reader still on the old occupants
+        // skips them or rejects its copy. fetch_max keeps concurrent advances
+        // monotonic.
         lane.descriptors.tail.fetch_max(
             (descriptor_position + 1).saturating_sub(lane.descriptors.capacity),
             Ordering::AcqRel,

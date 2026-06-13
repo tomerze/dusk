@@ -186,7 +186,12 @@ where
     ) -> Result<bool> {
         Self::strip_rtt_suffix(buffer, status_plain_width)?;
 
-        if !buffer.is_empty() {
+        // A comment-only (or blank) line executes nothing — keep its
+        // indicator dim and its history item free of execution metadata.
+        let runs_command = !dusk_base::dusk_program_sh::parser::strip_comments(buffer)
+            .trim()
+            .is_empty();
+        if runs_command {
             line_editor.update_last_command_context(
                 &|mut history_item: reedline::HistoryItem| {
                     history_item.start_timestamp = Some(chrono::Utc::now());
@@ -204,7 +209,7 @@ where
 
         let duration = start_timestamp.elapsed();
 
-        if !buffer.is_empty() {
+        if runs_command {
             line_editor.update_last_command_context(&|mut history_item| {
                 history_item.duration = Some(duration);
                 history_item.exit_status = Some(0);

@@ -215,7 +215,7 @@ impl dusk::Server for DuskServer {
     ) -> Promise<(), capnp::Error> {
         let pid = pry!(params.get()).get_pid();
         let signal = pry!(params.get()).get_signal();
-        debug!(method = "Dusk.kill", ?pid, ?signal, "rpc call");
+        debug!(method = "Dusk.kill", pid, signal, "rpc call");
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
@@ -242,7 +242,7 @@ impl dusk::Server for DuskServer {
         mut _results: dusk::WaitpidResults,
     ) -> Promise<(), capnp::Error> {
         let pid = pry!(params.get()).get_pid();
-        debug!(method = "Dusk.waitpid", ?pid, "rpc call");
+        debug!(method = "Dusk.waitpid", pid, "rpc call");
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
@@ -316,7 +316,7 @@ impl dusk::Server for DuskServer {
         _results: dusk::SettimeResults,
     ) -> Promise<(), capnp::Error> {
         let unix_time_ms = pry!(params.get()).get_unix_time_ms();
-        debug!(method = "Dusk.settime", ?unix_time_ms, "rpc call");
+        debug!(method = "Dusk.settime", unix_time_ms, "rpc call");
         self.namespace.creation_time.store(
             unix_time_ms - dusk_program::embassy_time::Instant::now().as_millis(),
             core::sync::atomic::Ordering::Relaxed,

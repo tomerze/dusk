@@ -41,23 +41,17 @@ an owner can keep one clone and move another into (say) the logs program's
 launcher, and both still mint handles. A second, *independent* buffer is always
 an explicit `LogBuffer::new`.
 
-The buffer also keeps **drop counters** — records discarded because their level
-routes to no lane, because they exceed their lane's whole arena, or because
-serialization failed — snapshotted by `buffer.drop_counts()`. Writes never fail
-for these, so the counters are the only trace; poll them when logs seem to go
-missing.
-
 ## The files
 
 `base/logs/src/buffer/` is split by concern:
 
 | File | Role |
 |------|------|
-| `mod.rs` | module root: the `LogBuffer` owner, `new`/`writer`/`reader`/`reader_with_offset`/`drop_counts`, `StartPosition`, the per-lane routing table, and the shared constants (`LEVELS`, `level_index`, `LANE_SEQUENCE_WRITING`). Re-exports `LogBuffer`, `Writer`, `Reader`, `LogEntry`, `StartPosition`, `DropCounts`. |
+| `mod.rs` | module root: the `LogBuffer` owner, `new`/`writer`/`reader`/`reader_with_offset`/`drop_counts`, `StartPosition`, the per-lane routing table, and the shared constants (`LEVELS`, `level_index`, `LANE_SEQUENCE_WRITING`). Re-exports `LogBuffer`, `Writer`, `Reader`, `StartPosition`, `DropCounts`. |
 | `lane.rs` | the data structures — `Lane` (its two rings), `Ring<T>` (`capacity` + `data` + `head` + `tail`), `Descriptor` (the seqlock-guarded slot) — plus `Lane::from_config`, which builds a lane's rings from a `LaneConfig`. |
 | `notify.rs` | the readers' wakeup: a version counter plus the parked readers' wakers — any number of readers can park. |
 | `io/writer.rs` | `Writer` and its `write` — the lock-free producer path. |
-| `io/reader.rs` | `Reader` and its `read`/`try_read` — the merged, non-destructive consumer; the per-step `Step`/`Read` outcomes; and `LogEntry`. |
+| `io/reader.rs` | `Reader` and its `read`/`try_read` — the merged, non-destructive consumer. |
 | `enrich.rs` | turning a stored record into an enriched OTLP `LogRecord`. |
 
 The ingest side lives one level up: `src/layer.rs` (behind the `layer` cargo
@@ -194,7 +188,7 @@ READER:  load lane_sequence;  == p ?      no → wait / retry (mid-write or stal
 READER:  read seq, level, data_position, data_length
 READER:  Acquire fence  ─┘                (pairs with the writer's first fence)
 READER:  re-load lane_sequence still == p ?   no → retry (the fields were torn)
-READER:  data_position ≥ data_tail ?      no → reclaimed, count it as a gap
+READER:  data_position ≥ data_tail ?      no → reclaimed, skip it
 READER:  copy the bytes out of the arena
 READER:  Acquire fence  ──┘               (pairs with the writer's second fence)
 READER:  re-load lane_sequence still == p,  and  data_position ≥ data_tail ?
@@ -235,22 +229,21 @@ A `Reader` keeps **one cursor per lane**. `read()`:
 3. copies the bytes out of the arena and **re-validates** under a *seqlock*: an
    `Acquire` fence, then re-check the descriptor's `lane_sequence` and that the bytes
    weren't reclaimed mid-copy — if either moved, discard and re-resolve,
-4. enriches it (severity + real timestamps) and returns a `LogEntry::Record`.
+4. enriches it (severity + real timestamps) and returns it.
 
-Reading removes nothing, so every reader sees every record (or an explicit gap
-for it) and records are retained with no reader attached. A reader that fell
-behind a lane's `tail` is told exactly how many it missed and from which levels —
-`LogEntry::Gap { missed, levels }`, the same idea as `printk`'s overrun or perf's
-`PERF_RECORD_LOST` — so "did I lose ERRORs or just TRACE?" has an answer. A
-record whose bytes won't parse (possible only through the
-[pathological-pressure caveat](#lineage-and-caveats)) is consumed and reported
-the same way, as a one-record gap, rather than failing the subscription.
+Reading removes nothing, so records are retained with no reader attached, and
+every reader sees every record still retained. A reader that fell behind a
+lane's `tail` silently skips ahead to the oldest retained record — eviction is
+not a per-reader event to report but a property of the lane. A record whose
+bytes won't parse (possible only through the
+[pathological-pressure caveat](#lineage-and-caveats)) is skipped the same way,
+with a WARN logged, rather than failing the subscription.
 
 Two reading modes. Awaiting `read()` parks when nothing is yieldable — caught up,
 or the only candidate is mid-write — by registering its waker against a version
 counter the next `write` bumps; no timer, no spin, no cap on how many readers
 park at once, and `read()` cannot fail. `try_read()` is the non-parking partner:
-the next entry if one is immediately available, `None` otherwise — use it to
+the next record if one is immediately available, `None` otherwise — use it to
 drain the retained records without awaiting (a panic-dump, a one-shot snapshot).
 
 One honesty note on step 2: the merge is chronological for records whose writes
@@ -282,6 +275,54 @@ about: composing the layer enables every routed callsite — with the default
 config that means `trace!` node-wide, captured into the ring but still filtered
 out of the console.
 
+## The viewer: `logs` in the shell
+
+Typing `logs` (or `logs view`) at the dusk prompt opens the buffer in a
+read-only, vi-style pager. `logs` is an ordinary shell command, built on the
+args-server callback path, and the node side is deliberately dumb:
+`LogsArgs.Server` has two methods — `send(entries)` (capnp-streaming) and
+`stop()`, a long-poll mirroring the shell's `ShStop`. The node-side process
+mints a replay-then-follow `Reader`, streams batched records into `send`
+never knowing what receives them, and holds one pending `stop()` call.
+A batch is whatever the buffer holds when a send is possible: awaiting
+`send` is the flow-control gate (capnp streaming credit), and while it
+withholds, the ring gathers the next batch — batch sizes follow the
+client's absorption rate with no timers in the path. When the viewer
+quits, the client answers the long-poll: the node's cue to finish
+`output()`, after which the shell kills the process. A failed `send` keeps
+its batch and retries, paced by the round-trip; only the connection dying
+ends the stream early.
+
+Where entries land is the client's choice, set by the command line — the
+default destination is the viewer; `logs stream <url>` routes the same
+`send` to a URL instead. `file://` appends one OTLP/JSON record per line
+(jsonl), `otlp://` exports OTLP/gRPC to a collector one call per batch,
+and `http://`/`https://` POSTs each record as a single OTLP/JSON document
+— all three converted once from the capnp wire form, which mirrors the
+OTLP proto field-for-field. For the viewer, the
+client renders each batch into styled pager lines — dim timestamp, colored
+level, message, cyan `key=value` fields (span fields included), wrapped to
+the terminal width with continuation rows hanging past the timestamp and
+level columns. Either destination is fed through a small bounded
+channel. That channel is the backpressure:
+the `send` callback resolves only when the channel has room, so a paused
+pager — or a slow file, endpoint, or collector — fills it, the unresolved
+call fills the stream's flow-control window,
+and the node parks.
+
+The pager: `hjkl`, `gg`/`G`, `Ctrl-d/u/f/b` motion; `/` and `?` search with
+`n`/`N` and a been-through/total match counter in the status bar (Escape
+leaves SEARCH); `v`/`V`/`Ctrl-V` selection with `y` or
+Ctrl-Shift-C copying to the clipboard (a native tool, or OSC 52); `:N` line
+jumps; `q`/`:q`/Ctrl-C to quit. **FOLLOW** tails like `tail -f`; any upward
+scroll drops to **NORMAL**, which freezes the view entirely (intake stops —
+the node parks); `f` or `G` re-enters FOLLOW. The status bar names the mode
+(FOLLOW / NORMAL / SEARCH / the VISUALs) and hints `f to follow` while
+paused. The terminal is in raw mode, so Ctrl-C is an ordinary key: no
+SIGINT, no job-control interplay with the CLI. The pager runs as its own
+task, so a dead connection only closes its channel: a `[disconnected]` line
+is appended and the viewer stays until the user quits.
+
 ## Timestamps
 
 `Writer::write` stamps every record's `time_unix_nano` with embassy's
@@ -301,8 +342,8 @@ The design is the in-memory log ring that real systems converge on — Linux's
 `printk` ringbuffer (the descriptor-ring-over-byte-arena shape is taken straight
 from it), the LMAX Disruptor (the published-position seqlock guard), `perf`/
 `ftrace`'s per-CPU rings: a bounded, drop-oldest ring read non-destructively by
-sequence, with overrun as a first-class signal, and the write surface sharded
-(here, by level) and reunified on read.
+sequence, with the write surface sharded (here, by level) and reunified on
+read.
 
 Two honest edges:
 
@@ -316,6 +357,6 @@ Two honest edges:
   way around (thousands of records on a real-size lane), it could overwrite a newer
   record's bytes. This is sound (the arena is atomic — never a data race) and
   astronomically unlikely; under any normal scheduling it cannot happen. A reader
-  that meets such bytes reports them as a one-record gap and keeps going; the
+  that meets such bytes skips them and keeps going; the
   unpack is also capped (8 MiB) so corrupt bytes can't demand a giant allocation,
   and the timestamp arithmetic saturates rather than overflowing on garbage.

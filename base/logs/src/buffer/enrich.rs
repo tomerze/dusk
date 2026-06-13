@@ -1,6 +1,10 @@
 //! Turning a stored record into an enriched OTLP `LogRecord`.
 
-use crate::log_record_capnp::{SeverityNumber, log_record};
+use crate::layer::HEX_ID_FIELDS;
+use crate::log_record_capnp::{SeverityNumber, any_value, log_record};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use capnp::message::{self, Builder, HeapAllocator, ReaderOptions};
 use capnp::serialize::OwnedSegments;
 use capnp::serialize_packed;
@@ -9,7 +13,7 @@ use tracing::Level;
 
 /// Cap on a record's unpacked size (in 8-byte words): capnp allocates the
 /// declared segment sizes up front, and corrupt bytes could otherwise demand the
-/// stock 64 MiB in one zeroed allocation. A record above 8 MiB reads as a gap.
+/// stock 64 MiB in one zeroed allocation. A record above 8 MiB is skipped.
 const UNPACK_TRAVERSAL_LIMIT_WORDS: usize = (8 << 20) / 8;
 
 /// Unpacks a packed record into a fresh message and fills in the severity and

@@ -60,6 +60,22 @@ From the client's side, a session looks like:
 2. Call the **per-program tools** (`ps`, `kill`, …) with that descriptor and any arguments to run commands and read their output.
 3. Call **`disconnect`** with the descriptor when finished.
 
+## Long-running programs
+
+Every program tool supports MCP **task-augmented invocation** (`execution.taskSupport: "optional"`). A client that invokes a program tool as a task gets a task id back immediately while the program runs in the background on the gateway; it polls the task and fetches the result when the program finishes — the model keeps working in the meantime. A plain (non-task) call returns when the program completes, as before, so clients without task support are unaffected.
+
+Two things to know:
+
+- Cancelling a task does not kill the program on the node — the program keeps running; use the `kill` tool for that.
+- Task results are held in gateway memory until fetched, so a pending result does not survive a gateway restart.
+
 ## Single worker only
 
-The connection registry is **in-process state**. Serve the gateway with a single worker: multiple worker processes would each hold a separate, unshared registry, so a descriptor minted by one worker would be unknown to another. `serve` runs a single worker; if you run the app yourself, do the same.
+The connection registry is **in-process state**. Serve the gateway with a single worker: multiple worker processes would each hold a separate, unshared registry, so a descriptor minted by one worker would be unknown to another. The task store is in-process too — a task started on one worker could not be polled on another. `serve` runs a single worker; if you run the app yourself, do the same.
+
+## No interactive views
+
+The gateway sets `DUSK_NON_INTERACTIVE=1` in its process. Interactive
+programs — `logs view` — refuse to run under it, since they would take over
+a terminal the model driving the gateway doesn't have and hang the tool call
+forever.

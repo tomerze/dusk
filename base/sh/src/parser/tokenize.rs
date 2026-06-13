@@ -91,10 +91,19 @@ pub fn ast(input: &str) -> IResult<&str, ast::Ast<'_>> {
     Ok((input, ast::Ast { statements }))
 }
 
-/// Strip `//` line comments and `/* ... */` block comments from `input`.
-/// Quoted strings (`'...'`, `"..."`) are preserved verbatim. Block comments
-/// are replaced by a single space so `foo/*x*/bar` becomes `foo bar`, not
-/// `foobar`.
+/// The characters that end a bare word (mirrors [`bare_word`]).
+fn word_break(character: char) -> bool {
+    matches!(
+        character,
+        ' ' | '\t' | '\r' | '\n' | ';' | '&' | '|' | '(' | ')' | '{' | '}'
+    )
+}
+
+/// Strip `#` line comments from `input`. Like a shell, a `#` starts a
+/// comment only at the start of a word — at the start of the input or
+/// after a word-breaking character — so a `#` inside a word
+/// (`http://host/page#section`) is just a character. Quoted strings
+/// (`'...'`, `"..."`) are preserved verbatim.
 pub fn strip_comments(input: &str) -> std::string::String {
     let mut out = std::string::String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
@@ -124,7 +133,7 @@ pub fn strip_comments(input: &str) -> std::string::String {
                 in_double = true;
                 out.push(c);
             }
-            '/' if chars.peek() == Some(&'/') => {
+            '#' if out.chars().next_back().is_none_or(word_break) => {
                 // Line comment — drop everything up to (but not including) `\n`.
                 while let Some(&n) = chars.peek() {
                     if n == '\n' {
@@ -132,19 +141,6 @@ pub fn strip_comments(input: &str) -> std::string::String {
                     }
                     chars.next();
                 }
-            }
-            '/' if chars.peek() == Some(&'*') => {
-                // Block comment — drop through the matching `*/`. Substitute a
-                // single space so adjoining tokens don't merge.
-                chars.next();
-                let mut prev = '\0';
-                for n in chars.by_ref() {
-                    if prev == '*' && n == '/' {
-                        break;
-                    }
-                    prev = n;
-                }
-                out.push(' ');
             }
             _ => out.push(c),
         }

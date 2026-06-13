@@ -126,46 +126,16 @@ impl Highlighter for CustomHighlighter {
             }
 
             match c {
-                '/' if chars.peek() == Some(&'/') => {
-                    Self::flush_word(
-                        &mut styled,
-                        &mut current,
-                        &mut at_command_start,
-                        &self.external_commands,
-                        &functions,
-                        &local_functions,
-                    );
-                    chars.next(); // consume the second '/'
-                    let mut comment = String::from("//");
+                // A `#` mid-word falls through to the default arm and stays
+                // part of the word, like the tokenizer's `strip_comments`.
+                '#' if current.is_empty() => {
+                    let mut comment = String::from("#");
                     while let Some(&next) = chars.peek() {
                         if next == '\n' {
                             break;
                         }
                         comment.push(next);
                         chars.next();
-                    }
-                    styled.push((Style::new().fg(Color::DarkGray), comment));
-                    def_candidate_idx = None;
-                }
-
-                '/' if chars.peek() == Some(&'*') => {
-                    Self::flush_word(
-                        &mut styled,
-                        &mut current,
-                        &mut at_command_start,
-                        &self.external_commands,
-                        &functions,
-                        &local_functions,
-                    );
-                    chars.next(); // consume the '*'
-                    let mut comment = String::from("/*");
-                    let mut prev = '\0';
-                    for next in chars.by_ref() {
-                        comment.push(next);
-                        if prev == '*' && next == '/' {
-                            break;
-                        }
-                        prev = next;
                     }
                     styled.push((Style::new().fg(Color::DarkGray), comment));
                     def_candidate_idx = None;

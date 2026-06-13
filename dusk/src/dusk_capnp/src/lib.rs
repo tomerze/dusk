@@ -71,6 +71,8 @@ pub const STREAM_CAPNP: CapnpDep = CapnpDep {
 
 /// Compile a `.capnp` schema file into Rust code.
 pub fn build_capnp(path: &str, deps: &[CapnpDep]) {
+    println!("cargo:rerun-if-changed={path}");
+
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let capnp_dir = Path::new(&out_dir).join("capnp");
     std::fs::create_dir_all(&capnp_dir).unwrap();
@@ -91,6 +93,8 @@ pub fn build_capnp(path: &str, deps: &[CapnpDep]) {
     cmd.import_path(&out_dir);
 
     for dep in builtins.iter().chain(deps.iter()) {
+        println!("cargo:rerun-if-changed={}", dep.schema);
+
         // Copy schema into the import directory so `import "/capnp/foo.capnp"` resolves
         let src = Path::new(dep.schema);
         let file_name = src

@@ -14,6 +14,7 @@ at this module's top. The package is only imported on demand, so plain
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
 from typing import TYPE_CHECKING
 
@@ -35,8 +36,8 @@ class ConnectionRegistry:
     all be torn down when that session ends (see :meth:`disconnect_session`)
     and when the whole server shuts down (see :meth:`disconnect_all`).
 
-    FastMCP dispatches tool calls on worker threads, so every access to the
-    map is guarded by a lock. The blocking ``Dusk.disconnect`` is always called
+    Tool handlers offload the blocking dusk calls to worker threads, so every
+    access to the map is guarded by a lock. The blocking ``Dusk.disconnect`` is always called
     outside the lock, so a slow connection teardown never blocks other tool
     calls. Descriptors are human-readable: ``host:port#n``, where ``n`` is a
     per-registry counter that keeps repeat connections to the same address
@@ -137,6 +138,8 @@ def app():
     :meth:`ConnectionRegistry.disconnect_all`). A forgotten ``disconnect`` tool
     call therefore leaks a connection only until its session closes.
     """
+    # The gateway has no terminal to give away, prevents a rogue model from calling `logs view` for example.
+    os.environ["DUSK_NON_INTERACTIVE"] = "1"
     registry = ConnectionRegistry()
 
     server = FastMCP(
@@ -174,6 +177,14 @@ Other programs return a plain JSON value instead — a string, object, number, b
 with no type-id key, in which case the value itself is the data. So before interpreting any
 output, check its shape: a single `0x…` key means "typed result, read the fields underneath";
 anything else is the data directly. Never invent a meaning for the hex key or present it as data.
+
+Long-running programs:
+Every program tool supports task-augmented invocation (MCP tasks). If a command may run for
+a while — a long `sleep`, a shell script, a `logs` stream — invoke the tool as a task: you
+get a task id back immediately while the program runs in the background, and you can keep
+working; poll the task and fetch its result when the program finishes. Quick commands work
+as plain synchronous calls. Cancelling a task does not kill the program on the node — use
+the `kill` tool for that.
             """
         ),
     )

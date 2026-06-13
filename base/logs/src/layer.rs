@@ -28,6 +28,13 @@ use tracing_subscriber::layer::Context;
 /// The event's format-string field; it becomes the OTLP `body`.
 const MESSAGE_FIELD: &str = "message";
 
+/// Span/event fields holding a node-assigned u64 id. They are re-encoded as
+/// bare hex on both the OTLP read path (buffer enrichment) and the console
+/// ([`bootstrap`]'s field formatter), so an id is one consistent,
+/// exactly-matchable string everywhere instead of an oversized number that an
+/// indexer types inconsistently and a JSON-number-as-double tool can't match.
+pub(crate) const HEX_ID_FIELDS: &[&str] = &["pid", "program_id", "namespace_id", "task_id"];
+
 /// Install the global subscriber: the buffer capture layer plus console output
 /// at INFO. A no-op if a subscriber is already installed (e.g. a test harness
 /// that set its own) — the buffer then simply receives no events.
@@ -39,11 +46,98 @@ pub(crate) fn bootstrap(buffer: LogBuffer) {
         .with(BufferLayer::new(buffer))
         .with(
             tracing_subscriber::fmt::layer()
+                .fmt_fields(HexIdFields)
                 .with_target(false)
                 .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
                 .with_filter(tracing_subscriber::filter::LevelFilter::INFO),
         )
         .try_init();
+}
+
+/// Console field formatter that renders [`HEX_ID_FIELDS`] as bare hex, so the
+/// console agrees with the OTLP/ES output. Other fields render `key=value` like
+/// the default, and the message field renders bare.
+#[cfg(feature = "console")]
+struct HexIdFields;
+
+#[cfg(feature = "console")]
+impl<'writer> tracing_subscriber::fmt::FormatFields<'writer> for HexIdFields {
+    fn format_fields<R: tracing_subscriber::field::RecordFields>(
+        &self,
+        writer: tracing_subscriber::fmt::format::Writer<'writer>,
+        fields: R,
+    ) -> core::fmt::Result {
+        let mut visitor = HexIdVisitor {
+            writer,
+            first: true,
+            result: Ok(()),
+        };
+        fields.record(&mut visitor);
+        visitor.result
+    }
+}
+
+#[cfg(feature = "console")]
+struct HexIdVisitor<'writer> {
+    writer: tracing_subscriber::fmt::format::Writer<'writer>,
+    first: bool,
+    result: core::fmt::Result,
+}
+
+#[cfg(feature = "console")]
+impl HexIdVisitor<'_> {
+    fn write(&mut self, content: core::fmt::Arguments) {
+        if self.result.is_err() {
+            return;
+        }
+        if !self.first {
+            self.result = self.writer.write_char(' ');
+            if self.result.is_err() {
+                return;
+            }
+        }
+        self.first = false;
+        self.result = self.writer.write_fmt(content);
+    }
+}
+
+#[cfg(feature = "console")]
+impl Visit for HexIdVisitor<'_> {
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        if HEX_ID_FIELDS.contains(&field.name()) {
+            self.write(format_args!("{}={:x}", field.name(), value));
+        } else {
+            self.write(format_args!("{}={}", field.name(), value));
+        }
+    }
+
+    fn record_i64(&mut self, field: &Field, value: i64) {
+        if HEX_ID_FIELDS.contains(&field.name()) && value >= 0 {
+            self.write(format_args!("{}={:x}", field.name(), value as u64));
+        } else {
+            self.write(format_args!("{}={}", field.name(), value));
+        }
+    }
+
+    fn record_bool(&mut self, field: &Field, value: bool) {
+        self.write(format_args!("{}={}", field.name(), value));
+    }
+
+    fn record_str(&mut self, field: &Field, value: &str) {
+        self.write(format_args!("{}={}", field.name(), value));
+    }
+
+    fn record_f64(&mut self, field: &Field, value: f64) {
+        self.write(format_args!("{}={}", field.name(), value));
+    }
+
+    fn record_debug(&mut self, field: &Field, value: &dyn core::fmt::Debug) {
+        if field.name() == MESSAGE_FIELD {
+            self.write(format_args!("{value:?}"));
+        } else {
+            self.write(format_args!("{}={:?}", field.name(), value));
+        }
+    }
 }
 
 /// Parent-chain walk cap — a reused span id could otherwise form a cycle.
@@ -154,8 +248,8 @@ impl<S: tracing::Subscriber> tracing_subscriber::layer::Layer<S> for BufferLayer
             return;
         }
 
-        let mut counter = AttributeCounter::default();
-        event.record(&mut counter);
+        let mut event_fields = FieldCollector::default();
+        event.record(&mut event_fields);
 
         let leaf = if let Some(parent) = event.parent() {
             Some(parent.into_u64())
@@ -168,40 +262,74 @@ impl<S: tracing::Subscriber> tracing_subscriber::layer::Layer<S> for BufferLayer
             None
         };
         let scope = self.scope_fields(leaf);
-        let span_attributes: u32 = scope.iter().map(|fields| fields.len() as u32).sum();
 
-        let location_attributes = 1 // target
-            + metadata.file().is_some() as u32
-            + metadata.line().is_some() as u32
-            + metadata.module_path().is_some() as u32;
+        // Source location, owned as field values so it dedups uniformly below.
+        let mut location: Vec<(&'static str, FieldValue)> = Vec::with_capacity(4);
+        location.push(("target", FieldValue::Text(metadata.target().to_string())));
+        if let Some(file) = metadata.file() {
+            location.push(("code.filepath", FieldValue::Text(file.to_string())));
+        }
+        if let Some(line) = metadata.line() {
+            location.push(("code.lineno", FieldValue::Int(line as i64)));
+        }
+        if let Some(module_path) = metadata.module_path() {
+            location.push(("code.namespace", FieldValue::Text(module_path.to_string())));
+        }
+
+        // The message becomes the body; everything else becomes an attribute.
+        let body = event_fields
+            .fields
+            .iter()
+            .find(|(name, _)| *name == MESSAGE_FIELD)
+            .map(|(_, value)| value);
+
+        // OTLP requires attribute keys to be unique within a record, but one
+        // name can appear on the event, on several spans up the parent chain,
+        // and in the location set. Flatten those sources innermost-first and
+        // keep the first value seen for each key, so precedence is
+        // event field > leaf span > ancestor span > location.
+        let mut attributes: Vec<(&'static str, &FieldValue)> = Vec::new();
+        let candidates = event_fields
+            .fields
+            .iter()
+            .filter(|(name, _)| *name != MESSAGE_FIELD)
+            .map(|(name, value)| (*name, value))
+            .chain(
+                scope
+                    .iter()
+                    .rev()
+                    .flat_map(|fields| fields.iter())
+                    .map(|(name, value)| (*name, value)),
+            )
+            .chain(location.iter().map(|(name, value)| (*name, value)));
+        for (name, value) in candidates {
+            if !attributes.iter().any(|(seen, _)| *seen == name) {
+                attributes.push((name, value));
+            }
+        }
 
         let mut message = Builder::new_default();
         {
             let mut record = message.init_root::<log_record::Builder>();
-            record
-                .reborrow()
-                .init_attributes(counter.attributes + span_attributes + location_attributes);
+            record.reborrow().init_attributes(attributes.len() as u32);
+            if let Some(value) = body {
+                let mut body_value = record.reborrow().init_body();
+                match value {
+                    FieldValue::Text(text) => body_value.set_string_value(text.as_str()),
+                    FieldValue::Int(integer) => body_value.set_string_value(&format!("{integer}")),
+                    FieldValue::Double(double) => {
+                        body_value.set_string_value(&format!("{double:?}"))
+                    }
+                    FieldValue::Bool(boolean) => body_value.set_string_value(&format!("{boolean}")),
+                }
+            }
 
             let mut filler = RecordFiller {
                 record,
                 next_attribute: 0,
             };
-            event.record(&mut filler);
-            // Root-first, so an inner span's same-named field lands last.
-            for fields in &scope {
-                for (name, value) in fields.iter() {
-                    filler.put(name, value);
-                }
-            }
-            filler.put_text("target", metadata.target());
-            if let Some(file) = metadata.file() {
-                filler.put_text("code.filepath", file);
-            }
-            if let Some(line) = metadata.line() {
-                filler.put_int("code.lineno", line as i64);
-            }
-            if let Some(module_path) = metadata.module_path() {
-                filler.put_text("code.namespace", module_path);
+            for &(name, value) in &attributes {
+                filler.put(name, value);
             }
         }
 
@@ -269,23 +397,7 @@ impl Visit for FieldCollector {
     }
 }
 
-/// Counts the fields that will become attributes — the capnp list must be sized
-/// up front.
-#[derive(Default)]
-struct AttributeCounter {
-    attributes: u32,
-}
-
-impl Visit for AttributeCounter {
-    fn record_debug(&mut self, field: &Field, _value: &dyn core::fmt::Debug) {
-        if field.name() != MESSAGE_FIELD {
-            self.attributes += 1;
-        }
-    }
-}
-
-/// Writes the message into `body` and every other field into the pre-sized
-/// `attributes` list.
+/// Writes each `(name, value)` into the pre-sized `attributes` list.
 struct RecordFiller<'a> {
     record: log_record::Builder<'a>,
     next_attribute: u32,
@@ -312,71 +424,6 @@ impl RecordFiller<'_> {
             FieldValue::Double(value) => builder.set_double_value(*value),
             FieldValue::Bool(value) => builder.set_bool_value(*value),
             FieldValue::Text(value) => builder.set_string_value(value.as_str()),
-        }
-    }
-
-    fn put_text(&mut self, name: &str, value: &str) {
-        self.attribute(name).init_value().set_string_value(value);
-    }
-
-    fn put_int(&mut self, name: &str, value: i64) {
-        self.attribute(name).init_value().set_int_value(value);
-    }
-}
-
-impl Visit for RecordFiller<'_> {
-    fn record_debug(&mut self, field: &Field, value: &dyn core::fmt::Debug) {
-        let text = format!("{value:?}");
-        if field.name() == MESSAGE_FIELD {
-            self.record
-                .reborrow()
-                .init_body()
-                .set_string_value(text.as_str());
-        } else {
-            self.put_text(field.name(), text.as_str());
-        }
-    }
-
-    fn record_str(&mut self, field: &Field, value: &str) {
-        if field.name() == MESSAGE_FIELD {
-            self.record.reborrow().init_body().set_string_value(value);
-        } else {
-            self.put_text(field.name(), value);
-        }
-    }
-
-    fn record_i64(&mut self, field: &Field, value: i64) {
-        if field.name() == MESSAGE_FIELD {
-            self.record_debug(field, &value);
-        } else {
-            self.put_int(field.name(), value);
-        }
-    }
-
-    fn record_u64(&mut self, field: &Field, value: u64) {
-        match i64::try_from(value) {
-            Ok(value) if field.name() != MESSAGE_FIELD => self.put_int(field.name(), value),
-            _ => self.record_debug(field, &value),
-        }
-    }
-
-    fn record_f64(&mut self, field: &Field, value: f64) {
-        if field.name() == MESSAGE_FIELD {
-            self.record_debug(field, &value);
-        } else {
-            self.attribute(field.name())
-                .init_value()
-                .set_double_value(value);
-        }
-    }
-
-    fn record_bool(&mut self, field: &Field, value: bool) {
-        if field.name() == MESSAGE_FIELD {
-            self.record_debug(field, &value);
-        } else {
-            self.attribute(field.name())
-                .init_value()
-                .set_bool_value(value);
         }
     }
 }

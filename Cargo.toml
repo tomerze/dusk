@@ -27,6 +27,7 @@ members = [
     "base/date",
     "base/logs",
     "base/hostname",
+    "base/echo",
     "tests/api",
     "tests/cli",
     "tests/common",

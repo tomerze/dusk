@@ -10,5 +10,8 @@ dusk_nix = { path = "../../impls/nix" }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program/" }
 dusk_base = { path = "../../dusk/src/dusk_base" }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.22", features = ["fmt"] }
+# A direct dependency only to turn on the logs `console` feature for the whole
+# test build (feature unification): with it, building the node's launcher set
+# installs the standard buffer-capture + stdout subscriber, so the node's logs
+# are both printed and captured into the buffer that `logs stream` reads.
+dusk_program_logs = { path = "../../base/logs", features = ["console"] }

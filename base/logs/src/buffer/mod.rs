@@ -3,7 +3,7 @@ mod io;
 mod lane;
 mod notify;
 
-pub use io::{LogEntry, Reader, Writer};
+pub use io::{Reader, Writer};
 
 use crate::config::LogsConfig;
 use alloc::boxed::Box;
@@ -53,17 +53,6 @@ pub(in crate::buffer) struct LogBufferInner {
     dropped_no_lane: AtomicU64,
     dropped_oversize: AtomicU64,
     write_failures: AtomicU64,
-}
-
-impl LogBufferInner {
-    /// The levels routed to `lane_index` — the attribution a `Gap` carries.
-    pub(in crate::buffer) fn lane_levels(&self, lane_index: usize) -> Vec<Level> {
-        LEVELS
-            .iter()
-            .copied()
-            .filter(|&level| self.level_to_lane[level_index(level)] == Some(lane_index))
-            .collect()
-    }
 }
 
 /// Records discarded without being stored, by cause. The write path never fails

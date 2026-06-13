@@ -264,17 +264,6 @@ impl Process {
 
 #[async_trait::async_trait(?Send)]
 impl dusk_program::process::ProcessMixin for Process {
-    async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self::with_context_and_function_table(
-            ctx,
-            Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new())),
-        )
-        .await?)
-    }
-
     fn portal(&self) -> portal::Client {
         let client: sh_capnp::sh_portal::Client = capnp_rpc::new_client(Portal {
             process: self.clone(),

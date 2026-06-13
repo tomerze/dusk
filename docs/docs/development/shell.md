@@ -18,7 +18,7 @@ travel back.
 ## Representations at a glance
 
 ```
-raw text            "ps && date  // comment"          reedline buffer (dusk_prompt)
+raw text            "ps && date  # comment"           reedline buffer (dusk_prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
    │ nom (parser/tokenize.rs)
@@ -65,9 +65,10 @@ Either way the server side is identical: a `Script` reader handed to
 
 The grammar is a nom parser in `base/sh/src/parser/`. It is deliberately tiny.
 
-**Comments** are stripped before parsing (`strip_comments`, quote-aware): `//`
-to end of line, `/* … */` block (replaced by a single space so `a/*x*/b` becomes
-`a b`). Text inside `'…'` / `"…"` is preserved verbatim.
+**Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
+to end of line, and only when the `#` starts a word — a `#` inside a word
+(`http://host/page#section`) is just a character. Text inside `'…'` / `"…"` is
+preserved verbatim.
 
 **A script** is a list of statements separated by `;`, newline, or `\r`. A
 trailing separator is allowed.

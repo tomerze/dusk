@@ -62,15 +62,14 @@ pub struct Process {
     pub ctx: ProcessContext,
 }
 
-#[async_trait::async_trait(?Send)]
-impl dusk_program::process::ProcessMixin for Process {
-    async fn with_context(ctx: dusk_program::process::ProcessContext) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
+impl Process {
+    pub async fn with_context(ctx: dusk_program::process::ProcessContext) -> anyhow::Result<Self> {
         Ok(Process { ctx })
     }
+}
 
+#[async_trait::async_trait(?Send)]
+impl dusk_program::process::ProcessMixin for Process {
     fn portal(&self) -> portal::Client {
         let client: true_capnp::true_portal::Client = capnp_rpc::new_client(Portal {
             process: self.clone(),

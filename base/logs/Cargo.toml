@@ -10,18 +10,25 @@ dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
+embassy-executor = "0.10.0"
 anyhow = { version = "1.0", public = true }
 capnp = { version = "0.21", public = true }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
+# The client-side log viewer (viewer.rs) — all std-only, client feature.
+base64 = { version = "0.22.1", optional = true }
+chrono = { version = "0.4.42", optional = true }
+crossterm = { version = "0.29", optional = true }
+nu-ansi-term = { version = "0.50.1", optional = true }
+tokio = { version = "1.47.1", features = ["sync", "macros", "rt", "fs", "io-util"], optional = true }
+opentelemetry-proto = { version = "0.28", default-features = false, features = ["gen-tonic", "logs", "with-serde"], optional = true, public = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+tonic = { version = "0.12", optional = true }
+serde_json = { version = "1", optional = true }
 portable-atomic = { version = "1", default-features = false }
 portable-atomic-util = { version = "0.2", default-features = false, features = ["alloc"] }
 tracing = { version = "0.1.41", default-features = false, public = true }
-# Not imported directly — declared so `tracing`'s types in the public surface
-# (Level, the layer's span types — all re-exported from tracing-core) count as a
-# public dependency.
 tracing-core = { version = "0.1", default-features = false, public = true }
-tracing-subscriber = { version = "0.3.22", default-features = false, features = ["alloc"], public = true }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
@@ -33,14 +40,22 @@ critical-section = { version = "1", features = ["std"] }
 embassy-time = { version = "0.5", features = ["std"] }
 
 [features]
-client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
-# Building the logs Launcher installs the global subscriber: the buffer capture
-# layer plus console output at INFO. std-only; without it, compose BufferLayer
-# onto your own subscriber.
-console = [
-    "tracing-subscriber/std",
-    "tracing-subscriber/registry",
-    "tracing-subscriber/fmt",
-    "tracing-subscriber/chrono",
-    "tracing-subscriber/ansi",
+client = [
+    "linkme",
+    "dusk_program_sh/client",
+    "clap",
+    "dusk_program_sh_proc",
+    "base64",
+    "chrono",
+    "crossterm",
+    "nu-ansi-term",
+    "tokio",
+    "opentelemetry-proto",
+    "reqwest",
+    "tonic",
+    "serde_json",
 ]
+# Capture is always on; `console` makes the same subscriber also write each
+# event to stdout (INFO and above), rich-style. std-only (stdout, timestamps,
+# color).
+console = ["chrono", "nu-ansi-term"]

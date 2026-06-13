@@ -82,7 +82,7 @@ pub(crate) async fn print_functions<D: DisplayEngine>(
 ) -> Result<()> {
     let functions = shell.functions().await?;
     if functions.is_empty() {
-        let example = "// defines foo function which just calls itself\nfoo() {\n    foo\n}";
+        let example = "# defines foo function which just calls itself\nfoo() {\n    foo\n}";
         let highlighter = CustomHighlighter {
             external_commands: Vec::new(),
             functions: std::sync::Arc::new(std::sync::Mutex::new(vec!["foo".to_string()])),

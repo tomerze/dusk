@@ -50,3 +50,15 @@ The iterator returned by `sh`. Each item is one `Dusk.Value` from the command's
 output stream, converted to a native Python value. It's lazy: each step blocks
 until the next value arrives, and the iterator is exhausted when the command
 signals it's done.
+
+## `DUSK_NON_INTERACTIVE`
+
+Some programs are interactive: `logs view` takes over the calling terminal until
+the user quits it. If the process embedding this API has no terminal to give
+away — a service, a notebook kernel, a gateway — set the `DUSK_NON_INTERACTIVE`
+environment variable (to any value) before running commands. Interactive
+commands then refuse to run, with an error naming a non-interactive alternative
+(`logs view` points at `logs stream`), instead of hanging the caller forever.
+
+The [MCP gateway](../features/mcp.md#no-interactive-views) sets it
+automatically in its own process.

@@ -3,21 +3,14 @@
 //! descriptor seqlock.
 
 use crate::buffer::enrich::unpack_and_enrich;
-use crate::buffer::{LEVELS, LogBufferInner, StartPosition, level_index};
+use crate::buffer::{LEVELS, LogBufferInner, StartPosition};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use capnp::message::{Builder, HeapAllocator};
 use core::sync::atomic::Ordering;
+use dusk_program::embassy_futures;
 use portable_atomic_util::Arc;
 use tracing::Level;
-
-pub enum LogEntry {
-    /// A log record, enriched with its severity and real timestamps.
-    Record(Builder<HeapAllocator>),
-    /// Records this reader will never yield — evicted, reclaimed mid-read, or
-    /// unparseable. `levels` are the levels of the lane that lost them.
-    Gap { missed: u64, levels: Vec<Level> },
-}
 
 enum Read {
     Record { level: Level },
@@ -25,25 +18,12 @@ enum Read {
     Retry,
 }
 
-pub(in crate::buffer) enum Step {
-    Record {
-        level: Level,
-    },
-    Gap {
-        missed: u64,
-        lane_index: usize,
-    },
-    /// Nothing yieldable right now — caught up, or the next candidate is
-    /// mid-write. Either way the next `write`'s notify resolves it.
-    Pending,
-}
-
 pub struct Reader {
     inner: Arc<LogBufferInner>,
     /// Per-lane next descriptor position to read.
     cursor: Box<[u64]>,
     offset_from_unix_time_ms: u64,
-    /// Scratch for the bytes copied out by the last `Step::Record`.
+    /// Scratch for the bytes copied out by the last accepted descriptor.
     packed: Vec<u8>,
 }
 
@@ -70,107 +50,85 @@ impl Reader {
         }
     }
 
-    /// The next entry, parking until one arrives. An unparseable record is
-    /// consumed and reported as a [`LogEntry::Gap`].
-    pub async fn read(&mut self) -> LogEntry {
-        let inner = self.inner.clone();
+    /// The next record, parking until one arrives, enriched with its severity
+    /// and real timestamps. Records this reader will never yield — evicted,
+    /// reclaimed mid-read, or unparseable — are skipped.
+    pub async fn read(&mut self) -> Builder<HeapAllocator> {
         loop {
             // Sample before scanning: a write landing mid-scan moves the version,
             // so the park returns immediately and we re-scan.
-            let version = inner.notify.version();
-            match self.try_step() {
-                Step::Pending => inner.notify.changed(version).await,
-                step => return self.entry(step),
+            let version = self.inner.notify.version();
+            if let Some(record) = self.try_read() {
+                return record;
+            }
+            // Under sustained writer pressure the version has always already
+            // moved, making the park below ready on its first poll — which
+            // never yields. Without this unconditional yield the loop starves
+            // the single-threaded executor.
+            embassy_futures::yield_now().await;
+            self.inner.notify.changed(version).await;
+        }
+    }
+
+    /// The non-parking partner of [`read`](Self::read): the next record if one
+    /// is immediately available.
+    pub fn try_read(&mut self) -> Option<Builder<HeapAllocator>> {
+        loop {
+            let level = self.try_step()?;
+            match unpack_and_enrich(&self.packed, level, self.offset_from_unix_time_ms) {
+                Ok(record) => return Some(record),
+                // The cursor already moved past it; erring would make one
+                // corrupt record look fatal to the whole subscription.
+                Err(error) => tracing::warn!(%error, "skipping an unparseable log record"),
             }
         }
     }
 
-    /// The non-parking partner of [`read`](Self::read): the next entry if one is
-    /// immediately available.
-    pub fn try_read(&mut self) -> Option<LogEntry> {
-        match self.try_step() {
-            Step::Pending => None,
-            step => Some(self.entry(step)),
-        }
-    }
+    /// One synchronous read attempt: merge the lanes in global-sequence order
+    /// and return the next record's level (its bytes land in the scratch).
+    /// Evicted and reclaimed records are stepped over; `None` means nothing is
+    /// yieldable right now — caught up, or the next candidate is mid-write —
+    /// and the next `write`'s notify resolves it.
+    fn try_step(&mut self) -> Option<Level> {
+        loop {
+            let mut best: Option<(usize, u64)> = None; // (lane, sequence)
 
-    fn entry(&mut self, step: Step) -> LogEntry {
-        match step {
-            Step::Record { level } => {
-                match unpack_and_enrich(&self.packed, level, self.offset_from_unix_time_ms) {
-                    Ok(record) => LogEntry::Record(record),
-                    // The cursor already moved past it; erring would make one
-                    // corrupt record look fatal to the whole subscription.
-                    Err(error) => {
-                        tracing::warn!(%error, "skipping an unparseable log record");
-                        let lane_index = self.inner.level_to_lane[level_index(level)]
-                            .expect("a yielded record's level is always routed");
-                        LogEntry::Gap {
-                            missed: 1,
-                            levels: self.inner.lane_levels(lane_index),
-                        }
-                    }
+            for lane_index in 0..self.inner.lanes.len() {
+                let lane = &self.inner.lanes[lane_index];
+                let head = lane.descriptors.head.load(Ordering::Acquire);
+                let oldest = lane.descriptors.tail.load(Ordering::Acquire);
+                if self.cursor[lane_index] < oldest {
+                    // Fell behind; this lane's oldest descriptors were evicted.
+                    self.cursor[lane_index] = oldest;
+                }
+                let cursor = self.cursor[lane_index];
+                if cursor >= head {
+                    continue;
+                }
+                let descriptor =
+                    &lane.descriptors.data[(cursor % lane.descriptors.capacity) as usize];
+                // Accept the slot only when it publishes *our* position; anything else
+                // is mid-write or a not-yet-written claim.
+                if descriptor.lane_sequence.load(Ordering::Acquire) != cursor {
+                    continue;
+                }
+                let sequence = descriptor.global_sequence.load(Ordering::Relaxed);
+                if best.is_none_or(|(_, b)| sequence < b) {
+                    best = Some((lane_index, sequence));
                 }
             }
-            Step::Gap { missed, lane_index } => LogEntry::Gap {
-                missed,
-                levels: self.inner.lane_levels(lane_index),
-            },
-            Step::Pending => unreachable!("entry() is only called with Record / Gap steps"),
-        }
-    }
 
-    /// One synchronous read attempt: merge the lanes in global-sequence order and
-    /// return the next record's level (its bytes land in the scratch), a gap, or
-    /// `Pending`.
-    pub(in crate::buffer) fn try_step(&mut self) -> Step {
-        let mut best: Option<(usize, u64)> = None; // (lane, sequence)
+            let (lane_index, _sequence) = best?;
 
-        for lane_index in 0..self.inner.lanes.len() {
-            let lane = &self.inner.lanes[lane_index];
-            let head = lane.descriptors.head.load(Ordering::Acquire);
-            let oldest = lane.descriptors.tail.load(Ordering::Acquire);
-            let cursor = self.cursor[lane_index];
-
-            if cursor < oldest {
-                // Fell behind; this lane's oldest descriptors were evicted.
-                let missed = oldest - cursor;
-                self.cursor[lane_index] = oldest;
-                return Step::Gap { missed, lane_index };
-            }
-            if cursor >= head {
-                continue;
-            }
-            let descriptor = &lane.descriptors.data[(cursor % lane.descriptors.capacity) as usize];
-            // Accept the slot only when it publishes *our* position; anything else
-            // is mid-write or a not-yet-written claim.
-            if descriptor.lane_sequence.load(Ordering::Acquire) != cursor {
-                continue;
-            }
-            let sequence = descriptor.global_sequence.load(Ordering::Relaxed);
-            if best.is_none_or(|(_, b)| sequence < b) {
-                best = Some((lane_index, sequence));
-            }
-        }
-
-        let Some((lane_index, _sequence)) = best else {
-            return Step::Pending;
-        };
-
-        match self.read_descriptor(lane_index) {
-            Read::Record { level } => {
-                self.cursor[lane_index] += 1;
-                Step::Record { level }
-            }
-            Read::Reclaimed => {
+            match self.read_descriptor(lane_index) {
+                Read::Record { level } => {
+                    self.cursor[lane_index] += 1;
+                    return Some(level);
+                }
                 // The descriptor is still ours, but the arena lapped its bytes.
-                self.cursor[lane_index] += 1;
-                Step::Gap {
-                    missed: 1,
-                    lane_index,
-                }
+                Read::Reclaimed => self.cursor[lane_index] += 1,
+                Read::Retry => return None, // overwritten / reclaimed mid-copy
             }
-            Read::Retry => Step::Pending, // overwritten / reclaimed mid-copy
         }
     }
 

@@ -504,6 +504,18 @@ You are bad at naming. Any identifier you invent is a placeholder.
 
 Exception: mechanical renames where the user already picked a name.
 
+## Terminology lives on one side of a boundary
+
+Code is named for what its own side does and knows — never for what the other side does with the output. If a stated invariant says "X doesn't know about Y", then no module name, identifier, doc, or comment on X's side may say Y. When writing or reviewing code at a boundary, check the names against the invariants written beside them — grep the side for the other side's vocabulary.
+
+Past failure: the node side of the `logs` program was a module named `view.rs` — "the node side of a view subscription", a `view_result` local, "(the viewer quit)" comments — while the same crate's schema said, verbatim, "the node doesn't know" where entries land. The name had leaked in from the user-facing `logs view` subcommand; the node's half of the feature is just streaming. Review read the prose invariant and the identifiers in the same pass and never collided them, because naming wasn't treated as part of the contract under review.
+
+## Say the domain's word — no imported metaphors
+
+When the codebase already has the exact term for a mechanism, prose, comments, and locals use that term. The logs transfer is a **stream** (`Dusk.Stream`, `StreamResult`, `stream_task`, capnp-streaming): say *streaming*, not "pumping". Mechanic/plumbing words — pump, plumbing, glue, wire up — are banned wherever a domain term exists.
+
+Past failure: the same module described itself as "pumping" in five places and the docs called the callback path "the plumbing", while every identifier around them said `stream`. Worse: while renaming `view` → `stream` I edited the very doc line containing "pumping" and kept the word, because I had scoped the fix as a hunt for the token "view" instead of a vocabulary audit of every line I touched. A terminology fix is a sweep: grep the crate *and* the docs for the whole family of wrong words before claiming done.
+
 ## API boundaries to downstream authors are ship-once contracts
 
 Three boundaries are not internal seams. They are public Cargo dependencies that downstream authors build against and **cannot ship PRs back to fix gaps** — they fork, work around, or walk away.

@@ -7,5 +7,5 @@
 mod reader;
 mod writer;
 
-pub use reader::{LogEntry, Reader};
+pub use reader::Reader;
 pub use writer::Writer;

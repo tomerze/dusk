@@ -8,7 +8,7 @@ link-time program set), so they are known without any connection.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import anyio
 import anyio.to_thread
@@ -17,9 +17,14 @@ import anyio.to_thread
 # context parameter by resolving the tool's type hints; a string annotation that
 # can't resolve to the real Context class would be treated as a tool input.
 from mcp.server.fastmcp import Context
+from mcp.types import TASK_OPTIONAL, CallToolResult, TextContent, ToolExecution
 
 if TYPE_CHECKING:
+    from typing import Any
+
+    from mcp.server.experimental.task_context import ServerTaskContext
     from mcp.server.fastmcp import FastMCP
+    from mcp.types import ContentBlock, Tool
 
     from . import ConnectionRegistry
 
@@ -65,8 +70,8 @@ def register_tools(server: "FastMCP", registry: "ConnectionRegistry") -> None:
         ),
     )
 
-    def disconnect(descriptor: str, context: Context) -> str:
-        registry.disconnect(context.session, descriptor)
+    async def disconnect(descriptor: str, context: Context) -> str:
+        await anyio.to_thread.run_sync(registry.disconnect, context.session, descriptor)
         return f"disconnected {descriptor}"
 
     server.add_tool(
@@ -79,8 +84,10 @@ def register_tools(server: "FastMCP", registry: "ConnectionRegistry") -> None:
         ),
     )
 
-    for program in Dusk.help():
+    programs = Dusk.help()
+    for program in programs:
         _register_program_tool(server, registry, program)
+    _register_task_support(server, frozenset(program["name"] for program in programs))
 
 
 def _register_program_tool(
@@ -112,12 +119,74 @@ def _register_program_tool(
     {long_description}
     """
 
-    def run(descriptor: str, context: Context, arguments: str = "") -> str:
+    async def run(descriptor: str, context: Context, arguments: str = "") -> str:
         connection = registry.get(context.session, descriptor)
         command = name if not arguments else f"{name} {arguments}"
-        return _drain(connection.sh(command))
+        return await anyio.to_thread.run_sync(lambda: _drain(connection.sh(command)))
 
     server.add_tool(run, name=name, title=title, description=description)
+
+
+def _register_task_support(server: "FastMCP", program_names: frozenset[str]) -> None:
+    """Let the program tools run task-augmented (MCP tasks).
+
+    A task-augmented call returns a task id immediately while the program runs
+    in the background; the client polls the task and fetches the result when
+    the program finishes, so a long-running program never stalls the caller.
+
+    FastMCP has no hook for tasks — task support lives on the lowlevel server,
+    and FastMCP's result conversion cannot carry a ``CreateTaskResult`` — so
+    this re-registers the lowlevel handlers FastMCP installed: ``list_tools``
+    to advertise ``execution.taskSupport "optional"`` on every program tool,
+    and ``call_tool`` to divert task-augmented calls through ``run_task``.
+    Plain calls and the gateway tools (connect / disconnect) behave as before;
+    task-augmenting a gateway tool is rejected, per the MCP spec's handling of
+    tools without task support.
+    """
+    lowlevel_server = server._mcp_server
+    lowlevel_server.experimental.enable_tasks()
+
+    async def list_tools_with_task_support() -> list[Tool]:
+        tools = await server.list_tools()
+        for tool in tools:
+            if tool.name in program_names:
+                tool.execution = ToolExecution(taskSupport=TASK_OPTIONAL)
+        return tools
+
+    async def call_tool_task_aware(name: str, arguments: dict[str, Any]):
+        experimental = lowlevel_server.request_context.experimental
+        experimental.validate_task_mode(
+            TASK_OPTIONAL if name in program_names else None
+        )
+        if not experimental.is_task:
+            return await server.call_tool(name, arguments)
+
+        async def run_program_in_task(
+            task_context: ServerTaskContext,
+        ) -> CallToolResult:
+            result = await server.call_tool(name, arguments)
+            if isinstance(result, tuple):
+                unstructured_content, structured_content = cast(
+                    "tuple[list[ContentBlock], dict[str, Any]]", result
+                )
+            elif isinstance(result, dict):
+                unstructured_content = [
+                    TextContent(type="text", text=json.dumps(result, indent=2))
+                ]
+                structured_content = result
+            else:
+                unstructured_content = result
+                structured_content = None
+            return CallToolResult(
+                content=list(unstructured_content),
+                structuredContent=structured_content,
+                isError=False,
+            )
+
+        return await experimental.run_task(run_program_in_task)
+
+    lowlevel_server.list_tools()(list_tools_with_task_support)
+    lowlevel_server.call_tool(validate_input=False)(call_tool_task_aware)
 
 
 def _drain(output) -> str:
