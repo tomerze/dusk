@@ -26,8 +26,9 @@ struct KillCli {
 
 struct KillProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for KillProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = KillCli::try_parse_from(args)?;
         Ok(Args::new(cli.pid, cli.signal).as_program_args()?)
     }

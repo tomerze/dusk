@@ -1,8 +1,3 @@
-//! Capture, stage one: a tracing event's or span's fields become owned
-//! [`FieldValue`]s, keyed by name. The [`BufferLayer`](super::BufferLayer)
-//! drives the collection; [`record`](super::record) turns the collected values
-//! into a capnp log record.
-
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -16,8 +11,6 @@ pub(crate) enum FieldValue {
     Text(String),
 }
 
-/// Collects span/event fields into owned values; a re-recorded name replaces
-/// its earlier value.
 #[derive(Default)]
 pub(crate) struct FieldCollector {
     pub(crate) fields: Vec<(&'static str, FieldValue)>,

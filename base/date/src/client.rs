@@ -43,8 +43,9 @@ fn parse_ntp_server(input: &str) -> Result<SocketAddr, String> {
 
 struct DateProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for DateProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = DateCli::try_parse_from(args)?;
         let args = match (cli.set, cli.ntp, cli.sync) {
             (Some(set_to), _, _) => {

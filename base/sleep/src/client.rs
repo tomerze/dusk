@@ -14,8 +14,9 @@ struct SleepCli {
 
 struct SleepProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for SleepProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = SleepCli::try_parse_from(args)?;
         Ok(Args::duration_ms(cli.duration_ms).as_program_args()?)
     }

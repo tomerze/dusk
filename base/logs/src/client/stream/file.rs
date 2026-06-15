@@ -1,6 +1,7 @@
-//! `file://<path>`: appends each streamed record as one OTLP/JSON line (jsonl).
+//! `file://<path>`: appends each streamed signal as one OTLP/JSON line (jsonl).
 
-use super::{records_json, stop_promise};
+use super::stop_promise;
+use crate::client::convert::signal_to_json;
 use crate::logs_capnp::logs_args;
 use capnp::capability::Promise;
 use dusk_program::anyhow::{Context as _, Result};
@@ -12,41 +13,62 @@ use tokio::io::AsyncWriteExt as _;
 use tokio::sync::{Mutex, Notify};
 
 /// The file, opened lazily on the first batch so construction stays sync. A
-/// fatal failure latches [`State::Failed`] so later batches drop rather than
-/// retry a dead file.
+/// failed open or write drops back to [`State::Unopened`] so the next attempt
+/// reopens.
 enum State {
     Unopened(PathBuf),
-    Open(tokio::fs::File),
-    Failed,
+    Open {
+        file: tokio::fs::File,
+        path: PathBuf,
+    },
 }
 
-/// A `LogsArgs.Server` stream that appends OTLP/JSON records, one per line, to
+/// A `LogsArgs.Server` stream that appends OTLP/JSON signals, one per line, to
 /// a file.
 pub struct FileStream {
     state: Rc<Mutex<State>>,
     stop: Rc<Notify>,
+    namespace_id: u64,
 }
 
 impl FileStream {
-    pub fn new(file_path: PathBuf) -> Self {
+    pub fn new(file_path: PathBuf, namespace_id: u64) -> Self {
         FileStream {
             state: Rc::new(Mutex::new(State::Unopened(file_path))),
             stop: Rc::new(Notify::new()),
+            namespace_id,
         }
+    }
+}
+
+impl Drop for FileStream {
+    fn drop(&mut self) {
+        tracing::info!("the file log stream closed");
     }
 }
 
 impl logs_args::server::Server for FileStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
         let entries = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_entries());
-        let batch = records_json(entries);
-        let state = self.state.clone();
-        let stop = self.stop.clone();
-        Promise::from_future(async move {
-            if let Err(error) = append(&state, batch).await {
-                tracing::error!(error = %format!("{error:#}"), "the file log stream failed");
-                stop.notify_one();
+        // Render each signal to its OTLP/JSON line; a span is a structured log to a
+        // file consumer. A signal that fails to convert is skipped with a warning.
+        let mut batch = Vec::new();
+        for entry in entries {
+            match signal_to_json(entry, self.namespace_id) {
+                Ok(value) => batch.push(value),
+                Err(error) => tracing::warn!(%error, "skipping an unconvertible signal"),
             }
+        }
+        let signal_count = entries.len();
+        let state = self.state.clone();
+        Promise::from_future(async move {
+            // Retry forever: awaiting the send is the backpressure, so a failing
+            // file parks the node-side subscription until writes land again.
+            while let Err(error) = append(&state, &batch).await {
+                tracing::warn!(error = %format!("{error:#}"), "the file log stream failed; retrying");
+                tokio::time::sleep(super::RETRY_INTERVAL).await;
+            }
+            tracing::info!(signal_count, "streamed a batch to the file");
             Ok(())
         })
     }
@@ -62,33 +84,35 @@ impl logs_args::server::Server for FileStream {
 
 /// Open on first use, then append `batch` as jsonl. Awaiting the write is the
 /// backpressure — a slow file/pipe parks the node's stream.
-async fn append(state: &Rc<Mutex<State>>, batch: Vec<serde_json::Value>) -> Result<()> {
+async fn append(state: &Rc<Mutex<State>>, batch: &[serde_json::Value]) -> Result<()> {
     let mut guard = state.lock().await;
     if let State::Unopened(file_path) = &*guard {
         let file_path = file_path.clone();
-        match tokio::fs::OpenOptions::new()
+        // A failed open leaves the state Unopened, so the retry reopens.
+        let file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&file_path)
             .await
-        {
-            Ok(file) => *guard = State::Open(file),
-            Err(error) => {
-                *guard = State::Failed;
-                return Err(error).with_context(|| format!("opening {}", file_path.display()));
-            }
-        }
+            .with_context(|| format!("opening {}", file_path.display()))?;
+        *guard = State::Open {
+            file,
+            path: file_path,
+        };
     }
-    let State::Open(file) = &mut *guard else {
+    let State::Open { file, path } = &mut *guard else {
         return Ok(());
     };
     let mut lines = String::new();
-    for record in batch {
-        lines.push_str(&serde_json::to_string(&record)?);
+    for signal in batch {
+        lines.push_str(&serde_json::to_string(signal)?);
         lines.push('\n');
     }
-    file.write_all(lines.as_bytes())
-        .await
-        .context("writing to the file log stream")?;
+    if let Err(error) = file.write_all(lines.as_bytes()).await {
+        // Reopen on the next attempt: the handle may be the casualty.
+        let path = path.clone();
+        *guard = State::Unopened(path);
+        return Err(error).context("writing to the file log stream");
+    }
     Ok(())
 }

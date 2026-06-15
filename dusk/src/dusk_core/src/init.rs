@@ -31,7 +31,11 @@ async fn init_task(
     namespace: Rc<Namespace>,
     init_program_args: Rc<ProgramArgs>,
 ) {
-    let span = info_span!("init", task_id = task_id.get(), namespace_id = namespace.id);
+    let span = info_span!(
+        "init",
+        __new_task_id__ = task_id.get(),
+        namespace_id = namespace.id
+    );
     if let Err(err) = run_init_process(namespace.clone(), init_program_args)
         .instrument(span.clone())
         .await

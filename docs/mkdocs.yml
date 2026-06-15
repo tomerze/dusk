@@ -71,6 +71,7 @@ nav:
       - Analytics: features/analytics.md
       - Diagnosis: features/diagnosis.md
       - Shell: features/shell.md
+      - Logs: features/logs.md
       - Ask Dusk: features/ask-dusk.md
       - MCP: features/mcp.md
       - Base programs: getting-started/concepts/base.md
@@ -90,7 +91,7 @@ nav:
       - development/index.md
       - Architecture: development/architecture.md
       - Shell: development/shell.md
-      - Log buffer: development/logs.md
+      - Logs: development/logs.md
       - Tracing and spans: development/tracing.md
       - Ask Dusk: development/ask_dusk.md
       - Contributing: development/contributing.md

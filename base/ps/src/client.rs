@@ -23,8 +23,9 @@ struct PsCli {
 
 struct PsProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for PsProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = PsCli::try_parse_from(args)?;
         Ok(Args::new(cli.pid).as_program_args()?)
     }

@@ -36,7 +36,7 @@ fn _embassy_trace_task_ready_begin(_executor_id: u32, _task_id: u32) {
     // Deliberately silent: this hook runs inside `wake()`, and wakes happen
     // in arbitrary foreign contexts — the embassy-time std driver wakes tasks
     // from its alarm thread while holding its internal mutex, and a tracing
-    // event from here reaches the log buffer's writer, whose timestamping
+    // event from here reaches the signal buffer's writer, whose timestamping
     // calls `Instant::now()` and takes that same mutex: the node deadlocks.
     // Wakers must stay cheap and lock-free; never trace from wake context.
 }

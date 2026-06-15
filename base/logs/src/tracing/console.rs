@@ -1,10 +1,3 @@
-//! The console side of the logs program: formatting a captured event to stdout,
-//! rich-style (dim timestamp, colored level and message, cyan `key=value`). It
-//! is not a separate subscriber or `fmt` layer — the always-on
-//! [`BufferLayer`](crate::BufferLayer) calls [`print`] from its event path when
-//! the `console` feature is on, so capture and console share one subscriber. The
-//! `console` feature is what makes this std-only code compile in.
-
 use super::collect::FieldValue;
 use super::{HEX_ID_FIELDS, MESSAGE_FIELD};
 use alloc::format;
@@ -68,7 +61,7 @@ pub(crate) fn print(
     }
 
     // Event fields (sans message) then span scope, innermost-first, first value
-    // per key — the same precedence the buffer record uses.
+    // per key — the same precedence the buffer's log record uses.
     let mut seen: Vec<&str> = Vec::new();
     let candidates = event_fields
         .iter()

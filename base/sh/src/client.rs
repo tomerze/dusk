@@ -16,8 +16,9 @@ struct ShCli {
 
 struct ShProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for ShProgramArgsBuilder {
-    fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
         let mode = match cli.command {
             None => ShMode::Server,

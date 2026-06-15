@@ -27,6 +27,18 @@ ps            # list every process on the node
 ps 0x1a2b     # show just the process with this pid (hex or decimal)
 ```
 
+## `logs`
+
+Reads the node's rolling log buffer — live in an interactive viewer, or streamed
+out to a file or a collector. See [Logs](../../features/logs.md).
+
+```sh
+logs                            # open the interactive log viewer
+logs stream file://out.jsonl    # stream logs to a file
+logs stream otlp://myotel:4317 # stream straight to an otel collector (traces included!)
+logs --replay-only              # dump the buffered history and exit
+```
+
 ## `kill`
 
 Sends a signal to a process by pid. The default signal is `15` (Terminate),

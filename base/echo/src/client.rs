@@ -14,8 +14,9 @@ struct EchoCli {
 
 struct EchoProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for EchoProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = EchoCli::try_parse_from(args)?;
         Ok(Args::new(&cli.words.join(" ")).as_program_args()?)
     }

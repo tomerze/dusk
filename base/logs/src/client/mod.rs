@@ -7,6 +7,7 @@ use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::rc::Rc;
 
+pub mod convert;
 pub mod stream;
 
 #[derive(clap::Parser)]
@@ -16,14 +17,14 @@ struct LogsCli {
     command: Option<String>,
     /// The stream destination: file://, otlp://, http:// or https://.
     url: Option<String>,
-    /// Only stream records at this severity or above.
+    /// Only stream signals at this severity or above.
     #[arg(short = 'l', long = "level", value_parser = ["error", "warn", "info", "debug", "trace"], default_value = "trace")]
     level: String,
     /// Replay the buffered history, then stop — a bounded snapshot that
     /// returns. Use this from scripts and MCP; a plain stream never returns.
     #[arg(long = "replay-only", conflicts_with = "follow_only")]
     replay_only: bool,
-    /// Skip the buffered history; follow only records logged from now on.
+    /// Skip the buffered history; follow only signals logged from now on.
     #[arg(long = "follow-only")]
     follow_only: bool,
 }
@@ -80,8 +81,9 @@ impl LogsArgs {
 
 struct LogsProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for LogsProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = LogsCli::try_parse_from(args)?;
         let minimum_level = Some(severity_floor(&cli.level));
         // clap's `conflicts_with` already rejects both flags together.
@@ -98,7 +100,14 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
                     .url
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("`logs stream` needs a destination url"))?;
-                stream::parse(url)?
+                let namespace_id = client
+                    .id_request()
+                    .send()
+                    .promise
+                    .await?
+                    .get()?
+                    .get_result();
+                stream::parse(url, namespace_id)?
             }
             _ => {
                 if let Some(url) = &cli.url {
@@ -113,8 +122,6 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
                          to stdout) or `logs stream <url> --replay-only`."
                     );
                 } else if cli.replay_only {
-                    // A bounded snapshot with no terminal to take over: dump the
-                    // buffered records to stdout, one per line, and exit.
                     capnp_rpc::new_client(stream::PrintStream::new())
                 } else {
                     capnp_rpc::new_client(stream::ViewerStream::new())
@@ -138,15 +145,14 @@ Use `logs` to view or stream the node's logs
 Examples:
 * `logs` or `logs view` opens an interactive log view.
 Intended for use from an interactive context (The dusk prompt, python repl).
-* `logs stream <url>` streams the logs to a URL.
-* `logs stream <url> --replay-only` writes the buffered history to the URL and
-EXITS — a bounded snapshot. Use this from scripts and MCP; a plain stream never
-returns and pins its connection.
+* `logs stream <url>` streams the logs and tracing spans to a URL.
+* `logs stream <url> --replay-only` writes the buffered history to the URL and exits.
+Use this from scripts and MCP; a plain stream never returns.
 
 Modes:
-(default)      replay the buffered history, then follow new records forever.
+(default)      replay the buffered history, then follow new logged signals forever.
 --replay-only  replay the buffered history, then stop (a bounded snapshot).
---follow-only  skip the history; follow only records logged from now on.
+--follow-only  skip the history; follow only signals logged from now on.
 
 Supported url types:
 file:// - streams in jsonl format to a file
@@ -154,15 +160,13 @@ otlp:// - streams in opentelemetry grpc to an otlp collector
 http (or https):// - streams in HTTP(s) post requests where each POST is a JSON with a single log
 
 Notes:
-For a bounded read-and-return, prefer `--replay-only` and read the file.
-For a live follow (no --replay-only), stream to a named pipe so it stays
-bounded, run it as a background task, and `kill` it when done — a file follow
-grows without limit.
-If you are using MCP, put your connection descriptor in the file name
-(e.g. `file:///tmp/dusk-logs-<descriptor>.jsonl`) so you won't collide with
-other models.
+* Tracing spans are logged too. 
+- When viewing logs via `logs view` spans don't show.
+- when streaming to file:// or http(s):// they show as normal structured logs without severity.
+- when streaming to otlp:// they show as otlp traces.
 
-`-l <level>` sets the minimum severity (error, warn, info, debug, trace).
+
+* `-l <level>` sets the minimum severity (error, warn, info, debug, trace).
 The default is trace.
 "#,
             version: VERSION,

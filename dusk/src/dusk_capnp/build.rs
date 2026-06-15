@@ -159,6 +159,9 @@ fn main() {
     let capnp_root = Path::new(&out_dir).join("capnproto");
     let capnp_bin = ensure_capnp_build(&capnp_root);
 
+    println!("cargo:rerun-if-changed=capnp/dusk.capnp");
+    println!("cargo:rerun-if-changed=capnp/stream.capnp");
+
     let capnp_dir = Path::new(&out_dir).join("capnp");
     std::fs::create_dir_all(&capnp_dir).unwrap();
 

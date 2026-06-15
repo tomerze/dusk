@@ -40,15 +40,16 @@ pub(super) struct Descriptor {
 pub(super) struct Lane {
     pub(super) descriptors: Ring<Descriptor>,
     pub(super) logs: Ring<AtomicU8>,
+    pub(super) overwritten: AtomicU64,
 }
 
 impl Lane {
     /// Build a lane's two rings from a [`LaneConfig`]. Errors on a zero capacity
     /// (the modulo indexing would divide by zero) and on a `byte_capacity` above
-    /// `u32::MAX` (a record's length is stored in a `u32` descriptor field).
+    /// `u32::MAX` (a signal's length is stored in a `u32` descriptor field).
     pub(super) fn from_config(config: &LaneConfig) -> anyhow::Result<Self> {
         for (name, capacity) in [
-            ("record_capacity", config.record_capacity),
+            ("signal_capacity", config.signal_capacity),
             ("byte_capacity", config.byte_capacity),
         ] {
             if capacity == 0 {
@@ -57,12 +58,12 @@ impl Lane {
         }
         if config.byte_capacity as u64 > u32::MAX as u64 {
             anyhow::bail!(
-                "byte_capacity must fit in a u32 (the descriptor's record-length field), got {}",
+                "byte_capacity must fit in a u32 (the descriptor's signal-length field), got {}",
                 config.byte_capacity
             );
         }
         Ok(Lane {
-            descriptors: Ring::new(config.record_capacity as u64, || Descriptor {
+            descriptors: Ring::new(config.signal_capacity as u64, || Descriptor {
                 lane_sequence: AtomicU64::new(LANE_SEQUENCE_WRITING),
                 global_sequence: AtomicU64::new(0),
                 level: AtomicU8::new(0),
@@ -70,6 +71,7 @@ impl Lane {
                 data_length: AtomicU32::new(0),
             }),
             logs: Ring::new(config.byte_capacity as u64, || AtomicU8::new(0)),
+            overwritten: AtomicU64::new(0),
         })
     }
 }

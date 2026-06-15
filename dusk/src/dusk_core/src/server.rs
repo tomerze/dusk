@@ -74,7 +74,7 @@ async fn process_task(
 ) {
     let span = info_span!(
         "process",
-        task_id = task_id.get(),
+        __new_task_id__ = task_id.get(),
         pid = process.pid(),
         program_id = process.program_id(),
         program_name = process.name(),
@@ -307,6 +307,16 @@ impl dusk::Server for DuskServer {
             .load(core::sync::atomic::Ordering::Relaxed)
             + dusk_program::embassy_time::Instant::now().as_millis();
         results.get().set_unix_time_ms(time);
+        Promise::ok(())
+    }
+
+    fn id(
+        &mut self,
+        _params: dusk::IdParams,
+        mut results: dusk::IdResults,
+    ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.id", "rpc call");
+        results.get().set_result(self.namespace.id);
         Promise::ok(())
     }
 

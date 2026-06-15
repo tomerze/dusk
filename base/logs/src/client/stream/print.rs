@@ -1,5 +1,5 @@
 //! The non-interactive log dump: `logs --replay-only` with no url prints the
-//! buffered records to stdout, one per line, and exits — the scriptable
+//! buffered signals to stdout, one per line, and exits — the scriptable
 //! counterpart to the interactive [`viewer`](super::viewer), whose line
 //! rendering it reuses.
 
@@ -8,7 +8,7 @@ use crate::logs_capnp::logs_args;
 use capnp::capability::Promise;
 use std::io::Write as _;
 
-/// Prints each streamed record to stdout as a plain line. The node finishes a
+/// Prints each streamed signal to stdout as a plain line. The node finishes a
 /// `--replay-only` stream on its own once the history is drained, so this never
 /// needs to signal stop.
 pub struct PrintStream;
@@ -31,11 +31,13 @@ impl logs_args::server::Server for PrintStream {
             Ok(entries) => entries,
             Err(error) => return Promise::err(error),
         };
+        let signal_count = entries.len();
         let mut stdout = std::io::stdout().lock();
         for line in entry_lines(entries) {
             // A closed stdout (e.g. piped into `head`) just ends the dump.
             let _ = writeln!(stdout, "{}", line.plain);
         }
+        tracing::info!(signal_count, "printed a batch");
         Promise::ok(())
     }
 

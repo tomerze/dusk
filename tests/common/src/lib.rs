@@ -1,8 +1,9 @@
 use capnp::capability::Promise;
 use dusk_base::dusk_program_init::Args as InitArgs;
 use dusk_program_logs::client::LogsArgs;
-use dusk_program_logs::log_record_capnp::{any_value, log_record};
-use dusk_program_logs::logs_args;
+use dusk_program_logs::common_capnp::any_value;
+use dusk_program_logs::log_record_capnp::{SeverityNumber, log_record};
+use dusk_program_logs::{logs_args, signal};
 use dusk_shell::connection::Connection;
 use rand::Rng;
 use std::net::SocketAddr;
@@ -31,13 +32,10 @@ impl logs_args::server::Server for ErrorCaptureStream {
         };
         let mut errors = self.errors.lock().unwrap();
         for entry in entries.iter() {
-            let is_error = entry
-                .get_severity_text()
-                .ok()
-                .and_then(|text| text.to_str().ok())
-                .is_some_and(|text| text == "ERROR");
-            if is_error {
-                errors.push(body_text(entry));
+            if matches!(entry.get_severity_number(), Ok(SeverityNumber::Error))
+                && let Ok(signal::Which::LogRecord(Ok(log_record))) = entry.which()
+            {
+                errors.push(body_text(log_record));
             }
         }
         Promise::ok(())
@@ -154,7 +152,7 @@ impl DuskNixImpl {
         Self { errors }
     }
 
-    /// Fail if any ERROR-severity record reached the monitor. Gives the
+    /// Fail if any ERROR-severity signal reached the monitor. Gives the
     /// asynchronous stream a moment to drain first, so an error logged just
     /// before this call is not missed.
     pub fn assert_no_errors(&self) {

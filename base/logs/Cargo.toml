@@ -20,7 +20,7 @@ base64 = { version = "0.22.1", optional = true }
 chrono = { version = "0.4.42", optional = true }
 crossterm = { version = "0.29", optional = true }
 nu-ansi-term = { version = "0.50.1", optional = true }
-tokio = { version = "1.47.1", features = ["sync", "macros", "rt", "fs", "io-util"], optional = true }
+tokio = { version = "1.47.1", features = ["sync", "macros", "rt", "fs", "io-util", "time"], optional = true }
 opentelemetry-proto = { version = "0.28", default-features = false, features = ["gen-tonic", "logs", "trace", "with-serde"], optional = true, public = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
 tonic = { version = "0.12", optional = true }

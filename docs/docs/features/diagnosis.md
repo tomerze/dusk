@@ -11,8 +11,8 @@ layer you embedded, not the host operating system's process table.
   [processes](../getting-started/concepts/processes.md) running *inside the node*
   (the Dusk programs that have been started), with each one's pid, name, and
   version. Like `docker ps`, it shows Dusk's own process table, not the host's.
-- **Read logs** — pull the structured log records Dusk programs emit off the
-  node.
+- **Read logs** — `logs` opens the node's log buffer in an interactive viewer, or
+  streams it to a file, otel collector, or just an http server. See [Logs](logs.md).
 - **Run commands** — open the [shell](shell.md) and run Dusk programs against the
   node interactively.
 - **Stop or restart work** — `kill` signals a Dusk process by pid; with the shell

@@ -49,7 +49,7 @@ pub async fn session(
     let span = tracing::info_span!(
         "session",
         ?session_id,
-        task_id = task_id.get(),
+        __new_task_id__ = task_id.get(),
         namespace_id = namespace.id,
         pid = tracing::field::Empty,
         program_id = tracing::field::Empty,

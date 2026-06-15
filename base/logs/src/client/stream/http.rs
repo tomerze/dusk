@@ -1,7 +1,8 @@
-//! `http://` / `https://`: one POST per record, the record as a single
+//! `http://` / `https://`: one POST per signal, the signal as a single
 //! OTLP/JSON document.
 
-use super::{records_json, stop_promise};
+use super::stop_promise;
+use crate::client::convert::signal_to_json;
 use crate::logs_capnp::logs_args;
 use capnp::capability::Promise;
 use dusk_program::anyhow::{Context as _, Result};
@@ -17,42 +18,64 @@ struct Target {
     url: String,
 }
 
-/// A `LogsArgs.Server` stream that POSTs each record as an OTLP/JSON document.
+/// A `LogsArgs.Server` stream that POSTs each signal as an OTLP/JSON document.
 pub struct HttpStream {
     target: Result<Target, String>,
     stop: Rc<Notify>,
+    namespace_id: u64,
 }
 
 impl HttpStream {
-    pub fn new(url: String) -> Self {
+    pub fn new(url: String, namespace_id: u64) -> Self {
         let target = build_client()
             .map(|client| Target { client, url })
             .map_err(|error| format!("{error:#}"));
         HttpStream {
             target,
             stop: Rc::new(Notify::new()),
+            namespace_id,
         }
+    }
+}
+
+impl Drop for HttpStream {
+    fn drop(&mut self) {
+        tracing::info!("the http log stream closed");
     }
 }
 
 impl logs_args::server::Server for HttpStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
         let entries = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_entries());
-        let batch = records_json(entries);
+        // Render each signal to its OTLP/JSON document; a span is a structured log
+        // to an http consumer. A signal that fails to convert is skipped.
+        let mut batch = Vec::new();
+        for entry in entries {
+            match signal_to_json(entry, self.namespace_id) {
+                Ok(value) => batch.push(value),
+                Err(error) => tracing::warn!(%error, "skipping an unconvertible signal"),
+            }
+        }
+        let signal_count = entries.len();
         let stop = self.stop.clone();
         let (client, url) = match &self.target {
             Ok(target) => (target.client.clone(), target.url.clone()),
             Err(error) => {
+                // A construction failure is not a connection failure; there is
+                // nothing to retry.
                 tracing::error!(error = %error, "the http log stream is unusable");
                 stop.notify_one();
                 return Promise::ok(());
             }
         };
         Promise::from_future(async move {
-            if let Err(error) = post(&client, &url, batch).await {
-                tracing::error!(error = %format!("{error:#}"), "the http log stream failed");
-                stop.notify_one();
+            // Retry forever: awaiting the send is the backpressure, so a down
+            // endpoint parks the node-side subscription until it recovers.
+            while let Err(error) = post(&client, &url, &batch).await {
+                tracing::warn!(error = %format!("{error:#}"), "the http log stream failed; retrying");
+                tokio::time::sleep(super::RETRY_INTERVAL).await;
             }
+            tracing::info!(signal_count, "streamed a batch over http");
             Ok(())
         })
     }
@@ -66,13 +89,13 @@ impl logs_args::server::Server for HttpStream {
     }
 }
 
-/// POST each record as a single OTLP/JSON document. Awaiting the posts is the
+/// POST each signal as a single OTLP/JSON document. Awaiting the posts is the
 /// backpressure — a slow endpoint parks the node's stream.
-async fn post(client: &reqwest::Client, url: &str, batch: Vec<serde_json::Value>) -> Result<()> {
-    for record in batch {
+async fn post(client: &reqwest::Client, url: &str, batch: &[serde_json::Value]) -> Result<()> {
+    for signal in batch {
         client
             .post(url)
-            .json(&record)
+            .json(signal)
             .send()
             .await
             .and_then(|response| response.error_for_status())

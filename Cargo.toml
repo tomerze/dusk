@@ -34,3 +34,14 @@ members = [
     "tests/py",
 ]
 resolver = "2"
+
+[profile.release]
+strip = true
+
+[profile.prod]
+inherits = "release"
+opt-level = "z"     # optimize for size
+lto = "fat"         # whole-program dead-code elimination + cross-crate inlining
+codegen-units = 1   # one unit → best size (slower compile)
+panic = "abort"     # drop unwind/landing-pad tables
+strip = true

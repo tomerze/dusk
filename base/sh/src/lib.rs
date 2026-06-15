@@ -112,23 +112,29 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
                 .ok_or_else(|| anyhow::anyhow!("empty command"))
                 .into_capnp()
         );
-        let args = &words[1..];
-        for entry in self.sh_entries_builder.get_entries() {
-            if entry.info.name == *program {
-                let program_args = pry!(
-                    entry
-                        .program_args_builder
-                        .build(self.client.clone(), args)
-                        .context("program args builder failed")
-                        .into_capnp()
-                );
-                pry!(program_args.with_reader(|reader| results.get().set_program_args(reader)));
-                return capnp::capability::Promise::ok(());
-            }
-        }
-        capnp::capability::Promise::err(capnp::Error::failed(format!(
-            "no sh entry found for `{program}`"
-        )))
+        let Some(builder) = self
+            .sh_entries_builder
+            .get_entries()
+            .into_iter()
+            .find(|entry| entry.info.name == *program)
+            .map(|entry| entry.program_args_builder)
+        else {
+            return capnp::capability::Promise::err(capnp::Error::failed(format!(
+                "no sh entry found for `{program}`"
+            )));
+        };
+        let client = self.client.clone();
+        let args: Vec<String> = words[1..].iter().map(|word| word.to_string()).collect();
+        capnp::capability::Promise::from_future(async move {
+            let arg_refs: Vec<&str> = args.iter().map(|arg| arg.as_str()).collect();
+            let program_args = builder
+                .build(client, &arg_refs)
+                .await
+                .context("program args builder failed")
+                .into_capnp()?;
+            program_args.with_reader(|reader| results.get().set_program_args(reader))?;
+            Ok(())
+        })
     }
 }
 
@@ -173,6 +179,7 @@ struct State {
 async fn sh_exec_task(
     task_id: Rc<Cell<u32>>,
     pid: u64,
+    namespace_id: u64,
     interpreter: Interpreter,
     script_msg: capnp::message::Builder<capnp::message::HeapAllocator>,
     output: dusk_capnp::dusk_capnp::stream::Client,
@@ -183,7 +190,12 @@ async fn sh_exec_task(
     >,
 ) {
     use tracing::Instrument;
-    let span = tracing::info_span!("sh_exec", task_id = task_id.get(), pid);
+    let span = tracing::info_span!(
+        "sh_exec",
+        __new_task_id__ = task_id.get(),
+        pid,
+        namespace_id
+    );
     async move {
         let result: anyhow::Result<()> = async {
             let reader = script_msg.get_root_as_reader::<sh_capnp::script::Reader>()?;
@@ -223,6 +235,7 @@ fn spawn_sh_exec_task(
     let token = sh_exec_task(
         task_id.clone(),
         ctx.pid,
+        ctx.namespace.id,
         interpreter,
         script_msg,
         output,

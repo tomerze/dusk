@@ -3,7 +3,8 @@
 #![cfg_attr(not(any(feature = "client", test)), no_std)]
 
 use dusk_program::{ready::Ready, signal::SignalReceiver};
-use tracing::Instrument;
+// `::tracing` (the crate), disambiguated from this crate's own `tracing` module.
+use ::tracing::Instrument;
 
 extern crate alloc;
 extern crate capnp;
@@ -14,36 +15,49 @@ extern crate std;
 
 mod buffer;
 mod config;
-mod layer;
+mod enrich;
 mod pipe;
+mod tracing;
 
-pub use buffer::{DropCounts, LogBuffer, Reader, StartPosition, Writer};
+pub use crate::tracing::BufferLayer;
+pub use buffer::{DropCounts, Reader, SignalBuffer, StartPosition, Writer};
 pub use config::{LaneConfig, LogsConfig};
-pub use layer::BufferLayer;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("logs", VERSION, logs_capnp::PROGRAM_ID);
 
-/// OTel/OTLP log record schema, compiled from `capnp/log_record.capnp`.
-pub mod log_record_capnp {
-    include!(concat!(env!("OUT_DIR"), "/capnp/log_record_capnp.rs"));
+/// OTLP common types (the AnyValue/KeyValue family and InstrumentationScope),
+/// compiled from `capnp/otlp/common.capnp`. Shared by `log_record_capnp` and
+/// `span_capnp`.
+pub mod common_capnp {
+    include!(concat!(env!("OUT_DIR"), "/capnp/otlp/common_capnp.rs"));
 }
 
-pub use logs_capnp::logs_args;
+/// OTel/OTLP log record schema, compiled from `capnp/otlp/log_record.capnp`.
+pub mod log_record_capnp {
+    include!(concat!(env!("OUT_DIR"), "/capnp/otlp/log_record_capnp.rs"));
+}
+
+/// OTel/OTLP trace schema, compiled from `capnp/otlp/span.capnp`.
+pub mod span_capnp {
+    include!(concat!(env!("OUT_DIR"), "/capnp/otlp/span_capnp.rs"));
+}
+
+pub use logs_capnp::{logs_args, signal};
 
 #[cfg(feature = "client")]
 pub mod client;
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher {
-    pub buffer: LogBuffer,
+    pub buffer: SignalBuffer,
 }
 
 impl Launcher {
     pub fn new(config: LogsConfig) -> anyhow::Result<Self> {
-        let buffer = LogBuffer::new(config)?;
-        let _ = tracing::subscriber::set_global_default(BufferLayer::new(buffer.clone()));
+        let buffer = SignalBuffer::new(config)?;
+        let _ = ::tracing::subscriber::set_global_default(BufferLayer::new(buffer.clone()));
         Ok(Self { buffer })
     }
 }
@@ -62,7 +76,7 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 
 #[derive(Clone, dusk_program_proc::Process)]
 pub struct Process {
-    pub buffer: LogBuffer,
+    pub buffer: SignalBuffer,
     #[process_context]
     pub ctx: ProcessContext,
 }
@@ -70,7 +84,7 @@ pub struct Process {
 impl Process {
     async fn with_context_and_buffer(
         ctx: ProcessContext,
-        buffer: LogBuffer,
+        buffer: SignalBuffer,
     ) -> anyhow::Result<Self> {
         Ok(Process { ctx, buffer })
     }
@@ -144,10 +158,10 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                         })?;
                 let dusk_client = dusk_core::local_client(process.ctx.namespace.clone()).await;
                 let mut reader = process.buffer.reader(start_position, dusk_client).await?;
-                let span = tracing::info_span!("logs_stream", pid = process.ctx.pid);
-                let streaming = pipe::pipe(&mut reader, &server, minimum_severity, follow);
-                if let Err(error) = streaming.instrument(span).await {
-                    tracing::warn!(error = %error, "the logs stream failed");
+                let span = ::tracing::info_span!("logs_stream", pid = process.ctx.pid);
+                let pipe = pipe::pipe(&mut reader, &server, minimum_severity, follow);
+                if let Err(error) = pipe.instrument(span).await {
+                    ::tracing::warn!(error = %error, "the logs stream failed");
                 }
                 Ok::<(), capnp::Error>(())
             }

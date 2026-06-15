@@ -1,9 +1,9 @@
 //! The [`Reader`]: a non-destructive consumer that merges the lanes in
-//! global-sequence order and copies each record out of the arena under the
+//! global-sequence order and copies each signal out of the arena under the
 //! descriptor seqlock.
 
-use crate::buffer::enrich::unpack_and_enrich;
-use crate::buffer::{LEVELS, LogBufferInner, StartPosition};
+use crate::buffer::{LEVELS, SignalBufferInner, StartPosition};
+use crate::enrich::unpack_and_enrich;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use capnp::message::{Builder, HeapAllocator};
@@ -13,17 +13,17 @@ use portable_atomic_util::Arc;
 use tracing::Level;
 
 enum Read {
-    Record { level: Level },
+    Signal { level: Level, global_sequence: u64 },
     Reclaimed,
     Retry,
 }
 
 pub struct Reader {
-    inner: Arc<LogBufferInner>,
+    inner: Arc<SignalBufferInner>,
     /// Per-lane next descriptor position to read.
     cursor: Box<[u64]>,
     /// Per-lane head at subscription: the end of the retained history a
-    /// `Replay` walks. Records logged since are beyond it.
+    /// `Replay` walks. Signals logged since are beyond it.
     subscription_head: Box<[u64]>,
     offset_from_unix_time_ms: u64,
     /// Scratch for the bytes copied out by the last accepted descriptor.
@@ -32,7 +32,7 @@ pub struct Reader {
 
 impl Reader {
     pub(in crate::buffer) fn new(
-        inner: Arc<LogBufferInner>,
+        inner: Arc<SignalBufferInner>,
         start: StartPosition,
         offset_from_unix_time_ms: u64,
     ) -> Self {
@@ -60,11 +60,11 @@ impl Reader {
         }
     }
 
-    /// Whether the reader has yielded every record retained at subscription —
-    /// the end of a `Replay`'s history. Records logged since are beyond this
+    /// Whether the reader has yielded every signal retained at subscription —
+    /// the end of a `Replay`'s history. Signals logged since are beyond this
     /// boundary, so a replay-only snapshot stops here even while the node keeps
     /// logging. (Eviction past the boundary also counts as caught up: those
-    /// records are gone.)
+    /// signals are gone.)
     pub fn caught_up_to_subscription(&self) -> bool {
         self.cursor
             .iter()
@@ -72,16 +72,16 @@ impl Reader {
             .all(|(cursor, head)| cursor >= head)
     }
 
-    /// The next record, parking until one arrives, enriched with its severity
-    /// and real timestamps. Records this reader will never yield — evicted,
+    /// The next signal, parking until one arrives, enriched with its severity
+    /// and real timestamps. Signals this reader will never yield — evicted,
     /// reclaimed mid-read, or unparseable — are skipped.
     pub async fn read(&mut self) -> Builder<HeapAllocator> {
         loop {
             // Sample before scanning: a write landing mid-scan moves the version,
             // so the park returns immediately and we re-scan.
             let version = self.inner.notify.version();
-            if let Some(record) = self.try_read() {
-                return record;
+            if let Some(signal) = self.try_read() {
+                return signal;
             }
             // Under sustained writer pressure the version has always already
             // moved, making the park below ready on its first poll — which
@@ -92,26 +92,31 @@ impl Reader {
         }
     }
 
-    /// The non-parking partner of [`read`](Self::read): the next record if one
+    /// The non-parking partner of [`read`](Self::read): the next signal if one
     /// is immediately available.
     pub fn try_read(&mut self) -> Option<Builder<HeapAllocator>> {
         loop {
-            let level = self.try_step()?;
-            match unpack_and_enrich(&self.packed, level, self.offset_from_unix_time_ms) {
-                Ok(record) => return Some(record),
+            let (level, global_sequence) = self.try_step()?;
+            match unpack_and_enrich(
+                &self.packed,
+                level,
+                self.offset_from_unix_time_ms,
+                global_sequence,
+            ) {
+                Ok(signal) => return Some(signal),
                 // The cursor already moved past it; erring would make one
-                // corrupt record look fatal to the whole subscription.
-                Err(error) => tracing::warn!(%error, "skipping an unparseable log record"),
+                // corrupt signal look fatal to the whole subscription.
+                Err(error) => tracing::warn!(%error, "skipping an unparseable signal"),
             }
         }
     }
 
     /// One synchronous read attempt: merge the lanes in global-sequence order
-    /// and return the next record's level (its bytes land in the scratch).
-    /// Evicted and reclaimed records are stepped over; `None` means nothing is
+    /// and return the next signal's level (its bytes land in the scratch).
+    /// Evicted and reclaimed signals are stepped over; `None` means nothing is
     /// yieldable right now — caught up, or the next candidate is mid-write —
     /// and the next `write`'s notify resolves it.
-    fn try_step(&mut self) -> Option<Level> {
+    fn try_step(&mut self) -> Option<(Level, u64)> {
         loop {
             let mut best: Option<(usize, u64)> = None; // (lane, sequence)
 
@@ -143,9 +148,12 @@ impl Reader {
             let (lane_index, _sequence) = best?;
 
             match self.read_descriptor(lane_index) {
-                Read::Record { level } => {
+                Read::Signal {
+                    level,
+                    global_sequence,
+                } => {
                     self.cursor[lane_index] += 1;
-                    return Some(level);
+                    return Some((level, global_sequence));
                 }
                 // The descriptor is still ours, but the arena lapped its bytes.
                 Read::Reclaimed => self.cursor[lane_index] += 1,
@@ -154,7 +162,7 @@ impl Reader {
         }
     }
 
-    /// Copy the record at `lane_index`'s cursor out of the arena, validating the
+    /// Copy the signal at `lane_index`'s cursor out of the arena, validating the
     /// descriptor seqlock and that the bytes weren't reclaimed mid-copy.
     fn read_descriptor(&mut self, lane_index: usize) -> Read {
         let cursor = self.cursor[lane_index];
@@ -167,6 +175,7 @@ impl Reader {
         let data_position = descriptor.data_position.load(Ordering::Relaxed);
         let data_length = descriptor.data_length.load(Ordering::Relaxed) as u64;
         let level = LEVELS[descriptor.level.load(Ordering::Relaxed) as usize];
+        let global_sequence = descriptor.global_sequence.load(Ordering::Relaxed);
 
         // Pairs with the producer's post-WRITING Release fence: if any field read
         // was torn by a rewrite, this re-check sees the slot move and rejects.
@@ -193,7 +202,10 @@ impl Reader {
         if descriptor.lane_sequence.load(Ordering::Relaxed) == cursor
             && data_position >= lane.logs.tail.load(Ordering::Relaxed)
         {
-            Read::Record { level }
+            Read::Signal {
+                level,
+                global_sequence,
+            }
         } else {
             Read::Retry
         }

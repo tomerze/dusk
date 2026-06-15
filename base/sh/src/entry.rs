@@ -15,8 +15,9 @@ pub struct EntryInfo {
     pub version: &'static str,
 }
 
+#[dusk_program::async_trait::async_trait(?Send)]
 pub trait ProgramArgsBuilder {
-    fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>>;
+    async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>>;
 }
 
 #[derive(Clone)]

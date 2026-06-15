@@ -1,4 +1,3 @@
-mod enrich;
 mod io;
 mod lane;
 mod notify;
@@ -38,14 +37,14 @@ pub(crate) fn level_index(level: Level) -> usize {
 
 #[derive(Clone, Copy, Debug)]
 pub enum StartPosition {
-    /// Yield every record currently retained (oldest-first) before following new
+    /// Yield every signal currently retained (oldest-first) before following new
     /// ones — a `tail -f`-style replay-then-tail.
     Replay,
-    /// Skip the retained history; only yield records pushed after subscribing.
+    /// Skip the retained history; only yield signals pushed after subscribing.
     Live,
 }
 
-pub(in crate::buffer) struct LogBufferInner {
+pub(in crate::buffer) struct SignalBufferInner {
     lanes: Box<[Lane]>,
     level_to_lane: [Option<usize>; 5],
     global_sequence: AtomicU64,
@@ -55,9 +54,7 @@ pub(in crate::buffer) struct LogBufferInner {
     write_failures: AtomicU64,
 }
 
-/// Records discarded without being stored, by cause. The write path never fails
-/// for these — the counters are the only trace.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DropCounts {
     /// Level routed to no lane.
     pub no_lane: u64,
@@ -65,16 +62,18 @@ pub struct DropCounts {
     pub oversize: u64,
     /// Serialization failed inside `Writer::write` (the error is also returned).
     pub write_failures: u64,
+    /// Stored signals each lane has destroyed by drop-oldest overwrite, by lane.
+    pub overwritten: Vec<u64>,
 }
 
 /// A handle is a pointer-clone: clones share the same lanes. Mint per-producer
 /// [`Writer`]s and per-consumer [`Reader`]s from any clone.
 #[derive(Clone)]
-pub struct LogBuffer {
-    inner: Arc<LogBufferInner>,
+pub struct SignalBuffer {
+    inner: Arc<SignalBufferInner>,
 }
 
-impl LogBuffer {
+impl SignalBuffer {
     pub fn new(config: LogsConfig) -> anyhow::Result<Self> {
         let lanes = config
             .lanes
@@ -98,7 +97,7 @@ impl LogBuffer {
         }
 
         Ok(Self {
-            inner: Arc::new(LogBufferInner {
+            inner: Arc::new(SignalBufferInner {
                 lanes,
                 level_to_lane,
                 global_sequence: AtomicU64::new(0),
@@ -115,7 +114,7 @@ impl LogBuffer {
         Writer::new(self.inner.clone())
     }
 
-    /// Whether `level` routes to a lane; records at unrouted levels are dropped.
+    /// Whether `level` routes to a lane; signals at unrouted levels are dropped.
     pub(crate) fn routes(&self, level: Level) -> bool {
         self.inner.level_to_lane[level_index(level)].is_some()
     }
@@ -149,13 +148,18 @@ impl LogBuffer {
         Reader::new(self.inner.clone(), start, offset_from_unix_time_ms)
     }
 
-    /// Snapshot of the records discarded so far without being stored.
     pub fn drop_counts(&self) -> DropCounts {
         use core::sync::atomic::Ordering;
         DropCounts {
             no_lane: self.inner.dropped_no_lane.load(Ordering::Relaxed),
             oversize: self.inner.dropped_oversize.load(Ordering::Relaxed),
             write_failures: self.inner.write_failures.load(Ordering::Relaxed),
+            overwritten: self
+                .inner
+                .lanes
+                .iter()
+                .map(|lane| lane.overwritten.load(Ordering::Relaxed))
+                .collect(),
         }
     }
 }

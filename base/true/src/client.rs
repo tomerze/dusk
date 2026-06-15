@@ -11,8 +11,9 @@ struct TrueCli {}
 
 struct TrueProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for TrueProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let _cli = TrueCli::try_parse_from(args)?;
         Ok(Args::new().as_program_args()?)
     }
