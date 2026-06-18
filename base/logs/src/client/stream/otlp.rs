@@ -88,21 +88,18 @@ impl logs_args::server::Server for OtlpStream {
                 Err(error) => tracing::warn!(%error, "skipping an unreadable signal"),
             }
         }
+        let logs_count = logs.len();
+        let spans_count = spans.len();
         let resource_spans = resource_spans(spans);
-        let signal_count = entries.len();
 
         let state = self.state.clone();
         Promise::from_future(async move {
-            // Retry forever: awaiting the send is the backpressure, so a down
-            // collector parks the node-side subscription until it recovers.
-            while let Err(error) = export(&state, &logs, &resource_spans).await {
-                tracing::warn!(error = %format!("{error:#}"), "the otlp stream failed; retrying");
-                tokio::time::sleep(super::RETRY_INTERVAL).await;
+            if let Err(error) = export(&state, &logs, &resource_spans).await {
+                let message = format!("{error:#}");
+                tracing::warn!(logs_count, spans_count, error = %message, "failed streaming over otlp");
+                return Err(capnp::Error::failed(message));
             }
-            tracing::info!(
-                signals = signal_count,
-                "streamed a batch to the otlp collector"
-            );
+            tracing::info!(logs_count, spans_count, "streaming over otlp...");
             Ok(())
         })
     }

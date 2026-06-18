@@ -22,15 +22,12 @@
 
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Duration;
 
 use crate::logs_capnp::logs_args;
 use capnp::capability::Promise;
 use dusk_program::anyhow::{Result, bail};
 use dusk_program::dusk_capnp::capnp_rpc;
 use tokio::sync::Notify;
-
-pub(crate) const RETRY_INTERVAL: Duration = Duration::from_millis(500);
 
 pub mod file;
 pub mod http;

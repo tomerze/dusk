@@ -56,7 +56,7 @@ impl logs_args::server::Server for HttpStream {
                 Err(error) => tracing::warn!(%error, "skipping an unconvertible signal"),
             }
         }
-        let signal_count = entries.len();
+        let logs_count = entries.len();
         let stop = self.stop.clone();
         let (client, url) = match &self.target {
             Ok(target) => (target.client.clone(), target.url.clone()),
@@ -69,13 +69,12 @@ impl logs_args::server::Server for HttpStream {
             }
         };
         Promise::from_future(async move {
-            // Retry forever: awaiting the send is the backpressure, so a down
-            // endpoint parks the node-side subscription until it recovers.
-            while let Err(error) = post(&client, &url, &batch).await {
-                tracing::warn!(error = %format!("{error:#}"), "the http log stream failed; retrying");
-                tokio::time::sleep(super::RETRY_INTERVAL).await;
+            if let Err(error) = post(&client, &url, &batch).await {
+                let message = format!("{error:#}");
+                tracing::warn!(logs_count, error = %message, "failed streaming over http");
+                return Err(capnp::Error::failed(message));
             }
-            tracing::info!(signal_count, "streamed a batch over http");
+            tracing::info!(logs_count, "streaming over http...");
             Ok(())
         })
     }

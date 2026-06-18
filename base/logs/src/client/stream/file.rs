@@ -59,16 +59,15 @@ impl logs_args::server::Server for FileStream {
                 Err(error) => tracing::warn!(%error, "skipping an unconvertible signal"),
             }
         }
-        let signal_count = entries.len();
+        let logs_count = entries.len();
         let state = self.state.clone();
         Promise::from_future(async move {
-            // Retry forever: awaiting the send is the backpressure, so a failing
-            // file parks the node-side subscription until writes land again.
-            while let Err(error) = append(&state, &batch).await {
-                tracing::warn!(error = %format!("{error:#}"), "the file log stream failed; retrying");
-                tokio::time::sleep(super::RETRY_INTERVAL).await;
+            if let Err(error) = append(&state, &batch).await {
+                let message = format!("{error:#}");
+                tracing::warn!(logs_count, error = %message, "failed streaming over file");
+                return Err(capnp::Error::failed(message));
             }
-            tracing::info!(signal_count, "streamed a batch to the file");
+            tracing::info!(logs_count, "streaming over file...");
             Ok(())
         })
     }

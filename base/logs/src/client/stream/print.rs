@@ -31,13 +31,11 @@ impl logs_args::server::Server for PrintStream {
             Ok(entries) => entries,
             Err(error) => return Promise::err(error),
         };
-        let signal_count = entries.len();
         let mut stdout = std::io::stdout().lock();
         for line in entry_lines(entries) {
             // A closed stdout (e.g. piped into `head`) just ends the dump.
             let _ = writeln!(stdout, "{}", line.plain);
         }
-        tracing::info!(signal_count, "printed a batch");
         Promise::ok(())
     }
 
