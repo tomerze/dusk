@@ -1,31 +1,5 @@
-//! The client-side viewer: a read-only, vi-style pager over the node's log
-//! buffer.
-//!
-//! The node streams entries into `LogsArgs.Server.send`; batches arrive as
-//! styled [`Line`]s over a bounded channel and the pager tails them in an
-//! alternate screen, wrapping each line to the terminal width (no
-//! horizontal scrolling; continuation wrap-rows hang past the timestamp
-//! and level columns, aligning wrapped text with the message): vi motions,
-//! `/` and `?` search with
-//! `n`/`N`, `v`/`V`/`Ctrl-V` selection with `y` yank (a native clipboard
-//! tool, or OSC 52 where none exists), `:N` to jump to a line,
-//! `q`/`:q`/Ctrl-C back to the shell. **FOLLOW** tails new logs; any
-//! upward scroll drops to **NORMAL**, which freezes the world — intake
-//! stops, the bounded channel fills, and the stream's flow control parks
-//! the node until `f` or `G` re-enters FOLLOW. The status bar's right side
-//! always names the mode (FOLLOW / NORMAL / SEARCH / the VISUALs) and it
-//! hints `f to follow` while paused. While a pattern is active it also
-//! shows a `through/total matches` counter — the matching lines at or
-//! above the cursor, of all of them.
-//! The terminal is in raw mode, so Ctrl-C is an ordinary key — no SIGINT
-//! reaches the CLI. If the connection dies, the channel closes, a
-//! `[disconnected]` line is appended, and the viewer stays until the user
-//! quits.
-//!
-//! Columns are tracked per `char`; wide glyphs may misalign the cursor by a
-//! cell — log output is overwhelmingly single-width.
-
 use std::io::{Write, stdout};
+use std::path::PathBuf;
 use std::string::String;
 use std::time::Duration;
 use std::vec::Vec;
@@ -73,6 +47,9 @@ const WRAP_MARGIN: usize = 19;
 pub struct ViewerStream {
     entries: mpsc::Sender<Vec<Line>>,
     stop: Rc<Notify>,
+    /// Fired on drop — i.e. when the node-side capability is gone — so the pager
+    /// can surface the disconnect in its status bar even while paused.
+    disconnected: Rc<Notify>,
 }
 
 impl ViewerStream {
@@ -81,15 +58,29 @@ impl ViewerStream {
         // paused pager parks the node instead of buffering a flood.
         let (entries, receiver) = mpsc::channel(16);
         let stop = Rc::new(Notify::new());
+        let disconnected = Rc::new(Notify::new());
         let stop_for_pager = stop.clone();
+        let disconnected_for_pager = disconnected.clone();
         tokio::task::spawn_local(async move {
-            if let Err(error) = Pager::run(receiver).await {
+            if let Err(error) = Pager::run(receiver, disconnected_for_pager).await {
                 tracing::error!(error = %format!("{error:#}"), "the log viewer failed");
             }
             // The pager quit (or failed): the node's cue to finish the stream.
             stop_for_pager.notify_one();
         });
-        ViewerStream { entries, stop }
+        ViewerStream {
+            entries,
+            stop,
+            disconnected,
+        }
+    }
+}
+
+impl Drop for ViewerStream {
+    fn drop(&mut self) {
+        // The node finished the stream or the connection died; wake the pager so
+        // it marks the disconnect, regardless of whether it is following.
+        self.disconnected.notify_one();
     }
 }
 
@@ -340,13 +331,6 @@ fn log_record_lines(
     Ok(lines)
 }
 
-fn disconnected_line() -> Line {
-    Line::new(vec![Span {
-        style: Style::new().fg(Color::Red).bold(),
-        text: "[disconnected]".into(),
-    }])
-}
-
 // ---- the pager ----
 
 #[derive(Clone, Copy, PartialEq)]
@@ -491,7 +475,7 @@ fn spawn_event_thread() -> tokio::sync::mpsc::UnboundedReceiver<Event> {
 }
 
 impl Pager {
-    async fn run(mut entries: Receiver<Vec<Line>>) -> Result<()> {
+    async fn run(mut entries: Receiver<Vec<Line>>, disconnected: Rc<Notify>) -> Result<()> {
         let (width, height) = crossterm::terminal::size()?;
         let mut pager = Pager {
             lines: Vec::new(),
@@ -507,26 +491,29 @@ impl Pager {
             height: height as usize,
         };
 
-        let _guard = TerminalGuard::enter()?;
+        let guard = TerminalGuard::enter()?;
         let mut events = spawn_event_thread();
-        let mut streaming = true;
 
         pager.draw()?;
+        let mut disconnected_exit = false;
         'pager: loop {
             tokio::select! {
                 // Intake is gated on FOLLOW: in NORMAL mode nothing is received,
                 // so nothing can move — not even retention trimming — and the
                 // stream's flow-control window fills until the node parks.
                 // Resuming drains the backlog.
-                batch = entries.recv(), if streaming && pager.follow => match batch {
+                batch = entries.recv(), if pager.follow => match batch {
                     Some(lines) => pager.append(lines),
                     // The node side is gone; nothing more will ever arrive.
-                    // Mark it and keep the pager for the user to read.
                     None => {
-                        streaming = false;
-                        pager.append(vec![disconnected_line()]);
+                        disconnected_exit = true;
+                        break 'pager;
                     }
                 },
+                _ = disconnected.notified() => {
+                    disconnected_exit = true;
+                    break 'pager;
+                }
                 event = events.recv() => {
                     let Some(event) = event else { break };
                     if matches!(pager.handle(event)?, Outcome::Quit) {
@@ -548,6 +535,22 @@ impl Pager {
                 }
             }
             pager.draw()?;
+        }
+
+        drop(events);
+        drop(guard);
+
+        if disconnected_exit {
+            match pager.write_buffer(None) {
+                Ok(path) => tracing::warn!(
+                    path = %path.display(),
+                    "logs view connection lost, no worries the logs you viewed were saved to a file"
+                ),
+                Err(error) => tracing::error!(
+                    %error,
+                    "logs view connection lost, and there was an error while attempting to save the viewed logs to a file"
+                ),
+            }
         }
         Ok(())
     }
@@ -731,8 +734,6 @@ impl Pager {
         self.scroll_to_cursor();
     }
 
-    // ---- search ----
-
     fn find_from(
         &self,
         from: (usize, usize),
@@ -878,6 +879,31 @@ impl Pager {
         Ok(())
     }
 
+    fn write_buffer(&self, path: Option<&str>) -> std::io::Result<PathBuf> {
+        let path = match path {
+            Some(path) => PathBuf::from(path),
+            None => PathBuf::from(format!(
+                "/tmp/dusk-logs-{}.log",
+                chrono::Local::now().format("%Y%m%d-%H%M%S")
+            )),
+        };
+        let mut file = std::fs::File::create(&path)?;
+        for line in &self.lines {
+            writeln!(file, "{}", line.plain)?;
+        }
+        file.flush()?;
+        Ok(path)
+    }
+
+    /// Write the buffer for an interactive `:w` / Ctrl-S and report where it
+    /// landed (or why it failed) in the status bar.
+    fn write_and_flash(&mut self, path: Option<&str>) {
+        self.flash = Some(match self.write_buffer(path) {
+            Ok(path) => format!("wrote {} lines to {}", self.lines.len(), path.display()),
+            Err(error) => format!("write failed: {error}"),
+        });
+    }
+
     // ---- input ----
 
     fn handle(&mut self, event: Event) -> Result<Outcome> {
@@ -924,16 +950,16 @@ impl Pager {
                     match prefix {
                         ':' => {
                             let trimmed = entered.trim();
-                            match trimmed {
-                                "q" | "q!" | "quit" => return Ok(Outcome::Quit),
-                                _ => {
-                                    if let Ok(number) = trimmed.parse::<usize>() {
-                                        self.jump_to_line(number.saturating_sub(1));
-                                    } else {
-                                        self.flash =
-                                            Some(format!("Not a viewer command: {trimmed}"));
-                                    }
-                                }
+                            if matches!(trimmed, "q" | "q!" | "quit") {
+                                return Ok(Outcome::Quit);
+                            } else if trimmed == "w" {
+                                self.write_and_flash(None);
+                            } else if let Some(path) = trimmed.strip_prefix("w ") {
+                                self.write_and_flash(Some(path.trim()));
+                            } else if let Ok(number) = trimmed.parse::<usize>() {
+                                self.jump_to_line(number.saturating_sub(1));
+                            } else {
+                                self.flash = Some(format!("Not a viewer command: {trimmed}"));
                             }
                         }
                         slash => {
@@ -969,6 +995,7 @@ impl Pager {
                 KeyCode::Char('f') => self.move_cursor_line(rows),
                 KeyCode::Char('b') => self.move_cursor_line(-rows),
                 KeyCode::Char('v') => self.toggle_visual(VisualKind::Block),
+                KeyCode::Char('s') => self.write_and_flash(None),
                 _ => {}
             }
             self.pending = None;
@@ -1153,11 +1180,11 @@ impl Pager {
             Mode::Normal => match &self.flash {
                 Some(flash) => (flash.clone(), Style::new().bold()),
                 None if !self.follow => (
-                    "f to follow · q to quit · h, j, k, l to navigate".to_string(),
+                    "f to follow · q to quit · ctrl+s to save · h, j, k, l to navigate".to_string(),
                     Style::new().fg(Color::DarkGray),
                 ),
                 None => (
-                    "q to quit · h, j, k, l to navigate".to_string(),
+                    "q to quit · ctrl+s to save · h, j, k, l to navigate".to_string(),
                     Style::new().fg(Color::DarkGray),
                 ),
             },
