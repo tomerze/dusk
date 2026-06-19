@@ -2,9 +2,9 @@
 #![feature(linkage)]
 
 use dusk_capnp::dusk_capnp::dusk::Client;
+use dusk_connection::Connection;
 use dusk_program::anyhow::Result;
 use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo, StaticShEntriesBuilder};
-use dusk_shell::connection::Connection;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::str::FromStr;

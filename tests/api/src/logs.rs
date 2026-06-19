@@ -24,13 +24,13 @@ use axum::routing::post;
 use capnp::capability::FromClientHook as _;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::stream;
+use dusk_connection::Connection;
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{logs_args, signal};
 use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_program_sh::parser::Parser;
 use dusk_program_sh::sh_capnp;
-use dusk_shell::connection::Connection;
 use dusk_shell::shell::Shell;
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 

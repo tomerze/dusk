@@ -1,10 +1,10 @@
 use capnp::capability::Promise;
 use dusk_base::dusk_program_init::Args as InitArgs;
+use dusk_connection::Connection;
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::log_record_capnp::{SeverityNumber, log_record};
 use dusk_program_logs::{logs_args, signal};
-use dusk_shell::connection::Connection;
 use rand::Rng;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};

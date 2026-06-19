@@ -4,12 +4,13 @@ use dusk_base::dusk_program_sh::{
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
     parser::Parser as ShParser,
 };
+use dusk_connection::Connection;
 use dusk_prompt::{
     display_engine::DefaultDisplayEngine,
     prompt::{Prompt, StreamRequest},
     stream::{display_stream, json_stream},
 };
-use dusk_shell::{connection::Connection, shell::Shell};
+use dusk_shell::shell::Shell;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use tokio::signal;

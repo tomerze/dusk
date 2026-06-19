@@ -11,7 +11,7 @@ dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program/" }
 dusk_base = { path = "../../dusk/src/dusk_base" }
 dusk_program_logs = { path = "../../base/logs", features = ["client"] }
-dusk_shell = { path = "../../dusk/src/dusk_shell" }
+dusk_connection = { path = "../../dusk/src/dusk_connection" }
 dusk_program_sh = { path = "../../base/sh", features = ["client"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util"] }
 capnp = "0.21"

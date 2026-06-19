@@ -3,8 +3,8 @@
 
 #[tokio::test(flavor = "current_thread")]
 async fn test_process_lifecycle() {
+    use dusk_connection::Connection;
     use dusk_program_ps::Args as PsArgs;
-    use dusk_shell::connection::Connection;
     use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 
     let port = gen_port();
