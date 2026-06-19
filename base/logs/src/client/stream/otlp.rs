@@ -11,17 +11,11 @@ use opentelemetry_proto::tonic::common::v1 as otlp_common;
 use opentelemetry_proto::tonic::logs::v1 as otlp_logs;
 use opentelemetry_proto::tonic::resource::v1 as otlp_resource;
 use opentelemetry_proto::tonic::trace::v1 as otlp_trace;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
 use tokio::sync::{Mutex, Notify};
 use tonic::transport::Channel;
-
-/// A span's `program_name` attribute names its service; a span with no program
-/// belongs to the node core.
-const PROGRAM_NAME_FIELD: &str = "program_name";
-const CORE_SERVICE: &str = "core";
 
 /// The collector connection, dialed lazily on the first batch so construction
 /// stays sync. One channel backs both signal clients. A failed connect or export
@@ -92,11 +86,12 @@ impl logs_args::server::Server for OtlpStream {
         }
         let logs_count = logs.len();
         let spans_count = spans.len();
-        let resource_spans = resource_spans(spans);
+        let resource_spans = resource_spans(spans, self.namespace_id);
 
         let state = self.state.clone();
+        let namespace_id = self.namespace_id;
         Promise::from_future(async move {
-            if let Err(error) = export(&state, &logs, &resource_spans).await {
+            if let Err(error) = export(&state, &logs, &resource_spans, namespace_id).await {
                 let message = format!("{error:#}");
                 tracing::warn!(logs_count, spans_count, error = %message, "failed streaming over otlp");
                 return Ok(());
@@ -135,47 +130,53 @@ async fn connect(
     ))
 }
 
-/// Group spans into OTLP `ResourceSpans`, one per service — a service per program
-/// (`program_name`), program-less spans under `core`.
-fn resource_spans(spans: Vec<otlp_trace::Span>) -> Vec<otlp_trace::ResourceSpans> {
-    let mut by_service: BTreeMap<String, Vec<otlp_trace::Span>> = BTreeMap::new();
-    for span in spans {
-        by_service.entry(service_of(&span)).or_default().push(span);
+fn node_resource(namespace_id: u64) -> otlp_resource::Resource {
+    let id = format!("{namespace_id:x}");
+    otlp_resource::Resource {
+        attributes: vec![
+            otlp_common::KeyValue {
+                key: "service.name".to_string(),
+                value: Some(otlp_common::AnyValue {
+                    value: Some(otlp_common::any_value::Value::StringValue(
+                        "dusk_node".to_string(),
+                    )),
+                }),
+            },
+            otlp_common::KeyValue {
+                key: "host.name".to_string(),
+                value: Some(otlp_common::AnyValue {
+                    value: Some(otlp_common::any_value::Value::StringValue(id.clone())),
+                }),
+            },
+            otlp_common::KeyValue {
+                key: "host.id".to_string(),
+                value: Some(otlp_common::AnyValue {
+                    value: Some(otlp_common::any_value::Value::StringValue(id)),
+                }),
+            },
+        ],
+        ..Default::default()
     }
-    by_service
-        .into_iter()
-        .map(|(service, spans)| otlp_trace::ResourceSpans {
-            resource: Some(otlp_resource::Resource {
-                attributes: vec![otlp_common::KeyValue {
-                    key: "service.name".to_string(),
-                    value: Some(otlp_common::AnyValue {
-                        value: Some(otlp_common::any_value::Value::StringValue(service)),
-                    }),
-                }],
-                ..Default::default()
-            }),
-            scope_spans: vec![otlp_trace::ScopeSpans {
-                scope: None,
-                spans,
-                schema_url: String::new(),
-            }],
-            schema_url: String::new(),
-        })
-        .collect()
 }
 
-/// A span's service: its `program_name` attribute, or `core` if it carries none.
-fn service_of(span: &otlp_trace::Span) -> String {
-    for attribute in &span.attributes {
-        if attribute.key == PROGRAM_NAME_FIELD
-            && let Some(otlp_common::AnyValue {
-                value: Some(otlp_common::any_value::Value::StringValue(name)),
-            }) = &attribute.value
-        {
-            return name.clone();
-        }
+/// Wrap the batch's spans in a single OTLP `ResourceSpans` under the node's
+/// [`node_resource`]. Empty when there are no spans.
+fn resource_spans(
+    spans: Vec<otlp_trace::Span>,
+    namespace_id: u64,
+) -> Vec<otlp_trace::ResourceSpans> {
+    if spans.is_empty() {
+        return Vec::new();
     }
-    CORE_SERVICE.to_string()
+    vec![otlp_trace::ResourceSpans {
+        resource: Some(node_resource(namespace_id)),
+        scope_spans: vec![otlp_trace::ScopeSpans {
+            scope: None,
+            spans,
+            schema_url: String::new(),
+        }],
+        schema_url: String::new(),
+    }]
 }
 
 /// Connect on first use, then export this batch's logs and spans. Awaiting the
@@ -186,6 +187,7 @@ async fn export(
     state: &Rc<Mutex<State>>,
     logs: &[otlp_logs::LogRecord],
     resource_spans: &[otlp_trace::ResourceSpans],
+    namespace_id: u64,
 ) -> Result<()> {
     let mut guard = state.lock().await;
     if let State::Unconnected(endpoint) = &*guard {
@@ -207,7 +209,15 @@ async fn export(
         return Ok(());
     };
 
-    let result = export_signals(endpoint, logs_client, traces_client, logs, resource_spans).await;
+    let result = export_signals(
+        endpoint,
+        logs_client,
+        traces_client,
+        logs,
+        resource_spans,
+        namespace_id,
+    )
+    .await;
     if result.is_err() {
         // The connection may be the casualty; drop it so the retry redials.
         let endpoint = endpoint.clone();
@@ -224,11 +234,12 @@ async fn export_signals(
     traces_client: &mut TraceServiceClient<Channel>,
     logs: &[otlp_logs::LogRecord],
     resource_spans: &[otlp_trace::ResourceSpans],
+    namespace_id: u64,
 ) -> Result<()> {
     if !logs.is_empty() {
         let request = ExportLogsServiceRequest {
             resource_logs: vec![otlp_logs::ResourceLogs {
-                resource: None,
+                resource: Some(node_resource(namespace_id)),
                 scope_logs: vec![otlp_logs::ScopeLogs {
                     scope: None,
                     log_records: logs.to_vec(),

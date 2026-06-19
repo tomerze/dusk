@@ -11,6 +11,8 @@ use std::vec::Vec;
 /// neutral, and log records only — the convention has no span equivalent.
 const LOG_RECORD_UID_ATTRIBUTE: &str = "log.record.uid";
 
+const ELASTICSEARCH_DOCUMENT_ID_ATTRIBUTE: &str = "elasticsearch.document_id";
+
 pub(crate) fn signal_to_json(
     signal: signal::Reader,
     namespace_id: u64,
@@ -26,6 +28,7 @@ pub(crate) fn signal_to_json(
             // unique by minting `namespace_id` into the trace id below.
             let unique_id = format!("{:x}-{:x}", namespace_id, signal.get_global_sequence());
             add_attribute(&mut value, LOG_RECORD_UID_ATTRIBUTE, &unique_id);
+            add_attribute(&mut value, ELASTICSEARCH_DOCUMENT_ID_ATTRIBUTE, &unique_id);
             Ok(value)
         }
         signal::Which::Span(span) => span_json(span?, namespace_id),

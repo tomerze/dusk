@@ -167,8 +167,6 @@ The mapping to a trace is fixed by the node's structure:
 
 - **`trace_id` is the task root span's id** (above) — the namespace travels as the
   `namespace_id` *attribute* (rule 2), not as the trace id.
-- **A service per program.** `service.name` is the span's `program_name`; spans with
-  no program (`init`, client sessions, core internals) fall to the `core` service.
 
 Spans are streamed like any other signal, and each sink renders them its own way:
 the `file://` and `http(s)://` sinks emit each span as OTLP/JSON (with its

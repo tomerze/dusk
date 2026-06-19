@@ -74,6 +74,29 @@ it from scripts and the [MCP gateway](mcp.md). Supported URLs:
 If the destination's connection drops, the stream retries every half-second until
 it returns, so a brief collector restart doesn't tear the stream down.
 
+### Streaming to Elasticsearch
+
+You can setup an OpenTelemetry collector to stream otlp:// logs to Elasticsearch.
+
+When configurating the collector it isrecommended to set [Elasticsearch
+exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/elasticsearchexporter)'s
+mapping mode to **`ecs`**.
+
+Dusk stamps each record with `elasticsearch.document_id`, so replays dedupe
+seamlessly — turn on the `logs_dynamic_id` flag in your otel collector's elasticsearch exporter config and the exporter uses it as the document
+`_id` (a re-streamed record overwrites its earlier copy instead of duplicating). 
+
+```yaml
+# otel-collector.yaml — verified on OpenTelemetry Collector Contrib v0.142.0 (released 15 December 2025)
+exporters:
+  elasticsearch:
+    endpoint: http://elasticsearch:9200
+    mapping:
+      mode: ecs            # not the default `otel`
+    logs_dynamic_id:
+      enabled: true        # use dusk's elasticsearch.document_id as the doc _id, so replays dedupe
+```
+
 ## Modes
 
 By default `logs` replays the buffered history and then follows new logs forever.

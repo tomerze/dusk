@@ -424,6 +424,16 @@ the working agreements below, which take precedence over everything else here.
 
 Read before touching anything. These describe failure modes that have actually shipped.
 
+## I was unprofessional
+
+Hold yourself to the standing this code demands. Dusk is infrastructure: the code you write here is meant to run unchanged for a very long time, likely at least **128 years** — on hardware and in contexts you will never see, perhaps in a world you could never imagine. Write it the way you would write for OpenSSH or the Linux kernel, because that is the bar. The consequances of failure would be too hard to carry.
+
+The Dusk standard is **robustness**. "Failure", "flaky", "finicky", "works on my machine", "probably fine" — these are not concepts that exist in Dusk. Dusk is clear, direct, and intuitive; it never surprises the user; and it is **accurate in everything it does**. *Everything* includes the tests and the docs — they are part of the product, held to the identical standard as the runtime. A wrong comment, an unversioned example, a test that asserts the wrong thing, a doc that can't be acted on — each is a defect as real as a bug, and each erodes the project, nothing is fixable once a dusk node is shipped, it can down in the deepest trenches of the ocean, up in space, voyaging out to eternity, Dusk works as expected as long as electriciy flows.
+
+Before you ship anything — code, test, comment, doc, example — ask: *can the reader act on this without guessing, and is every claim in it verifiably true?* If not, it is not done.
+
+Past failure: I documented Elasticsearch dedup with a bare YAML snippet — no statement of **which file** it belonged in, and no statement of **which OpenTelemetry Collector version** the `logs_dynamic_id` setting is valid for. The reader could not place it or trust it; the example was incomplete and unverified. That is unprofessional. An example without its filename and its version, an API reference without its since-version, a number without its unit — all the same failure: I asked the reader to guess, and I did not check. Name the file. Pin the version. State the assumption. Verify the fact (fetch the changelog, read the source) before writing it down.
+
 ## Don't cut corners silently
 
 Cutting a corner is fine. Cutting it silently is not. If you skipped a piece, picked the lazy implementation, glossed an edge case, or left a TODO, **flag it in your reply**: "I cut a corner here — X is Y instead of Z because …". The user decides whether to accept.
@@ -459,6 +469,12 @@ Past failure: asked to remove a `tracing::warn!("detached sh script failed")` in
 If two functions differ in a single field or a single line, that's one function with a parameter, not two. Copy-pasting a handler and tweaking an identifier is the failure mode.
 
 Past failure: I wrote `detached_script_task` and then a near-identical `sh_script_task` differing only in `noop` vs a real `output: stream::Client`. The right shape was one task taking the output stream as a parameter.
+
+## Don't extract trivial helpers
+
+Wrapping a few lines of boilerplate in a named function is not abstraction — it's noise. A helper has to *earn its name* by hiding real complexity or by being called from enough places that inlining would genuinely duplicate logic. Two call sites of a four-line struct literal do not qualify; inline it. A one-line wrapper around a single library call does not qualify; inline it. When in doubt, inline — a reader following the code should not have to jump to a one-off helper to see what a `KeyValue` looks like.
+
+Past failure: building two OTLP resource attributes, I extracted a `string_attribute(key, value)` helper used twice. The two `KeyValue { key, value: Some(AnyValue { … }) }` literals belonged inline; the helper just added a hop. Same instinct produced an `acknowledge` wrapper around one `ack_request().send()` call. Stop reaching for these.
 
 ## The user is likely right
 
