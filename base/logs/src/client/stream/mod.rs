@@ -8,13 +8,11 @@ use dusk_program::dusk_capnp::capnp_rpc;
 pub mod file;
 pub mod http;
 pub mod otlp;
-pub mod print;
 pub mod viewer;
 
 pub use file::FileStream;
 pub use http::HttpStream;
 pub use otlp::OtlpStream;
-pub use print::PrintStream;
 pub use viewer::ViewerStream;
 
 /// Build the built-in stream for a `logs stream` URL. The viewer has no url; it

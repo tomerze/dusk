@@ -15,6 +15,7 @@ extern crate std;
 
 mod buffer;
 mod config;
+mod dump;
 mod enrich;
 mod streamer;
 mod tracing;
@@ -44,7 +45,7 @@ pub mod span_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/otlp/span_capnp.rs"));
 }
 
-pub use logs_capnp::{logs_args, signal};
+pub use logs_capnp::{FLAG_DUMP, FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
 
 #[cfg(feature = "client")]
 pub mod client;
@@ -134,35 +135,38 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let process = self.process.clone();
         Promise::from_future(async move {
             let stream_result = async {
-                let server: logs_capnp::logs_args::server::Client =
-                    process.ctx.program_args.server_as()?;
-                let (minimum_severity, start_position, follow) =
+                let (minimum_severity, start_position, follow, dump) =
                     process
                         .ctx
                         .program_args
                         .with_data::<logs_capnp::logs_args::data::Owned, _, _>(|data| {
-                            // Unknown ordinals (a newer client) act as "no floor".
                             let minimum_severity =
                                 data.get_level().map(|level| level as u16).unwrap_or(0);
-                            let (start_position, follow) = match data.get_mode() {
-                                Ok(logs_capnp::logs_args::Mode::ReplayOnly) => {
-                                    (StartPosition::Replay, false)
-                                }
-                                Ok(logs_capnp::logs_args::Mode::FollowOnly) => {
-                                    (StartPosition::Live, true)
-                                }
-                                // ReplayThenFollow, or an unknown ordinal from a newer client.
-                                _ => (StartPosition::Replay, true),
+                            let flags = data.get_flags();
+                            let start_position = if flags & FLAG_REPLAY != 0 {
+                                StartPosition::Replay
+                            } else {
+                                StartPosition::Live
                             };
-                            Ok((minimum_severity, start_position, follow))
+                            let follow = flags & FLAG_FOLLOW != 0;
+                            let dump = flags & FLAG_DUMP != 0;
+                            Ok((minimum_severity, start_position, follow, dump))
                         })?;
                 let dusk_client = dusk_core::local_client(process.ctx.namespace.clone()).await;
                 let mut reader = process.buffer.reader(start_position, dusk_client).await?;
                 let span = ::tracing::info_span!("logs_stream", pid = process.ctx.pid);
-                let streamer = streamer::Streamer::<8>::new(64, 256);
-                let stream = streamer.stream(&mut reader, &server, minimum_severity, follow);
-                if let Err(error) = stream.instrument(span).await {
-                    ::tracing::warn!(error = %error, "the logs stream failed");
+                if dump {
+                    dump::dump(&mut reader, &stream, minimum_severity, follow)
+                        .instrument(span)
+                        .await?;
+                } else {
+                    let server: logs_capnp::logs_args::server::Client =
+                        process.ctx.program_args.server_as()?;
+                    let streamer = streamer::Streamer::<8>::new(64, 256);
+                    let streaming = streamer.stream(&mut reader, &server, minimum_severity, follow);
+                    if let Err(error) = streaming.instrument(span).await {
+                        ::tracing::warn!(error = %error, "the logs stream failed");
+                    }
                 }
                 Ok::<(), capnp::Error>(())
             }

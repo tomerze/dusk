@@ -35,11 +35,14 @@ pub fn sh_entry() -> ShEntry {
         info: EntryInfo {
             program_id: Some(sh_capnp::PROGRAM_ID),
             name: "sh",
-            short_description: "run a shell command",
+            short_description: "run Dusk shell commands",
             long_description: r#"
-The `sh` command is used to run shell commands.
-* Use `sh <command>` (or `sh "<command>"`) to run a command
-* Use `sh -d <command>` to run a command detached from the current session"#,
+`sh` runs commands in the Dusk shell — Dusk's own shell language, not a Unix
+shell. Dusk shell commands run Dusk programs built into the Dusk Node.
+
+* Use `sh <command>` (or `sh "<command>"`) to run a command.
+* Use `sh -d <command>` to run it detached from the current session.
+"#,
             version: VERSION,
         },
         program_args_builder: Rc::new(ShProgramArgsBuilder {}),

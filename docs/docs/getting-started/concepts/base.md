@@ -36,7 +36,7 @@ out to a file or a collector. See [Logs](../../features/logs.md).
 logs                            # open the interactive log viewer
 logs stream file://out.jsonl    # stream logs to a file
 logs stream otlp://myotel:4317 # stream straight to an otel collector (traces included!)
-logs --replay-only              # dump the buffered history and exit
+logs dump --replay-only         # return the buffered history as values, then exit
 ```
 
 ## `kill`

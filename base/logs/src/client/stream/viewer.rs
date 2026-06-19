@@ -172,8 +172,7 @@ struct Span {
 #[derive(Clone)]
 pub(crate) struct Line {
     spans: Vec<Span>,
-    /// The concatenated span text — what search, selection, and yank act on,
-    /// and what the non-interactive [`print`](super::print) dump writes.
+    /// The concatenated span text — what search, selection, and yank act on.
     pub(crate) plain: String,
 }
 

@@ -11,6 +11,12 @@ using Span = import "/capnp/span.capnp";
 
 const programId :UInt64 = 0xa508ae4405044e9d;
 
+const batchTypeId :UInt64 = 0xb3d9f4a05c7e2186;
+
+const flagReplay :UInt8 = 1;
+const flagFollow :UInt8 = 2;
+const flagDump :UInt8 = 4;
+
 # One streamed signal: an OTLP log record or an OTLP span.
 struct Signal {
   severityNumber @0 :LogRecord.SeverityNumber;
@@ -31,15 +37,8 @@ struct SignalBatch {
 
 struct LogsArgs {
   struct Data {
-    # The minimum severity to stream; unspecified streams everything.
     level @0 :LogRecord.SeverityNumber;
-    # Replay retained history, follow new records, or both (the default).
-    mode @1 :Mode;
-  }
-  enum Mode {
-    replayThenFollow @0;
-    replayOnly @1;
-    followOnly @2;
+    flags @1 :UInt8;
   }
   interface Server {
     # Streams signals (log records and spans) to the client. Where they land is

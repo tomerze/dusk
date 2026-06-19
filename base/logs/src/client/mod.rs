@@ -13,7 +13,7 @@ pub mod stream;
 #[derive(clap::Parser)]
 #[command(name = "logs", no_binary_name = true)]
 struct LogsCli {
-    #[arg(value_parser = ["view", "stream"])]
+    #[arg(value_parser = ["view", "stream", "dump"])]
     command: Option<String>,
     /// The stream destination: file://, otlp://, http:// or https://.
     url: Option<String>,
@@ -41,14 +41,14 @@ fn severity_floor(level: &str) -> log_record_capnp::SeverityNumber {
 
 pub struct LogsArgs {
     data: ArgsDataBuilder,
-    server: logs_args::server::Client,
+    server: Option<logs_args::server::Client>,
 }
 
 impl LogsArgs {
     pub fn new(
         minimum_level: Option<log_record_capnp::SeverityNumber>,
-        mode: logs_args::Mode,
-        server: logs_args::server::Client,
+        flags: u8,
+        server: Option<logs_args::server::Client>,
     ) -> Self {
         let mut data = ArgsDataBuilder::new_default();
         {
@@ -56,7 +56,7 @@ impl LogsArgs {
             if let Some(minimum_level) = minimum_level {
                 root.set_level(minimum_level);
             }
-            root.set_mode(mode);
+            root.set_flags(flags);
         }
         LogsArgs { data, server }
     }
@@ -69,12 +69,14 @@ impl LogsArgs {
             let data_reader = self.data.get_root_as_reader()?;
             data_dest.set_as::<logs_capnp::logs_args::data::Owned>(data_reader)
         })?;
-        owned.with_root_builder(|root| {
-            root.get_args()
-                .init_server()
-                .set_as_capability(self.server.into_client_hook());
-            Ok(())
-        })?;
+        if let Some(server) = self.server {
+            owned.with_root_builder(|root| {
+                root.get_args()
+                    .init_server()
+                    .set_as_capability(server.into_client_hook());
+                Ok(())
+            })?;
+        }
         Ok(Rc::new(owned))
     }
 }
@@ -86,13 +88,12 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = LogsCli::try_parse_from(args)?;
         let minimum_level = Some(severity_floor(&cli.level));
-        // clap's `conflicts_with` already rejects both flags together.
-        let mode = if cli.replay_only {
-            logs_args::Mode::ReplayOnly
+        let mut flags = if cli.replay_only {
+            FLAG_REPLAY
         } else if cli.follow_only {
-            logs_args::Mode::FollowOnly
+            FLAG_FOLLOW
         } else {
-            logs_args::Mode::ReplayThenFollow
+            FLAG_REPLAY | FLAG_FOLLOW
         };
         let server = match cli.command.as_deref() {
             Some("stream") => {
@@ -107,28 +108,38 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
                     .await?
                     .get()?
                     .get_result();
-                stream::parse(url, namespace_id)?
+                Some(stream::parse(url, namespace_id)?)
+            }
+            Some("dump") => {
+                if let Some(url) = &cli.url {
+                    anyhow::bail!("`logs dump` takes no url: {url}");
+                }
+                flags |= FLAG_DUMP;
+                None
             }
             _ => {
                 if let Some(url) = &cli.url {
                     anyhow::bail!("`logs view` takes no url: {url}");
-                } else if std::env::var_os("DUSK_NON_INTERACTIVE").is_some() {
-                    // Set by gateways (the MCP server) that have no terminal to
-                    // give away: the viewer would take over the process and hang
-                    // a caller that can never press `q`.
+                }
+                if cli.replay_only || cli.follow_only {
+                    anyhow::bail!(
+                        "`logs view` is an interactive view and has no bounded or \
+                         follow-only mode. For logs that return as Dusk values, use \
+                         `logs dump` (add --replay-only for a bounded snapshot, or \
+                         --follow-only to skip the history)."
+                    );
+                }
+                if std::env::var_os("DUSK_NON_INTERACTIVE").is_some() {
                     anyhow::bail!(
                         "`logs view` is interactive and unavailable here. For a bounded \
-                         snapshot that returns, use `logs --replay-only` (dumps the buffer \
-                         to stdout) or `logs stream <url> --replay-only`."
+                         snapshot that returns, use `logs dump --replay-only`; to follow \
+                         the live logs, use `logs dump`."
                     );
-                } else if cli.replay_only {
-                    capnp_rpc::new_client(stream::PrintStream::new())
-                } else {
-                    capnp_rpc::new_client(stream::ViewerStream::new())
                 }
+                Some(capnp_rpc::new_client(stream::ViewerStream::new()))
             }
         };
-        Ok(LogsArgs::new(minimum_level, mode, server).as_program_args()?)
+        Ok(LogsArgs::new(minimum_level, flags, server).as_program_args()?)
     }
 }
 
@@ -140,31 +151,40 @@ pub fn sh_entry() -> ShEntry {
             name: "logs",
             short_description: "access logs",
             long_description: r#"
-Use `logs` to view or stream the node's logs
+Use `logs` to read or stream the node's logs.
 
-Examples:
-* `logs` or `logs view` opens an interactive log view.
-Intended for use from an interactive context (The dusk prompt, python repl).
-* `logs stream <url>` streams the logs and tracing spans to a URL.
+Subcommands:
+* `logs` or `logs view` opens an interactive log pager.
+Intended for an interactive context (the dusk prompt). It has no bounded or
+follow-only mode; use `logs dump` when you need the logs as a command result.
+* `logs dump` returns the logs as Dusk values — one record per signal — on the
+command's own output stream. Use this from scripts, the python repl, and MCP:
+its output comes back to the caller (unlike `view`, which paints a terminal, and
+`stream`, which sends to an external sink).
+* `logs stream <url>` streams the logs and tracing spans to an external URL.
 * `logs stream <url> --replay-only` writes the buffered history to the URL and exits.
-Use this from scripts and MCP; a plain stream never returns.
 
-Modes:
+Modes (apply to `dump` and `stream`):
 (default)      replay the buffered history, then follow new logged signals forever.
---replay-only  replay the buffered history, then stop (a bounded snapshot).
+--replay-only  replay the buffered history, then stop (a bounded snapshot that returns).
 --follow-only  skip the history; follow only signals logged from now on.
 
-Supported url types:
+Examples:
+* `logs dump --replay-only`         a bounded snapshot of the buffered logs.
+* `logs dump`                       the snapshot, then follow live (until stopped).
+* `logs dump --follow-only -l warn` follow new warnings and errors only.
+
+Supported `stream` url types:
 file:// - streams in jsonl format to a file
 otlp:// - streams in opentelemetry grpc to an otlp collector
 http (or https):// - streams in HTTP(s) post requests where each POST is a JSON with a single log
 
 Notes:
-* Tracing spans are logged too. 
+* Tracing spans are logged too.
 - When viewing logs via `logs view` spans don't show.
+- `logs dump` emits spans as records alongside log records.
 - when streaming to file:// or http(s):// they show as normal structured logs without severity.
 - when streaming to otlp:// they show as otlp traces.
-
 
 * `-l <level>` sets the minimum severity (error, warn, info, debug, trace).
 The default is trace.

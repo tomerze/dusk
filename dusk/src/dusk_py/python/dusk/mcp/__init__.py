@@ -146,20 +146,28 @@ def app():
         "Dusk",
         instructions=(
             """
-Dusk is a framework for fleet management. A Dusk Node is controlled via a Dusk Client
-A Dusk Client exposes a shell interface which allows running Dusk programs on the Node.
-Dusk is not an OS itself but the interface to control a Node is
-similar in nature to something like SSH: 
-You connect to a Node and then run commands on it. 
+Think of each Dusk Node as its own self-contained operating system — not a Linux box.
+A Node has its own shell language (the Dusk shell), its own programs, and its own
+process model (running processes you can list with `ps` and signal with `kill`). It is
+NOT Unix: there is no `/bin`, no coreutils, no filesystem to shell out to, and no
+Linux/Unix tools. The ONLY commands a Node can run are the Dusk programs compiled into
+it — and this gateway exposes exactly those, one MCP tool per program (`ps`, `kill`,
+`logs`, `hostname`, `sh`, `sleep`, …). If a capability isn't one of these program
+tools, it does not exist on the Node: use the Dusk program built for the job (e.g.
+`logs` to read logs, `ps` to list processes), never reach for a Unix command like
+`cat`, `ls`, or `grep`. `sh` runs Dusk programs by name in the Dusk shell language; it
+does not run Unix shell commands.
 
-**This MCP server is a gateway that exposes the Dusk Client's shell interface as MCP tools.**
+Dusk is a framework for fleet management: many such Nodes, each driven the same way.
+You drive a Node a bit like SSH — connect, then run its programs — but what you reach
+on the far side is a Dusk OS, not a Unix host.
 
-This MCP server is a Dusk Client gateway: it opens client connections to Dusk Nodes on your 
-behalf and exposes each Node program as a tool. Workflow:
-1. Call the `connect` tool with a Node's host and port to open a connection. It returns a 
+**This MCP server is a gateway that opens client connections to Dusk Nodes on your
+behalf and exposes each Node's programs as MCP tools.** Workflow:
+1. Call the `connect` tool with a Node's host and port to open a connection. It returns a
 descriptor (a connection handle, formatted host:port#n) that identifies that one connection.
-2. Pass that descriptor to the per-program tools (one tool per Dusk program) to run commands
- on that Node and read their output.
+2. Pass that descriptor to the per-program tools (one tool per Dusk program) to run that
+Node's programs and read their output.
 3. Call the `disconnect` tool with the descriptor when finished.
 
 You may hold several connections to different Nodes at once, each identified by its own descriptor.
@@ -192,13 +200,20 @@ running as a task) does NOT block other commands on the same descriptor. Still p
 read over an endless stream (see Reading logs).
 
 Reading logs:
-To read the current logs and get them back, take a BOUNDED snapshot — never an endless stream.
-Run the `logs` tool with arguments `stream file:///tmp/dusk-logs-<descriptor>.jsonl --replay-only`:
-the `--replay-only` flag replays the buffered history to the file and RETURNS, then you read that
-file. Put your connection descriptor in the path so you don't collide with other models. A plain
-`logs stream <url>` (without --replay-only) NEVER returns and a file target grows without limit —
-do not use it to read logs. If you genuinely need a live follow, stream to
-a named pipe (`mkfifo`) so it stays bounded, invoke it as an MCP task, and `kill` it when done.
+Use the `logs` tool's `dump` subcommand — it returns the logs to you as the tool result, one
+structured record per log entry. For a BOUNDED snapshot that returns immediately, run the `logs`
+tool with arguments `dump --replay-only`. To follow the live logs, run `dump` (without
+--replay-only) as an MCP task and `kill` it when you're done — a plain follow never returns on its
+own. Add `-l <level>` (error|warn|info|debug|trace) to raise the severity floor.
+
+Do NOT use `logs view` (the interactive terminal pager; it is unavailable here) or `logs stream
+<url>` to read logs back: a stream's url sink (file://, otlp://, http://) is written on THIS
+gateway host, not delivered to you, and a plain stream never returns. Only `dump` hands the logs
+to you.
+
+Each dumped entry is a typed record — read it as described in "Reading program output" above (the
+single `0x…` key is the entry's Cap'n Proto type id; the fields are nested underneath). A `time`
+field (e.g. `timeUnixNano`) is an integer count of nanoseconds since the Unix epoch.
             """
         ),
     )

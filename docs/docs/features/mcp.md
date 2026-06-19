@@ -78,4 +78,5 @@ The connection registry is **in-process state**. Serve the gateway with a single
 The gateway sets `DUSK_NON_INTERACTIVE=1` in its process. Interactive
 programs — `logs view` — refuse to run under it, since they would take over
 a terminal the model driving the gateway doesn't have and hang the tool call
-forever.
+forever. To read logs over the gateway, use `logs dump` (add `--replay-only`
+for a bounded snapshot), which returns the entries as the tool result.

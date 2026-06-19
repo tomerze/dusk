@@ -186,7 +186,7 @@ impl<const MAX_INFLIGHT: usize> Streamer<MAX_INFLIGHT> {
 /// Whether the signal passes the severity floor; an unreadable severity fails
 /// open. The level is the signal's envelope severity (the lane it rode), so logs
 /// and spans filter alike.
-fn keeps(signal: &SignalBuilder, minimum_severity: u16) -> capnp::Result<bool> {
+pub(crate) fn keeps(signal: &SignalBuilder, minimum_severity: u16) -> capnp::Result<bool> {
     if minimum_severity == 0 {
         return Ok(true);
     }

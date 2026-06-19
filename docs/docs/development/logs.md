@@ -279,12 +279,19 @@ out of the console.
 
 ## The viewer: `logs` in the shell
 
-`logs` is an ordinary shell command, built on the args-server callback path. How
-to *use* it — the viewer keys, `logs stream <url>`, the modes, `-l` — lives on the
+`logs` is an ordinary shell command. How to *use* it — the viewer keys, `logs
+dump`, `logs stream <url>`, the modes, `-l` — lives on the
 [user-facing Logs page](../features/logs.md); this section is how the node side
 and the client stream are wired underneath.
 
-The node side is deliberately dumb. `LogsArgs.Server` has two methods —
+The node side has two output shapes, chosen by the `dump` bit of
+`LogsArgs.Data.flags`. Without it, the node drives a client-hosted
+`LogsArgs.Server` (`view` and `stream`); with it, the node emits the signals as
+Dusk values on the command's own output stream (`dump`). The other two flag bits,
+`replay` and `follow`, pick the `Reader`'s start and whether it tails. The
+callback path is described next; the values path follows.
+
+On the callback path the node side is deliberately dumb. `LogsArgs.Server` has two methods —
 `send(entries)` (capnp-streaming) and `stop()`, a long-poll mirroring the shell's
 `ShStop`. The node-side process mints a replay-then-follow `Reader`, streams
 batched signals into `send` never knowing what receives them, and holds one
@@ -306,6 +313,18 @@ to the terminal width with continuation rows hanging past the timestamp and leve
 columns. The network sinks retry a failed connection forever at a fixed interval,
 and awaiting that retry is itself the backpressure — a down collector parks the
 node the way a paused viewer does.
+
+The values path (`dump`, the `dump` flag bit set) skips the `LogsArgs.Server`
+entirely. The same node-side `Reader` drains the buffer, but each signal is
+converted into a `Value::Record` (tagged with `batchTypeId`) and sent on the
+output stream the shell already handed every program — the channel `ps` and the
+rest write to — so a non-interactive caller receives the entries as its command
+result. `--replay-only` returns once the replay history is drained (the stream's
+`done`); a follow runs until the shell stops the command, which drops the
+`output()` call and kills the process, exactly as a `file://` follow is stopped.
+Backpressure is the output stream's own send credit. The conversion lives
+node-side (`dump.rs`) because, unlike the viewer and network sinks, there is no
+client half to render on.
 
 The viewer feeds its rendered lines through a small bounded channel, and that
 channel is the backpressure: the `send` callback resolves only when the channel

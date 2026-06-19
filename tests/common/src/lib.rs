@@ -4,7 +4,7 @@ use dusk_connection::Connection;
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::log_record_capnp::{SeverityNumber, log_record};
-use dusk_program_logs::{logs_args, signal};
+use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
 use rand::Rng;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -133,8 +133,7 @@ impl DuskNixImpl {
                     errors: monitor_errors,
                 });
                 let Ok(program_args) =
-                    LogsArgs::new(None, logs_args::Mode::ReplayThenFollow, server)
-                        .as_program_args()
+                    LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, Some(server)).as_program_args()
                 else {
                     return;
                 };

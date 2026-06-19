@@ -27,7 +27,7 @@ use dusk_capnp::dusk_capnp::stream;
 use dusk_connection::Connection;
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
-use dusk_program_logs::{logs_args, signal};
+use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
 use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_program_sh::parser::Parser;
 use dusk_program_sh::sh_capnp;
@@ -312,7 +312,7 @@ async fn test_logs_stream_to_custom_stream() {
             let server: logs_args::server::Client = capnp_rpc::new_client(CaptureStream {
                 captured: captured.clone(),
             });
-            let program_args = LogsArgs::new(None, logs_args::Mode::ReplayThenFollow, server)
+            let program_args = LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, Some(server))
                 .as_program_args()
                 .unwrap();
 
