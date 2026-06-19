@@ -904,7 +904,7 @@ impl Pager {
         Ok(path)
     }
 
-    /// Write the buffer for an interactive `:w` / Ctrl-S and report where it
+    /// Write the buffer for an interactive `:w` / `s` and report where it
     /// landed (or why it failed) in the status bar.
     fn write_and_flash(&mut self, path: Option<&str>) {
         self.flash = Some(match self.write_buffer(path) {
@@ -1004,7 +1004,6 @@ impl Pager {
                 KeyCode::Char('f') => self.move_cursor_line(rows),
                 KeyCode::Char('b') => self.move_cursor_line(-rows),
                 KeyCode::Char('v') => self.toggle_visual(VisualKind::Block),
-                KeyCode::Char('s') => self.write_and_flash(None),
                 _ => {}
             }
             self.pending = None;
@@ -1014,6 +1013,7 @@ impl Pager {
         let pending = self.pending.take();
         match key.code {
             KeyCode::Char('q') => return Ok(Outcome::Quit),
+            KeyCode::Char('s') => self.write_and_flash(None),
             KeyCode::Char(':') => {
                 self.mode = Mode::Input {
                     prefix: ':',
@@ -1189,11 +1189,11 @@ impl Pager {
             Mode::Normal => match &self.flash {
                 Some(flash) => (flash.clone(), Style::new().bold()),
                 None if !self.follow => (
-                    "f to follow · q to quit · ctrl+s to save · h, j, k, l to navigate".to_string(),
+                    "f to follow · q to quit · s to save · h, j, k, l to navigate".to_string(),
                     Style::new().fg(Color::DarkGray),
                 ),
                 None => (
-                    "q to quit · ctrl+s to save · h, j, k, l to navigate".to_string(),
+                    "q to quit · s to save · h, j, k, l to navigate".to_string(),
                     Style::new().fg(Color::DarkGray),
                 ),
             },

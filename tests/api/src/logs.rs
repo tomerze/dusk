@@ -25,8 +25,8 @@ use capnp::capability::FromClientHook as _;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_program_logs::client::LogsArgs;
-use dusk_program_logs::log_record_capnp::any_value;
-use dusk_program_logs::logs_args;
+use dusk_program_logs::common_capnp::any_value;
+use dusk_program_logs::{logs_args, signal};
 use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_program_sh::parser::Parser;
 use dusk_program_sh::sh_capnp;
@@ -243,20 +243,41 @@ struct CaptureStream {
 
 impl logs_args::server::Server for CaptureStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
-        let entries = match params.get().and_then(|params| params.get_entries()) {
+        let signal_batch = match params.get().and_then(|params| params.get_signal_batch()) {
+            Ok(signal_batch) => signal_batch,
+            Err(error) => return Promise::err(error),
+        };
+        let entries = match signal_batch.get_signals() {
             Ok(entries) => entries,
             Err(error) => return Promise::err(error),
         };
-        let mut captured = self.captured.lock().unwrap();
-        for entry in entries.iter() {
-            let Ok(body) = entry.get_body() else { continue };
-            let Ok(any_value::Which::StringValue(Ok(text))) = body.which() else {
-                continue;
-            };
-            let Ok(text) = text.to_str() else { continue };
-            captured.push(text.to_string());
+        let ack = match signal_batch.get_ack() {
+            Ok(ack) => ack,
+            Err(error) => return Promise::err(error),
+        };
+        {
+            let mut captured = self.captured.lock().unwrap();
+            for entry in entries.iter() {
+                let Ok(signal::Which::LogRecord(Ok(log_record))) = entry.which() else {
+                    continue;
+                };
+                let Ok(body) = log_record.get_body() else {
+                    continue;
+                };
+                let Ok(any_value::Which::StringValue(Ok(text))) = body.which() else {
+                    continue;
+                };
+                let Ok(text) = text.to_str() else { continue };
+                captured.push(text.to_string());
+            }
         }
-        Promise::ok(())
+        // Acknowledge so the node frees the batch instead of re-sending it.
+        Promise::from_future(async move {
+            if let Err(error) = ack.ack_request().send().promise.await {
+                eprintln!("capture stream failed to acknowledge a batch: {error}");
+            }
+            Ok(())
+        })
     }
 
     fn stop(

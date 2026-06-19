@@ -30,7 +30,7 @@ REPL.
 | `/` `?`, then `n` / `N` | search forward / back; next / previous match |
 | `v` / `V` / `Ctrl-V` | select charwise / linewise / block |
 | `y` or `Ctrl-Shift-C` | copy the selection (or the current line) to the clipboard |
-| `Ctrl-S` or `:w` | save the logs to a file (see below) |
+| `s` or `:w` | save the logs to a file (see below) |
 | `q`, `:q`, `Ctrl-C` | quit back to the shell |
 
 The viewer starts in **FOLLOW**, tailing new logs. Scrolling up pauses it in
@@ -40,7 +40,7 @@ while a search is active — a `matched/total` counter.
 
 ### Save what you're looking at
 
-`Ctrl-S` (or `:w`) writes the logs the viewer has collected to a file:
+`s` (or `:w`) writes the logs the viewer has collected to a file:
 
 ```
 :w                    # a timestamped file, e.g. /tmp/dusk-logs-20260615-143002.log
