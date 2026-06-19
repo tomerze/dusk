@@ -96,7 +96,7 @@ impl dusk_program::process::ProcessMixin for Process {
             tracing::info!(
                 program_id = entry.get_program_id(),
                 version = entry.get_version()?.to_str()?,
-                git_revision = entry.get_git_revision()?.to_str()?,
+                git_rev = entry.get_git_revision()?.to_str()?,
                 "available program",
             );
         }

@@ -1,6 +1,6 @@
 use crate::buffer::Reader;
 use crate::common_capnp::{any_value, key_value};
-use crate::logs_capnp::{BATCH_TYPE_ID, signal};
+use crate::logs_capnp::{ATTRIBUTES_TYPE_ID, SIGNAL_TYPE_ID, signal};
 use crate::streamer::keeps;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -76,7 +76,7 @@ pub(crate) fn signal_to_value(signal: signal::Reader) -> capnp::Result<Value> {
             }
         }
     }
-    Ok(Value::Record(Record::with_fields(BATCH_TYPE_ID, fields)))
+    Ok(Value::Record(Record::with_fields(SIGNAL_TYPE_ID, fields)))
 }
 
 fn attributes_value(
@@ -96,7 +96,7 @@ fn attributes_value(
         fields.push((key, value));
     }
     Ok(Some(Value::Record(Record::with_fields(
-        BATCH_TYPE_ID,
+        ATTRIBUTES_TYPE_ID,
         fields,
     ))))
 }
@@ -131,7 +131,7 @@ fn any_value_to_value(value: any_value::Reader) -> capnp::Result<Value> {
                 };
                 fields.push((key, entry_value));
             }
-            Value::Record(Record::with_fields(BATCH_TYPE_ID, fields))
+            Value::Record(Record::with_fields(ATTRIBUTES_TYPE_ID, fields))
         }
     })
 }

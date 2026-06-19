@@ -11,7 +11,8 @@ using Span = import "/capnp/span.capnp";
 
 const programId :UInt64 = 0xa508ae4405044e9d;
 
-const batchTypeId :UInt64 = 0xb3d9f4a05c7e2186;
+const signalTypeId :UInt64 = 0xb3d9f4a05c7e2186;
+const attributesTypeId :UInt64 = 0xdb2048b3069ea12b;
 
 const flagReplay :UInt8 = 1;
 const flagFollow :UInt8 = 2;

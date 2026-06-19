@@ -11,4 +11,4 @@ dusk_nix = { path = "../../impls/nix" }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program/" }
 dusk_base = { path = "../../dusk/src/dusk_base" }
-dusk_program_logs = { path = "../../base/logs", features = ["console"] }
+dusk_program_logs = { path = "../../base/logs" }

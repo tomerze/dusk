@@ -316,7 +316,8 @@ node the way a paused viewer does.
 
 The values path (`dump`, the `dump` flag bit set) skips the `LogsArgs.Server`
 entirely. The same node-side `Reader` drains the buffer, but each signal is
-converted into a `Value::Record` (tagged with `batchTypeId`) and sent on the
+converted into a `Value::Record` (tagged with `signalTypeId`, its attributes a
+nested record tagged with `attributesTypeId`) and sent on the
 output stream the shell already handed every program — the channel `ps` and the
 rest write to — so a non-interactive caller receives the entries as its command
 result. `--replay-only` returns once the replay history is drained (the stream's

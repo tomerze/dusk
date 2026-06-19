@@ -162,7 +162,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 } else {
                     let server: logs_capnp::logs_args::server::Client =
                         process.ctx.program_args.server_as()?;
-                    let streamer = streamer::Streamer::<8>::new(64, 256);
+                    let streamer = streamer::Streamer::<8>::new(128, 1024);
                     let streaming = streamer.stream(&mut reader, &server, minimum_severity, follow);
                     if let Err(error) = streaming.instrument(span).await {
                         ::tracing::warn!(error = %error, "the logs stream failed");
