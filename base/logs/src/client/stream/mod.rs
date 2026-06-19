@@ -1,33 +1,9 @@
-//! The client-side log streams: the consumers of the node's streamed signals.
-//! Each stream is an implementation of the `LogsArgs.Server` capnp interface
-//! (`send`/`stop`) — the node pushes signals in through [`pipe`](crate::pipe)
-//! and the stream writes them wherever it lands. The built-ins live one per
-//! submodule; an external author implements the same interface to write their
-//! own.
-//!
-//! A signal is turned into its exportable form by [`convert`](crate::client::convert):
-//! the file and http sinks emit OTLP/JSON, the otlp sink the OTLP protobuf types
-//! (built from that same JSON). The viewer renders straight off the capnp signals.
-//!
-//! Backpressure is the `send` itself: a stream resolves its `send` only once it
-//! has written the batch (or has room), which fills the node's flow-control
-//! window and parks it. A stream that fails fatally triggers its
-//! [`stop`](stop_promise) signal — the node's cue to finish.
-//!
-//! - [`file`] — `file://<path>`: appends one OTLP/JSON signal per line (jsonl).
-//! - [`http`] — `http://` / `https://`: one POST per signal, OTLP/JSON.
-//! - [`otlp`] — `otlp://<host:port>`: OTLP/gRPC `Export` calls, one per batch.
-//! - [`viewer`] — the interactive terminal pager (no url).
-//! - [`print`] — a plain stdout dump (no url, `--replay-only`).
-
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use crate::logs_capnp::logs_args;
-use capnp::capability::Promise;
+use crate::logs_capnp::signal_batch;
 use dusk_program::anyhow::{Result, bail};
 use dusk_program::dusk_capnp::capnp_rpc;
-use tokio::sync::Notify;
 
 pub mod file;
 pub mod http;
@@ -62,13 +38,8 @@ pub(crate) fn parse(url: &str, namespace_id: u64) -> Result<logs_args::server::C
     Ok(server)
 }
 
-/// Answer the node's `stop` long-poll once `stop` is signalled — the cue to
-/// finish the stream. Shared by every built-in: a stream signals it when it
-/// fails fatally or (the viewer) when the user quits.
-pub(crate) fn stop_promise(stop: &Rc<Notify>) -> Promise<(), capnp::Error> {
-    let stop = stop.clone();
-    Promise::from_future(async move {
-        stop.notified().await;
-        Ok(())
-    })
+pub(crate) async fn acknowledge(ack: signal_batch::ack::Client) {
+    if let Err(error) = ack.ack_request().send().promise.await {
+        tracing::warn!(%error, "failed to acknowledge a streamed batch");
+    }
 }

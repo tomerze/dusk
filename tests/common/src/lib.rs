@@ -26,19 +26,35 @@ struct ErrorCaptureStream {
 
 impl logs_args::server::Server for ErrorCaptureStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
-        let entries = match params.get().and_then(|params| params.get_entries()) {
+        let signal_batch = match params.get().and_then(|params| params.get_signal_batch()) {
+            Ok(signal_batch) => signal_batch,
+            Err(error) => return Promise::err(error),
+        };
+        let entries = match signal_batch.get_signals() {
             Ok(entries) => entries,
             Err(error) => return Promise::err(error),
         };
-        let mut errors = self.errors.lock().unwrap();
-        for entry in entries.iter() {
-            if matches!(entry.get_severity_number(), Ok(SeverityNumber::Error))
-                && let Ok(signal::Which::LogRecord(Ok(log_record))) = entry.which()
-            {
-                errors.push(body_text(log_record));
+        let ack = match signal_batch.get_ack() {
+            Ok(ack) => ack,
+            Err(error) => return Promise::err(error),
+        };
+        {
+            let mut errors = self.errors.lock().unwrap();
+            for entry in entries.iter() {
+                if matches!(entry.get_severity_number(), Ok(SeverityNumber::Error))
+                    && let Ok(signal::Which::LogRecord(Ok(log_record))) = entry.which()
+                {
+                    errors.push(body_text(log_record));
+                }
             }
         }
-        Promise::ok(())
+        // Acknowledge so the node frees the batch instead of re-sending it.
+        Promise::from_future(async move {
+            if let Err(error) = ack.ack_request().send().promise.await {
+                eprintln!("error monitor failed to acknowledge a batch: {error}");
+            }
+            Ok(())
+        })
     }
 
     fn stop(

@@ -21,6 +21,14 @@ struct Signal {
   }
 }
 
+struct SignalBatch {
+    interface Ack {
+        ack @0 () -> ();
+    }
+    signals @0 :List(Signal);
+    ack @1 :Ack;
+}
+
 struct LogsArgs {
   struct Data {
     # The minimum severity to stream; unspecified streams everything.
@@ -37,7 +45,7 @@ struct LogsArgs {
     # Streams signals (log records and spans) to the client. Where they land is
     # the client's choice (its command line; the viewer by default) — the node
     # doesn't know. A failed send is retried.
-    send @0 (entries :List(Signal)) -> StreamResult;
+    send @0 (signal_batch :SignalBatch) -> StreamResult;
     # Long-poll, the client answers when its time to stop
     stop @1 () -> ();
   }

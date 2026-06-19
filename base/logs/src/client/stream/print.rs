@@ -3,6 +3,7 @@
 //! counterpart to the interactive [`viewer`](super::viewer), whose line
 //! rendering it reuses.
 
+use super::acknowledge;
 use super::viewer::entry_lines;
 use crate::logs_capnp::logs_args;
 use capnp::capability::Promise;
@@ -27,8 +28,16 @@ impl Default for PrintStream {
 
 impl logs_args::server::Server for PrintStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
-        let entries = match params.get().and_then(|params| params.get_entries()) {
+        let signal_batch = match params.get().and_then(|params| params.get_signal_batch()) {
+            Ok(signal_batch) => signal_batch,
+            Err(error) => return Promise::err(error),
+        };
+        let entries = match signal_batch.get_signals() {
             Ok(entries) => entries,
+            Err(error) => return Promise::err(error),
+        };
+        let ack = match signal_batch.get_ack() {
+            Ok(ack) => ack,
             Err(error) => return Promise::err(error),
         };
         let mut stdout = std::io::stdout().lock();
@@ -36,7 +45,10 @@ impl logs_args::server::Server for PrintStream {
             // A closed stdout (e.g. piped into `head`) just ends the dump.
             let _ = writeln!(stdout, "{}", line.plain);
         }
-        Promise::ok(())
+        Promise::from_future(async move {
+            acknowledge(ack).await;
+            Ok(())
+        })
     }
 
     fn stop(

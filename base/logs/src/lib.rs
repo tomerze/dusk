@@ -16,7 +16,7 @@ extern crate std;
 mod buffer;
 mod config;
 mod enrich;
-mod pipe;
+mod streamer;
 mod tracing;
 
 pub use crate::tracing::BufferLayer;
@@ -159,8 +159,9 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 let dusk_client = dusk_core::local_client(process.ctx.namespace.clone()).await;
                 let mut reader = process.buffer.reader(start_position, dusk_client).await?;
                 let span = ::tracing::info_span!("logs_stream", pid = process.ctx.pid);
-                let pipe = pipe::pipe(&mut reader, &server, minimum_severity, follow);
-                if let Err(error) = pipe.instrument(span).await {
+                let streamer = streamer::Streamer::<8>::new(64, 256);
+                let stream = streamer.stream(&mut reader, &server, minimum_severity, follow);
+                if let Err(error) = stream.instrument(span).await {
                     ::tracing::warn!(error = %error, "the logs stream failed");
                 }
                 Ok::<(), capnp::Error>(())

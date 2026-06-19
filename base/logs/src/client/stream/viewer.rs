@@ -4,7 +4,7 @@ use std::string::String;
 use std::time::Duration;
 use std::vec::Vec;
 
-use super::stop_promise;
+use super::acknowledge;
 use crate::common_capnp::any_value;
 use crate::log_record_capnp::log_record;
 use crate::logs_capnp::{logs_args, signal};
@@ -63,7 +63,7 @@ impl ViewerStream {
         let disconnected_for_pager = disconnected.clone();
         tokio::task::spawn_local(async move {
             if let Err(error) = Pager::run(receiver, disconnected_for_pager).await {
-                tracing::error!(error = %format!("{error:#}"), "the log viewer failed");
+                tracing::error!(error = %format!("{error:#}"), "log viewer failed");
             }
             // The pager quit (or failed): the node's cue to finish the stream.
             stop_for_pager.notify_one();
@@ -92,7 +92,9 @@ impl Default for ViewerStream {
 
 impl logs_args::server::Server for ViewerStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
-        let entries = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_entries());
+        let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
+        let entries = dusk_capnp::pry!(signal_batch.get_signals());
+        let ack = dusk_capnp::pry!(signal_batch.get_ack());
         // Render to pager lines here, off the capnp signals — the pager never
         // sees a log record, only its styled lines.
         let lines = entry_lines(entries);
@@ -100,10 +102,13 @@ impl logs_args::server::Server for ViewerStream {
         let stop = self.stop.clone();
         Promise::from_future(async move {
             // A closed channel means the pager already quit; signal stop so the
-            // node finishes rather than dropping batches forever.
+            // node finishes rather than dropping batches forever, and leave the
+            // batch unacknowledged.
             if sender.send(lines).await.is_err() {
                 stop.notify_one();
+                return Ok(());
             }
+            acknowledge(ack).await;
             Ok(())
         })
     }
@@ -113,7 +118,11 @@ impl logs_args::server::Server for ViewerStream {
         _params: logs_args::server::StopParams,
         _results: logs_args::server::StopResults,
     ) -> Promise<(), capnp::Error> {
-        stop_promise(&self.stop)
+        let stop = self.stop.clone();
+        Promise::from_future(async move {
+            stop.notified().await;
+            Ok(())
+        })
     }
 }
 

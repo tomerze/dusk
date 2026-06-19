@@ -1,7 +1,7 @@
 //! `http://` / `https://`: one POST per signal, the signal as a single
 //! OTLP/JSON document.
 
-use super::stop_promise;
+use super::acknowledge;
 use crate::client::convert::signal_to_json;
 use crate::logs_capnp::logs_args;
 use capnp::capability::Promise;
@@ -46,7 +46,9 @@ impl Drop for HttpStream {
 
 impl logs_args::server::Server for HttpStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
-        let entries = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_entries());
+        let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
+        let entries = dusk_capnp::pry!(signal_batch.get_signals());
+        let ack = dusk_capnp::pry!(signal_batch.get_ack());
         // Render each signal to its OTLP/JSON document; a span is a structured log
         // to an http consumer. A signal that fails to convert is skipped.
         let mut batch = Vec::new();
@@ -72,8 +74,9 @@ impl logs_args::server::Server for HttpStream {
             if let Err(error) = post(&client, &url, &batch).await {
                 let message = format!("{error:#}");
                 tracing::warn!(logs_count, error = %message, "failed streaming over http");
-                return Err(capnp::Error::failed(message));
+                return Ok(());
             }
+            acknowledge(ack).await;
             tracing::info!(logs_count, "streaming over http...");
             Ok(())
         })
@@ -84,7 +87,11 @@ impl logs_args::server::Server for HttpStream {
         _params: logs_args::server::StopParams,
         _results: logs_args::server::StopResults,
     ) -> Promise<(), capnp::Error> {
-        stop_promise(&self.stop)
+        let stop = self.stop.clone();
+        Promise::from_future(async move {
+            stop.notified().await;
+            Ok(())
+        })
     }
 }
 

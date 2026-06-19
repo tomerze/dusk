@@ -1,4 +1,4 @@
-use super::stop_promise;
+use super::acknowledge;
 use crate::client::convert::signal_to_json;
 use crate::logs_capnp::{logs_args, signal};
 use capnp::capability::Promise;
@@ -64,7 +64,9 @@ impl Drop for OtlpStream {
 
 impl logs_args::server::Server for OtlpStream {
     fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
-        let entries = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_entries());
+        let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
+        let entries = dusk_capnp::pry!(signal_batch.get_signals());
+        let ack = dusk_capnp::pry!(signal_batch.get_ack());
 
         let mut logs: Vec<otlp_logs::LogRecord> = Vec::new();
         let mut spans: Vec<otlp_trace::Span> = Vec::new();
@@ -97,8 +99,9 @@ impl logs_args::server::Server for OtlpStream {
             if let Err(error) = export(&state, &logs, &resource_spans).await {
                 let message = format!("{error:#}");
                 tracing::warn!(logs_count, spans_count, error = %message, "failed streaming over otlp");
-                return Err(capnp::Error::failed(message));
+                return Ok(());
             }
+            acknowledge(ack).await;
             tracing::info!(logs_count, spans_count, "streaming over otlp...");
             Ok(())
         })
@@ -109,7 +112,11 @@ impl logs_args::server::Server for OtlpStream {
         _params: logs_args::server::StopParams,
         _results: logs_args::server::StopResults,
     ) -> Promise<(), capnp::Error> {
-        stop_promise(&self.stop)
+        let stop = self.stop.clone();
+        Promise::from_future(async move {
+            stop.notified().await;
+            Ok(())
+        })
     }
 }
 
