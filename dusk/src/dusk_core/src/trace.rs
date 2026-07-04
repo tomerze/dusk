@@ -14,7 +14,7 @@ fn _embassy_trace_task_new(executor_id: u32, task_id: u32) {
 
 #[unsafe(no_mangle)]
 fn _embassy_trace_task_end(executor_id: u32, task_id: u32) {
-    tracing::trace!(executor_id, task_id, "reaping finished task");
+    tracing::trace!(executor_id, task_id, "spawned task finished");
 }
 
 #[unsafe(no_mangle)]
