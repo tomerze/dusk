@@ -17,30 +17,27 @@ pub(crate) fn signal_to_json(
     signal: signal::Reader,
     namespace_id: u64,
 ) -> capnp::Result<serde_json::Value> {
+    let unique_id = format!("{:x}-{:x}", namespace_id, signal.get_global_sequence());
     match signal.which()? {
         signal::Which::LogRecord(log_record) => {
             let mut value = log_record_json(log_record?, namespace_id)?;
-            // The stable per-signal id (unique within a run via the sequence,
-            // across runs via `namespace_id`, fetched once from the node), so a
-            // backend honouring `log.record.uid` collapses a replayed record
-            // onto the same document. A span needs no such attribute — its
-            // natural (trace_id, span_id) identity is the key, made globally
-            // unique by minting `namespace_id` into the trace id below.
-            let unique_id = format!("{:x}-{:x}", namespace_id, signal.get_global_sequence());
             add_attribute(&mut value, LOG_RECORD_UID_ATTRIBUTE, &unique_id);
             add_attribute(&mut value, ELASTICSEARCH_DOCUMENT_ID_ATTRIBUTE, &unique_id);
             Ok(value)
         }
-        signal::Which::Span(span) => span_json(span?, namespace_id),
+        signal::Which::Span(span) => {
+            let mut value = span_json(span?, namespace_id)?;
+            add_attribute(&mut value, ELASTICSEARCH_DOCUMENT_ID_ATTRIBUTE, &unique_id);
+            Ok(value)
+        }
     }
 }
 
 /// The 16-byte OTLP trace id with `namespace_id` folded into its high 8 bytes.
 /// `build_log_record`/`build_span` fill only the low 8 bytes (the task-root id),
 /// leaving the high 8 zero; stamping the node's namespace id there makes the
-/// trace id globally unique across node runs, so a span's natural
-/// `(trace_id, span_id)` identity dedupes a replayed span correctly, and logs
-/// stay correlated to the same trace.
+/// trace id globally unique across node runs, so logs and spans from different
+/// runs never collide on a trace.
 fn mint_trace_id(trace_id: &[u8], namespace_id: u64) -> String {
     let mut bytes = [0u8; 16];
     // Right-align the stored id (its low 8 bytes hold the task-root); a

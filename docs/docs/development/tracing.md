@@ -29,8 +29,10 @@ ties every log under the task back to where it ran. Four rules govern it:
    across an `.await` stays entered while the executor polls *other* tasks, leaking
    this span into theirs.
 
-A root span carries the marker and these fields; **child spans inherit them and
-must not repeat them**, and a span that is *not* a task root (`logs_stream`, a span
+A root span carries the marker and these fields; **child spans and the task's
+logs must not repeat them** — everything in the task shares the root span's
+trace id, and that reference is how a log or child span links back to the
+fields the root carries. A span that is *not* a task root (`logs_stream`, a span
 over a future inside an RPC handler) neither marks itself nor restates them. The
 node's own task spans already follow the rules (`init`, `session`, `process`); a
 program that spawns work must too — `sh`'s `sh_exec` task carries `__new_task_id__`,
@@ -71,8 +73,9 @@ span.in_scope(|| info!("init task exiting"));
 
 ### Field conventions
 
-- `__new_task_id__` is **always the first field** on a task root span. It surfaces
-  on every log as the `task_id` attribute (see
+- `__new_task_id__` is **always the first field** on a task root span. It
+  surfaces as the root span's `task_id` attribute; a log under the task reaches
+  it through the log's trace id (see
   [behind the scenes](#behind-the-scenes-telling-tasks-apart)).
 - Domain fields follow: `namespace_id`, `pid`, `program_id`, `program_name`,
   `program_version` — whatever the task is about.
@@ -86,9 +89,12 @@ span.in_scope(|| info!("init task exiting"));
 
 The capture subscriber, [`BufferLayer`](logs.md), *is* the subscriber — not a layer
 over a std-only `tracing` registry — so it owns its own span table and entered-span
-stack and works the same under `no_std` on a node. When an event fires it records
-the event's **scope**: the fields of the spans the event is inside, so a `process
-bootstrap` event inherits the `pid` and `program_id` from its `process` span.
+stack and works the same under `no_std` on a node. When an event fires it
+resolves the event's **scope**: the spans the event is inside. The stored log
+record carries only the event's own fields — the scope supplies the record's
+span and trace ids (and, on the node's console, the `key=value` context printed
+after the line), so a `process bootstrap` event links to its `process` span
+instead of copying the span's `pid` and `program_id`.
 
 The catch is that there is **one** entered-span stack, shared by every task on the
 single executor. Raw nesting can't be trusted: a span left entered across an
@@ -127,8 +133,7 @@ span's id.** A log's trace is its task, a span's trace is the task it belongs to
 and a task's nested spans all share it — distinct forever, where the embassy id
 would have collided.
 
-## Executor instrumentatios;
-use capnp::serialize_packed;n: the `tracing` feature
+## Executor instrumentation: the `tracing` feature
 
 The spans above are opened by *task code*. The executor itself also reports its
 scheduling, through link-time hooks Embassy calls at each task transition — the
@@ -155,13 +160,18 @@ distinct from the durational task spans that become OTLP traces (next).
 
 ## Spans as OTLP traces
 
-A task's spans don't only scope logs — when their lane is routed, each span's
-**close** is captured as a `Signal` span: a real OTLP span carrying its id, parent,
-name, kind, start/end, and its deduplicated scope as attributes, with the task root
-id as its `trace_id`. A span rides its **own** level's lane (`info_span!` → info,
-`debug_span!` → debug), so it is kept exactly when that level is. Nothing is written
-when a span opens — OTLP can't represent an unfinished span, so only the complete
-close signal is emitted.
+A task's spans don't only scope logs — when their lane is routed, each span is
+captured as `Signal` spans: real OTLP spans carrying the span's id, parent,
+name, kind, start time, and its **own** fields as attributes, with the task
+root id as the `trace_id`. Each span is written **twice**: once at open, with
+no end time, and once at close, with the end time and the span's final fields
+(anything `record()`-ed after open appears only in the close signal). The open
+signal is what makes a still-running task visible — its spans are already in
+the buffer and any live stream before they close, and a node that stops
+mid-task has already emitted them. A span whose end time is absent is one that
+is still open, or one whose node stopped before it closed. A span rides its
+**own** level's lane (`info_span!` → info, `debug_span!` → debug), so it is
+kept exactly when that level is.
 
 The mapping to a trace is fixed by the node's structure:
 
@@ -180,9 +190,10 @@ exporter reshapes each onto the OTLP **trace** signal field-for-field (grouped o
   `dusk_core`'s `init_task` / `process_task`, `sh`'s `sh_exec`).
 - **The executor hooks** — the always-on and `tracing`-gated `_embassy_trace_*`
   functions — are in `dusk/src/dusk_core/src/trace.rs`.
-- **The capture and per-task scoping** is in `base/logs/src/layer/`: `BufferLayer`
-  (the subscriber, span table, and the `(span_id, task root span id)` entered stack)
-  plus the `collect` → `record` → `console` pipeline that turns an event into a
-  packed log record. The same layer writes each span's close signal.
+- **The capture and per-task scoping** is in `base/logs/src/tracing/`:
+  `BufferLayer` (the subscriber, span table, and the `(span_id, task root span
+  id)` entered stack) plus the `collect` → `convert` → `console` pipeline that
+  turns an event into a packed log record. The same layer writes each span's
+  open and close signals.
 - **The OTLP trace reshaping** — mapping each span to a `Span` and grouping them by
-  service — is in `base/logs/src/client/stream/otlp/`, the `otlp://` stream only.
+  service — is in `base/logs/src/client/stream/otlp.rs`, the `otlp://` stream only.

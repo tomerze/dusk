@@ -55,11 +55,12 @@ an explicit `SignalBuffer::new`.
 | `notify.rs` | the readers' wakeup: a version counter plus the parked readers' wakers — any number of readers can park. |
 | `io/writer.rs` | `Writer` and its `write` — the lock-free producer path. |
 | `io/reader.rs` | `Reader` and its `read`/`try_read` — the merged, non-destructive consumer. |
-| `enrich.rs` | turning a stored signal into an enriched OTLP `LogRecord`. |
 
-The ingest side lives one level up: `src/layer.rs` (behind the `layer` cargo
-feature) holds `BufferLayer`, the `tracing` layer that captures events into the
-buffer.
+Enrichment — turning a stored signal into an OTLP log record or span with its
+severity and real timestamps — lives one level up in `src/enrich.rs`, called
+from the read path. The ingest side lives beside it: `src/tracing/layer.rs`
+(always compiled) holds `BufferLayer`, the `tracing` subscriber that captures
+events into the buffer.
 
 Sizing lives in `base/logs/src/config.rs`: `LogsConfig { lanes: Vec<LaneConfig> }`,
 each `LaneConfig { levels, byte_capacity, signal_capacity }`.
@@ -256,26 +257,30 @@ best-effort under concurrent writers, not a total order.
 
 ## The ingest side: BufferLayer
 
-On a node, signals reach the buffer through **`BufferLayer`** (`src/layer.rs`,
-always compiled). The layer is **no_std** — it tracks live spans' fields and
+On a node, signals reach the buffer through **`BufferLayer`**
+(`src/tracing/layer.rs`, always compiled). It is a standalone `tracing`
+**subscriber**, and it is **no_std** — it tracks live spans' fields and
 parentage in its own map instead of the std-only subscriber registry, so it
-composes onto any base subscriber. The **`console`** cargo feature adds the
-std machinery: with it, building the logs program's `Launcher` installs the
-global subscriber — the capture layer plus console output at INFO (a no-op if a
-subscriber already exists, e.g. under a test harness). Without `console`,
-compose `BufferLayer` onto your own subscriber. For each event the layer builds
-a `log_record`: the message becomes the OTLP `body`; the event's fields **and
-every field of the spans in scope** become `attributes` — so `task_id`, `pid`,
-`program_name` and the rest of the span convention reach the buffer.
+needs no `tracing-subscriber` `Registry`. Building the logs program's `Launcher`
+installs it as the program's global subscriber (a no-op if one already exists,
+e.g. under a test harness). The **`console`** cargo feature adds the std
+machinery to also print each event to stdout at INFO and above; without it the
+same subscriber captures into the buffer but prints nothing. For each event the layer builds
+a `log_record`: the message becomes the OTLP `body`; the event's **own** fields
+become `attributes`; and the record carries the innermost enclosing span's id
+and the task's trace id. `task_id`, `pid`, `program_name` and the rest of the
+span convention are not copied onto the record — they reach the buffer on the
+span signals themselves, and a log links to them through those ids.
 Events at levels routed to no lane return before serializing anything.
 
 The layer is **lock-free into the buffer from any thread**: each event packs
 through its own short-lived `Writer` (one small allocation per event); span
-bookkeeping (create/record/close, and a pointer-clone snapshot of the scope when
-an event sits inside spans) takes a brief critical section. One cost to know
-about: composing the layer enables every routed callsite — with the default
-config that means `trace!` node-wide, captured into the ring but still filtered
-out of the console.
+bookkeeping (create/record/close, and reading the innermost entered span's ids
+for an event — plus, on `console` builds, a pointer-clone of the scope for the
+printed line) takes a brief critical section. One cost to know about: composing
+the layer enables every routed callsite — with the default config that means
+`trace!` node-wide, captured into the ring but still filtered out of the
+console.
 
 ## The viewer: `logs` in the shell
 
@@ -308,11 +313,11 @@ one of the streaming sinks. Every sink consumes the same `send` and converts the
 capnp wire form — which mirrors the OTLP proto field-for-field — once into its
 output: OTLP/JSON for `file://` and `http(s)://`, OTLP/gRPC for `otlp://`. The
 viewer instead renders each batch into styled pager lines — dim timestamp,
-colored level, message, cyan `key=value` fields (span fields included), wrapped
+colored level, message, cyan `key=value` fields (the event's own), wrapped
 to the terminal width with continuation rows hanging past the timestamp and level
-columns. The network sinks retry a failed connection forever at a fixed interval,
-and awaiting that retry is itself the backpressure — a down collector parks the
-node the way a paused viewer does.
+columns. The network sinks retry a failed connection indefinitely, paced by the
+send round-trip rather than a timer, and awaiting that retry is itself the
+backpressure — a down collector parks the node the way a paused viewer does.
 
 The values path (`dump`, the `dump` flag bit set) skips the `LogsArgs.Server`
 entirely. The same node-side `Reader` drains the buffer, but each signal is
@@ -341,7 +346,8 @@ terminal before returning.
 
 ## Timestamps
 
-`Writer::write` stamps every signal's `time_unix_nano` with embassy's
+The layer stamps every signal's `time_unix_nano` as it assembles the record
+(`tracing/convert.rs`, just before `Writer::write` appends it) with embassy's
 **monotonic** clock (milliseconds since node start) — cheap, immune to
 wall-clock changes, and never the caller's job. The wall-clock offset is sampled
 **once** when `SignalBuffer::reader` mints

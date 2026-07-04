@@ -15,12 +15,13 @@ A few rules are enforced more strictly than usual:
   `address`, not `addr`. This holds even for short-lived locals.
 - **Respect the `no_std` / `std` split.** Server-side code stays `no_std`-clean;
   std-only code belongs behind the `client` feature. A quick check:
-  `grep -rn "std::\|use std" programs/` should only turn up hits in `client.rs`
+  `grep -rn "std::\|use std" base/ --include="*.rs"` should only turn up hits in `client.rs`
   files or `#[cfg(feature = "client")]` modules. See
   [Architecture](architecture.md#client-server-split).
-- **Trace every task.** Each Embassy task opens a `tracing` span whose **first**
-  field is `task_id`, followed by the domain fields (`namespace_id`, `pid`,
-  `program_id`, `program_name`). Lifecycle events, dropped errors, and boundary
+- **Trace every task.** Each Embassy task opens a `tracing` span that declares
+  the task id under `__new_task_id__` (the logs subscriber surfaces it as
+  `task_id`), with the domain fields (`namespace_id`, `pid`, `program_id`,
+  `program_name`) alongside. Lifecycle events, dropped errors, and boundary
   calls are logged so a node is diagnosable after the fact.
 
 ## Pre-commit and CI

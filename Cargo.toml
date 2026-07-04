@@ -29,6 +29,7 @@ members = [
     "base/logs",
     "base/hostname",
     "base/echo",
+    "base/kvs",
     "tests/api",
     "tests/cli",
     "tests/common",

@@ -25,19 +25,20 @@ Two workspace crates and one C library:
 `build.rs` builds it as static archives (`libllama.a`, `libggml*.a`) and emits
 `cargo:rustc-link-lib=static=…` directives, so everything links statically into
 the final binary. The Rust↔C surface is hand-written `unsafe extern "C"`
-declarations in `ffi.rs` — only the ~20 symbols we call, plus `#[repr(C)]`
+declarations in `ffi.rs` — only the ~30 symbols we call, plus `#[repr(C)]`
 mirrors of the few structs whose fields we touch. No `bindgen`, no wrapper crate.
 
 The trade-off: bumping `vendor/llama.cpp` past the currently pinned version means re-verifying those
 struct layouts and the `LLAMA_SESSION_VERSION` constant against the new
-`llama.h`. A runtime version check on the snapshot turns layout drift into a
-clean error instead of silent UB.
+`llama.h`. A runtime version check on the snapshot turns session-format drift
+into a clean error instead of silent UB; the `#[repr(C)]` struct mirrors have no
+such guard and must be re-verified by hand.
 
 ## Pipeline at a glance
 
 ```
 program crate    #[sh_entry] proc-macro writes JSON
-(compile time)   → target/.dusk_sh_entries/<crate>.json
+(compile time)   → target/.dusk_sh_entries/<crate>__sh_entry.json
                                  │
                                  ▼
 dusk_llm         build.rs:
@@ -121,10 +122,10 @@ offset  bytes  field
 12+4n   …      raw llama_state_get_data bytes (the KV cache)
 ```
 
-It is single-digit megabytes — the cache holds only the tokens the warm-up
+It is roughly 30 MB — the cache holds only the tokens the warm-up
 decoded, far below the 16K-token context reservation.
 
-This effectively allows as to **skip the prefill stage at runtime**!
+This effectively allows us to **skip the prefill stage at runtime**!
 
 ## Stage 3 — Runtime loads the embedded snapshot lazily
 
@@ -140,7 +141,8 @@ The binary embeds **two** blobs:
 
 `dusk_llm` exposes the pieces but owns no laziness — that lives in
 `dusk_prompt`. On the **first** Ask Dusk of a session, `dusk_prompt` (inside a
-`spawn_blocking`) calls `load_from_self_exe_section(EMBEDDED_GGUF_SECTION)`,
+`spawn_blocking`) calls
+`load_from_self_exe_section(GEMMA4E2B_EMBEDDED_GGUF_SECTION)`,
 which opens `/proc/self/exe`, finds the section, and hands back an
 `EmbeddedGgufFile` — a glibc `fopencookie` stream over it (`use_mmap=false`, so
 reads land in our callbacks). It passes that to `Chat::new(embedded)`, which
@@ -157,7 +159,7 @@ loads eagerly and returns a ready `Chat` (`Arc<Mutex<LlmState>>`). `Chat::new`:
 6. Sets `next_position = n_tokens`, so decoding resumes exactly where warm-up
    stopped.
 
-Each `chat_turn` then decodes the user's message from `next_position` and samples
+Each `Chat::chat` turn then decodes the user's message from `next_position` and samples
 until end-of-turn or `MAX_RESPONSE_TOKENS` (1024). The first turn continues the
 half-open user turn from the snapshot; later turns open their own `<|turn>user`
 block. No further model loads, no disk I/O, no re-feeding the system prompt — it
@@ -172,7 +174,7 @@ output into `LlmReply { explanation, command }`.
 
 ## Knobs that must match between build and runtime
 
-These are duplicated in `build.rs` and `src/load.rs` (build.rs predates the
+These are duplicated in `build.rs` and `src/chat.rs` (build.rs predates the
 source in compile order, so they can't share a constant). Change one, change the
 other:
 
@@ -182,5 +184,5 @@ other:
 - **`vendor/llama.cpp` revision** — the snapshot format is versioned by
   `LLAMA_SESSION_VERSION`; the runtime rejects a mismatch with a clean error.
 - **`add_special` / `parse_special` flags** — warm-up tokenizes with both
-  `true`; `chat_turn` uses `parse_special=true` so turn boundaries line up with
+  `true`; `Chat::chat` uses `parse_special=true` so turn boundaries line up with
   the cache.

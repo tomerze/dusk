@@ -10,11 +10,9 @@ use alloc::format;
 use alloc::vec::Vec;
 use capnp::message::{Builder, HeapAllocator};
 use dusk_program::embassy_time::Instant;
-use portable_atomic_util::Arc;
 
 pub(crate) fn build_log_record(
     event_fields: &[(&'static str, FieldValue)],
-    scope: &[Arc<Vec<(&'static str, FieldValue)>>],
     span_id: Option<u64>,
     trace_id: Option<u64>,
 ) -> Builder<HeapAllocator> {
@@ -23,23 +21,11 @@ pub(crate) fn build_log_record(
         .find(|(name, _)| *name == MESSAGE_FIELD)
         .map(|(_, value)| value);
 
-    let mut attributes: Vec<(&'static str, &FieldValue)> = Vec::new();
-    let candidates = event_fields
+    let attributes: Vec<(&'static str, &FieldValue)> = event_fields
         .iter()
         .filter(|(name, _)| *name != MESSAGE_FIELD)
         .map(|(name, value)| (*name, value))
-        .chain(
-            scope
-                .iter()
-                .rev()
-                .flat_map(|fields| fields.iter())
-                .map(|(name, value)| (*name, value)),
-        );
-    for (name, value) in candidates {
-        if !attributes.iter().any(|(seen, _)| *seen == name) {
-            attributes.push((name, value));
-        }
-    }
+        .collect();
 
     let mut message = Builder::new_default();
     {
@@ -123,8 +109,8 @@ pub(crate) fn build_span(
     name: &str,
     root: bool,
     start_milliseconds: u64,
-    end_milliseconds: u64,
-    attributes: &[(&'static str, &FieldValue)],
+    end_milliseconds: Option<u64>,
+    attributes: &[(&'static str, FieldValue)],
 ) -> Builder<HeapAllocator> {
     let mut message = Builder::new_default();
     {
@@ -146,12 +132,16 @@ pub(crate) fn build_span(
             span::SpanKind::Internal
         });
         builder.set_start_time_unix_nano(start_milliseconds);
-        builder.set_end_time_unix_nano(end_milliseconds);
+        // An absent end stays at the capnp default 0: the span is still open,
+        // and the read path treats 0 as "no end yet".
+        if let Some(end_milliseconds) = end_milliseconds {
+            builder.set_end_time_unix_nano(end_milliseconds);
+        }
 
         let mut attribute_list = builder.init_attributes(attributes.len() as u32);
-        for (index, &(name, value)) in attributes.iter().enumerate() {
+        for (index, (name, value)) in attributes.iter().enumerate() {
             let mut entry = attribute_list.reborrow().get(index as u32);
-            entry.set_key(name);
+            entry.set_key(*name);
             set_any_value(entry.init_value(), value);
         }
     }

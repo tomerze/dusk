@@ -73,7 +73,8 @@ result.
 
 Each record carries `sequence`, `severity`, `timeUnixNano` (nanoseconds since the
 Unix epoch), the `message`, and any `attributes`; a span record carries its
-`name`, `startTimeUnixNano`, and `endTimeUnixNano` instead. In the dusk prompt
+`name`, `startTimeUnixNano`, and — once it has closed — `endTimeUnixNano`
+instead. In the dusk prompt
 they render as a table; in the Python bindings they arrive as the values a `sh`
 call yields.
 
@@ -101,26 +102,42 @@ it returns, so a brief collector restart doesn't tear the stream down.
 
 ### Streaming to Elasticsearch
 
-You can setup an OpenTelemetry collector to stream otlp:// logs to Elasticsearch.
+You can set up an OpenTelemetry collector to stream `otlp://` logs to
+Elasticsearch.
 
-When configurating the collector it isrecommended to set [Elasticsearch
+When configuring the collector it is recommended to set the [Elasticsearch
 exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/elasticsearchexporter)'s
 mapping mode to **`ecs`**.
 
-Dusk stamps each record with `elasticsearch.document_id`, so replays dedupe
-seamlessly — turn on the `logs_dynamic_id` flag in your otel collector's elasticsearch exporter config and the exporter uses it as the document
-`_id` (a re-streamed record overwrites its earlier copy instead of duplicating). 
+Dusk stamps every log record and every span with `elasticsearch.document_id`,
+so replays dedupe seamlessly — turn on the `logs_dynamic_id` and
+`traces_dynamic_id` flags in your otel collector's Elasticsearch exporter
+config and the exporter uses it as the document `_id`. Elasticsearch then
+refuses a re-streamed copy as a duplicate of the document it already indexed,
+instead of indexing it twice.
 
 ```yaml
-# otel-collector.yaml — verified on OpenTelemetry Collector Contrib v0.142.0 (released 15 December 2025)
+# otel-collector.yaml — verified on OpenTelemetry Collector Contrib v0.146.0 (released 18 February 2026)
 exporters:
   elasticsearch:
     endpoint: http://elasticsearch:9200
     mapping:
       mode: ecs            # not the default `otel`
     logs_dynamic_id:
-      enabled: true        # use dusk's elasticsearch.document_id as the doc _id, so replays dedupe
+      enabled: true        # use dusk's elasticsearch.document_id as the log document _id
+    traces_dynamic_id:
+      enabled: true        # the same for spans; first shipped in v0.146.0
 ```
+
+A span reaches Elasticsearch twice: once when it opens — with no end time —
+and once when it closes, with its end time and final attributes. The two are
+separate documents, each with its own `elasticsearch.document_id`, so each
+dedupes on replay independently. A span document with no end time is a span
+that is still open, or one whose node stopped before it closed.
+
+Log records don't repeat their spans' attributes. To find a process's logs in
+Kibana, filter spans by what you know — `pid`, `program_name`, … — take the
+matching span's `trace.id` (every task is one trace), and filter logs by it.
 
 ## Modes
 
@@ -146,11 +163,13 @@ logs stream file://out.jsonl -l error
 
 ## Spans
 
-Dusk records [tracing spans](../development/tracing.md) alongside log records, and
-where they surface depends on the destination:
+Dusk records [tracing spans](../development/tracing.md) alongside log records —
+each span twice, once when it opens (no end time) and once when it closes —
+and where they surface depends on the destination:
 
 - in the **viewer**, spans aren't shown — logs only;
-- from **`logs dump`**, they come back as records alongside the log records;
+- from **`logs dump`**, they come back as records alongside the log records; a
+  span that is still open has no `endTimeUnixNano`;
 - streamed to **`file://`** or **`http(s)://`**, they appear as ordinary
   structured logs (without a severity);
 - streamed to **`otlp://`**, they appear as proper OTLP traces.

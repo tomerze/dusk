@@ -22,6 +22,7 @@ pub(crate) const HEX_ID_FIELDS: &[&str] = &["pid", "program_id", "namespace_id",
 type SpanFields = Arc<Vec<(&'static str, FieldValue)>>;
 
 /// A stack of span field-sets — a span's effective scope.
+#[cfg(feature = "console")]
 type Scope = Vec<SpanFields>;
 
 struct SpanRecord {
@@ -30,7 +31,8 @@ struct SpanRecord {
     metadata: &'static Metadata<'static>,
     start_milliseconds: u64,
     root: bool,
-    ancestors: Vec<u64>,
+    parent: Option<u64>,
+    trace: Option<u64>,
 }
 
 struct ClosedSpan {
@@ -40,7 +42,7 @@ struct ClosedSpan {
     parent: Option<u64>,
     trace: Option<u64>,
     root: bool,
-    scope: Scope,
+    fields: SpanFields,
 }
 
 /// Everything the subscriber mutates, behind one critical-section mutex.
@@ -76,12 +78,19 @@ impl BufferLayer {
         }
     }
 
-    fn current_scope(&self) -> (Scope, Option<(u64, u64)>) {
+    /// The entered spans' field-sets for the current task, root-first — the
+    /// console line's scope. Stored records don't carry it; a log reaches its
+    /// spans' fields through its span and trace ids.
+    #[cfg(feature = "console")]
+    fn current_scope(&self) -> Scope {
         self.state.lock(|state| {
             let state = state.borrow();
-            let current = state.entered.last().copied();
-            let current_task_root = current.map(|(_, task_root)| task_root).unwrap_or(0);
-            let scope = state
+            let current_task_root = state
+                .entered
+                .last()
+                .map(|&(_, task_root)| task_root)
+                .unwrap_or(0);
+            state
                 .entered
                 .iter()
                 .filter(|&&(_, task_root)| task_root == current_task_root)
@@ -91,29 +100,16 @@ impl BufferLayer {
                         .get(&span_id)
                         .map(|record| record.fields.clone())
                 })
-                .collect();
-            (scope, current)
+                .collect()
         })
     }
 
-    /// Write a closing span as a `Signal` span: its identity, kind, start/end, and
-    /// attributes (the span's deduplicated effective scope, innermost-first). The
-    /// trace id is the span's task root id (each task is a trace); the innermost
-    /// ancestor is the parent. Written to its level's lane.
+    /// Write a closing span as a `Signal` span: its identity, kind, start/end,
+    /// and its own fields as attributes. The trace id is the span's task root
+    /// id (each task is a trace); the innermost ancestor is the parent. Written
+    /// to its level's lane.
     fn write_span_close(&self, id: u64, span: ClosedSpan) {
         let end_milliseconds = Instant::now().as_millis();
-
-        // Deduplicate the effective scope (innermost-first, first value wins) into
-        // the span's attributes.
-        let mut attributes: Vec<(&'static str, &FieldValue)> = Vec::new();
-        for fields in span.scope.iter().rev() {
-            for (name, value) in fields.iter() {
-                if !attributes.iter().any(|(seen, _)| *seen == *name) {
-                    attributes.push((name, value));
-                }
-            }
-        }
-
         let mut message = build_span(
             id,
             span.trace,
@@ -121,11 +117,12 @@ impl BufferLayer {
             span.name,
             span.root,
             span.start_milliseconds,
-            end_milliseconds,
-            &attributes,
+            Some(end_milliseconds),
+            &span.fields,
         );
-        let result = self.buffer.writer().write(span.level, &mut message);
-        debug_assert!(result.is_ok(), "writing a span signal to the buffer failed");
+        // Can't log from inside the subscriber (it would recurse); write()
+        // counted the failure in drop_counts().write_failures.
+        let _ = self.buffer.writer().write(span.level, &mut message);
     }
 }
 
@@ -165,45 +162,68 @@ impl Subscriber for BufferLayer {
         };
         let own = Arc::new(collector.fields);
 
-        let id = self.state.lock(|state| {
+        let (id, parent, trace) = self.state.lock(|state| {
             let mut state = state.borrow_mut();
             state.last_id += 1;
             let id = state.last_id;
 
-            // Stash what the span close needs: the ids of the task's
-            // currently-entered spans — its ancestors, root-first, the innermost
-            // being the parent. The close reads their *live* fields. A task's root
-            // span heads its own trace, so it has no ancestors. Only gathered when
-            // the trace lane keeps the signal.
+            // Derive the span's identity in its trace: the parent is the task's
+            // innermost currently-entered span, the trace is the task root
+            // (root-first first entered) — the span's own id if it is the root.
+            // Both are written at open and again at close. Only derived when the
+            // span's lane keeps the signal.
             let current_task_root = state
                 .entered
                 .last()
                 .map(|&(_, task_root)| task_root)
                 .unwrap_or(0);
-            let ancestors = if !routed || root {
-                Vec::new()
+            let (parent, trace) = if !routed {
+                (None, None)
+            } else if root {
+                (None, Some(id))
             } else {
-                state
-                    .entered
-                    .iter()
-                    .filter(|&&(_, task_root)| task_root == current_task_root)
-                    .map(|&(span_id, _)| span_id)
-                    .collect()
+                let mut parent = None;
+                let mut trace = None;
+                for &(span_id, task_root) in state.entered.iter() {
+                    if task_root != current_task_root {
+                        continue;
+                    }
+                    if trace.is_none() {
+                        trace = Some(span_id);
+                    }
+                    parent = Some(span_id);
+                }
+                (parent, trace)
             };
 
             state.spans.insert(
                 id,
                 SpanRecord {
-                    fields: own,
+                    fields: own.clone(),
                     references: 1,
                     metadata,
                     start_milliseconds,
                     root,
-                    ancestors,
+                    parent,
+                    trace,
                 },
             );
-            id
+            (id, parent, trace)
         });
+
+        if routed {
+            let mut message = build_span(
+                id,
+                trace,
+                parent,
+                metadata.name(),
+                root,
+                start_milliseconds,
+                None,
+                &own,
+            );
+            let _ = self.buffer.writer().write(*metadata.level(), &mut message);
+        }
         span::Id::from_u64(id)
     }
 
@@ -239,20 +259,21 @@ impl Subscriber for BufferLayer {
         let mut event_fields = FieldCollector::default();
         event.record(&mut event_fields);
 
-        let (scope, current) = self.current_scope();
         // A log's span is the innermost it's within; its trace is its task — the
         // id of that task's root span.
+        let current = self
+            .state
+            .lock(|state| state.borrow().entered.last().copied());
         let span_id = current.map(|(span_id, _)| span_id);
         let trace_id = current.map(|(_, task_root)| task_root);
 
-        let mut message = build_log_record(&event_fields.fields, &scope, span_id, trace_id);
-        let result = self.buffer.writer().write(*metadata.level(), &mut message);
+        let mut message = build_log_record(&event_fields.fields, span_id, trace_id);
         // Can't log from inside event (it would recurse into this subscriber);
         // write() counted the failure in drop_counts().write_failures.
-        debug_assert!(result.is_ok(), "writing a log signal to the buffer failed");
+        let _ = self.buffer.writer().write(*metadata.level(), &mut message);
 
         #[cfg(feature = "console")]
-        super::console::print(metadata, &event_fields.fields, &scope);
+        super::console::print(metadata, &event_fields.fields, &self.current_scope());
     }
 
     fn enter(&self, id: &span::Id) {
@@ -315,36 +336,15 @@ impl Subscriber for BufferLayer {
             }
             // The span rides its own level's lane; only record it when kept.
             let level = *record.metadata.level();
-            // Pull the closing span's own data out first — ending its `&mut`
-            // borrow — then read its ancestors' *current* fields from the same
-            // table, so a late `record()` on the span or an ancestor is reflected.
             let span = if self.routed[level_index(level)] {
-                let name = record.metadata.name();
-                let start_milliseconds = record.start_milliseconds;
-                let root = record.root;
-                let own = record.fields.clone();
-                let ancestors = core::mem::take(&mut record.ancestors);
-                let mut scope: Scope = ancestors
-                    .iter()
-                    .filter_map(|ancestor| state.spans.get(ancestor).map(|r| r.fields.clone()))
-                    .collect();
-                let parent = ancestors.last().copied();
-                // The trace is the task root: this span's own id if it is the root,
-                // else the root-first first ancestor (the task root span).
-                let trace = if root {
-                    Some(id.into_u64())
-                } else {
-                    ancestors.first().copied()
-                };
-                scope.push(own);
                 Some(ClosedSpan {
-                    name,
+                    name: record.metadata.name(),
                     level,
-                    start_milliseconds,
-                    parent,
-                    trace,
-                    root,
-                    scope,
+                    start_milliseconds: record.start_milliseconds,
+                    parent: record.parent,
+                    trace: record.trace,
+                    root: record.root,
+                    fields: record.fields.clone(),
                 })
             } else {
                 None

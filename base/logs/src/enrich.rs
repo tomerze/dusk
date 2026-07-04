@@ -89,8 +89,10 @@ fn enrich_log_record(
     Ok(enriched)
 }
 
-/// A span with its embassy-relative start/end turned into real Unix nanoseconds.
-/// Spans carry no severity, so `level` does not apply.
+/// A span with its embassy-relative start/end turned into real Unix
+/// nanoseconds. An end of 0 is a span signal written at open — the span has no
+/// end yet, and 0 must stay 0 rather than gain the offset and masquerade as a
+/// real end time. Spans carry no severity, so `level` does not apply.
 fn enrich_span(
     stored: span::Reader,
     offset_from_unix_time_ms: u64,
@@ -98,9 +100,7 @@ fn enrich_span(
     let start_unix_ms = stored
         .get_start_time_unix_nano()
         .saturating_add(offset_from_unix_time_ms);
-    let end_unix_ms = stored
-        .get_end_time_unix_nano()
-        .saturating_add(offset_from_unix_time_ms);
+    let stored_end_milliseconds = stored.get_end_time_unix_nano();
     let hex_ids = hex_id_attributes(stored.get_attributes()?)?;
 
     let mut enriched = Builder::new_default();
@@ -108,7 +108,13 @@ fn enrich_span(
     {
         let mut span = enriched.get_root::<span::Builder>()?;
         span.set_start_time_unix_nano(start_unix_ms.saturating_mul(1_000_000));
-        span.set_end_time_unix_nano(end_unix_ms.saturating_mul(1_000_000));
+        if stored_end_milliseconds != 0 {
+            span.set_end_time_unix_nano(
+                stored_end_milliseconds
+                    .saturating_add(offset_from_unix_time_ms)
+                    .saturating_mul(1_000_000),
+            );
+        }
         rewrite_hex_ids(span.reborrow().get_attributes()?, &hex_ids)?;
     }
     Ok(enriched)

@@ -9,12 +9,12 @@ fn _embassy_trace_poll_start(executor_id: u32) {
 
 #[unsafe(no_mangle)]
 fn _embassy_trace_task_new(executor_id: u32, task_id: u32) {
-    tracing::trace!(executor_id, task_id, "task new");
+    tracing::trace!(executor_id, task_id, "spawning new task");
 }
 
 #[unsafe(no_mangle)]
 fn _embassy_trace_task_end(executor_id: u32, task_id: u32) {
-    tracing::trace!(executor_id, task_id, "task end");
+    tracing::trace!(executor_id, task_id, "reaping finished task");
 }
 
 #[unsafe(no_mangle)]

@@ -67,10 +67,11 @@ pub(crate) fn signal_to_value(signal: signal::Reader) -> capnp::Result<Value> {
                 b"startTimeUnixNano".to_vec(),
                 Value::Uint(span.get_start_time_unix_nano()),
             ));
-            fields.push((
-                b"endTimeUnixNano".to_vec(),
-                Value::Uint(span.get_end_time_unix_nano()),
-            ));
+            // 0 is a span still open (its signal written at open) — no end field.
+            let end_time_unix_nano = span.get_end_time_unix_nano();
+            if end_time_unix_nano != 0 {
+                fields.push((b"endTimeUnixNano".to_vec(), Value::Uint(end_time_unix_nano)));
+            }
             if let Some(attributes) = attributes_value(span.get_attributes()?)? {
                 fields.push((b"attributes".to_vec(), attributes));
             }
