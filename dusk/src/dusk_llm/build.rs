@@ -9,6 +9,13 @@ const CONTEXT_TOKENS: u32 = 16_384;
 // ggml_type::GGML_TYPE_Q8_0
 const KV_CACHE_TYPE: i32 = 8;
 const MODEL_GGUF_PATH: &str = "models/gemma-4-E2B-it-Q4_K_M.gguf";
+const MODEL_MANIFEST_PATH: &str = "models/models.toml";
+
+#[derive(serde::Deserialize)]
+struct ModelManifest {
+    url: String,
+    sha256: String,
+}
 
 #[derive(serde::Deserialize, Clone)]
 struct ShEntrySpec {
@@ -22,10 +29,15 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=prompts/system.md");
     println!("cargo:rerun-if-changed=warmup/main.c");
+    println!("cargo:rerun-if-changed={MODEL_MANIFEST_PATH}");
     println!(
         "cargo:rerun-if-changed={}/../../../Cargo.lock",
         env!("CARGO_MANIFEST_DIR")
     );
+
+    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MODEL_GGUF_PATH);
+    provide_model(&model_path)?;
+    println!("cargo:rerun-if-changed={}", model_path.display());
 
     let llama_src = locate_llama_src()?;
     println!(
@@ -48,12 +60,6 @@ fn main() -> Result<()> {
 
     let sh_entries_info = collect_sh_entries_info()?;
     let system_prompt = compose_system_prompt(&sh_entries_info);
-    let model_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MODEL_GGUF_PATH);
-    if !model_path.is_file() {
-        bail!("model GGUF not found at {}", model_path.display());
-    }
-    println!("cargo:rerun-if-changed={}", model_path.display());
-
     let out_dir = PathBuf::from(env::var("OUT_DIR").context("OUT_DIR not set")?);
     let state_path = out_dir.join("dusk_llm_kv_snapshot");
     let key_path = out_dir.join("dusk_llm_kv_snapshot.key");
@@ -88,6 +94,79 @@ fn main() -> Result<()> {
         fs::metadata(&state_path)?.len(),
     );
     Ok(())
+}
+
+fn provide_model(model_path: &Path) -> Result<()> {
+    let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MODEL_MANIFEST_PATH);
+    let manifest_text = fs::read_to_string(&manifest_path)
+        .with_context(|| format!("reading {}", manifest_path.display()))?;
+    let manifest: ModelManifest = toml::from_str(&manifest_text)
+        .with_context(|| format!("parsing {}", manifest_path.display()))?;
+
+    if !model_path.is_file() {
+        download_model(&manifest.url, model_path)?;
+    }
+
+    let actual = sha256_of_file(model_path)?;
+    if actual != manifest.sha256 {
+        bail!(
+            "{} is not the model {} names\n  expected sha256 {}\n  actual   sha256 {}\n\
+             Delete the file and build again to re-download it from {}",
+            model_path.display(),
+            manifest_path.display(),
+            manifest.sha256,
+            actual,
+            manifest.url,
+        );
+    }
+    Ok(())
+}
+
+fn download_model(url: &str, destination: &Path) -> Result<()> {
+    let directory = destination
+        .parent()
+        .ok_or_else(|| anyhow!("model path has no parent: {}", destination.display()))?;
+    fs::create_dir_all(directory).with_context(|| format!("creating {}", directory.display()))?;
+
+    eprintln!("dusk_llm build.rs: downloading {url}");
+    let mut partial_path = destination.as_os_str().to_owned();
+    partial_path.push(".partial");
+    let partial_path = PathBuf::from(partial_path);
+
+    let response = ureq::get(url)
+        .call()
+        .with_context(|| format!("GET {url}"))?;
+    let mut partial = fs::File::create(&partial_path)
+        .with_context(|| format!("creating {}", partial_path.display()))?;
+    std::io::copy(&mut response.into_body().into_reader(), &mut partial)
+        .with_context(|| format!("writing {}", partial_path.display()))?;
+    partial
+        .sync_all()
+        .with_context(|| format!("flushing {}", partial_path.display()))?;
+    drop(partial);
+
+    fs::rename(&partial_path, destination).with_context(|| {
+        format!(
+            "renaming {} to {}",
+            partial_path.display(),
+            destination.display()
+        )
+    })?;
+    eprintln!(
+        "dusk_llm build.rs: downloaded {} ({} bytes)",
+        destination.display(),
+        fs::metadata(destination)?.len(),
+    );
+    Ok(())
+}
+
+fn sha256_of_file(path: &Path) -> Result<String> {
+    use sha2::Digest;
+
+    let mut file = fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
+    let mut hasher = sha2::Sha256::new();
+    std::io::copy(&mut file, &mut hasher).with_context(|| format!("reading {}", path.display()))?;
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 /// Content key for the warm-up snapshot: changes whenever an input that
