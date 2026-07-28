@@ -11,6 +11,10 @@ toolchain alongside Rust:
   project root installs the correct version automatically.
 - **`make`, `cmake`, `autotools`** — required to build the vendored Cap'n Proto
   compiler under `vendor/`.
+- **A network connection for the first build** — `dusk_llm` downloads the
+  ≈2.9 GB GGUF model named in `dusk/src/dusk_llm/models/models.toml` into that
+  directory. It is kept there and verified against the manifest's SHA-256 on
+  every build, so builds after the first need no network.
 - **[`uv`](https://docs.astral.sh/uv/)** — used for the Python tooling
   (pre-commit, the `dusk_py` extension, the docs).
 

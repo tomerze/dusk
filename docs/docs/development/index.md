@@ -30,7 +30,9 @@ cargo nextest run
 
 ## Trying things out
 
-Make sure you have `make` `cmake` and `autotools` installed.
+Make sure you have `make` `cmake` and `autotools` installed. The first build also
+downloads the ≈2.9 GB [Ask Dusk](ask_dusk.md) model, so it needs a network
+connection; later builds reuse the downloaded file.
 
 ### Run a node
 
