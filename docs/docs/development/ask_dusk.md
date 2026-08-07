@@ -14,25 +14,34 @@ This page documents how it works under the hood.
 
 Two workspace crates and one C library:
 
-- **`dusk/src/dusk_llm/`** owns the whole LLM stack: the vendored `llama.cpp`
-  source, the FFI bindings (`ffi.rs`), the build-time warm-up tool, and the
-  runtime `Chat` / `LlmReply` types. Its `build.rs` is the only place in the
-  workspace that compiles `llama.cpp`.
+- **`dusk/src/dusk_llm/`** owns the whole LLM stack: the vendored
+  `ik_llama.cpp` source, the FFI bindings (`ffi.rs`), the build-time warm-up
+  tool, and the runtime `Chat` / `LlmReply` types. Its `build.rs` is the only
+  place in the workspace that compiles `ik_llama.cpp`.
 - **`dusk/src/dusk_prompt/`** consumes `dusk_llm::Chat` like any other
-  dependency — no `build.rs`, no awareness of llama.cpp.
+  dependency — no `build.rs`, no awareness of ik_llama.cpp.
 
-`llama.cpp` is pinned as a git submodule at `vendor/llama.cpp`.
-`build.rs` builds it as static archives (`libllama.a`, `libggml*.a`) and emits
-`cargo:rustc-link-lib=static=…` directives, so everything links statically into
-the final binary. The Rust↔C surface is hand-written `unsafe extern "C"`
-declarations in `ffi.rs` — only the ~30 symbols we call, plus `#[repr(C)]`
-mirrors of the few structs whose fields we touch. No `bindgen`, no wrapper crate.
+[`ik_llama.cpp`](https://github.com/ikawrakow/ik_llama.cpp) is pinned as a git
+submodule at `vendor/ik_llama.cpp`. It is a fork of llama.cpp whose CPU
+inference kernels are faster, which is the whole reason we are on it — Ask Dusk
+never runs on a GPU. `build.rs` builds it as static archives (`libllama.a`,
+`libggml.a`) and emits `cargo:rustc-link-lib=static=…` directives, so everything
+links statically into the final binary. The Rust↔C surface is hand-written
+`unsafe extern "C"` declarations in `ffi.rs` — only the ~25 symbols we call, plus
+`#[repr(C)]` mirrors of the few structs whose fields we touch. No `bindgen`, no
+wrapper crate.
 
-The trade-off: bumping `vendor/llama.cpp` past the currently pinned version means re-verifying those
-struct layouts and the `LLAMA_SESSION_VERSION` constant against the new
-`llama.h`. A runtime version check on the snapshot turns session-format drift
-into a clean error instead of silent UB; the `#[repr(C)]` struct mirrors have no
-such guard and must be re-verified by hand.
+The archives are read out of the CMake build tree rather than the install
+prefix, because ik_llama.cpp installs its libraries only when
+`BUILD_SHARED_LIBS` is on.
+
+The trade-off: bumping `vendor/ik_llama.cpp` past the currently pinned revision
+means re-verifying those struct layouts and the `LLAMA_SESSION_VERSION` constant
+against the new `llama.h`. A runtime version check on the snapshot turns
+session-format drift into a clean error instead of silent UB; the `#[repr(C)]`
+struct mirrors have no such guard and must be re-verified by hand — `sizeof` and
+`offsetof` from a C program against the header, compared with `size_of` and
+`offset_of!` from the Rust mirrors.
 
 ## Pipeline at a glance
 
@@ -43,7 +52,7 @@ program crate    #[sh_entry] proc-macro writes JSON
                                  ▼
 dusk_llm         build.rs:
 build.rs           1. fetch + verify model.json's gguf (first build only)
-(compile time)     2. cmake build vendor/llama.cpp → static archives
+(compile time)     2. cmake build vendor/ik_llama.cpp → static archives
                    3. cc warmup/main.c            → dusk_warmup binary
                    4. read sh_entries + prompts/system.md → system prompt
                    5. run dusk_warmup             → OUT_DIR/dusk_llm_kv_snapshot
@@ -55,6 +64,7 @@ dusk_llm         binary embeds two blobs:
                                  │
                                  ▼ first Ask Dusk in a session
 dusk_prompt      load_from_self_exe_section(section) → EmbeddedGgufFile
+                 (ELF section → memfd)
                  → Chat::new(embedded): build context,
                    llama_state_set_data(SNAPSHOT)
                                  │
@@ -112,11 +122,22 @@ breaks an embassy macro.)
    `directory` and `file` are also the only place the model's location is
    written down: `build.rs` passes the resulting path to `rustc` as
    `DUSK_LLM_MODEL_PATH`, which is what `src/load.rs` `.incbin`s in stage 3.
-2. **Build `vendor/llama.cpp`** via `cmake` — static libs only, tools/examples/
-   server off, `GGML_OPENMP=ON`. Host CPU features (`avx2`, `fma`, …) are
-   mapped from `CARGO_CFG_TARGET_FEATURE` to `GGML_*` defines. `libstdc++`,
-   `libgcc`, and OpenMP are linked statically too; only `pthread`/`m`/`dl`
-   stay dynamic.
+2. **Build `vendor/ik_llama.cpp`** via `cmake` — static libs only, tests/
+   examples/server off, `GGML_OPENMP=ON`, and the fork's own CPU kernels named
+   explicitly (`GGML_IQK_MUL_MAT`, `GGML_IQK_FLASH_ATTENTION`,
+   `GGML_IQK_FA_ALL_QUANTS`).
+
+    `GGML_NATIVE` is off, so the build is not pinned to the machine that ran
+    it. It cannot simply be off, though: ik_llama.cpp then leaves every
+    instruction-set option off too, which compiles no SIMD — and the IQK
+    kernels are behind `#if defined __AVX2__`, so they would silently
+    disappear. x86-64 therefore gets an explicit floor of AVX2 + FMA + F16C
+    (Haswell and newer); aarch64 needs none, as ggml compiles NEON there
+    unconditionally. Anything the target asks for above that floor is mapped
+    from `CARGO_CFG_TARGET_FEATURE` to `GGML_*` defines on top.
+
+    `libstdc++`, `libgcc`, and OpenMP are linked statically; only
+   `pthread`/`m`/`dl` stay dynamic.
 3. **Compile the warm-up tool** — `warmup/main.c` (~220 lines of C11) is linked
    against the archives from step 2 into an `OUT_DIR/dusk_warmup` executable. It
    has to be a separate binary because a build script can't link itself against
@@ -132,12 +153,12 @@ breaks an embassy macro.)
    their dedicated token IDs), decodes it into the KV cache, and writes the
    cache out with `llama_state_save_file`.
 
-The output, `OUT_DIR/dusk_llm_kv_snapshot`, is a llama.cpp session file:
+The output, `OUT_DIR/dusk_llm_kv_snapshot`, is an ik_llama.cpp session file:
 
 ```text
 offset  bytes  field
 0       4      u32 magic   = 0x6767736e ('ggsn')
-4       4      u32 version = LLAMA_SESSION_VERSION (9 in b9282)
+4       4      u32 version = LLAMA_SESSION_VERSION (10 in ik_llama.cpp)
 8       4      u32 n_tokens
 12      4n     llama_token tokens[n_tokens]
 12+4n   …      raw llama_state_get_data bytes (the KV cache)
@@ -164,15 +185,20 @@ The binary embeds **two** blobs:
 `dusk_prompt`. On the **first** Ask Dusk of a session, `dusk_prompt` (inside a
 `spawn_blocking`) calls
 `load_from_self_exe_section(GEMMA4E2B_EMBEDDED_GGUF_SECTION)`,
-which opens `/proc/self/exe`, finds the section, and hands back an
-`EmbeddedGgufFile` — a glibc `fopencookie` stream over it (`use_mmap=false`, so
-reads land in our callbacks). It passes that to `Chat::new(embedded)`, which
-loads eagerly and returns a ready `Chat` (`Arc<Mutex<LlmState>>`). `Chat::new`:
+which opens `/proc/self/exe`, finds the section, and `sendfile`s its bytes into
+a `memfd` — an anonymous in-memory file, handed back as an `EmbeddedGgufFile`.
+The copy is there because ik_llama.cpp loads a model only from a path it opens
+itself (it has no counterpart to stock llama.cpp's
+`llama_model_load_from_file_ptr`), and a `memfd` is the only path-addressable
+file whose first byte can be the GGUF's first byte. ik_llama.cpp then `mmap`s
+it, so the model stays resident once. It passes that to `Chat::new(embedded)`,
+which loads eagerly and returns a ready `Chat` (`Arc<Mutex<LlmState>>`).
+`Chat::new`:
 
-1. Installs the llama.cpp log hook and `llama_backend_init()`.
+1. Installs the ik_llama.cpp log hook and `llama_backend_init()`.
 2. Parses the 12-byte snapshot header — verifies magic and version, pulls
    `n_tokens`, slices off the raw KV tail. A version mismatch is a clean error.
-3. Loads the embedded GGUF over the cookie stream.
+3. Loads the embedded GGUF from `/proc/self/fd/<memfd>`.
 4. Builds a context with `CONTEXT_TOKENS` (16384) and `KV_CACHE_TYPE` (Q8_0);
    thread count from `DUSK_LLM_THREADS_COUNT` or `available_parallelism()`.
 5. `llama_state_set_data(ctx, raw_tail)` — splats the warm cache back in (the
@@ -202,8 +228,18 @@ other:
 - **`CONTEXT_TOKENS`** — the cache is sized for `n_ctx`; loading a snapshot into
   a smaller context is undefined.
 - **`KV_CACHE_TYPE`** — bytes are formatted per the quantisation (Q8_0).
-- **`vendor/llama.cpp` revision** — the snapshot format is versioned by
+- **`vendor/ik_llama.cpp` revision** — the snapshot format is versioned by
   `LLAMA_SESSION_VERSION`; the runtime rejects a mismatch with a clean error.
+  The snapshot's build-time cache key folds in that revision (the submodule's
+  checked-out commit) and the `libllama.a` built from it, so moving the
+  submodule regenerates the snapshot instead of reusing one written by a
+  different library.
+- **`n_batch`** — restoring the snapshot replays the output id the warm-up
+  asked for logits on, and an id beyond the context's batch size is rejected
+  (`invalid output id, N does not fit in batch size of M`). The warm-up decodes
+  its prompt in one batch of `CONTEXT_TOKENS`, so the runtime context sets
+  `n_batch` to the same value. It costs nothing: `n_ubatch`, left at its
+  default, is what sizes the compute buffer.
 - **`add_special` / `parse_special` flags** — warm-up tokenizes with both
   `true`; `Chat::chat` uses `parse_special=true` so turn boundaries line up with
   the cache.

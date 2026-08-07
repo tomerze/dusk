@@ -1,5 +1,5 @@
 /*
- * dusk_warmup — produce a llama.cpp KV-cache snapshot for a primed
+ * dusk_warmup — produce an ik_llama.cpp KV-cache snapshot for a primed
  * system prompt. Invoked at build time by `dusk_llm/build.rs`.
  *
  * Usage:
@@ -114,6 +114,9 @@ int main(int argc, char **argv) {
     llama_backend_init();
 
     struct llama_model_params model_params = llama_model_default_params();
+    // No GPU backend is compiled in, and ik_llama.cpp's default (-1) asks
+    // for every layer to be offloaded to one.
+    model_params.n_gpu_layers = 0;
     model = llama_model_load_from_file(model_path, model_params);
     if (model == NULL) {
         (void)fprintf(stderr,
@@ -144,11 +147,12 @@ int main(int argc, char **argv) {
 
     // Probe call: with a NULL output buffer the tokenizer returns the
     // negation of the required slot count (or INT32_MIN on overflow).
-    int32_t probe = llama_tokenize(vocab, prompt, prompt_length,
-                                   /*tokens=*/NULL, /*n_tokens_max=*/0,
-                                   /*add_special=*/true, /*parse_special=*/true);
+    int32_t probe = llama_vocab_tokenize(vocab, prompt, prompt_length,
+                                         /*tokens=*/NULL, /*n_tokens_max=*/0,
+                                         /*add_special=*/true,
+                                         /*parse_special=*/true);
     if (probe == INT32_MIN) {
-        (void)fputs("dusk_warmup: llama_tokenize probe overflowed i32\n", stderr);
+        (void)fputs("dusk_warmup: llama_vocab_tokenize probe overflowed i32\n", stderr);
         goto cleanup;
     }
     if (probe >= 0) {
@@ -172,11 +176,12 @@ int main(int argc, char **argv) {
         (void)fputs("dusk_warmup: malloc for token buffer failed\n", stderr);
         goto cleanup;
     }
-    int32_t written = llama_tokenize(vocab, prompt, prompt_length, tokens, n_tokens,
-                                     /*add_special=*/true, /*parse_special=*/true);
+    int32_t written =
+        llama_vocab_tokenize(vocab, prompt, prompt_length, tokens, n_tokens,
+                             /*add_special=*/true, /*parse_special=*/true);
     if (written != n_tokens) {
         (void)fprintf(stderr,
-                      "dusk_warmup: second llama_tokenize wrote %" PRId32
+                      "dusk_warmup: second llama_vocab_tokenize wrote %" PRId32
                       " tokens, expected %" PRId32 "\n",
                       written, n_tokens);
         goto cleanup;
@@ -222,7 +227,7 @@ cleanup:
         llama_free(context);
     }
     if (model != NULL) {
-        llama_model_free(model);
+        llama_free_model(model);
     }
     return exit_code;
 }
