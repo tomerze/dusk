@@ -52,7 +52,7 @@ kill --signal 9 0x1a2b   # send a different signal
 ## `sleep`
 
 Waits for a given number of milliseconds, then exits. A Terminate signal ends it
-early.
+early, so Ctrl+C at the prompt stops the wait instead of letting it run out.
 
 ```sh
 sleep 500     # sleep 500 ms
