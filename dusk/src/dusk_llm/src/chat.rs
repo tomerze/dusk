@@ -235,6 +235,11 @@ fn build_context(model: *mut llama_model) -> Result<*mut llama_context> {
     let mut params = unsafe { llama_context_default_params() };
     params.seed = SAMPLER_SEED;
     params.n_ctx = CONTEXT_TOKENS;
+    // The snapshot carries the output id of the token the warm-up asked for
+    // logits on, and restoring rejects an id that does not fit the batch. The
+    // warm-up decodes its whole prompt in one batch of `CONTEXT_TOKENS`, so
+    // the runtime has to admit ids from that same range.
+    params.n_batch = CONTEXT_TOKENS;
     params.n_threads = threads;
     params.n_threads_batch = threads;
     params.type_k = KV_CACHE_TYPE;
