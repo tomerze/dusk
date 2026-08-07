@@ -155,9 +155,11 @@ async fn spawn_http_collector() -> (String, Arc<Mutex<Vec<serde_json::Value>>>) 
     (format!("http://{address}/"), received)
 }
 
-/// rustls 0.23 needs a process-wide default crypto provider once more than one
-/// provider is linked (reqwest's client plus axum-server's TLS). Installing it
-/// once is enough; a later attempt returns `Err` and is ignored.
+/// Only aws-lc-rs is linked — reqwest's `rustls` feature, axum-server's
+/// `tls-rustls` and rustls' own default all select it — so rustls 0.23 resolves the
+/// process-wide default itself. Installing it explicitly keeps these tests working
+/// if a dependency ever links `ring` as well, which turns that resolution into a
+/// panic. Installing once is enough; a later attempt returns `Err` and is ignored.
 fn install_crypto_provider() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 }

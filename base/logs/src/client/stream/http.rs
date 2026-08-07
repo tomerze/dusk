@@ -116,7 +116,7 @@ async fn post(client: &reqwest::Client, url: &str, batch: &[serde_json::Value]) 
 fn build_client() -> Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder();
     if std::env::var_os("DUSK_CLIENT_SKIP_TLS_VERIFY").is_some() {
-        builder = builder.danger_accept_invalid_certs(true);
+        builder = builder.tls_danger_accept_invalid_certs(true);
     }
     builder.build().context("building the http client")
 }
