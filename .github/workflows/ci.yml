@@ -1,0 +1,252 @@
+name: CI
+
+# Every push to a pull request runs the full set of checks. Pushes to master
+# run the same set, and are additionally the only runs that write the shared
+# caches: a cache saved on a pull request branch is readable only by that
+# branch, so saving one there would consume the repository's 10 GB cache quota
+# without ever being restored by another run.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# A new push to the same pull request supersedes the run in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # The issue asks for incremental builds. Incremental artifacts live in
+  # target/*/incremental, which is part of the cached target directory.
+  CARGO_INCREMENTAL: 1
+  RUST_BACKTRACE: 1
+
+jobs:
+  python-lint:
+    name: Python (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+
+      # Both commands mirror the ruff-check and ruff-format hooks in
+      # .pre-commit-config.yaml, including their file scope.
+      - name: ruff check
+        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/
+
+      - name: ruff format
+        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/
+
+  c-lint:
+    name: C (clang-format, clang-tidy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # clang-tidy resolves llama.h and ggml.h out of the submodule. Only
+          # the headers are needed, so the submodule is checked out but never
+          # built.
+          submodules: false
+
+      - name: Check out vendor/ik_llama.cpp
+        run: git submodule update --init --depth 1 vendor/ik_llama.cpp
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+
+      # The versions are the ones .pre-commit-config.yaml pins: clang-format
+      # from mirrors-clang-format v19.1.7, clang-tidy from the local hook's
+      # additional_dependencies.
+      - name: clang-format
+        run: >
+          uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
+          dusk/src/dusk_llm/warmup/main.c
+          artifacts/dusk_node/include/dusk.h
+
+      - name: clang-tidy
+        run: >
+          uvx --from clang-tidy==19.1.0 clang-tidy --quiet
+          dusk/src/dusk_llm/warmup/main.c
+          --
+          -std=c11
+          -Ivendor/ik_llama.cpp/include
+          -Ivendor/ik_llama.cpp/ggml/include
+
+  docs:
+    name: Docs (mkdocs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+
+      # --strict turns mkdocs warnings, such as a link to a page that does not
+      # exist, into a failure.
+      - name: mkdocs build
+        working-directory: docs
+        run: uv run mkdocs build --strict
+
+  python-sdk:
+    name: Python SDK and MCP server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # dusk_py depends on dusk_capnp, whose build.rs compiles the Cap'n
+          # Proto compiler out of vendor/capnproto. It does not depend on
+          # dusk_llm, so this job never touches the model.
+          submodules: false
+
+      - name: Check out vendor/capnproto
+        run: git submodule update --init --depth 1 vendor/capnproto
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+
+      # maturin drives cargo, which needs the nightly that
+      # rust-toolchain.toml pins: .cargo/config.toml passes -Zmacro-backtrace
+      # and sets the unstable public-dependency flag, neither of which stable
+      # accepts.
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Restore the cargo home and target directory
+        id: cargo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: sdk-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: sdk-${{ runner.os }}-
+
+      # The same command tests/scripts/maturin-develop.sh runs, so the SDK is
+      # built here exactly as it is for the test suite.
+      - name: Build the SDK
+        run: uv run maturin develop --uv -m artifacts/dusk_py/Cargo.toml
+
+      # Building the MCP server means constructing its ASGI app: that resolves
+      # every tool's type hints and registers one tool per program in the
+      # link-time program set, so it fails if either the extension module or
+      # the tool definitions are broken.
+      - name: Build the MCP server
+        run: uv run python -c "import dusk, dusk.mcp; dusk.mcp.app()"
+
+      - name: Prune build artifacts too large to cache
+        if: github.event_name == 'push'
+        run: bash .github/scripts/prune-target.sh
+
+      - name: Save the cargo home and target directory
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: sdk-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}
+
+  rust:
+    name: Rust (fmt, clippy, node, client, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+
+      # rustup reads rust-toolchain.toml and installs the pinned nightly along
+      # with the rustfmt and clippy components it names.
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: taiki-e/install-action@v2
+        with:
+          # .config/nextest.toml requires at least this version.
+          tool: cargo-nextest@0.9.120
+
+      # The model is content-addressed by the sha256 in model.json, so this key
+      # changes only when the model does. It is restored rather than
+      # re-downloaded so that its modification time stays stable: dusk_llm's
+      # build.rs hashes the model's length and mtime into the key that decides
+      # whether the warm-up snapshot must be regenerated, and regenerating it
+      # runs the model over the whole system prompt.
+      - name: Restore the model
+        id: model-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: dusk/src/dusk_llm/models
+          key: model-${{ hashFiles('dusk/src/dusk_llm/model.json') }}
+
+      - name: Restore the cargo home and target directory
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: Disk before the build
+        run: df -h /
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build the node
+        run: cargo build -p dusk_node_bin
+
+      - name: Build the client
+        run: cargo build -p dusk_cli_bin
+
+      # The setup scripts in .config/nextest.toml build the CLI and run
+      # `maturin develop`, both of which reuse this job's target directory.
+      - name: cargo nextest run
+        run: cargo nextest run
+
+      - name: Disk after the build
+        if: always()
+        run: df -h /
+
+      # Saved whenever it was not restored, on pull requests too: the key is the
+      # hash of model.json, so the entry is immutable, and a run that had to
+      # download 2.9 GB from Hugging Face should spare the next one from doing
+      # the same. Once master holds the entry, every pull request restores it
+      # from there and this step is skipped. It runs even when an earlier step
+      # failed, so that a lint failure does not throw away a 2.9 GB download.
+      - name: Save the model
+        if: always() && steps.model-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: dusk/src/dusk_llm/models
+          key: model-${{ hashFiles('dusk/src/dusk_llm/model.json') }}
+
+      - name: Prune build artifacts too large to cache
+        if: github.event_name == 'push'
+        run: bash .github/scripts/prune-target.sh
+
+      - name: Save the cargo home and target directory
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}
