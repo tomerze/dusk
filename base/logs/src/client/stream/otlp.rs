@@ -29,7 +29,7 @@ enum State {
     },
 }
 
-/// A `LogsArgs.Server` stream that exports each batch to an OTLP/gRPC collector —
+/// A `LogsArgs.Stream` that exports each batch to an OTLP/gRPC collector —
 /// logs on the log signal, reconstructed spans on the trace signal.
 pub struct OtlpStream {
     state: Rc<Mutex<State>>,
@@ -56,8 +56,8 @@ impl Drop for OtlpStream {
     }
 }
 
-impl logs_args::server::Server for OtlpStream {
-    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+impl logs_args::stream::Server for OtlpStream {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
         let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
         let entries = dusk_capnp::pry!(signal_batch.get_signals());
         let ack = dusk_capnp::pry!(signal_batch.get_ack());
@@ -104,8 +104,8 @@ impl logs_args::server::Server for OtlpStream {
 
     fn stop(
         &mut self,
-        _params: logs_args::server::StopParams,
-        _results: logs_args::server::StopResults,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
     ) -> Promise<(), capnp::Error> {
         let stop = self.stop.clone();
         Promise::from_future(async move {

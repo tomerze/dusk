@@ -42,10 +42,11 @@ program crate    #[sh_entry] proc-macro writes JSON
                                  │
                                  ▼
 dusk_llm         build.rs:
-build.rs           1. cmake build vendor/llama.cpp → static archives
-(compile time)     2. cc warmup/main.c            → dusk_warmup binary
-                   3. read sh_entries + prompts/system.md → system prompt
-                   4. run dusk_warmup             → OUT_DIR/dusk_llm_kv_snapshot
+build.rs           1. fetch + verify model.json's gguf (first build only)
+(compile time)     2. cmake build vendor/llama.cpp → static archives
+                   3. cc warmup/main.c            → dusk_warmup binary
+                   4. read sh_entries + prompts/system.md → system prompt
+                   5. run dusk_warmup             → OUT_DIR/dusk_llm_kv_snapshot
                                  │
                                  ▼
 dusk_llm         binary embeds two blobs:
@@ -91,20 +92,40 @@ breaks an embassy macro.)
 
 `build.rs` runs in order:
 
-1. **Build `vendor/llama.cpp`** via `cmake` — static libs only, tools/examples/
+1. **Fetch and verify the model** — `model.json` holds the `url` the GGUF is
+   fetched from, the `file` it is saved as, the SHA-256 its bytes must have, and
+   the `directory` it lands in (relative to the crate root). The URL must
+   address one immutable set of bytes — pin a commit, a digest or a version,
+   never a branch — so the host cannot start serving different weights. Nothing
+   in the manifest is specific to a particular host; the current URL happens to
+   be a Hugging Face commit. If `directory/file` is absent it is downloaded
+   (2.89 GiB) with [`fast-down`](https://crates.io/crates/fast-down) over six
+   connections at once, because a single one is throttled well below a fast
+   link — 15 MiB/s against 28 MiB/s on a 280 Mbit line. It lands via a
+   `.partial` file, so an interrupted download is never mistaken for a complete
+   model. Whether it was just downloaded or was already there, its SHA-256 is
+   checked. A mismatch fails the build and removes nothing — the GGUF is
+   embedded verbatim into the binary, so building on unknown bytes is never the
+   lesser evil; delete the file and build again to re-fetch it. This is the only
+   step that needs the network, and only on the first build.
+
+   `directory` and `file` are also the only place the model's location is
+   written down: `build.rs` passes the resulting path to `rustc` as
+   `DUSK_LLM_MODEL_PATH`, which is what `src/load.rs` `.incbin`s in stage 3.
+2. **Build `vendor/llama.cpp`** via `cmake` — static libs only, tools/examples/
    server off, `GGML_OPENMP=ON`. Host CPU features (`avx2`, `fma`, …) are
    mapped from `CARGO_CFG_TARGET_FEATURE` to `GGML_*` defines. `libstdc++`,
    `libgcc`, and OpenMP are linked statically too; only `pthread`/`m`/`dl`
    stay dynamic.
-2. **Compile the warm-up tool** — `warmup/main.c` (~220 lines of C11) is linked
-   against the archives from step 1 into an `OUT_DIR/dusk_warmup` executable. It
+3. **Compile the warm-up tool** — `warmup/main.c` (~220 lines of C11) is linked
+   against the archives from step 2 into an `OUT_DIR/dusk_warmup` executable. It
    has to be a separate binary because a build script can't link itself against
    a library it just produced.
-3. **Compose the system prompt** — glob `target/.dusk_sh_entries/*.json` (sorted
+4. **Compose the system prompt** — glob `target/.dusk_sh_entries/*.json` (sorted
    by name) and splice them into the `{{PROGRAMS}}` placeholder of
    `prompts/system.md`. That template holds the persona, the dusk grammar, the
    strict JSON output contract, and few-shot examples in Gemma turn structure.
-4. **Run `dusk_warmup`** with `model n_ctx kv_type n_threads out_path prompt`,
+5. **Run `dusk_warmup`** with `model n_ctx kv_type n_threads out_path prompt`,
    where the prompt is `<|turn>user\n{system_prompt}` — a deliberately
    *half-open* user turn. It loads the GGUF, tokenizes the prompt
    (`add_special=true`, `parse_special=true` so Gemma's chat markers become

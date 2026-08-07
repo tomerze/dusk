@@ -291,24 +291,37 @@ and the client stream are wired underneath.
 
 The node side has two output shapes, chosen by the `dump` bit of
 `LogsArgs.Data.flags`. Without it, the node drives a client-hosted
-`LogsArgs.Server` (`view` and `stream`); with it, the node emits the signals as
+`LogsArgs.Stream` (`view` and `stream`); with it, the node emits the signals as
 Dusk values on the command's own output stream (`dump`). The other two flag bits,
 `replay` and `follow`, pick the `Reader`'s start and whether it tails. The
 callback path is described next; the values path follows.
 
-On the callback path the node side is deliberately dumb. `LogsArgs.Server` has two methods —
+On the callback path the client hosts two capabilities, and the split is what
+keeps a destination from being opened before the command runs. `LogsArgs.Server`
+— the args' `server` half — has one method, `openStream()`, and it is a builder:
+it holds *how* to make the stream, not a made one. The node calls it from the
+`logs` process's `main`, before the process signals ready. Everything the client
+opens — the pager's alternate screen, a file, a collector connection — is opened
+inside that call, so building a command's args opens nothing: `hi () { logs }`
+defines a function, and the shell compiles the word `logs` into `ProgramArgs`
+through the client callback right then, long before `hi` is ever run.
+
+What `openStream` returns is the stream itself, and there the node side is
+deliberately dumb. `LogsArgs.Stream` has two methods —
 `send(entries)` (capnp-streaming) and `stop()`, a long-poll mirroring the shell's
 `ShStop`. The node-side process mints a replay-then-follow `Reader`, streams
 batched signals into `send` never knowing what receives them, and holds one
 pending `stop()` call. A batch is whatever the buffer holds when a send is
 possible: awaiting `send` is the flow-control gate (capnp streaming credit), and
 while it withholds, the ring gathers the next batch — batch sizes follow the
-client's absorption rate, no timers in the path. When the client answers the
-long-poll, that is the node's cue to finish `output()`, after which the shell
-kills the process. A failed `send` keeps its batch and retries, paced by the
-round-trip; only the connection dying ends the stream early.
+client's absorption rate, no timers in the path. The streaming is `main`'s own
+work, so when the client answers the long-poll `main` returns and the process
+exits on its own; `output()`, which until then only held the command's output
+stream open, finishes it, and the shell reaps the process it finds already gone.
+A failed `send` keeps its batch and retries, paced by the round-trip; only the
+connection dying ends the stream early.
 
-Which `LogsArgs.Server` the node talks to is the client's choice — the viewer, or
+Which `LogsArgs.Stream` the node talks to is the client's choice — the viewer, or
 one of the streaming sinks. Every sink consumes the same `send` and converts the
 capnp wire form — which mirrors the OTLP proto field-for-field — once into its
 output: OTLP/JSON for `file://` and `http(s)://`, OTLP/gRPC for `otlp://`. The
@@ -319,8 +332,10 @@ columns. The network sinks retry a failed connection indefinitely, paced by the
 send round-trip rather than a timer, and awaiting that retry is itself the
 backpressure — a down collector parks the node the way a paused viewer does.
 
-The values path (`dump`, the `dump` flag bit set) skips the `LogsArgs.Server`
-entirely. The same node-side `Reader` drains the buffer, but each signal is
+The values path (`dump`, the `dump` flag bit set) leaves `LogsArgs.Server`
+unused and never reaches a `LogsArgs.Stream` — `main` never calls `openStream`,
+and the builder a `dump` command carries fails if it ever is
+called. The same node-side `Reader` drains the buffer, but each signal is
 converted into a `Value::Record` (tagged with `signalTypeId`, its attributes a
 nested record tagged with `attributesTypeId`) and sent on the
 output stream the shell already handed every program — the channel `ps` and the

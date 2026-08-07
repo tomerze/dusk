@@ -15,25 +15,42 @@ pub use http::HttpStream;
 pub use otlp::OtlpStream;
 pub use viewer::ViewerStream;
 
-/// Build the built-in stream for a `logs stream` URL. The viewer has no url; it
-/// is constructed directly ([`ViewerStream`]).
-pub(crate) fn parse(url: &str, namespace_id: u64) -> Result<logs_args::server::Client> {
-    let server: logs_args::server::Client = if let Some(path) = url.strip_prefix("file://") {
+pub type StreamBuilder = Box<dyn Fn() -> Result<logs_args::stream::Client>>;
+
+pub(crate) fn parse(url: &str, namespace_id: u64) -> Result<StreamBuilder> {
+    if let Some(path) = url.strip_prefix("file://") {
         if path.is_empty() {
             bail!("file:// needs a path: {url}");
         }
-        capnp_rpc::new_client(FileStream::new(PathBuf::from(path), namespace_id))
+        let path = PathBuf::from(path);
+        Ok(Box::new(move || {
+            Ok(capnp_rpc::new_client(FileStream::new(
+                path.clone(),
+                namespace_id,
+            )))
+        }))
     } else if let Some(authority) = url.strip_prefix("otlp://") {
         if authority.is_empty() {
             bail!("otlp:// needs a host:port: {url}");
         }
-        capnp_rpc::new_client(OtlpStream::new(format!("http://{authority}"), namespace_id))
+        let endpoint = format!("http://{authority}");
+        Ok(Box::new(move || {
+            Ok(capnp_rpc::new_client(OtlpStream::new(
+                endpoint.clone(),
+                namespace_id,
+            )))
+        }))
     } else if url.starts_with("http://") || url.starts_with("https://") {
-        capnp_rpc::new_client(HttpStream::new(url.to_string(), namespace_id))
+        let url = url.to_string();
+        Ok(Box::new(move || {
+            Ok(capnp_rpc::new_client(HttpStream::new(
+                url.clone(),
+                namespace_id,
+            )))
+        }))
     } else {
         bail!("unsupported url: {url} (expected file://, otlp://, http:// or https://)")
-    };
-    Ok(server)
+    }
 }
 
 pub(crate) async fn acknowledge(ack: signal_batch::ack::Client) {

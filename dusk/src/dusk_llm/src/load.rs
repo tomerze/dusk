@@ -13,13 +13,14 @@ use crate::ffi::{
 };
 
 // Embed the GGUF into the binary via `.incbin` in a NON-ALLOC section.
+// `build.rs` sets `DUSK_LLM_MODEL_PATH` from the `directory` and `file` in
+// `model.json`, which is also where it downloaded and verified those bytes.
 core::arch::global_asm!(concat!(
     ".section .llm_gguf, \"R\", @progbits\n",
     ".global llm_gguf_start\n",
     "llm_gguf_start:\n",
     ".incbin \"",
-    env!("CARGO_MANIFEST_DIR"),
-    "/models/gemma-4-E2B-it-Q4_K_M.gguf",
+    env!("DUSK_LLM_MODEL_PATH"),
     "\"\n",
     "llm_gguf_end:\n",
     ".global llm_gguf_end\n",

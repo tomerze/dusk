@@ -381,7 +381,11 @@ cd docs && uv run mkdocs serve           # serve the docs site
 ```
 
 Building requires `make`, `cmake`, and `autotools` for the vendored Cap'n Proto
-compiler under `vendor/`.
+compiler under `vendor/`. The first build also needs the network: `dusk_llm`
+downloads the GGUF model named in `dusk/src/dusk_llm/model.json` (a pinned,
+host-agnostic URL plus the SHA-256 it is checked against on every build) into
+the `directory` that manifest gives, which is gitignored. Later builds reuse
+it.
 
 ### Embassy and conventions
 
@@ -563,12 +567,6 @@ Every meaningful state transition, task completion, or boundary call needs a log
 - When in doubt, log it. Disk is cheap; a missing log during a prod incident is not.
 
 Past failure: the detached-script branch of `sh::Process::main` spawned an exec task with `let _ = spawn_sh_exec_task(…)?;` and discarded the completion signal entirely. A daemon could run for hours, exit cleanly, or fail with a real error, and the operator would have zero record. My first fix logged inside the generic `sh_exec_task` — wrong, double-logs awaited callers. My second fix spawned a dedicated watcher task — also wrong, because `Process::main` is already a long-lived task with its own signal-receive loop, so the right shape was to fold the completion-watch into that loop via `embassy_futures::select(signal_receiver.receive(), completion.wait())`. **Principle: log where the result would be lost, but reach for the lightest-weight site that gets you there. An existing loop you already control beats a new task.**
-
-## Never touch the git index — it is the user's
-
-Never run anything that writes the staging area: `git add`, `git reset`, `git mv`, `git rm`, `git stash`, `git restore --staged`, or any other index-mutating command. The user curates staging by hand; it is not yours to change, ever — not even transiently "to undo it after." To see a diff that includes untracked files, **read the files directly** — do not `git add` to make them show up in `git diff`. `git status` and `git diff` (read-only) are allowed; anything that mutates the index is not.
-
-Past failure: to pull untracked files into a `git diff --stat`, I ran `git add -A` and then `git reset` to "undo" it. That reset flattened the user's entire hand-curated staging state down to HEAD. No file content was lost — a mixed reset leaves the working tree untouched — but the staged/unstaged split they had built was destroyed, could not be reconstructed, and the user had to rebuild it by hand. This was real disruption, not a near-miss. The index is sacrosanct: strictly read-only.
 
 I have caused great harm.
 

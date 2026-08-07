@@ -2,6 +2,9 @@
 #![feature(prelude_import)]
 #![cfg_attr(not(any(feature = "client", test)), no_std)]
 
+use alloc::rc::Rc;
+use dusk_program::embassy_futures::select::{Either, select};
+use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::{ready::Ready, signal::SignalReceiver};
 // `::tracing` (the crate), disambiguated from this crate's own `tracing` module.
 use ::tracing::Instrument;
@@ -78,6 +81,14 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 #[derive(Clone, dusk_program_proc::Process)]
 pub struct Process {
     pub buffer: SignalBuffer,
+    minimum_severity: u16,
+    start_position: StartPosition,
+    follow: bool,
+    dump: bool,
+    /// Signalled when `main` has finished streaming to the client's stream, so
+    /// the portal's `output` can finish the command's output stream and return.
+    /// Unused by `dump`, which streams from the portal itself.
+    streamer_done: Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, ()>>,
     #[process_context]
     pub ctx: ProcessContext,
 }
@@ -87,7 +98,32 @@ impl Process {
         ctx: ProcessContext,
         buffer: SignalBuffer,
     ) -> anyhow::Result<Self> {
-        Ok(Process { ctx, buffer })
+        let (minimum_severity, start_position, follow, dump) =
+            ctx.program_args
+                .with_data::<logs_capnp::logs_args::data::Owned, _, _>(|data| {
+                    let minimum_severity = data.get_level().map(|level| level as u16).unwrap_or(0);
+                    let flags = data.get_flags();
+                    let start_position = if flags & FLAG_REPLAY != 0 {
+                        StartPosition::Replay
+                    } else {
+                        StartPosition::Live
+                    };
+                    Ok((
+                        minimum_severity,
+                        start_position,
+                        flags & FLAG_FOLLOW != 0,
+                        flags & FLAG_DUMP != 0,
+                    ))
+                })?;
+        Ok(Process {
+            ctx,
+            buffer,
+            minimum_severity,
+            start_position,
+            follow,
+            dump,
+            streamer_done: Rc::new(dusk_program::embassy_sync::signal::Signal::new()),
+        })
     }
 }
 
@@ -105,14 +141,46 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        ready.sender().send(true);
-        loop {
-            let signal = signal_receiver.receive().await;
-            match signal {
-                Signal::Terminate => return Ok(()),
-                Signal::Unknown(_signal) => {}
+        if self.dump {
+            ready.sender().send(true);
+            loop {
+                let signal = signal_receiver.receive().await;
+                match signal {
+                    Signal::Terminate => return Ok(()),
+                    Signal::Unknown(_signal) => {}
+                }
             }
         }
+
+        // The client opens its stream here, where the process is already
+        // running — never when its args were built.
+        let server: logs_capnp::logs_args::server::Client = self.ctx.program_args.server_as()?;
+        let response = server.open_stream_request().send().promise.await?;
+        let stream = response.get()?.get_stream()?;
+        ::tracing::info!(pid = self.ctx.pid, "the client opened its logs stream");
+        ready.sender().send(true);
+
+        let dusk_client = dusk_core::local_client(self.ctx.namespace.clone()).await;
+        let mut reader = self.buffer.reader(self.start_position, dusk_client).await?;
+        let streamer = streamer::Streamer::<8>::new(128, 1024);
+        let span = ::tracing::info_span!("logs_stream", pid = self.ctx.pid);
+        let streaming = streamer
+            .stream(&mut reader, &stream, self.minimum_severity, self.follow)
+            .instrument(span);
+        let terminated = async {
+            loop {
+                match signal_receiver.receive().await {
+                    Signal::Terminate => return,
+                    Signal::Unknown(_signal) => {}
+                }
+            }
+        };
+        let streaming_result = match select(streaming, terminated).await {
+            Either::First(streaming_result) => streaming_result,
+            Either::Second(()) => Ok(()),
+        };
+        self.streamer_done.signal(());
+        Ok(streaming_result?)
     }
 }
 
@@ -134,45 +202,30 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         let process = self.process.clone();
         Promise::from_future(async move {
-            let stream_result = async {
-                let (minimum_severity, start_position, follow, dump) =
-                    process
-                        .ctx
-                        .program_args
-                        .with_data::<logs_capnp::logs_args::data::Owned, _, _>(|data| {
-                            let minimum_severity =
-                                data.get_level().map(|level| level as u16).unwrap_or(0);
-                            let flags = data.get_flags();
-                            let start_position = if flags & FLAG_REPLAY != 0 {
-                                StartPosition::Replay
-                            } else {
-                                StartPosition::Live
-                            };
-                            let follow = flags & FLAG_FOLLOW != 0;
-                            let dump = flags & FLAG_DUMP != 0;
-                            Ok((minimum_severity, start_position, follow, dump))
-                        })?;
-                let dusk_client = dusk_core::local_client(process.ctx.namespace.clone()).await;
-                let mut reader = process.buffer.reader(start_position, dusk_client).await?;
-                let span = ::tracing::info_span!("logs_stream", pid = process.ctx.pid);
-                if dump {
-                    dump::dump(&mut reader, &stream, minimum_severity, follow)
-                        .instrument(span)
-                        .await?;
-                } else {
-                    let server: logs_capnp::logs_args::server::Client =
-                        process.ctx.program_args.server_as()?;
-                    let streamer = streamer::Streamer::<8>::new(128, 1024);
-                    let streaming = streamer.stream(&mut reader, &server, minimum_severity, follow);
-                    if let Err(error) = streaming.instrument(span).await {
-                        ::tracing::warn!(error = %error, "the logs stream failed");
-                    }
+            let dump_result = async {
+                if !process.dump {
+                    process.streamer_done.wait().await;
+                    return Ok(());
                 }
+                let dusk_client = dusk_core::local_client(process.ctx.namespace.clone()).await;
+                let mut reader = process
+                    .buffer
+                    .reader(process.start_position, dusk_client)
+                    .await?;
+                let span = ::tracing::info_span!("logs_dump", pid = process.ctx.pid);
+                dump::dump(
+                    &mut reader,
+                    &stream,
+                    process.minimum_severity,
+                    process.follow,
+                )
+                .instrument(span)
+                .await?;
                 Ok::<(), capnp::Error>(())
             }
             .await;
             stream.done_request().send().promise.await?;
-            stream_result
+            dump_result
         })
     }
 }

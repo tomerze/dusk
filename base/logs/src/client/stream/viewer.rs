@@ -39,7 +39,7 @@ const TRIM_CHUNK: usize = 4_096;
 /// timestamp or level.
 const WRAP_MARGIN: usize = 19;
 
-/// A `LogsArgs.Server` stream that pages the node's logs in an interactive
+/// A `LogsArgs.Stream` that pages the node's logs in an interactive
 /// terminal viewer. Unlike the other streams it can't write on `send` — the
 /// pager UI runs concurrently — so `send` feeds the pager's bounded channel
 /// (the backpressure) and the pager drains it; `stop` is answered when the user
@@ -90,8 +90,8 @@ impl Default for ViewerStream {
     }
 }
 
-impl logs_args::server::Server for ViewerStream {
-    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+impl logs_args::stream::Server for ViewerStream {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
         let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
         let entries = dusk_capnp::pry!(signal_batch.get_signals());
         let ack = dusk_capnp::pry!(signal_batch.get_ack());
@@ -115,8 +115,8 @@ impl logs_args::server::Server for ViewerStream {
 
     fn stop(
         &mut self,
-        _params: logs_args::server::StopParams,
-        _results: logs_args::server::StopResults,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
     ) -> Promise<(), capnp::Error> {
         let stop = self.stop.clone();
         Promise::from_future(async move {

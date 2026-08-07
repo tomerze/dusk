@@ -18,5 +18,5 @@
 /**/dusk*.so
 /.github
 /.claude/settings.local.json
-/dusk/src/dusk_llm/models/*.gguf
+/dusk/src/dusk_llm/models/*
 .superpowers/

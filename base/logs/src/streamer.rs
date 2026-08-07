@@ -79,20 +79,20 @@ impl<const MAX_INFLIGHT: usize> Streamer<MAX_INFLIGHT> {
     pub(crate) async fn stream(
         &self,
         reader: &mut Reader,
-        server: &logs_args::server::Client,
+        stream: &logs_args::stream::Client,
         minimum_severity: u16,
         follow: bool,
     ) -> capnp::Result<()> {
         self.resend_queue.clear();
         self.inflight.store(0, Ordering::Relaxed);
 
-        let stop = server.stop_request().send().promise;
+        let stop = stream.stop_request().send().promise;
 
         let streaming = async {
             loop {
                 embassy_futures::yield_now().await;
                 let outcome = match self.drain(reader, minimum_severity) {
-                    Ok(Some(batch)) => self.send_batch(server, batch).await,
+                    Ok(Some(batch)) => self.send_batch(stream, batch).await,
                     Ok(None) => Ok(()),
                     Err(error) => Err(error),
                 };
@@ -143,10 +143,10 @@ impl<const MAX_INFLIGHT: usize> Streamer<MAX_INFLIGHT> {
 
     async fn send_batch(
         &self,
-        server: &logs_args::server::Client,
+        stream: &logs_args::stream::Client,
         signals: Vec<SignalBuilder>,
     ) -> capnp::Result<()> {
-        let mut request = server.send_request();
+        let mut request = stream.send_request();
         let mut signal_batch = request.get().init_signal_batch();
         {
             let mut list = signal_batch.reborrow().init_signals(signals.len() as u32);

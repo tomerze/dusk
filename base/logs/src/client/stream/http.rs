@@ -18,7 +18,7 @@ struct Target {
     url: String,
 }
 
-/// A `LogsArgs.Server` stream that POSTs each signal as an OTLP/JSON document.
+/// A `LogsArgs.Stream` that POSTs each signal as an OTLP/JSON document.
 pub struct HttpStream {
     target: Result<Target, String>,
     stop: Rc<Notify>,
@@ -44,8 +44,8 @@ impl Drop for HttpStream {
     }
 }
 
-impl logs_args::server::Server for HttpStream {
-    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+impl logs_args::stream::Server for HttpStream {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
         let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
         let entries = dusk_capnp::pry!(signal_batch.get_signals());
         let ack = dusk_capnp::pry!(signal_batch.get_ack());
@@ -84,8 +84,8 @@ impl logs_args::server::Server for HttpStream {
 
     fn stop(
         &mut self,
-        _params: logs_args::server::StopParams,
-        _results: logs_args::server::StopResults,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
     ) -> Promise<(), capnp::Error> {
         let stop = self.stop.clone();
         Promise::from_future(async move {
@@ -116,7 +116,7 @@ async fn post(client: &reqwest::Client, url: &str, batch: &[serde_json::Value]) 
 fn build_client() -> Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder();
     if std::env::var_os("DUSK_CLIENT_SKIP_TLS_VERIFY").is_some() {
-        builder = builder.danger_accept_invalid_certs(true);
+        builder = builder.tls_danger_accept_invalid_certs(true);
     }
     builder.build().context("building the http client")
 }
