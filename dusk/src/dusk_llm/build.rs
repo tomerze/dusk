@@ -95,11 +95,19 @@ fn main() -> Result<()> {
     // that determine its contents are byte-for-byte unchanged: a stale
     // rerun-if-changed trigger (e.g. an unrelated program recompiling and
     // touching .dusk_sh_entries) must not force a regeneration.
-    // The ik_llama.cpp archive is one of those inputs: it writes the snapshot
-    // in a versioned session format, so a snapshot from another revision of it
-    // is not interchangeable.
+    // ik_llama.cpp is one of those inputs: it writes the snapshot in a
+    // versioned session format, so a snapshot another revision of it wrote is
+    // not interchangeable. Both its checked-out commit and the archive built
+    // from that commit go into the key — the commit identifies the source, the
+    // archive identifies what was actually compiled from it.
     let mut hasher = DefaultHasher::new();
-    (&prompt_text, CONTEXT_TOKENS, KV_CACHE_TYPE).hash(&mut hasher);
+    (
+        &prompt_text,
+        CONTEXT_TOKENS,
+        KV_CACHE_TYPE,
+        ik_llama_revision(&ik_llama_src)?,
+    )
+        .hash(&mut hasher);
     for path in [&model_path, &archive_directories[0].join("libllama.a")] {
         let file = fs::metadata(path).with_context(|| format!("reading {}", path.display()))?;
         let modified = file
@@ -148,6 +156,21 @@ fn main() -> Result<()> {
         fs::metadata(&state_path)?.len(),
     );
     Ok(())
+}
+
+/// The commit `vendor/ik_llama.cpp` is checked out at. The submodule is
+/// fetched with git, so git is available wherever this builds.
+fn ik_llama_revision(source: &Path) -> Result<String> {
+    let output = run(
+        Command::new("git")
+            .arg("-C")
+            .arg(source)
+            .args(["rev-parse", "HEAD"]),
+        "`git rev-parse HEAD` in vendor/ik_llama.cpp",
+    )?;
+    let revision = String::from_utf8(output.stdout)
+        .context("reading the revision git reported for vendor/ik_llama.cpp")?;
+    Ok(revision.trim().to_owned())
 }
 
 fn ensure_model(crate_root: &Path) -> Result<PathBuf> {
