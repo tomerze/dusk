@@ -23,7 +23,7 @@ enum State {
     },
 }
 
-/// A `LogsArgs.Server` stream that appends OTLP/JSON signals, one per line, to
+/// A `LogsArgs.Stream` that appends OTLP/JSON signals, one per line, to
 /// a file.
 pub struct FileStream {
     state: Rc<Mutex<State>>,
@@ -47,8 +47,8 @@ impl Drop for FileStream {
     }
 }
 
-impl logs_args::server::Server for FileStream {
-    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+impl logs_args::stream::Server for FileStream {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
         let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
         let entries = dusk_capnp::pry!(signal_batch.get_signals());
         let ack = dusk_capnp::pry!(signal_batch.get_ack());
@@ -79,8 +79,8 @@ impl logs_args::server::Server for FileStream {
 
     fn stop(
         &mut self,
-        _params: logs_args::server::StopParams,
-        _results: logs_args::server::StopResults,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
     ) -> Promise<(), capnp::Error> {
         let stop = self.stop.clone();
         Promise::from_future(async move {

@@ -1,6 +1,5 @@
 use super::*;
 use crate::logs_capnp::logs_args;
-use capnp::capability::FromClientHook as _;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
@@ -39,16 +38,18 @@ fn severity_floor(level: &str) -> log_record_capnp::SeverityNumber {
     }
 }
 
+#[derive(dusk_program_proc::Args)]
 pub struct LogsArgs {
+    #[data]
     data: ArgsDataBuilder,
-    server: Option<logs_args::server::Client>,
+    build_stream: stream::StreamBuilder,
 }
 
 impl LogsArgs {
     pub fn new(
         minimum_level: Option<log_record_capnp::SeverityNumber>,
         flags: u8,
-        server: Option<logs_args::server::Client>,
+        build_stream: impl Fn() -> anyhow::Result<logs_args::stream::Client> + 'static,
     ) -> Self {
         let mut data = ArgsDataBuilder::new_default();
         {
@@ -58,26 +59,29 @@ impl LogsArgs {
             }
             root.set_flags(flags);
         }
-        LogsArgs { data, server }
-    }
-
-    pub fn as_program_args(self) -> capnp::Result<Rc<ProgramArgs>> {
-        let owned = ProgramArgs::new();
-        owned.with_root_builder(|mut root| {
-            root.set_program_id(PROGRAM_ID);
-            let mut data_dest = root.init_args().init_data();
-            let data_reader = self.data.get_root_as_reader()?;
-            data_dest.set_as::<logs_capnp::logs_args::data::Owned>(data_reader)
-        })?;
-        if let Some(server) = self.server {
-            owned.with_root_builder(|root| {
-                root.get_args()
-                    .init_server()
-                    .set_as_capability(server.into_client_hook());
-                Ok(())
-            })?;
+        LogsArgs {
+            data,
+            build_stream: Box::new(build_stream),
         }
-        Ok(Rc::new(owned))
+    }
+}
+
+#[dusk_program_proc::impl_args_rpc_server]
+impl LogsArgs {
+    fn open_stream(
+        &mut self,
+        _params: logs_args::server::OpenStreamParams,
+        mut results: logs_args::server::OpenStreamResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        match (self.build_stream)() {
+            Ok(stream) => {
+                results.get().set_stream(stream);
+                capnp::capability::Promise::ok(())
+            }
+            Err(error) => {
+                capnp::capability::Promise::err(capnp::Error::failed(format!("{error:#}")))
+            }
+        }
     }
 }
 
@@ -95,7 +99,7 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
         } else {
             FLAG_REPLAY | FLAG_FOLLOW
         };
-        let server = match cli.command.as_deref() {
+        let build_stream: stream::StreamBuilder = match cli.command.as_deref() {
             Some("stream") => {
                 let url = cli
                     .url
@@ -108,14 +112,16 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
                     .await?
                     .get()?
                     .get_result();
-                Some(stream::parse(url, namespace_id)?)
+                stream::parse(url, namespace_id)?
             }
             Some("dump") => {
                 if let Some(url) = &cli.url {
                     anyhow::bail!("`logs dump` takes no url: {url}");
                 }
                 flags |= FLAG_DUMP;
-                None
+                // `dump` streams Dusk values on the command's own output stream,
+                // so the node never asks for one of these.
+                Box::new(|| anyhow::bail!("`logs dump` has no client stream"))
             }
             _ => {
                 if let Some(url) = &cli.url {
@@ -136,10 +142,10 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
                          the live logs, use `logs dump`."
                     );
                 }
-                Some(capnp_rpc::new_client(stream::ViewerStream::new()))
+                Box::new(|| Ok(capnp_rpc::new_client(stream::ViewerStream::new())))
             }
         };
-        Ok(LogsArgs::new(minimum_level, flags, server).as_program_args()?)
+        Ok(LogsArgs::new(minimum_level, flags, build_stream).as_program_args()?)
     }
 }
 

@@ -17,15 +17,15 @@ pub fn gen_port() -> u16 {
     rng.random_range(1001..=65535)
 }
 
-/// A `LogsArgs.Server` that records the body of every ERROR-severity entry the
+/// A `LogsArgs.Stream` that records the body of every ERROR-severity entry the
 /// node streams to it — the harness's error monitor, hosted directly rather
 /// than going through `logs stream <url>`.
 struct ErrorCaptureStream {
     errors: Arc<Mutex<Vec<String>>>,
 }
 
-impl logs_args::server::Server for ErrorCaptureStream {
-    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+impl logs_args::stream::Server for ErrorCaptureStream {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
         let signal_batch = match params.get().and_then(|params| params.get_signal_batch()) {
             Ok(signal_batch) => signal_batch,
             Err(error) => return Promise::err(error),
@@ -59,8 +59,8 @@ impl logs_args::server::Server for ErrorCaptureStream {
 
     fn stop(
         &mut self,
-        _params: logs_args::server::StopParams,
-        _results: logs_args::server::StopResults,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
     ) -> Promise<(), capnp::Error> {
         // Long-poll: the monitor streams for the node's whole lifetime.
         Promise::from_future(std::future::pending())
@@ -129,12 +129,12 @@ impl DuskNixImpl {
                     return;
                 };
                 let client = connection.client().await;
-                let server: logs_args::server::Client = capnp_rpc::new_client(ErrorCaptureStream {
-                    errors: monitor_errors,
-                });
-                let Ok(program_args) =
-                    LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, Some(server)).as_program_args()
-                else {
+                let Ok(program_args) = LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, move || {
+                    Ok(capnp_rpc::new_client(ErrorCaptureStream {
+                        errors: monitor_errors.clone(),
+                    }))
+                })
+                .as_program_args() else {
                     return;
                 };
 

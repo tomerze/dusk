@@ -41,13 +41,13 @@ struct LogsArgs {
     level @0 :LogRecord.SeverityNumber;
     flags @1 :UInt8;
   }
-  interface Server {
-    # Streams signals (log records and spans) to the client. Where they land is
-    # the client's choice (its command line; the viewer by default) — the node
-    # doesn't know. A failed send is retried.
-    send @0 (signal_batch :SignalBatch) -> StreamResult;
+  interface Stream {
+    send @0 (signal_batch :SignalBatch) -> stream;
     # Long-poll, the client answers when its time to stop
     stop @1 () -> ();
+  }
+  interface Server {
+    openStream @0 () -> (stream :Stream);
   }
 }
 

@@ -1,7 +1,7 @@
 //! End-to-end tests for the node's log streams: drive an in-process node and
 //! assert its log records reach each stream — an HTTP collector, an HTTPS
 //! collector (self-signed), and an OTLP/gRPC collector (all via the
-//! `logs stream <url>` shell path), plus a custom in-memory `LogsArgs.Server`
+//! `logs stream <url>` shell path), plus a custom in-memory `LogsArgs.Stream`
 //! an external author could write (driven straight through the SDK, since a
 //! custom stream has no url).
 //!
@@ -235,7 +235,7 @@ async fn spawn_grpc_collector() -> (String, Arc<Mutex<Vec<OtlpLogRecord>>>) {
     (format!("otlp://{address}"), received)
 }
 
-/// A custom in-memory stream: a `LogsArgs.Server` an external author could
+/// A custom in-memory stream: a `LogsArgs.Stream` an external author could
 /// write, capturing each streamed record's message body. No file, no collector,
 /// no console — it straps straight onto the stream interface and reads the capnp
 /// records itself.
@@ -243,8 +243,8 @@ struct CaptureStream {
     captured: Arc<Mutex<Vec<String>>>,
 }
 
-impl logs_args::server::Server for CaptureStream {
-    fn send(&mut self, params: logs_args::server::SendParams) -> Promise<(), capnp::Error> {
+impl logs_args::stream::Server for CaptureStream {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
         let signal_batch = match params.get().and_then(|params| params.get_signal_batch()) {
             Ok(signal_batch) => signal_batch,
             Err(error) => return Promise::err(error),
@@ -284,8 +284,8 @@ impl logs_args::server::Server for CaptureStream {
 
     fn stop(
         &mut self,
-        _params: logs_args::server::StopParams,
-        _results: logs_args::server::StopResults,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
     ) -> Promise<(), capnp::Error> {
         // Never stop on our own; the test tears the stream down by killing the
         // process once the marker has arrived.
@@ -309,14 +309,14 @@ async fn test_logs_stream_to_custom_stream() {
             let connection = Connection::connect(address).await.unwrap();
             let client = connection.client().await;
 
-            // Build the program args around our own stream — the SDK path,
-            // since a custom server has no `logs stream <url>` to type.
-            let server: logs_args::server::Client = capnp_rpc::new_client(CaptureStream {
-                captured: captured.clone(),
-            });
-            let program_args = LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, Some(server))
-                .as_program_args()
-                .unwrap();
+            let builder_captured = captured.clone();
+            let program_args = LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, move || {
+                Ok(capnp_rpc::new_client(CaptureStream {
+                    captured: builder_captured.clone(),
+                }))
+            })
+            .as_program_args()
+            .unwrap();
 
             let mut process_request = client.process_request();
             program_args
