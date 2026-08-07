@@ -19,6 +19,19 @@ Standalone skill for non-TDD workflows. Helps create clean, atomic commits by an
 git status && git diff && git diff --staged
 ```
 
+**A rebase in progress is a normal working state, not a blocker.** `git rebase -i`
+with `edit` is exactly how a commit gets split into atomic ones — the working tree
+you are asked to commit is usually the leftover of the commit being split. Do not
+raise it, do not warn about it, do not ask whether to proceed. Commit onto the
+detached HEAD as usual; `git rebase --continue` is the user's move, not yours.
+
+**Never put a timeout on a commit.** Pre-commit hooks stash the unstaged changes
+before they run. Killing the commit mid-hook — a timeout, a Ctrl-C — leaves that
+stash unrestored, and the user's uncommitted work is gone from the tree. Give the
+commit the maximum timeout available, or run it in the background. If a commit
+does get killed, the work is recoverable from the patch file named in the hook's
+`[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
+
 ### 2. Detect Mixed Concerns
 Look for files mixing:
 - Multiple features
@@ -47,10 +60,15 @@ For each group:
 2. Review: `git diff --staged`
 3. Test: Run tests, ensure pass
 4. Build: Run build if applicable, ensure success
-5. Commit: Use conventional commit format
+5. Commit: Write the message in the repository's own style
 6. Verify: `git log -1 --oneline`
 
-Conventional commit types: `feat|fix|refactor|docs|test|chore|perf|style`
+**No conventional-commit prefixes.** `feat:`, `fix:`, `chore:`, `docs:`,
+`refactor:` and the rest are banned. A subject line is one imperative sentence
+saying what the commit does — "Add the atomic-commit skill", "Bump sntpc to 0.11
+and sntpc-net-std to 1.3" — with no type, no scope, and no colon standing in for
+a verb. Read `git log --oneline -20` before writing the first message and match
+what is already there.
 
 ### 5. Final Check
 ```bash
@@ -62,7 +80,7 @@ git log --oneline -n <N>
 - IF no issue: ask if user wants to create one
   - IF user does not want to provider, leave it blank
 - IF yes: help write description, offer `gh issue create` or `glab issue create`
-  - Include in commits: `"feat: description (#42)"`
+  - Include in commits: `"Add the thing (#42)"`
 
 ## Guidelines
 **DO:** One logical change, include related tests, run tests, clear messages, issue numbers
