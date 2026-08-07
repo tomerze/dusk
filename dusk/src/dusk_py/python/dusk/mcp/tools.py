@@ -199,6 +199,6 @@ def _drain(output) -> str:
     for item in output:
         try:
             rendered.append(json.dumps(item, default=str))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             rendered.append(repr(item))
     return "\n".join(rendered)
