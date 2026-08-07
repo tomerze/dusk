@@ -382,9 +382,10 @@ cd docs && uv run mkdocs serve           # serve the docs site
 
 Building requires `make`, `cmake`, and `autotools` for the vendored Cap'n Proto
 compiler under `vendor/`. The first build also needs the network: `dusk_llm`
-downloads the GGUF model named in `dusk/src/dusk_llm/models/models.toml` (a
-pinned Hugging Face URL plus the SHA-256 it is checked against on every build)
-into that directory, which is gitignored. Later builds reuse it.
+downloads the GGUF model named in `dusk/src/dusk_llm/model.json` (a pinned,
+host-agnostic URL plus the SHA-256 it is checked against on every build) into
+the `directory` that manifest gives, which is gitignored. Later builds reuse
+it.
 
 ### Embassy and conventions
 

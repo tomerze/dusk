@@ -42,7 +42,7 @@ program crate    #[sh_entry] proc-macro writes JSON
                                  │
                                  ▼
 dusk_llm         build.rs:
-build.rs           1. fetch + verify models/*.gguf → models/ (first build only)
+build.rs           1. fetch + verify model.json's gguf (first build only)
 (compile time)     2. cmake build vendor/llama.cpp → static archives
                    3. cc warmup/main.c            → dusk_warmup binary
                    4. read sh_entries + prompts/system.md → system prompt
@@ -92,16 +92,26 @@ breaks an embassy macro.)
 
 `build.rs` runs in order:
 
-1. **Fetch and verify the model** — `models/models.toml` holds the GGUF's
-   download URL and the SHA-256 its bytes must have. The URL pins a Hugging Face
-   *commit* rather than a branch, so it cannot start serving different weights.
-   If `models/gemma-4-E2B-it-Q4_K_M.gguf` is absent it is downloaded (≈2.9 GB,
-   via a `.partial` file so an interrupted download is never mistaken for a
-   complete model); whether it was just downloaded or was already there, its
-   SHA-256 is checked. A mismatch fails the build and removes nothing — the GGUF
-   is embedded verbatim into the binary, so building on unknown bytes is never
-   the lesser evil; delete the file and build again to re-fetch it. This is the
-   only step that needs the network, and only on the first build.
+1. **Fetch and verify the model** — `model.json` holds the `url` the GGUF is
+   fetched from, the `file` it is saved as, the SHA-256 its bytes must have, and
+   the `directory` it lands in (relative to the crate root). The URL must
+   address one immutable set of bytes — pin a commit, a digest or a version,
+   never a branch — so the host cannot start serving different weights. Nothing
+   in the manifest is specific to a particular host; the current URL happens to
+   be a Hugging Face commit. If `directory/file` is absent it is downloaded
+   (2.89 GiB) with [`fast-down`](https://crates.io/crates/fast-down) over six
+   connections at once, because a single one is throttled well below a fast
+   link — 15 MiB/s against 28 MiB/s on a 280 Mbit line. It lands via a
+   `.partial` file, so an interrupted download is never mistaken for a complete
+   model. Whether it was just downloaded or was already there, its SHA-256 is
+   checked. A mismatch fails the build and removes nothing — the GGUF is
+   embedded verbatim into the binary, so building on unknown bytes is never the
+   lesser evil; delete the file and build again to re-fetch it. This is the only
+   step that needs the network, and only on the first build.
+
+   `directory` and `file` are also the only place the model's location is
+   written down: `build.rs` passes the resulting path to `rustc` as
+   `DUSK_LLM_MODEL_PATH`, which is what `src/load.rs` `.incbin`s in stage 3.
 2. **Build `vendor/llama.cpp`** via `cmake` — static libs only, tools/examples/
    server off, `GGML_OPENMP=ON`. Host CPU features (`avx2`, `fma`, …) are
    mapped from `CARGO_CFG_TARGET_FEATURE` to `GGML_*` defines. `libstdc++`,
