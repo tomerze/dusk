@@ -281,6 +281,10 @@ fn build_ik_llama(source: &Path) -> Result<PathBuf> {
         ("LLAMA_BUILD_SERVER", "OFF"),
         ("LLAMA_CURL", "OFF"),
         ("GGML_OPENMP", "ON"),
+        // Without this, ggml compiles `-march=native` and the result only runs
+        // on the machine that built it, or on one whose instruction set is a
+        // superset. Off, the baseline below decides instead.
+        ("GGML_NATIVE", "OFF"),
         // The CPU kernels this fork exists for: its quantized matrix
         // multiplications and its FlashAttention, compiled for every
         // quantization so the Q8_0 KV cache is covered. All three default to
@@ -295,6 +299,23 @@ fn build_ik_llama(source: &Path) -> Result<PathBuf> {
         config.define(define, value);
     }
 
+    // With `GGML_NATIVE` off, ik_llama.cpp leaves every instruction-set option
+    // off as well, which compiles no SIMD at all — and its IQK kernels, the
+    // reason for this fork, are `#if defined __AVX2__`, so they would vanish
+    // silently (the build in fact stops earlier, on a header of theirs that
+    // only compiles once some SIMD path has pulled in <cstdint>). So x86-64
+    // gets an explicit floor: AVX2 with FMA and F16C, i.e. any Haswell or
+    // newer, 2013 onwards. aarch64 needs no floor — ggml compiles NEON
+    // unconditionally there.
+    let target_architecture =
+        env::var("CARGO_CFG_TARGET_ARCH").context("CARGO_CFG_TARGET_ARCH is not set")?;
+    if target_architecture == "x86_64" {
+        for flag in ["GGML_AVX", "GGML_AVX2", "GGML_FMA", "GGML_F16C"] {
+            config.define(flag, "ON");
+        }
+    }
+
+    // Anything the target asks for beyond that floor is added on top.
     let target_features =
         env::var("CARGO_CFG_TARGET_FEATURE").context("CARGO_CFG_TARGET_FEATURE is not set")?;
     for (feature, flag) in FEATURE_TO_GGML_FLAG {
