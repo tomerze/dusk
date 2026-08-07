@@ -10,6 +10,12 @@ on:
   push:
     branches: [master]
 
+# Every job only reads the repository. Naming that here overrides whatever the
+# repository's default token permissions are, so a compromised dependency
+# cannot use GITHUB_TOKEN to write to the repository.
+permissions:
+  contents: read
+
 # A new push to the same pull request supersedes the run in flight.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
