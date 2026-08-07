@@ -292,12 +292,12 @@ unsafe extern "C" fn llama_log_trampoline(
     }
     match level {
         ggml_log_level::GGML_LOG_LEVEL_ERROR => {
-            tracing::error!(target: "llama_cpp", "{trimmed}")
+            tracing::error!(target: "ik_llama_cpp", "{trimmed}")
         }
-        ggml_log_level::GGML_LOG_LEVEL_WARN => tracing::warn!(target: "llama_cpp", "{trimmed}"),
-        ggml_log_level::GGML_LOG_LEVEL_INFO => tracing::info!(target: "llama_cpp", "{trimmed}"),
+        ggml_log_level::GGML_LOG_LEVEL_WARN => tracing::warn!(target: "ik_llama_cpp", "{trimmed}"),
+        ggml_log_level::GGML_LOG_LEVEL_INFO => tracing::info!(target: "ik_llama_cpp", "{trimmed}"),
         ggml_log_level::GGML_LOG_LEVEL_DEBUG | ggml_log_level::GGML_LOG_LEVEL_CONT => {
-            tracing::debug!(target: "llama_cpp", "{trimmed}")
+            tracing::debug!(target: "ik_llama_cpp", "{trimmed}")
         }
         ggml_log_level::GGML_LOG_LEVEL_NONE => {}
     }
