@@ -9,32 +9,32 @@ use tokio::sync::Mutex;
 use crate::ffi::{
     GGML_TYPE_Q8_0, ggml_log_level, llama_backend_init, llama_batch, llama_batch_free,
     llama_batch_init, llama_context, llama_context_default_params, llama_decode, llama_free,
-    llama_init_from_model, llama_log_set, llama_model, llama_model_default_params,
-    llama_model_free, llama_model_get_vocab, llama_model_load_from_file_ptr, llama_pos,
-    llama_sampler, llama_sampler_accept, llama_sampler_chain_add,
-    llama_sampler_chain_default_params, llama_sampler_chain_init, llama_sampler_free,
-    llama_sampler_init_dist, llama_sampler_init_temp, llama_sampler_init_top_k,
-    llama_sampler_sample, llama_state_set_data, llama_token, llama_token_to_piece, llama_tokenize,
-    llama_vocab, llama_vocab_is_eog,
+    llama_free_model, llama_get_logits_ith, llama_init_from_model, llama_log_set, llama_model,
+    llama_model_default_params, llama_model_get_vocab, llama_model_load_from_file, llama_n_vocab,
+    llama_pos, llama_sample_temp, llama_sample_token, llama_sample_top_k, llama_state_set_data,
+    llama_token, llama_token_data, llama_token_data_array, llama_token_to_piece_vocab, llama_vocab,
+    llama_vocab_is_eog, llama_vocab_tokenize,
 };
 use crate::load::EmbeddedGgufFile;
 
 /// KV-cache snapshot produced at build time by `dusk_warmup`.
 static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dusk_llm_kv_snapshot"));
 
-// llama.cpp session file header: u32 magic, u32 version, u32 n_tokens,
+// ik_llama.cpp session file header: u32 magic, u32 version, u32 n_tokens,
 // llama_token[n_tokens], then raw `llama_state_get_data` bytes. Pinned to
-// the submodule revision (vendor/llama.cpp, tag b9282).
+// the submodule revision (vendor/ik_llama.cpp).
 const LLAMA_SESSION_MAGIC: u32 = 0x6767736e; // 'ggsn'
-const LLAMA_SESSION_VERSION: u32 = 9;
+const LLAMA_SESSION_VERSION: u32 = 10;
 
 // Must match build.rs (the warmup binary builds the KV cache with these).
 const CONTEXT_TOKENS: u32 = 16_384;
 const KV_CACHE_TYPE: c_int = GGML_TYPE_Q8_0;
 
-// Sampler chain: top-K narrows the candidate set, temperature rescales,
-// dist samples from the resulting distribution.
+// Sampling stages, applied in order: top-K narrows the candidate set,
+// temperature rescales, then the context's RNG draws from the result.
 const SAMPLER_TOP_K: i32 = 20;
+// `min_keep` for top-K: never narrow the candidate set below one token.
+const SAMPLER_MINIMUM_KEEP: usize = 1;
 const SAMPLER_TEMPERATURE: f32 = 0.6;
 // LLAMA_DEFAULT_SEED in llama.h — pick a fresh random seed at init.
 const SAMPLER_SEED: u32 = 0xFFFF_FFFF;
@@ -44,22 +44,23 @@ const MAX_RESPONSE_TOKENS: i32 = 1024;
 pub(crate) struct LlmState {
     pub(crate) context: *mut llama_context,
     pub(crate) model: *mut llama_model,
-    pub(crate) sampler: *mut llama_sampler,
+    /// One slot per vocabulary token, refilled from the logits before each
+    /// sampling step. Held here so a chat turn allocates nothing per token.
+    pub(crate) candidates: Vec<llama_token_data>,
     pub(crate) next_position: i32,
     pub(crate) had_first_chat: bool,
 }
 
-// SAFETY: llama.cpp has no thread-affinity state — only concurrent access
+// SAFETY: ik_llama.cpp has no thread-affinity state — only concurrent access
 // is unsound. The `Mutex<LlmState>` in `Chat` serialises every access.
 unsafe impl Send for LlmState {}
 
 impl Drop for LlmState {
     fn drop(&mut self) {
-        // Reverse construction order: sampler refs context, context refs model.
+        // Reverse construction order: the context refs the model.
         unsafe {
-            llama_sampler_free(self.sampler);
             llama_free(self.context);
-            llama_model_free(self.model);
+            llama_free_model(self.model);
         }
     }
 }
@@ -79,7 +80,7 @@ impl Chat {
     /// Load the model from an already-opened embedded GGUF. Blocks — call
     /// from `spawn_blocking`.
     pub fn new(embedded: EmbeddedGgufFile) -> Result<Self> {
-        install_llama_log_hook(); // llama.cpp logs a bunch of trash, this hooks it into traces
+        install_llama_log_hook(); // ik_llama.cpp logs a bunch of trash, this hooks it into traces
         let state = build_llm_state(embedded)?;
         Ok(Self {
             loaded: Arc::new(Mutex::new(state)),
@@ -145,16 +146,25 @@ fn build_llm_state(embedded: EmbeddedGgufFile) -> Result<LlmState> {
     let (snapshot_tokens, raw_state) = parse_snapshot(SNAPSHOT)?;
 
     let mut model_params = unsafe { llama_model_default_params() };
-    model_params.use_mmap = false;
-    let model = unsafe { llama_model_load_from_file_ptr(embedded.file, model_params) };
+    // No GPU backend is compiled in, and ik_llama.cpp's default (-1) asks
+    // for every layer to be offloaded to one.
+    model_params.n_gpu_layers = 0;
+    let model_path = embedded.path();
+    let model = unsafe { llama_model_load_from_file(model_path.as_ptr(), model_params) };
     if model.is_null() {
-        bail!("llama_model_load_from_file_ptr returned null for embedded GGUF");
+        bail!("llama_model_load_from_file returned null for the embedded GGUF");
+    }
+
+    let vocabulary_size = unsafe { llama_n_vocab(model) };
+    if vocabulary_size <= 0 {
+        unsafe { llama_free_model(model) };
+        bail!("llama_n_vocab returned {vocabulary_size}");
     }
 
     let context = match build_context(model) {
         Ok(context) => context,
         Err(error) => {
-            unsafe { llama_model_free(model) };
+            unsafe { llama_free_model(model) };
             return Err(error);
         }
     };
@@ -162,26 +172,24 @@ fn build_llm_state(embedded: EmbeddedGgufFile) -> Result<LlmState> {
     let written = unsafe { llama_state_set_data(context, raw_state.as_ptr(), raw_state.len()) };
     if written != raw_state.len() {
         unsafe { llama_free(context) };
-        unsafe { llama_model_free(model) };
+        unsafe { llama_free_model(model) };
         bail!(
             "snapshot load consumed {written} bytes, expected {}",
             raw_state.len()
         );
     }
 
-    let sampler = match build_sampler() {
-        Ok(sampler) => sampler,
-        Err(error) => {
-            unsafe { llama_free(context) };
-            unsafe { llama_model_free(model) };
-            return Err(error);
-        }
-    };
-
     Ok(LlmState {
         context,
         model,
-        sampler,
+        candidates: vec![
+            llama_token_data {
+                id: 0,
+                logit: 0.0,
+                p: 0.0,
+            };
+            vocabulary_size as usize
+        ],
         next_position: snapshot_tokens,
         had_first_chat: false,
     })
@@ -201,7 +209,7 @@ fn parse_snapshot(bytes: &[u8]) -> Result<(i32, &[u8])> {
     if version != LLAMA_SESSION_VERSION {
         bail!(
             "snapshot version mismatch: got {version}, expected {LLAMA_SESSION_VERSION} \
-             (vendor/llama.cpp moved out of sync with this build)"
+             (vendor/ik_llama.cpp moved out of sync with this build)"
         );
     }
     let tokens_byte_len = (n_tokens as usize)
@@ -225,6 +233,7 @@ fn parse_snapshot(bytes: &[u8]) -> Result<(i32, &[u8])> {
 fn build_context(model: *mut llama_model) -> Result<*mut llama_context> {
     let threads = inference_threads();
     let mut params = unsafe { llama_context_default_params() };
+    params.seed = SAMPLER_SEED;
     params.n_ctx = CONTEXT_TOKENS;
     params.n_threads = threads;
     params.n_threads_batch = threads;
@@ -238,57 +247,25 @@ fn build_context(model: *mut llama_model) -> Result<*mut llama_context> {
     Ok(context)
 }
 
-fn build_sampler() -> Result<*mut llama_sampler> {
-    let params = unsafe { llama_sampler_chain_default_params() };
-    let chain = unsafe { llama_sampler_chain_init(params) };
-    if chain.is_null() {
-        bail!("llama_sampler_chain_init returned null");
-    }
-    let stages: [(*mut llama_sampler, &str); 3] = unsafe {
-        [
-            (
-                llama_sampler_init_top_k(SAMPLER_TOP_K),
-                "llama_sampler_init_top_k",
-            ),
-            (
-                llama_sampler_init_temp(SAMPLER_TEMPERATURE),
-                "llama_sampler_init_temp",
-            ),
-            (
-                llama_sampler_init_dist(SAMPLER_SEED),
-                "llama_sampler_init_dist",
-            ),
-        ]
-    };
-    for (stage, name) in stages {
-        if stage.is_null() {
-            unsafe { llama_sampler_free(chain) };
-            bail!("{name} returned null");
-        }
-        unsafe { llama_sampler_chain_add(chain, stage) };
-    }
-    Ok(chain)
-}
-
 /// Honour `DUSK_LLM_THREADS_COUNT` if it's a positive integer; otherwise
 /// fall back to host parallelism, then 1.
-fn inference_threads() -> i32 {
+fn inference_threads() -> u32 {
     if let Ok(value) = std::env::var("DUSK_LLM_THREADS_COUNT")
-        && let Ok(parsed) = value.parse::<i32>()
+        && let Ok(parsed) = value.parse::<u32>()
         && parsed > 0
     {
         return parsed;
     }
     std::thread::available_parallelism()
         .ok()
-        .and_then(|count| i32::try_from(count.get()).ok())
+        .and_then(|count| u32::try_from(count.get()).ok())
         .unwrap_or(1)
 }
 
 static INSTALL_LLAMA_LOG_HOOK: Once = Once::new();
 fn install_llama_log_hook() {
     INSTALL_LLAMA_LOG_HOOK.call_once(|| {
-        // SAFETY: trampoline is `extern "C"`, `'static`; llama.cpp stores
+        // SAFETY: trampoline is `extern "C"`, `'static`; ik_llama.cpp stores
         // the pointer indefinitely.
         unsafe { llama_log_set(Some(llama_log_trampoline), ptr::null_mut()) };
     });
@@ -309,7 +286,9 @@ unsafe extern "C" fn llama_log_trampoline(
         return;
     }
     match level {
-        ggml_log_level::GGML_LOG_LEVEL_ERROR => tracing::error!(target: "llama_cpp", "{trimmed}"),
+        ggml_log_level::GGML_LOG_LEVEL_ERROR => {
+            tracing::error!(target: "llama_cpp", "{trimmed}")
+        }
         ggml_log_level::GGML_LOG_LEVEL_WARN => tracing::warn!(target: "llama_cpp", "{trimmed}"),
         ggml_log_level::GGML_LOG_LEVEL_INFO => tracing::info!(target: "llama_cpp", "{trimmed}"),
         ggml_log_level::GGML_LOG_LEVEL_DEBUG | ggml_log_level::GGML_LOG_LEVEL_CONT => {
@@ -356,7 +335,7 @@ fn tokenize(state: &LlmState, text: &str) -> Result<Vec<llama_token>> {
 
     // Probe: null buffer returns -(required slots), or i32::MIN on overflow.
     let probe =
-        unsafe { llama_tokenize(vocab, text_ptr, text_len, ptr::null_mut(), 0, false, true) };
+        unsafe { llama_vocab_tokenize(vocab, text_ptr, text_len, ptr::null_mut(), 0, false, true) };
     if probe == i32::MIN {
         bail!("tokenization overflowed i32");
     }
@@ -365,7 +344,7 @@ fn tokenize(state: &LlmState, text: &str) -> Result<Vec<llama_token>> {
         .context("tokenizer reported negative capacity")?;
     let mut tokens = vec![0_i32; needed];
     let written = unsafe {
-        llama_tokenize(
+        llama_vocab_tokenize(
             vocab,
             text_ptr,
             text_len,
@@ -376,7 +355,7 @@ fn tokenize(state: &LlmState, text: &str) -> Result<Vec<llama_token>> {
         )
     };
     if written < 0 {
-        bail!("llama_tokenize failed (returned {written})");
+        bail!("llama_vocab_tokenize failed (returned {written})");
     }
     tokens.truncate(written as usize);
     Ok(tokens)
@@ -430,8 +409,7 @@ fn sample_reply<F: FnMut(usize)>(
     let mut count: usize = 0;
 
     for _ in 0..MAX_RESPONSE_TOKENS {
-        let token = unsafe { llama_sampler_sample(state.sampler, state.context, sample_index) };
-        unsafe { llama_sampler_accept(state.sampler, token) };
+        let token = sample_token(state, sample_index)?;
         if unsafe { llama_vocab_is_eog(vocab(state), token) } {
             break;
         }
@@ -448,16 +426,49 @@ fn sample_reply<F: FnMut(usize)>(
     Ok(String::from_utf8_lossy(&reply_bytes).into_owned())
 }
 
+/// Draw one token from the logits at row `index`: top-K narrows the
+/// candidates, temperature rescales them, and the context's RNG draws from
+/// what is left.
+fn sample_token(state: &mut LlmState, index: i32) -> Result<llama_token> {
+    let logits = unsafe { llama_get_logits_ith(state.context, index) };
+    if logits.is_null() {
+        bail!("llama_get_logits_ith returned null for row {index}");
+    }
+    for (token, candidate) in state.candidates.iter_mut().enumerate() {
+        candidate.id = token as llama_token;
+        candidate.logit = unsafe { *logits.add(token) };
+        candidate.p = 0.0;
+    }
+
+    let mut candidates = llama_token_data_array {
+        data: state.candidates.as_mut_ptr(),
+        size: state.candidates.len(),
+        selected: -1,
+        sorted: false,
+    };
+    unsafe {
+        llama_sample_top_k(
+            state.context,
+            &mut candidates,
+            SAMPLER_TOP_K,
+            SAMPLER_MINIMUM_KEEP,
+        );
+        llama_sample_temp(state.context, &mut candidates, SAMPLER_TEMPERATURE);
+        Ok(llama_sample_token(state.context, &mut candidates))
+    }
+}
+
 fn token_to_piece(state: &LlmState, token: llama_token) -> Result<Vec<u8>> {
     let vocab = vocab(state);
-    let required = unsafe { llama_token_to_piece(vocab, token, ptr::null_mut(), 0, 0, false) };
+    let required =
+        unsafe { llama_token_to_piece_vocab(vocab, token, ptr::null_mut(), 0, 0, false) };
     if required == 0 {
         return Ok(Vec::new());
     }
     let needed = required.unsigned_abs() as usize;
     let mut buffer = vec![0_u8; needed];
     let written = unsafe {
-        llama_token_to_piece(
+        llama_token_to_piece_vocab(
             vocab,
             token,
             buffer.as_mut_ptr() as *mut c_char,

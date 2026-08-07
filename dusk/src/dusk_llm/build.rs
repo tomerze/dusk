@@ -60,24 +60,30 @@ fn main() -> Result<()> {
         model_path.display()
     );
 
-    let llama_src = crate_root
+    let ik_llama_src = crate_root
         .ancestors()
         .nth(3)
         .context("dusk_llm's Cargo.toml has fewer than four ancestor directories")?
-        .join("vendor/llama.cpp");
-    if !llama_src.join("CMakeLists.txt").is_file() {
+        .join("vendor/ik_llama.cpp");
+    if !ik_llama_src.join("CMakeLists.txt").is_file() {
         bail!(
-            "vendor/llama.cpp is not initialised at {}. Run `git submodule update --init vendor/llama.cpp` and build again.",
-            llama_src.display()
+            "vendor/ik_llama.cpp is not initialised at {}. Run `git submodule update --init vendor/ik_llama.cpp` and build again.",
+            ik_llama_src.display()
         );
     }
     for input in ["CMakeLists.txt", "include/llama.h"] {
-        println!("cargo:rerun-if-changed={}/{input}", llama_src.display());
+        println!("cargo:rerun-if-changed={}/{input}", ik_llama_src.display());
     }
 
-    let install_prefix = build_llama_cpp(&llama_src)?;
-    emit_link_directives(&install_prefix.join("lib"))?;
-    let warmup_binary = compile_warmup_binary(&llama_src, &install_prefix, &out_dir)?;
+    let install_prefix = build_ik_llama(&ik_llama_src)?;
+    // ik_llama.cpp installs its libraries only when `BUILD_SHARED_LIBS` is on,
+    // so the static archives come from the build tree.
+    let archive_directories = [
+        install_prefix.join("build/src"),
+        install_prefix.join("build/ggml/src"),
+    ];
+    emit_link_directives(&archive_directories)?;
+    let warmup_binary = compile_warmup_binary(&ik_llama_src, &archive_directories, &out_dir)?;
 
     // Gemma 4 turn token
     let prompt_text = format!("<|turn>user\n{}", system_prompt(&out_dir)?);
@@ -89,20 +95,18 @@ fn main() -> Result<()> {
     // that determine its contents are byte-for-byte unchanged: a stale
     // rerun-if-changed trigger (e.g. an unrelated program recompiling and
     // touching .dusk_sh_entries) must not force a regeneration.
-    let model =
-        fs::metadata(&model_path).with_context(|| format!("reading {}", model_path.display()))?;
-    let modified = model
-        .modified()
-        .with_context(|| format!("reading the modification time of {}", model_path.display()))?;
+    // The ik_llama.cpp archive is one of those inputs: it writes the snapshot
+    // in a versioned session format, so a snapshot from another revision of it
+    // is not interchangeable.
     let mut hasher = DefaultHasher::new();
-    (
-        &prompt_text,
-        CONTEXT_TOKENS,
-        KV_CACHE_TYPE,
-        model.len(),
-        modified,
-    )
-        .hash(&mut hasher);
+    (&prompt_text, CONTEXT_TOKENS, KV_CACHE_TYPE).hash(&mut hasher);
+    for path in [&model_path, &archive_directories[0].join("libllama.a")] {
+        let file = fs::metadata(path).with_context(|| format!("reading {}", path.display()))?;
+        let modified = file
+            .modified()
+            .with_context(|| format!("reading the modification time of {}", path.display()))?;
+        (file.len(), modified).hash(&mut hasher);
+    }
     let cache_key = format!("{:016x}", hasher.finish());
     if state_path.is_file() && fs::read_to_string(&key_path).ok().as_deref() == Some(&*cache_key) {
         eprintln!(
@@ -253,17 +257,19 @@ async fn download_model(url: &Url, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn build_llama_cpp(source: &Path) -> Result<PathBuf> {
+fn build_ik_llama(source: &Path) -> Result<PathBuf> {
+    // ik_llama.cpp has no GGML_SSE42 or GGML_BMI2 switch, and spells AVX-VNNI
+    // without the second underscore. GGML_AVX512 gates the three AVX512
+    // sub-options, so it has to go on with them.
     const FEATURE_TO_GGML_FLAG: &[(&str, &str)] = &[
         ("avx", "GGML_AVX"),
         ("avx2", "GGML_AVX2"),
+        ("avx512f", "GGML_AVX512"),
         ("avx512bf16", "GGML_AVX512_BF16"),
         ("avx512vbmi", "GGML_AVX512_VBMI"),
         ("avx512vnni", "GGML_AVX512_VNNI"),
-        ("avxvnni", "GGML_AVX_VNNI"),
+        ("avxvnni", "GGML_AVXVNNI"),
         ("f16c", "GGML_F16C"),
-        ("bmi2", "GGML_BMI2"),
-        ("sse4.2", "GGML_SSE42"),
         ("fma", "GGML_FMA"),
     ];
 
@@ -273,11 +279,16 @@ fn build_llama_cpp(source: &Path) -> Result<PathBuf> {
         ("LLAMA_BUILD_TESTS", "OFF"),
         ("LLAMA_BUILD_EXAMPLES", "OFF"),
         ("LLAMA_BUILD_SERVER", "OFF"),
-        ("LLAMA_BUILD_TOOLS", "OFF"),
-        ("LLAMA_BUILD_APP", "OFF"),
-        ("LLAMA_BUILD_COMMON", "OFF"),
         ("LLAMA_CURL", "OFF"),
         ("GGML_OPENMP", "ON"),
+        // The CPU kernels this fork exists for: its quantized matrix
+        // multiplications and its FlashAttention, compiled for every
+        // quantization so the Q8_0 KV cache is covered. All three default to
+        // ON; naming them keeps a default flip upstream from silently dropping
+        // the reason we are on this fork.
+        ("GGML_IQK_MUL_MAT", "ON"),
+        ("GGML_IQK_FLASH_ATTENTION", "ON"),
+        ("GGML_IQK_FA_ALL_QUANTS", "ON"),
         ("CMAKE_POSITION_INDEPENDENT_CODE", "ON"),
         ("CMAKE_INSTALL_RPATH_USE_LINK_PATH", "ON"),
     ] {
@@ -297,12 +308,14 @@ fn build_llama_cpp(source: &Path) -> Result<PathBuf> {
     Ok(config.profile("Release").build())
 }
 
-fn emit_link_directives(lib_dir: &Path) -> Result<()> {
-    println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    for archive in ["llama", "ggml", "ggml-cpu", "ggml-base"] {
+fn emit_link_directives(archive_directories: &[PathBuf]) -> Result<()> {
+    for directory in archive_directories {
+        println!("cargo:rustc-link-search=native={}", directory.display());
+    }
+    for archive in ["llama", "ggml"] {
         println!("cargo:rustc-link-lib=static={archive}");
     }
-    // libstdc++ (libllama is C++) and libgomp (ggml's OpenMP runtime)
+    // libstdc++ (ik_llama.cpp is C++) and libgomp (ggml's OpenMP runtime)
     // are linked statically — final binary has no .so dep on either.
     for archive in ["stdc++", openmp_archive_name()] {
         let path = static_archive(archive)?;
@@ -354,8 +367,8 @@ fn static_archive(name: &str) -> Result<PathBuf> {
 }
 
 fn compile_warmup_binary(
-    llama_src: &Path,
-    install_prefix: &Path,
+    ik_llama_src: &Path,
+    archive_directories: &[PathBuf],
     out_dir: &Path,
 ) -> Result<PathBuf> {
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("warmup/main.c");
@@ -371,19 +384,17 @@ fn compile_warmup_binary(
             .args(["-std=c11", "-O2", "-Wall", "-Wextra", "-o"])
             .args([&binary, &source])
             .args([
-                format!("-I{}/include", install_prefix.display()),
-                format!("-I{}/ggml/include", llama_src.display()),
-                format!("-L{}/lib", install_prefix.display()),
+                format!("-I{}/include", ik_llama_src.display()),
+                format!("-I{}/ggml/include", ik_llama_src.display()),
             ])
+            .args(
+                archive_directories
+                    .iter()
+                    .map(|directory| format!("-L{}", directory.display())),
+            )
             // start-group lets the linker resolve circular static-archive
             // references between llama, ggml, libgomp, libstdc++, libgcc.
-            .args([
-                "-Wl,--start-group",
-                "-lllama",
-                "-lggml",
-                "-lggml-cpu",
-                "-lggml-base",
-            ])
+            .args(["-Wl,--start-group", "-lllama", "-lggml"])
             .args([
                 static_archive(openmp)?,
                 static_archive("stdc++")?,

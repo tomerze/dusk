@@ -23,8 +23,8 @@ repos:
           -   dusk/src/dusk_llm/warmup/main.c
           -   --
           -   -std=c11
-          -   -Ivendor/llama.cpp/include
-          -   -Ivendor/llama.cpp/ggml/include
+          -   -Ivendor/ik_llama.cpp/include
+          -   -Ivendor/ik_llama.cpp/ggml/include
       -   id: ruff-check
           name: ruff (lint)
           entry: uvx ruff check --force-exclude
