@@ -1,6 +1,6 @@
 mod chat;
-mod ffi;
-mod load;
 
-pub use chat::{Chat, LlmReply};
-pub use load::{EmbeddedGgufFile, GEMMA4E2B_EMBEDDED_GGUF_SECTION, load_from_self_exe_section};
+pub use chat::{
+    API_KEY_VARIABLE, Chat, ENDPOINT_URL_VARIABLE, Endpoint, LlmReply, MODEL_VARIABLE,
+    TLS_NO_VERIFY_VARIABLE, Transport,
+};
