@@ -2,7 +2,3 @@
 	path = vendor/capnproto
 	url = https://github.com/capnproto/capnproto.git
 	branch = v1.2.0
-[submodule "vendor/ik_llama.cpp"]
-	path = vendor/ik_llama.cpp
-	url = https://github.com/ikawrakow/ik_llama.cpp.git
-	branch = main

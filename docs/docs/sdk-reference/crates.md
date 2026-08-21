@@ -14,7 +14,7 @@ the impls, and the clients.
 | `dusk_program_sh_proc` | The `#[sh_entry]` attribute macro. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and `init` wiring. `no_std`. |
 | `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
-| `dusk_llm` | The embedded LLM stack behind [Ask Dusk](../features/ask-dusk.md) (vendored llama.cpp). |
+| `dusk_llm` | The client behind [Ask Dusk](../features/ask-dusk.md): builds the prompt and calls a configured OpenAI-compatible endpoint. |
 
 ## Programs (`base/`)
 

@@ -381,11 +381,7 @@ cd docs && uv run mkdocs serve           # serve the docs site
 ```
 
 Building requires `make`, `cmake`, and `autotools` for the vendored Cap'n Proto
-compiler under `vendor/`. The first build also needs the network: `dusk_llm`
-downloads the GGUF model named in `dusk/src/dusk_llm/model.json` (a pinned,
-host-agnostic URL plus the SHA-256 it is checked against on every build) into
-the `directory` that manifest gives, which is gitignored. Later builds reuse
-it.
+compiler under `vendor/`. Nothing else is fetched at build time.
 
 ### Embassy and conventions
 
@@ -467,6 +463,59 @@ Default: solve the problem inside the existing design. Don't refactor neighbouri
 When the user asks for a surgical change ("remove that warn", "delete this field"), do not stop at the literal token. Re-read the function top-to-bottom after the edit and ask: *is anything else here only justified by what I just deleted?* If yes, that's dead code and part of the same task.
 
 Past failure: asked to remove a `tracing::warn!("detached sh script failed")` inside a `select` arm, I deleted the warn and left behind a `detached_completion` local, the entire `select(signal_receiver.receive(), completion.wait())`, both `Either` arms, and a now-pointless symmetric `info!` — the whole `select` scaffold existed only for the log I removed. The loop should have collapsed back to `signal_receiver.receive().await`. I shipped the literal diff and the user had to come back furious.
+
+## Never poll for a command I started — and never blame the build
+
+**The harness re-invokes me when a background command exits. Polling it is pure
+waste.** Never spawn a second command that greps my own output file in a
+`sleep` loop. If something must run in the background, I background it and then
+*wait for the notification* — nothing else.
+
+**Default to the foreground with an explicit long timeout, not the background.**
+`timeout: 600000` on a `git commit` is both faster and safer than backgrounding
+it: no extra round-trips, and no chance of the two-minute default killing a
+pre-commit hook mid-run and stranding its stash.
+
+**When something feels slow, measure it before working around it.** A workaround
+built on a wrong guess costs more than the thing it avoids.
+
+Past failure: rebuilding three commits on the `llm-endpoint` branch took 31
+minutes. The real cost was ~35 seconds each — clippy is 21.6s warm. I had
+launched `git commit` in the background *and* a `until grep …; do sleep 8; done`
+waiter for it; the waiter grepped `llm-endpoint\]` while git prints
+`[llm-endpoint 2c613a1]`, so it never matched and burned its full 600-second
+timeout, three times over. I then decided the pre-commit hooks were the problem
+and built workarounds around them, which added more round-trips. **~95% of that
+half hour was me waiting for myself.** For reshuffling commits the answer was
+also never soft-reset-and-recommit: `git commit --fixup=<sha>` plus
+`GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>` does it in seconds,
+because a rebase does not re-run pre-commit on replayed commits.
+
+## A fixup belongs in the commit it fixes — always
+
+**The order in which I discover a change must never affect how the branch is
+divided into commits.** A branch's history is a statement about what the work
+*is*, not a log of what I noticed and when. Two people who arrive at the same
+final tree by different routes must produce the same commits.
+
+So a correction, a follow-up, an omission found later, an answer to a review
+comment, a bug I introduced three commits ago — none of these are new commits.
+Each is absorbed into the commit whose concern it belongs to, per the
+`atomic-commit` skill, and the branch is rewritten. `git commit --fixup` plus an
+autosquash rebase, or a soft reset and recommit, or an amend when it is the tip
+— the mechanism does not matter, the result does. Force-push the rewritten
+branch; a pushed branch is not a reason to append instead.
+
+The only commits that stand alone are the ones that would still stand alone if I
+had known everything from the start.
+
+Past failure: on the `dusk_llm` endpoint branch I shipped "Change dusk_llm to
+use an external llm source", then later noticed a dead `ik_llama_cpp` tracing
+directive and later still fixed the token counter — and committed each as its
+own commit on top. Both were fixups to the first commit: the directive was dead
+*because* that commit deleted the log hook, and the counter was that commit's
+own spinner. The history recorded my discovery order instead of the change, and
+the user had to tell me to collapse it.
 
 ## Don't write near-duplicate functions
 

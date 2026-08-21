@@ -9,17 +9,11 @@ tokio = { version = "1.47.1", features = ["rt", "sync"] }
 tracing = "0.1.41"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-object = { version = "0.36", default-features = false, features = ["read_core", "elf", "std"] }
-libc = "0.2"
-dusk_base = { path = "../dusk_base", features = ["client"] }
-
-[build-dependencies]
-cmake = "0.1"
-anyhow = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-fast-down = { version = "5", features = ["reqwest", "file"] }
-reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
-tokio = { version = "1.39", features = ["rt-multi-thread"] }
-url = { version = "2.5", features = ["serde"] }
-sha2 = "0.10"
+futures-util = "0.3"
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls",
+    "json",
+    "stream",
+    "http2",
+    "charset",
+] }

@@ -1,68 +1,160 @@
-use std::ffi::{CStr, c_char, c_int, c_void};
-use std::ptr;
-use std::sync::{Arc, Once};
+use std::env;
 
 use dusk_program::anyhow::{Context, Error, Result, anyhow, bail};
-use serde::Deserialize;
+use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::ffi::{
-    GGML_TYPE_Q8_0, ggml_log_level, llama_backend_init, llama_batch, llama_batch_free,
-    llama_batch_init, llama_context, llama_context_default_params, llama_decode, llama_free,
-    llama_free_model, llama_get_logits_ith, llama_init_from_model, llama_log_set, llama_model,
-    llama_model_default_params, llama_model_get_vocab, llama_model_load_from_file, llama_n_vocab,
-    llama_pos, llama_sample_temp, llama_sample_token, llama_sample_top_k, llama_state_set_data,
-    llama_token, llama_token_data, llama_token_data_array, llama_token_to_piece_vocab, llama_vocab,
-    llama_vocab_is_eog, llama_vocab_tokenize,
-};
-use crate::load::EmbeddedGgufFile;
+/// The full chat-completions URL Ask Dusk posts to.
+pub const ENDPOINT_URL_VARIABLE: &str = "DUSK_LLM_URL";
+/// The model Ask Dusk asks that endpoint for.
+pub const MODEL_VARIABLE: &str = "DUSK_LLM_MODEL";
+/// The bearer token for that endpoint. Optional — some endpoints want none.
+pub const API_KEY_VARIABLE: &str = "DUSK_LLM_API_KEY";
+/// Set to `1` to keep TLS but stop checking the certificate behind it.
+pub const TLS_NO_VERIFY_VARIABLE: &str = "DUSK_LLM_TLS_NO_VERIFY";
 
-/// KV-cache snapshot produced at build time by `dusk_warmup`.
-static SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dusk_llm_kv_snapshot"));
+/// Sent on every request. Hosts commonly sit behind bot filters that reject
+/// clients which do not identify themselves at all, so this is not left to the
+/// HTTP library's default.
+const USER_AGENT: &str = concat!(
+    "dusk_llm/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/tomerze/dusk)"
+);
 
-// ik_llama.cpp session file header: u32 magic, u32 version, u32 n_tokens,
-// llama_token[n_tokens], then raw `llama_state_get_data` bytes. Pinned to
-// the submodule revision (vendor/ik_llama.cpp).
-const LLAMA_SESSION_MAGIC: u32 = 0x6767736e; // 'ggsn'
-const LLAMA_SESSION_VERSION: u32 = 10;
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-// Must match build.rs (the warmup binary builds the KV cache with these).
-const CONTEXT_TOKENS: u32 = 16_384;
-const KV_CACHE_TYPE: c_int = GGML_TYPE_Q8_0;
+/// Ceiling on a turn's output. Sized with headroom because a model that
+/// reasons before answering spends this budget on reasoning it never shows:
+/// one measured turn reported 64 visible tokens against 404 hidden ones.
+const MAX_RESPONSE_TOKENS: u32 = 8192;
+const TEMPERATURE: f32 = 0.6;
 
-// Sampling stages, applied in order: top-K narrows the candidate set,
-// temperature rescales, then the context's RNG draws from the result.
-const SAMPLER_TOP_K: i32 = 20;
-// `min_keep` for top-K: never narrow the candidate set below one token.
-const SAMPLER_MINIMUM_KEEP: usize = 1;
-const SAMPLER_TEMPERATURE: f32 = 0.6;
-// LLAMA_DEFAULT_SEED in llama.h — pick a fresh random seed at init.
-const SAMPLER_SEED: u32 = 0xFFFF_FFFF;
+/// How many past messages a chat carries forward, newest first, not counting
+/// the system prompt. The endpoint charges for and bounds the whole
+/// conversation, so an unbounded history would eventually be refused outright
+/// rather than degrade.
+const HISTORY_LIMIT: usize = 20;
 
-const MAX_RESPONSE_TOKENS: i32 = 1024;
-
-pub(crate) struct LlmState {
-    pub(crate) context: *mut llama_context,
-    pub(crate) model: *mut llama_model,
-    /// One slot per vocabulary token, refilled from the logits before each
-    /// sampling step. Held here so a chat turn allocates nothing per token.
-    pub(crate) candidates: Vec<llama_token_data>,
-    pub(crate) next_position: i32,
-    pub(crate) had_first_chat: bool,
+/// How much the transport is trusted to protect a turn on its way out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Transport {
+    /// Plaintext. Anything on the path reads the question and the node's
+    /// program list.
+    Http,
+    /// TLS with the certificate checked against the system roots.
+    Https,
+    /// TLS with certificate and hostname checks turned off — encrypted against
+    /// a passive listener, but it cannot tell the endpoint from an impostor.
+    TlsNoVerify,
 }
 
-// SAFETY: ik_llama.cpp has no thread-affinity state — only concurrent access
-// is unsound. The `Mutex<LlmState>` in `Chat` serialises every access.
-unsafe impl Send for LlmState {}
+/// Where Ask Dusk sends its requests, and as whom.
+#[derive(Clone, Debug)]
+pub struct Endpoint {
+    url: reqwest::Url,
+    model: String,
+    api_key: Option<String>,
+    transport: Transport,
+}
 
-impl Drop for LlmState {
-    fn drop(&mut self) {
-        // Reverse construction order: the context refs the model.
-        unsafe {
-            llama_free(self.context);
-            llama_free_model(self.model);
+impl Endpoint {
+    /// Build an endpoint. `tls_no_verify` only means anything for an `https`
+    /// URL, where it keeps the encryption and drops the identity check — for a
+    /// self-signed certificate on a model you host yourself.
+    pub fn new(
+        url: &str,
+        model: impl Into<String>,
+        api_key: Option<String>,
+        tls_no_verify: bool,
+    ) -> Result<Self> {
+        let url = reqwest::Url::parse(url).with_context(|| format!("parsing {url} as a URL"))?;
+        let transport = match (url.scheme(), tls_no_verify) {
+            ("https", false) => Transport::Https,
+            ("https", true) => Transport::TlsNoVerify,
+            ("http", _) => Transport::Http,
+            (scheme, _) => bail!(
+                "the Ask Dusk endpoint {url} is {scheme}, which is not a way to reach an HTTP \
+                 API. Set {ENDPOINT_URL_VARIABLE} to an http:// or https:// URL."
+            ),
+        };
+        Ok(Self {
+            url,
+            model: model.into(),
+            api_key,
+            transport,
+        })
+    }
+
+    /// The endpoint named by `DUSK_LLM_URL`, `DUSK_LLM_MODEL`,
+    /// `DUSK_LLM_API_KEY` and `DUSK_LLM_TLS_NO_VERIFY`. Ask Dusk ships pointed
+    /// at nothing, so a missing URL or model is reported as the setup step it
+    /// is, before the prompt takes a question it would have to discard.
+    pub fn from_environment() -> Result<Self> {
+        let read = |variable| env::var(variable).ok().filter(|value| !value.is_empty());
+        match (read(ENDPOINT_URL_VARIABLE), read(MODEL_VARIABLE)) {
+            (Some(url), Some(model)) => Self::new(
+                &url,
+                model,
+                read(API_KEY_VARIABLE),
+                matches!(read(TLS_NO_VERIFY_VARIABLE).as_deref(), Some("1")),
+            ),
+            _ => bail!("{}", setup_help()),
         }
     }
+
+    /// What protects — or does not protect — a turn in transit.
+    pub fn transport(&self) -> Transport {
+        self.transport
+    }
+}
+
+/// Every variable Ask Dusk reads, and an example for the one whose shape is not
+/// obvious from its description.
+const HELP_ENTRIES: &[(&str, &str, Option<&str>)] = &[
+    (
+        ENDPOINT_URL_VARIABLE,
+        "OpenAI API compatible chat-completions URL",
+        Some("https://api.openai.com/v1/chat/completions"),
+    ),
+    (MODEL_VARIABLE, "the model to ask that endpoint for", None),
+    (
+        API_KEY_VARIABLE,
+        "your API key — leave unset if it needs none",
+        None,
+    ),
+    (
+        TLS_NO_VERIFY_VARIABLE,
+        "set to 1 to skip certificate checks",
+        None,
+    ),
+];
+
+/// The gap between the longest variable name and the descriptions.
+const HELP_GAP: usize = 2;
+
+/// What to set. Ask Dusk's first Ctrl+A ends here, so this is the whole of its
+/// setup documentation as far as most users see it. It is logged as one warning,
+/// hence the leading blank line: it has to read as a block under the log prefix.
+fn setup_help() -> String {
+    // Derived rather than fixed: a name longer than a hardcoded column silently
+    // loses its padding and runs into its own description.
+    let indent = HELP_ENTRIES
+        .iter()
+        .map(|(variable, _, _)| variable.len())
+        .max()
+        .unwrap_or(0)
+        + HELP_GAP;
+
+    let mut help = String::from("\n\nTo use Ask Dusk, set these, then press Ctrl+A again:\n\n");
+    for (variable, description, example) in HELP_ENTRIES {
+        help += &format!("  {variable:<indent$}{description}\n");
+        if let Some(example) = example {
+            help += &format!("  {:<indent$}e.g. {example}\n", "");
+        }
+    }
+    help
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,242 +163,323 @@ pub struct LlmReply {
     pub command: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct Message {
+    role: &'static str,
+    content: String,
+}
+
+/// One past exchange, replayed ahead of the user's question so the model has
+/// the reply format and the voice demonstrated rather than only described.
+#[derive(Deserialize)]
+struct Example {
+    user: String,
+    assistant: String,
+}
+
+#[derive(Serialize)]
+struct CompletionRequest<'a> {
+    model: &'a str,
+    messages: &'a [Message],
+    stream: bool,
+    stream_options: StreamOptions,
+    temperature: f32,
+    max_tokens: u32,
+}
+
+/// Asks the endpoint to report what the turn actually cost. Hosts that do not
+/// implement it ignore it, which is why the streamed chunks are still counted.
+#[derive(Serialize)]
+struct StreamOptions {
+    include_usage: bool,
+}
+
+#[derive(Deserialize)]
+struct CompletionChunk {
+    #[serde(default)]
+    choices: Vec<ChunkChoice>,
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+#[derive(Deserialize)]
+struct ChunkChoice {
+    delta: ChunkDelta,
+    #[serde(default)]
+    finish_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ChunkDelta {
+    #[serde(default)]
+    content: Option<String>,
+    /// A reasoning model streams its thinking here — under this name, or under
+    /// `reasoning` on hosts that follow OpenRouter. It is not part of the
+    /// reply, but it is most of what such a model generates in a turn.
+    #[serde(default, alias = "reasoning")]
+    reasoning_content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Usage {
+    #[serde(default)]
+    completion_tokens: Option<usize>,
+}
+
 #[derive(Clone)]
 pub struct Chat {
-    loaded: Arc<Mutex<LlmState>>,
+    client: reqwest::Client,
+    endpoint: Endpoint,
+    /// The system message and the few-shot exchanges, built once and sent
+    /// ahead of the conversation on every turn.
+    preamble: Vec<Message>,
+    history: std::sync::Arc<Mutex<Vec<Message>>>,
 }
 
 impl Chat {
-    /// Load the model from an already-opened embedded GGUF. Blocks — call
-    /// from `spawn_blocking`.
-    pub fn new(embedded: EmbeddedGgufFile) -> Result<Self> {
-        install_llama_log_hook(); // ik_llama.cpp logs a bunch of trash, this hooks it into traces
-        let state = build_llm_state(embedded)?;
+    /// A chat against the endpoint the environment names. `programs` is the
+    /// rendered list of programs the connected node can run; it is spliced into
+    /// the system prompt so the model only suggests commands that exist.
+    pub fn new(programs: &str) -> Result<Self> {
+        Self::with_endpoint(Endpoint::from_environment()?, programs)
+    }
+
+    /// A chat against a caller-supplied endpoint.
+    pub fn with_endpoint(endpoint: Endpoint, programs: &str) -> Result<Self> {
+        let tls_no_verify = endpoint.transport == Transport::TlsNoVerify;
+        let client = reqwest::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .user_agent(USER_AGENT)
+            .tls_danger_accept_invalid_certs(tls_no_verify)
+            .tls_danger_accept_invalid_hostnames(tls_no_verify)
+            .build()
+            .context("building the HTTP client for Ask Dusk")?;
+        let examples: Vec<Example> = serde_json::from_str(include_str!("../prompts/examples.json"))
+            .context("parsing the built-in few-shot examples")?;
+        let mut preamble = vec![Message {
+            role: "system",
+            content: include_str!("../prompts/system.md").replace("{{PROGRAMS}}", programs),
+        }];
+        for example in examples {
+            preamble.push(Message {
+                role: "user",
+                content: example.user,
+            });
+            preamble.push(Message {
+                role: "assistant",
+                content: example.assistant,
+            });
+        }
+
         Ok(Self {
-            loaded: Arc::new(Mutex::new(state)),
+            client,
+            endpoint,
+            preamble,
+            history: std::sync::Arc::new(Mutex::new(Vec::new())),
         })
     }
 
-    /// Run one chat turn. `on_token` fires once per generated token with the
-    /// running count.
+    /// Run one chat turn. `on_token` fires once per streamed chunk with the
+    /// running count of tokens generated so far, reasoning included.
     pub async fn chat(
         &self,
         message: &str,
-        on_token: impl FnMut(usize) + Send + 'static,
+        mut on_token: impl FnMut(usize) + Send + 'static,
     ) -> Result<LlmReply> {
-        let message = message.to_string();
-        let loaded = self.loaded.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut guard = loaded.blocking_lock();
-            Self::chat_inner(&mut guard, &message, on_token)
-        })
-        .await
-        .context("llm task panicked")?
-    }
+        let mut history = self.history.lock().await;
+        history.push(Message {
+            role: "user",
+            content: message.to_owned(),
+        });
 
-    /// Run one chat turn against `state`. `on_token` fires once per generated
-    /// token with the running count.
-    fn chat_inner<F: FnMut(usize)>(
-        state: &mut LlmState,
-        message: &str,
-        mut on_token: F,
-    ) -> Result<LlmReply> {
-        // First chat continues the user turn the snapshot left half-open;
-        // subsequent turns open their own `<|turn>user` block.
-        let fragment = if state.had_first_chat {
-            format!("<|turn>user\n{message}<turn|>\n<|turn>model\n")
-        } else {
-            format!("{message}<turn|>\n<|turn>model\n")
+        let mut messages = self.preamble.clone();
+        messages.extend(history.iter().rev().take(HISTORY_LIMIT).rev().cloned());
+
+        let request = self
+            .client
+            .post(self.endpoint.url.clone())
+            .json(&CompletionRequest {
+                model: &self.endpoint.model,
+                messages: &messages,
+                stream: true,
+                stream_options: StreamOptions {
+                    include_usage: true,
+                },
+                temperature: TEMPERATURE,
+                max_tokens: MAX_RESPONSE_TOKENS,
+            });
+        let request = match &self.endpoint.api_key {
+            Some(key) => request.bearer_auth(key),
+            None => request,
         };
 
-        let tokens = tokenize(state, &fragment)?;
-        if tokens.is_empty() {
-            bail!("chat fragment tokenised to zero tokens");
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("sending a chat request to {}", self.endpoint.url))?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            history.pop();
+            if matches!(
+                status,
+                reqwest::StatusCode::PAYMENT_REQUIRED | reqwest::StatusCode::TOO_MANY_REQUESTS
+            ) {
+                bail!(
+                    "{} refused this request ({status}) — its budget or rate limit for this \
+                     caller is spent. Wait a moment and ask again, or point {ENDPOINT_URL_VARIABLE} \
+                     and {API_KEY_VARIABLE} at an account with more room.",
+                    self.endpoint.url,
+                );
+            }
+            bail!("{} answered {status}: {}", self.endpoint.url, body.trim());
         }
-        decode(state, &tokens)?;
-        let last_index: i32 = (tokens.len() - 1)
-            .try_into()
-            .context("sample index overflow")?;
 
-        let reply = sample_reply(state, last_index, &mut on_token)?;
+        let completion = match read_stream(response, &mut on_token).await {
+            Ok(completion) => completion,
+            Err(error) => {
+                history.pop();
+                return Err(error);
+            }
+        };
 
-        let closer = tokenize(state, "<end_of_turn>\n")?;
-        decode(state, &closer)?;
+        // A reply the endpoint cut short is not the model failing to follow the
+        // output contract, and saying so would send the reader after the wrong
+        // thing. Name the ceiling that actually stopped it.
+        if !completion.ended {
+            history.pop();
+            bail!(
+                "{} closed the stream after {} characters without finishing the reply.",
+                self.endpoint.url,
+                completion.reply.chars().count(),
+            );
+        }
 
-        state.had_first_chat = true;
-        parse_reply(reply.trim())
+        if completion.finish_reason.as_deref() == Some("length") {
+            history.pop();
+            bail!(
+                "{} stopped the reply after {MAX_RESPONSE_TOKENS} tokens, before it was finished.",
+                self.endpoint.url,
+            );
+        }
+
+        history.push(Message {
+            role: "assistant",
+            content: completion.reply.clone(),
+        });
+        parse_reply(completion.reply.trim())
     }
 }
 
-/// Build a context from an already-opened embedded GGUF and apply the
-/// build-time KV-cache snapshot. Blocks — call from `spawn_blocking`.
-fn build_llm_state(embedded: EmbeddedGgufFile) -> Result<LlmState> {
-    unsafe { llama_backend_init() };
+/// What the endpoint said, why it stopped saying it, and whether it got to the
+/// end at all.
+struct Completion {
+    reply: String,
+    finish_reason: Option<String>,
+    /// The stream carried its `[DONE]` marker. Without it the reply is whatever
+    /// arrived before the connection stopped, which is not the whole answer.
+    ended: bool,
+}
 
-    let (snapshot_tokens, raw_state) = parse_snapshot(SNAPSHOT)?;
+/// Accumulate the `content` deltas of an OpenAI-style `text/event-stream`
+/// response, firing `on_token` with the running count of generated tokens —
+/// reasoning included — as it grows.
+///
+/// The buffer is bytes, not text, and is decoded a whole line at a time. A
+/// multi-byte character can land across two chunks of the response, and
+/// decoding each chunk on its own turns the halves into replacement characters
+/// — which corrupts that line's JSON, drops the delta it carried, and truncates
+/// the reply. A line break cannot occur inside a UTF-8 character, so splitting
+/// on it before decoding is always safe.
+async fn read_stream<F: FnMut(usize)>(
+    response: reqwest::Response,
+    on_token: &mut F,
+) -> Result<Completion> {
+    let mut stream = response.bytes_stream();
+    let mut pending: Vec<u8> = Vec::new();
+    let mut reply = String::new();
+    let mut finish_reason = None;
+    let mut deltas = 0;
+    let mut ended = false;
 
-    let mut model_params = unsafe { llama_model_default_params() };
-    // No GPU backend is compiled in, and ik_llama.cpp's default (-1) asks
-    // for every layer to be offloaded to one.
-    model_params.n_gpu_layers = 0;
-    let model_path = embedded.path();
-    let model = unsafe { llama_model_load_from_file(model_path.as_ptr(), model_params) };
-    if model.is_null() {
-        bail!("llama_model_load_from_file returned null for the embedded GGUF");
-    }
+    while let Some(chunk) = stream.next().await {
+        pending.extend_from_slice(&chunk.context("reading the response stream")?);
 
-    let vocabulary_size = unsafe { llama_n_vocab(model) };
-    if vocabulary_size <= 0 {
-        unsafe { llama_free_model(model) };
-        bail!("llama_n_vocab returned {vocabulary_size}");
-    }
+        while let Some(newline) = pending.iter().position(|byte| *byte == b'\n') {
+            let line: Vec<u8> = pending.drain(..=newline).collect();
+            let line = match std::str::from_utf8(&line) {
+                Ok(line) => line.trim(),
+                Err(error) => {
+                    tracing::warn!(error = ?error, "dropping a stream line that is not UTF-8");
+                    continue;
+                }
+            };
 
-    let context = match build_context(model) {
-        Ok(context) => context,
-        Err(error) => {
-            unsafe { llama_free_model(model) };
-            return Err(error);
+            let Some(data) = line.strip_prefix("data:") else {
+                continue;
+            };
+            let data = data.trim();
+            if data == "[DONE]" {
+                ended = true;
+                continue;
+            }
+            let chunk: CompletionChunk = match serde_json::from_str(data) {
+                Ok(chunk) => chunk,
+                Err(error) => {
+                    // Dropping one of these loses part of the reply, so it is
+                    // reported rather than passed over quietly.
+                    tracing::warn!(error = ?error, data, "dropping an unparsable stream chunk");
+                    continue;
+                }
+            };
+
+            if let Some(choice) = chunk.choices.first() {
+                if let Some(content) = choice.delta.content.as_ref()
+                    && !content.is_empty()
+                {
+                    reply.push_str(content);
+                    deltas += 1;
+                }
+                if let Some(reasoning) = choice.delta.reasoning_content.as_ref()
+                    && !reasoning.is_empty()
+                {
+                    deltas += 1;
+                }
+                if choice.finish_reason.is_some() {
+                    finish_reason.clone_from(&choice.finish_reason);
+                }
+            }
+            // The endpoint's own running total wins where it sends one; the
+            // delta tally is the fallback for hosts that ignore stream_options.
+            on_token(
+                chunk
+                    .usage
+                    .and_then(|usage| usage.completion_tokens)
+                    .unwrap_or(deltas),
+            );
         }
-    };
+    }
 
-    let written = unsafe { llama_state_set_data(context, raw_state.as_ptr(), raw_state.len()) };
-    if written != raw_state.len() {
-        unsafe { llama_free(context) };
-        unsafe { llama_free_model(model) };
-        bail!(
-            "snapshot load consumed {written} bytes, expected {}",
-            raw_state.len()
+    // Anything left without a trailing newline is a line the endpoint never
+    // finished sending. Dropping it silently is what turns a cut-short stream
+    // into a reply that merely looks malformed.
+    if !pending.is_empty() {
+        tracing::warn!(
+            trailing = pending.len(),
+            "the response stream ended mid-line"
         );
     }
 
-    Ok(LlmState {
-        context,
-        model,
-        candidates: vec![
-            llama_token_data {
-                id: 0,
-                logit: 0.0,
-                p: 0.0,
-            };
-            vocabulary_size as usize
-        ],
-        next_position: snapshot_tokens,
-        had_first_chat: false,
+    Ok(Completion {
+        reply,
+        finish_reason,
+        ended,
     })
 }
 
-/// Parse a `llama_state_save_file` session file. Returns `(n_tokens, raw_kv_bytes)`.
-fn parse_snapshot(bytes: &[u8]) -> Result<(i32, &[u8])> {
-    if bytes.len() < 12 {
-        bail!("snapshot truncated: {} bytes < 12-byte header", bytes.len());
-    }
-    let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-    let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    let n_tokens = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
-    if magic != LLAMA_SESSION_MAGIC {
-        bail!("snapshot magic mismatch: got {magic:#010x}, expected {LLAMA_SESSION_MAGIC:#010x}");
-    }
-    if version != LLAMA_SESSION_VERSION {
-        bail!(
-            "snapshot version mismatch: got {version}, expected {LLAMA_SESSION_VERSION} \
-             (vendor/ik_llama.cpp moved out of sync with this build)"
-        );
-    }
-    let tokens_byte_len = (n_tokens as usize)
-        .checked_mul(4)
-        .ok_or_else(|| anyhow!("snapshot token count overflows usize: {n_tokens}"))?;
-    let tail_start = 12usize
-        .checked_add(tokens_byte_len)
-        .ok_or_else(|| anyhow!("snapshot header arithmetic overflowed"))?;
-    if bytes.len() < tail_start {
-        bail!(
-            "snapshot truncated: header claims {n_tokens} tokens but only {} bytes available",
-            bytes.len() - 12
-        );
-    }
-    let n_tokens_i32: i32 = n_tokens
-        .try_into()
-        .context("snapshot token count overflows i32")?;
-    Ok((n_tokens_i32, &bytes[tail_start..]))
-}
-
-fn build_context(model: *mut llama_model) -> Result<*mut llama_context> {
-    let threads = inference_threads();
-    let mut params = unsafe { llama_context_default_params() };
-    params.seed = SAMPLER_SEED;
-    params.n_ctx = CONTEXT_TOKENS;
-    // The snapshot carries the output id of the token the warm-up asked for
-    // logits on, and restoring rejects an id that does not fit the batch. The
-    // warm-up decodes its whole prompt in one batch of `CONTEXT_TOKENS`, so
-    // the runtime has to admit ids from that same range.
-    params.n_batch = CONTEXT_TOKENS;
-    params.n_threads = threads;
-    params.n_threads_batch = threads;
-    params.type_k = KV_CACHE_TYPE;
-    params.type_v = KV_CACHE_TYPE;
-
-    let context = unsafe { llama_init_from_model(model, params) };
-    if context.is_null() {
-        bail!("llama_init_from_model returned null");
-    }
-    Ok(context)
-}
-
-/// Honour `DUSK_LLM_THREADS_COUNT` if it's a positive integer; otherwise
-/// fall back to host parallelism, then 1.
-fn inference_threads() -> u32 {
-    if let Ok(value) = std::env::var("DUSK_LLM_THREADS_COUNT")
-        && let Ok(parsed) = value.parse::<u32>()
-        && parsed > 0
-    {
-        return parsed;
-    }
-    std::thread::available_parallelism()
-        .ok()
-        .and_then(|count| u32::try_from(count.get()).ok())
-        .unwrap_or(1)
-}
-
-static INSTALL_LLAMA_LOG_HOOK: Once = Once::new();
-fn install_llama_log_hook() {
-    INSTALL_LLAMA_LOG_HOOK.call_once(|| {
-        // SAFETY: trampoline is `extern "C"`, `'static`; ik_llama.cpp stores
-        // the pointer indefinitely.
-        unsafe { llama_log_set(Some(llama_log_trampoline), ptr::null_mut()) };
-    });
-}
-
-unsafe extern "C" fn llama_log_trampoline(
-    level: ggml_log_level,
-    text: *const c_char,
-    _user_data: *mut c_void,
-) {
-    if text.is_null() {
-        return;
-    }
-    let bytes = unsafe { CStr::from_ptr(text) }.to_bytes();
-    let message = String::from_utf8_lossy(bytes);
-    let trimmed = message.trim_end_matches('\n');
-    if trimmed.is_empty() {
-        return;
-    }
-    match level {
-        ggml_log_level::GGML_LOG_LEVEL_ERROR => {
-            tracing::error!(target: "ik_llama_cpp", "{trimmed}")
-        }
-        ggml_log_level::GGML_LOG_LEVEL_WARN => tracing::warn!(target: "ik_llama_cpp", "{trimmed}"),
-        ggml_log_level::GGML_LOG_LEVEL_INFO => tracing::info!(target: "ik_llama_cpp", "{trimmed}"),
-        ggml_log_level::GGML_LOG_LEVEL_DEBUG | ggml_log_level::GGML_LOG_LEVEL_CONT => {
-            tracing::debug!(target: "ik_llama_cpp", "{trimmed}")
-        }
-        ggml_log_level::GGML_LOG_LEVEL_NONE => {}
-    }
-}
-
-/// Extract the first JSON object from the model's raw reply. The model
-/// occasionally prefixes with stray few-shot echo text, so we skip to the
-/// first `{` and parse one value off the stream (ignoring any trailing
-/// noise).
+/// Extract the first JSON object from the model's raw reply. Models
+/// occasionally prefix with stray prose, so we skip to the first `{` and parse
+/// one value off the stream (ignoring any trailing noise).
 fn parse_reply(text: &str) -> Result<LlmReply> {
     let start = text
         .find('{')
@@ -318,196 +491,5 @@ fn parse_reply(text: &str) -> Result<LlmReply> {
             "model did not return a valid LlmReply; raw reply: {text:?}"
         ))),
         None => Err(anyhow!("no JSON object in reply; raw reply: {text:?}")),
-    }
-}
-
-fn vocab(state: &LlmState) -> *const llama_vocab {
-    unsafe { llama_model_get_vocab(state.model) }
-}
-
-/// Tokenize a chat continuation. `add_special=false` because the snapshot
-/// already contains the BOS. `parse_special=true` so chat-template
-/// markers (`<|turn>`, `<turn|>`) tokenize to their dedicated special-token
-/// IDs (105 and 106 for Gemma 4) instead of multi-token text.
-fn tokenize(state: &LlmState, text: &str) -> Result<Vec<llama_token>> {
-    let bytes = text.as_bytes();
-    let text_len: i32 = bytes
-        .len()
-        .try_into()
-        .context("tokenizer input overflows i32")?;
-    let text_ptr = bytes.as_ptr() as *const c_char;
-    let vocab = vocab(state);
-
-    // Probe: null buffer returns -(required slots), or i32::MIN on overflow.
-    let probe =
-        unsafe { llama_vocab_tokenize(vocab, text_ptr, text_len, ptr::null_mut(), 0, false, true) };
-    if probe == i32::MIN {
-        bail!("tokenization overflowed i32");
-    }
-    let needed: usize = (-probe)
-        .try_into()
-        .context("tokenizer reported negative capacity")?;
-    let mut tokens = vec![0_i32; needed];
-    let written = unsafe {
-        llama_vocab_tokenize(
-            vocab,
-            text_ptr,
-            text_len,
-            tokens.as_mut_ptr(),
-            needed as i32,
-            false,
-            true,
-        )
-    };
-    if written < 0 {
-        bail!("llama_vocab_tokenize failed (returned {written})");
-    }
-    tokens.truncate(written as usize);
-    Ok(tokens)
-}
-
-/// Decode `tokens` into the KV cache, starting at `state.next_position`.
-/// Only the last token's logits are kept (used by `sample_reply`).
-fn decode(state: &mut LlmState, tokens: &[llama_token]) -> Result<()> {
-    if tokens.is_empty() {
-        return Ok(());
-    }
-    let count: i32 = tokens
-        .len()
-        .try_into()
-        .context("token batch overflows i32")?;
-    let mut batch = unsafe { llama_batch_init(count, 0, 1) };
-
-    let last = tokens.len() - 1;
-    for (offset, &token) in tokens.iter().enumerate() {
-        let position = state
-            .next_position
-            .checked_add(offset as i32)
-            .ok_or_else(|| anyhow!("KV position overflows i32"))?;
-        unsafe { write_batch_slot(&mut batch, offset, token, position, offset == last) };
-    }
-    batch.n_tokens = count;
-
-    let status = unsafe { llama_decode(state.context, batch) };
-    unsafe { llama_batch_free(batch) };
-
-    if status != 0 {
-        bail!("llama_decode returned {status}");
-    }
-    state.next_position = state
-        .next_position
-        .checked_add(count)
-        .ok_or_else(|| anyhow!("KV position overflows i32"))?;
-    Ok(())
-}
-
-/// Sample tokens until end-of-generation or `MAX_RESPONSE_TOKENS`,
-/// feeding each accepted token back into the KV cache. `on_token`
-/// fires with the running count after each token is decoded.
-fn sample_reply<F: FnMut(usize)>(
-    state: &mut LlmState,
-    first_index: i32,
-    on_token: &mut F,
-) -> Result<String> {
-    let mut reply_bytes: Vec<u8> = Vec::new();
-    let mut sample_index = first_index;
-    let mut count: usize = 0;
-
-    for _ in 0..MAX_RESPONSE_TOKENS {
-        let token = sample_token(state, sample_index)?;
-        if unsafe { llama_vocab_is_eog(vocab(state), token) } {
-            break;
-        }
-
-        let piece = token_to_piece(state, token)?;
-        reply_bytes.extend_from_slice(&piece);
-        count += 1;
-        on_token(count);
-
-        decode(state, &[token])?;
-        // After decoding a single token, logits sit in row 0.
-        sample_index = 0;
-    }
-    Ok(String::from_utf8_lossy(&reply_bytes).into_owned())
-}
-
-/// Draw one token from the logits at row `index`: top-K narrows the
-/// candidates, temperature rescales them, and the context's RNG draws from
-/// what is left.
-fn sample_token(state: &mut LlmState, index: i32) -> Result<llama_token> {
-    let logits = unsafe { llama_get_logits_ith(state.context, index) };
-    if logits.is_null() {
-        bail!("llama_get_logits_ith returned null for row {index}");
-    }
-    for (token, candidate) in state.candidates.iter_mut().enumerate() {
-        candidate.id = token as llama_token;
-        candidate.logit = unsafe { *logits.add(token) };
-        candidate.p = 0.0;
-    }
-
-    let mut candidates = llama_token_data_array {
-        data: state.candidates.as_mut_ptr(),
-        size: state.candidates.len(),
-        selected: -1,
-        sorted: false,
-    };
-    unsafe {
-        llama_sample_top_k(
-            state.context,
-            &mut candidates,
-            SAMPLER_TOP_K,
-            SAMPLER_MINIMUM_KEEP,
-        );
-        llama_sample_temp(state.context, &mut candidates, SAMPLER_TEMPERATURE);
-        Ok(llama_sample_token(state.context, &mut candidates))
-    }
-}
-
-fn token_to_piece(state: &LlmState, token: llama_token) -> Result<Vec<u8>> {
-    let vocab = vocab(state);
-    let required =
-        unsafe { llama_token_to_piece_vocab(vocab, token, ptr::null_mut(), 0, 0, false) };
-    if required == 0 {
-        return Ok(Vec::new());
-    }
-    let needed = required.unsigned_abs() as usize;
-    let mut buffer = vec![0_u8; needed];
-    let written = unsafe {
-        llama_token_to_piece_vocab(
-            vocab,
-            token,
-            buffer.as_mut_ptr() as *mut c_char,
-            needed as i32,
-            0,
-            false,
-        )
-    };
-    if written < 0 {
-        bail!("llama_token_to_piece failed (returned {written})");
-    }
-    buffer.truncate(written as usize);
-    Ok(buffer)
-}
-
-/// Fill slot `index` of a `llama_batch_init`-allocated batch. Sequence id
-/// is always 0 (single-sequence inference).
-///
-/// # Safety
-/// `batch` must have been created with `llama_batch_init(capacity, _, 1)`
-/// with `capacity > index`.
-unsafe fn write_batch_slot(
-    batch: &mut llama_batch,
-    index: usize,
-    token: llama_token,
-    position: llama_pos,
-    keep_logits: bool,
-) {
-    unsafe {
-        *batch.token.add(index) = token;
-        *batch.pos.add(index) = position;
-        *batch.n_seq_id.add(index) = 1;
-        // batch.seq_id[index] points at a pre-allocated sub-array of length n_seq_max (= 1).
-        *(*batch.seq_id.add(index)) = 0;
-        *batch.logits.add(index) = if keep_logits { 1 } else { 0 };
     }
 }

@@ -22,7 +22,7 @@ use crate::ui::{
     CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
     render_keepalive_suffix,
 };
-use dusk_llm::{Chat, GEMMA4E2B_EMBEDDED_GGUF_SECTION, load_from_self_exe_section};
+use dusk_llm::Chat;
 use dusk_shell::shell::Shell;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
@@ -220,50 +220,58 @@ where
         Ok(false)
     }
 
+    /// Build the chat if there isn't one yet, so Ask Dusk is known to be usable
+    /// *before* the prompt accepts a question. Doing this at submit time would
+    /// mean discarding something the user had already typed.
+    fn prepare_chat(&mut self) -> Result<()> {
+        if self.llm_chat.is_some() {
+            return Ok(());
+        }
+        let mut entries: Vec<&EntryInfo> = self.available_entries_info.iter().collect();
+        entries.sort_by_key(|entry| entry.name);
+        let mut programs = String::new();
+        for entry in entries {
+            programs += &format!("\n## {} — {}\n", entry.name, entry.short_description);
+            let long_description = entry.long_description.trim();
+            if !long_description.is_empty() {
+                programs += long_description;
+                programs.push('\n');
+            }
+        }
+        self.llm_chat = Some(Chat::new(&programs)?);
+        Ok(())
+    }
+
     async fn chat_submit(&mut self, natural_language: &str) -> Option<String> {
         let natural_language = natural_language.trim();
         if natural_language.is_empty() {
             return None;
         }
 
-        if self.llm_chat.is_none() {
-            let loaded = with_spinner(
-                tokio::task::spawn_blocking(|| {
-                    let embedded = load_from_self_exe_section(GEMMA4E2B_EMBEDDED_GGUF_SECTION)?;
-                    Chat::new(embedded)
-                }),
-                || Style::new().fg(Color::Yellow).paint("Waking…").to_string(),
-            )
-            .await;
-            match loaded {
-                Ok(Ok(chat)) => self.llm_chat = Some(chat),
-                Ok(Err(error)) => {
-                    tracing::warn!(error = ?error, "llm load failed");
-                    return None;
-                }
-                Err(error) => {
-                    tracing::warn!(error = ?error, "llm load task panicked");
-                    return None;
-                }
-            }
-        }
-        let llm_chat = self.llm_chat.as_ref().expect("just loaded");
+        let Some(llm_chat) = self.llm_chat.as_ref() else {
+            tracing::warn!("ask dusk was asked a question without a prepared chat");
+            return None;
+        };
 
         let token_count = Arc::new(AtomicUsize::new(0));
         let writer = token_count.clone();
-        let reader = token_count.clone();
         let result = with_spinner(
-            llm_chat.chat(natural_language, move |n| {
-                writer.store(n, Ordering::Relaxed)
+            llm_chat.chat(natural_language, move |count| {
+                writer.store(count, Ordering::Relaxed)
             }),
             move || {
-                let count = reader.load(Ordering::Relaxed);
+                // An endpoint that reasons before answering sends nothing at
+                // all until it is done — measured at 3 to 17 seconds against
+                // Gemini. A count of zero for that whole stretch reads as a
+                // stall, so the wait is named instead of tallied.
+                let progress = match token_count.load(Ordering::Relaxed) {
+                    0 => String::from("· waiting for tokens"),
+                    count => format!("· ↓ {count} tokens"),
+                };
                 format!(
                     "{} {}",
                     Style::new().fg(Color::Yellow).paint("Dusking…"),
-                    Style::new()
-                        .fg(Color::DarkGray)
-                        .paint(format!("· ↓ {count} tokens")),
+                    Style::new().fg(Color::DarkGray).paint(progress),
                 )
             },
         )
@@ -272,7 +280,7 @@ where
         let reply = match result {
             Ok(reply) => reply,
             Err(error) => {
-                tracing::warn!(error = ?error, "chat request failed");
+                tracing::warn!("{error:#}");
                 return None;
             }
         };
@@ -359,7 +367,16 @@ where
             let sig = read_line_result?;
             match sig {
                 Signal::Success(buffer) if buffer == TOGGLE_CHAT_HOST_COMMAND => {
-                    self.mode.toggle();
+                    // Entering is where Ask Dusk has to prove it can answer. If
+                    // it can't, say so now and stay in command mode — the
+                    // alternative is taking a question and then binning it.
+                    match self.mode.is_chat() {
+                        false => match self.prepare_chat() {
+                            Ok(()) => self.mode.toggle(),
+                            Err(error) => tracing::warn!("{error:#}"),
+                        },
+                        true => self.mode.toggle(),
+                    }
                     execute!(
                         stdout(),
                         MoveTo(0, prompt_start_row),

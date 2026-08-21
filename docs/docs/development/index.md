@@ -30,9 +30,8 @@ cargo nextest run
 
 ## Trying things out
 
-Make sure you have `make` `cmake` and `autotools` installed. The first build also
-downloads the ≈2.9 GB [Ask Dusk](ask_dusk.md) model, so it needs a network
-connection; later builds reuse the downloaded file.
+Make sure you have `make` `cmake` and `autotools` installed, for the vendored
+Cap'n Proto compiler.
 
 ### Run a node
 
