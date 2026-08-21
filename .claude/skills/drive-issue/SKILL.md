@@ -1,6 +1,6 @@
 ---
 name: drive-issue
-description: Take a GitHub issue in this repository from "here is the issue number" to a merged PR — read it over the GitHub MCP, work in a git worktree, branch from current master, get the tree buildable, commit through the atomic-commit skill, push, open a PR that links the issue, ask for code review, and merge only once the user approves. Use this skill whenever the user hands over a dusk issue number or issue URL and asks to drive, complete, or finish it.
+description: Take a GitHub issue in this repository from "here is the issue number" to a merged PR — read it over the GitHub MCP, work in a git worktree, branch from current master, get the tree buildable, commit through the atomic-commit skill, push, open the single PR that links the issue, ask for code review, and merge only once the user approves. Use this skill whenever the user hands over a dusk issue number or issue URL and asks to drive, complete, or finish it. Also use it for "drive-issue continue", which resumes a drive whose PR is already open — absorbing the user's own edits and review comments into the existing commits rather than opening anything new.
 ---
 
 # Drive a Dusk Issue to a Merged PR
@@ -95,8 +95,13 @@ with an error that named neither the symlink nor the branch that removed it.
 
 ## Step 5 — Commit
 
-Use the `atomic-commit` skill and follow it. Reference the issue as `(#N)` in the
-subject.
+Use the `atomic-commit` skill and follow it.
+
+**Do not put the issue number in the commit subject.** A subject is one
+imperative sentence about what the commit does; `(#N)` is metadata about why the
+work was scheduled, not part of that sentence, and it is already carried by the
+`Closes #N` in the PR body. Trailing issue numbers in `git log --oneline` also
+read as pull-request merge numbers, which they are not.
 
 - **Run `git commit` in the foreground with an explicit long timeout**
   (`timeout: 600000`). Do not background it, and do not poll for it — the
@@ -118,6 +123,17 @@ subject.
   and anything else you created during setup must stay out of the commit.
 
 ## Step 6 — Push and open the PR over the MCP
+
+**A drive-issue session produces exactly one pull request.** Whatever else the
+work turns up — a stale skill, a broken config, a fix to something adjacent —
+becomes another commit on the same branch, never a second PR. Asking to drive an
+issue is asking for one thing to review and one thing to merge; two PRs make the
+user do the bookkeeping the skill exists to do for them.
+
+So `create_pull_request` is called at most once per session. After the PR is
+open, more work means: commit onto the same branch, push, and
+`update_pull_request` the body to cover it. If a second PR has already been
+opened, fold its commits onto the one branch and close it as superseded.
 
 ```
 git push -u origin <branch>
@@ -169,6 +185,45 @@ Afterwards confirm the issue closed and report the merge commit.
 
 ---
 
+## `drive-issue continue` — resuming a drive already in flight
+
+`drive-issue continue` means: the PR for this issue is already open, something
+has changed since, carry on. Usually the user has edited the worktree themselves,
+or left review comments, or asked for something the last round missed.
+
+Everything in Steps 1–8 still applies. What is different is that **nothing gets
+created**. There is already a worktree, a branch, and a PR; find them rather than
+opening new ones.
+
+```
+git status                 # what the user changed in the tree
+git log --oneline <base>.. # the commits already on the branch
+mcp__github__pull_request_read(method="get_review_comments", …)
+```
+
+Then:
+
+- **Absorb, do not append.** A correction, an omission, an answer to a review
+  comment, a bug introduced three commits ago — each belongs in the commit whose
+  concern it is, per the working agreement on fixups. `git commit --fixup=<sha>`
+  then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>` does it in
+  seconds, and a rebase does not re-run the pre-commit hooks on replayed commits.
+  Only a genuinely separate concern earns a commit of its own.
+- **The user's edits in the tree are theirs.** Read them before staging: they are
+  a decision, not a draft to improve on. If one looks wrong, say so rather than
+  quietly rewriting it.
+- **Force-push the rewritten branch.** A pushed branch is not a reason to append
+  instead — the history has to state what the work is, not the order it was
+  discovered in.
+- **Re-run whatever the change invalidated**, and update the numbers in the PR
+  body if they moved.
+- **Update the PR body**, do not open a new PR. If a new rule or decision came
+  out of this round, it belongs in the body's decisions section so the reviewer
+  sees it in one place.
+
+Finish the same way Step 7 does: hand back the PR URL and wait. `continue` never
+merges on its own either.
+
 ## Keeping this skill true
 
 This file describes an environment that changes under it. When a step here turns
@@ -188,7 +243,12 @@ next agent is a defect exactly like a wrong comment.
 ☐ `origin/master` re-checked before pushing; rebased, then the build re-run
 ☐ `cargo build --release --bin dusk` green; no tests run unless asked
 ☐ One commit per concern, committed in the foreground with a long timeout
+☐ No issue number in any commit subject
 ☐ PR body written in the first person, addressed to no one
-☐ Pushed; PR opened over the MCP with `Closes #N`
+☐ Pushed; **one** PR opened over the MCP, with `Closes #N`
+☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ Review requested; **waited**
 ☐ Merged only after explicit approval; issue confirmed closed
+
+On `drive-issue continue`, the first two lines are already done, nothing new is
+created, and the work absorbs into the commits that are already there.
