@@ -9,6 +9,8 @@ use rexpect::spawn;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
+use std::time::{Duration, Instant};
+use wait_timeout::ChildExt;
 
 lazy_static! {
     static ref DUSK_CLI_BIN: PathBuf = {
@@ -410,4 +412,58 @@ fn test_multiple_interactive_shells_parallel() {
             }
         }
     }
+}
+
+#[test]
+fn test_sleep_runs_for_its_duration() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    let started = Instant::now();
+    Command::new(get_dusk_cli_bin())
+        .arg(format!("{}:{}", LISTEN_ADDRESS, port))
+        .arg("sleep 2000")
+        .assert()
+        .success();
+    let elapsed = started.elapsed();
+
+    assert!(
+        elapsed >= Duration::from_millis(2000),
+        "sleep 2000 returned after {elapsed:?}, before its duration elapsed"
+    );
+}
+
+#[test]
+fn test_ctrl_c_stops_a_sleep() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    // Long enough that finishing on the timer instead of on the interrupt could
+    // not pass for an early exit.
+    let mut child = Command::new(get_dusk_cli_bin())
+        .arg(format!("{}:{}", LISTEN_ADDRESS, port))
+        .arg("sleep 600000")
+        .spawn()
+        .expect("spawn the dusk cli");
+
+    // Give the command time to reach the node and start its wait, so the
+    // interrupt lands on a sleep that is already running.
+    thread::sleep(Duration::from_secs(2));
+
+    let started = Instant::now();
+    Command::new("kill")
+        .arg("-INT")
+        .arg(child.id().to_string())
+        .status()
+        .expect("send SIGINT to the dusk cli");
+
+    let status = child
+        .wait_timeout(Duration::from_secs(10))
+        .expect("wait for the dusk cli");
+
+    assert!(
+        status.is_some(),
+        "Ctrl+C left sleep 600000 running for {:?}",
+        started.elapsed()
+    );
 }
