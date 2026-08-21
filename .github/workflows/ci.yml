@@ -20,7 +20,7 @@ concurrency:
 
 # No job here compiles the workspace, so there is no cargo cache and no
 # target directory to keep: cargo fmt parses sources and never runs a build
-# script, and the other three jobs never invoke cargo at all.
+# script, and the other four jobs never invoke cargo at all.
 jobs:
   python-lint:
     name: Python (ruff)
@@ -39,10 +39,37 @@ jobs:
       # Both commands mirror the ruff-check and ruff-format hooks in
       # .pre-commit-config.yaml, including their file scope.
       - name: ruff check
-        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/
+        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/gw/
 
       - name: ruff format
-        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/
+        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/gw/
+
+  python-tests:
+    name: Python (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # --no-install-project keeps this job off the Rust toolchain: installing
+      # the project itself would build the dusk_py extension through maturin.
+      # Its dependencies still come from uv.lock, so this job tests the versions
+      # the project actually pins rather than whatever resolves today — naming
+      # them on the command line instead is how this job once installed mcp 2.0
+      # against a tree written for 1.x. The gateway's tests supply their own
+      # connections and program set and stub the extension out, so they need
+      # nothing the lockfile does not already carry. The end-to-end tests that
+      # do drive a real node live in tests/py and are not run here.
+      - name: Install the locked dependencies
+        run: uv sync --no-install-project
+
+      - name: pytest
+        run: .venv/bin/python -m pytest tests/gw -q
 
   c-lint:
     name: C (clang-format, clang-tidy)

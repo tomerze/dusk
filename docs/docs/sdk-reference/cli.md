@@ -30,5 +30,5 @@ cargo run --bin dusk -- 127.0.0.1:9090
 ```
 
 The interactive prompt is also where [Ask Dusk](../features/ask-dusk.md) (Ctrl + A)
-lives. For the other ways to reach a node — Python and MCP — see
+lives. For the other ways to reach a node — Python, REST and MCP — see
 [Connect a client](../getting-started/guides/connect-a-client.md).

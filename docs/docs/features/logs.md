@@ -68,7 +68,7 @@ logs dump --follow-only   # skip the history; follow new logs as values
 `logs dump` returns the logs to the caller — one record per log entry — on the
 program's own output stream, instead of painting a terminal (`view`) or sending
 them to an external sink (`stream`). It's the way to read logs from a script, the
-Python REPL, and the [MCP gateway](mcp.md): the records come back as the program's
+Python REPL, and the [API gateway](gateway.md): the records come back as the program's
 result.
 
 Each record carries `sequence`, `severity`, `timeUnixNano` (nanoseconds since the
@@ -89,7 +89,7 @@ logs stream <url> --replay-only  # write the buffered history, then exit
 ```
 
 `logs stream` routes the same logs to a destination instead of the viewer — use
-it from scripts and the [MCP gateway](mcp.md). Supported URLs:
+it from scripts and the [API gateway](gateway.md). Supported URLs:
 
 | URL | Destination |
 |-----|-------------|
@@ -145,7 +145,7 @@ matching span's `trace.id` (every task is one trace), and filter logs by it.
 logs forever by default. Two flags change that:
 
 - `--replay-only` — replay the history, then stop: a bounded snapshot that
-  returns, for scripts and MCP (a plain follow never returns).
+  returns, for scripts and the gateway (a plain follow never returns).
 - `--follow-only` — skip the history; follow only logs from now on.
 
 These flags don't apply to `logs view`, the interactive pager, which always

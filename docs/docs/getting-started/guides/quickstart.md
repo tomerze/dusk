@@ -33,5 +33,5 @@ ps
 Type `help` to see every program the node can run. From here:
 
 - the [Shell](../../features/shell.md) reference covers the command language,
-- [Connect a client](connect-a-client.md) shows the Python and MCP entry points,
+- [Connect a client](connect-a-client.md) shows the Python and HTTP entry points,
 - [Write your first program](first-program.md) adds a new program of your own.
