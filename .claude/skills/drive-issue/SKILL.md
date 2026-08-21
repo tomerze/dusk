@@ -31,19 +31,23 @@ Use the `EnterWorktree` tool. A fresh dusk worktree does not build until:
 
 ```
 git submodule update --init vendor/capnproto        # else dusk_capnp's build.rs fails
-git submodule update --init vendor/ik_llama.cpp     # else dusk_llm's build.rs fails
 cp /home/<user>/git/dusk/Cargo.lock .               # Cargo.lock is gitignored
-ln -s <main checkout>/dusk/src/dusk_llm/models dusk/src/dusk_llm/models
 ```
 
 Why each matters:
 
+- **`vendor/capnproto` is the only submodule**, and the vendored Cap'n Proto
+  compiler is the only heavy build-time dependency in the tree. Nothing else is
+  fetched at build time: `dusk_llm` talks to an external endpoint over HTTP
+  (`DUSK_LLM_URL`) and has no build script, so no model is downloaded, verified
+  or embedded.
 - **`Cargo.lock` is gitignored.** A fresh resolve can pick dependency versions
   newer than the manifests were written against, and you will lose an hour to a
   compile error that is not yours. Copy the user's lockfile.
-- **The model symlink** skips a 2.9 GiB download. `dusk_llm/model.json` names the
-  URL and SHA-256; `build.rs` only downloads when `models/<file>` is absent, so a
-  symlink to the main checkout's copy is enough.
+- **Do not symlink build inputs in from another checkout.** A symlink whose
+  target is deleted while you work turns into a failure nowhere near its cause —
+  `fs::create_dir_all` on a dangling symlink fails with `File exists`, not with
+  anything naming the link.
 - Never work in the user's checkout, and never `cd` out of the worktree.
 
 ## Step 3 — Branch from current master, and check it again later
@@ -55,41 +59,63 @@ git log origin/master --oneline -3
 
 Branch from `origin/master`, not from whatever the worktree started on.
 
-**Re-check `origin/master` before you push.** Dusk work takes hours and the user
-merges their own PRs in the meantime; if master moved, rebase and re-run both the
-build and any measurements, because numbers taken on a stale base are not what
-the reviewer will see.
+**Re-check `origin/master` before you push, and re-run the build after you
+rebase.** Dusk work takes hours and the user merges their own PRs in the
+meantime. Master does not only change code — it can delete the build
+infrastructure you set your worktree up around, so treat a rebase as
+invalidating your whole environment, not just your numbers.
+
+Past failure: while driving #6, master moved twice. The second move (#11)
+deleted `dusk_llm/build.rs`, `dusk_llm/model.json`, the `vendor/ik_llama.cpp`
+submodule and the compile-time sh-entry side-channel. The setup this skill had
+prescribed an hour earlier no longer applied, and a step from it — a symlink
+into the main checkout — went dangling mid-run and failed a commit's clippy hook
+with an error that named neither the symlink nor the branch that removed it.
 
 ## Step 4 — Building and measuring
 
 - `cargo check` is cheap and always allowed. **Do not run `cargo test` or
   `cargo nextest` unless the user asked** — tests are a separate workstream.
-- `cargo build --release --bin dusk` is the real build. Budget for it: it
-  compiles the vendored C++ (ik_llama.cpp), runs the warm-up tool to produce the
-  KV snapshot, and links a ~3 GB binary with the model embedded. Sixteen minutes
-  from clean on a laptop.
-- Building only `-p dusk_llm` can fail with "could find entries-info … dir": the
-  system prompt is assembled from `target/.dusk_sh_entries/*.json`, which the
-  program crates' `#[sh_entry]` macros write. Build the CLI first.
+  An issue that asks for tests is asking; running them is then part of
+  delivering, and shipping a test you never executed is not.
+- `cargo build --release --bin dusk` is the real build. It is a plain Rust
+  release build; the only unusual cost is compiling the vendored Cap'n Proto
+  compiler the first time.
 - If the issue wants a before/after comparison, **build and measure the
   unmodified tree first and keep the numbers** — once the target directory is
   overwritten, recovering the baseline costs another full build. A second
   worktree at `origin/master` is the cheapest way to get it back.
 - Run benchmarks **sequentially on an idle machine**. A benchmark sharing the
-  machine with a compile reports numbers that are off by 8×.
+  machine with a compile reports numbers that are off by 8×. **Check whether the
+  machine is actually idle first** — other worktrees under `.claude/worktrees/`
+  may have their own sessions compiling right now (`ps aux | grep rustc` shows
+  whose target directory each one is writing to).
+- **Never state a number you did not measure**, and never explain a slow build
+  before timing it. Measure, then decide.
 
 ## Step 5 — Commit
 
 Use the `atomic-commit` skill and follow it. Reference the issue as `(#N)` in the
 subject.
 
-- **Never put a timeout on `git commit`.** The pre-commit hooks stash unstaged
-  work; a killed commit can lose it.
-- Expect two or three attempts: `fmt` and `clang-format` modify files and fail
-  the run. Re-stage what they touched and commit again. The full hook set is
-  fmt, clippy, clang-format, clang-tidy, ruff, pyright.
-- Stage explicit paths, never `git add .` — measurement harnesses, the `models`
-  symlink, and `Cargo.lock` must stay out of the commit.
+- **Run `git commit` in the foreground with an explicit long timeout**
+  (`timeout: 600000`). Do not background it, and do not poll for it — the
+  harness re-invokes you when a background command exits, so a `sleep` loop
+  watching your own output file is pure waste. The reason to give it a long
+  timeout rather than the default is that pre-commit stashes unstaged work
+  before the hooks run: a commit killed mid-hook can strand that stash.
+- If a commit is killed anyway, the stash is recoverable from the patch named in
+  the hook's `[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
+  **`~/.cache/pre-commit/` is shared by every worktree on the machine.** A patch
+  in there may belong to another session — check that its diff is yours before
+  applying it, and never apply one you did not create.
+- The hook set is fmt, clippy, clang-format, clang-tidy, ruff (lint and format)
+  and pyright, with `fail_fast: true`. Only fmt and clippy run for a Rust-only
+  change; the rest match on C or Python paths and skip. Expect a second attempt
+  when `fmt` rewrites a file and fails the run — re-stage what it touched and
+  commit again.
+- Stage explicit paths, never `git add .` — measurement harnesses, `Cargo.lock`
+  and anything else you created during setup must stay out of the commit.
 
 ## Step 6 — Push and open the PR over the MCP
 
@@ -143,15 +169,25 @@ Afterwards confirm the issue closed and report the merge commit.
 
 ---
 
+## Keeping this skill true
+
+This file describes an environment that changes under it. When a step here turns
+out to be wrong — a submodule that no longer exists, a build cost that no longer
+applies, a gotcha that was fixed — **say so and fix the skill**, in its own
+commit, separate from the issue you were driving. A skill that misdirects the
+next agent is a defect exactly like a wrong comment.
+
+---
+
 ## Checklist
 
 ☐ Issue and comments read over MCP; definition of done written out
-☐ Worktree entered; both submodules initialised, lockfile copied, model symlinked
+☐ Worktree entered; `vendor/capnproto` initialised, lockfile copied
 ☐ `origin/master` fetched; branch cut from it
 ☐ Baseline built and measured first, if the issue asks for a comparison
-☐ `origin/master` re-checked before pushing; rebased and re-measured if it moved
+☐ `origin/master` re-checked before pushing; rebased, then the build re-run
 ☐ `cargo build --release --bin dusk` green; no tests run unless asked
-☐ One commit per concern, hooks allowed to finish, issue referenced
+☐ One commit per concern, committed in the foreground with a long timeout
 ☐ PR body written in the first person, addressed to no one
 ☐ Pushed; PR opened over the MCP with `Closes #N`
 ☐ Review requested; **waited**
