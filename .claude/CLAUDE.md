@@ -563,6 +563,12 @@ Do not add tests as part of an implementation task. Do not run the test suite (`
 
 Default to no comments. Add one only when the WHY is non-obvious — a hidden constraint, a workaround for a specific bug, behaviour that would surprise a reader. **Never** add explanatory comments to code you didn't change in this task. Comments that restate what the code does are noise.
 
+**A comment is not the place to explain the change.** Before writing one, ask where the explanation belongs. Why this code exists, what it replaced, what was rejected, what it is a step towards, what still has to land — all of that is the commit message's job, and the commit message is where a reader looks for it. A comment that would read as a sentence in a commit message is one that has been put in the wrong file: it is written for whoever reviews this diff, and then it stays in the source forever, addressing a reader who no longer exists and describing a change they cannot see.
+
+So: if it is already in the commit message, delete it. If it *could* be in the commit message, put it there instead. What survives in the source is only what the next person editing this line needs in order not to break it — and that is nearly always one line, not a paragraph.
+
+Length is the signal. A multi-line comment on ordinary code is almost always a commit message that leaked.
+
 ## Naming routine — your names are placeholders
 
 You are bad at naming. Any identifier you invent is a placeholder.
