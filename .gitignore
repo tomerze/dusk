@@ -15,6 +15,5 @@
 /docs/site
 /**/__pycache__
 /**/dusk*.so
-/.github
 /.claude/settings.local.json
 .superpowers/

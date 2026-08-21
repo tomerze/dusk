@@ -1,0 +1,111 @@
+name: CI
+
+# Every push to a pull request runs the full set of checks, as does every push
+# to master.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Every job only reads the repository. Declaring that here overrides whatever
+# the repository's default token permissions are, so a compromised dependency
+# cannot use GITHUB_TOKEN to write to the repository.
+permissions:
+  contents: read
+
+# A new push to the same pull request supersedes the run in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# No job here compiles the workspace, so there is no cargo cache and no
+# target directory to keep: cargo fmt parses sources and never runs a build
+# script, and the other three jobs never invoke cargo at all.
+jobs:
+  python-lint:
+    name: Python (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # setup-uv publishes no moving major tag, only exact versions, so this
+      # reference is pinned where the others are not.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # Both commands mirror the ruff-check and ruff-format hooks in
+      # .pre-commit-config.yaml, including their file scope.
+      - name: ruff check
+        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/
+
+      - name: ruff format
+        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/
+
+  c-lint:
+    name: C (clang-format, clang-tidy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # The versions are the ones .pre-commit-config.yaml pins: clang-format
+      # from mirrors-clang-format v19.1.7, clang-tidy from the local hook's
+      # additional_dependencies. artifacts/dusk_node/include/dusk.h is the only
+      # C file left in the repository; both hooks also name
+      # dusk/src/dusk_llm/warmup/main.c, which no longer exists.
+      - name: clang-format
+        run: >
+          uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
+          artifacts/dusk_node/include/dusk.h
+
+      - name: clang-tidy
+        run: >
+          uvx --from clang-tidy==19.1.0 clang-tidy --quiet
+          artifacts/dusk_node/include/dusk.h
+          --
+          -std=c11
+
+  docs:
+    name: Docs (mkdocs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # --strict turns mkdocs warnings, such as a link to a page that does not
+      # exist, into a failure.
+      - name: mkdocs build
+        working-directory: docs
+        run: uv run mkdocs build --strict
+
+  rust-fmt:
+    name: Rust (fmt)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # rustup reads rust-toolchain.toml and installs the pinned nightly along
+      # with the rustfmt component it names. Installing the toolchain is the
+      # bulk of this job; the check itself is under a second.
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      # rustfmt parses the sources and never builds, so this needs neither the
+      # vendor/capnproto submodule nor a target directory.
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
