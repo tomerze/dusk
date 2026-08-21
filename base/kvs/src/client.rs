@@ -1,9 +1,45 @@
 use super::*;
+use crate::kvs::key_id;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
+use linkme::distributed_slice;
 use std::rc::Rc;
+
+/// A key name some program registered, paired with the id it hashes to.
+#[derive(Copy, Clone)]
+pub struct KnownKey {
+    pub name: &'static str,
+    pub id: u64,
+}
+
+/// Every key name registered with [`known_key!`](crate::known_key), collected
+/// at link time.
+#[distributed_slice]
+pub static KNOWN_KEYS: [KnownKey] = [..];
+
+/// The name `id` was hashed from, if a program registered it.
+#[must_use]
+pub fn known_key_name(id: u64) -> Option<&'static str> {
+    KNOWN_KEYS
+        .iter()
+        .find(|key| key.id == id)
+        .map(|key| key.name)
+}
+
+/// Register a key name so `kvs get` would know what name to associate with an id.
+#[macro_export]
+macro_rules! known_key {
+    ($binding:ident, $name:literal) => {
+        #[$crate::linkme::distributed_slice($crate::client::KNOWN_KEYS)]
+        #[linkme(crate = $crate::linkme)]
+        static $binding: $crate::client::KnownKey = $crate::client::KnownKey {
+            name: $name,
+            id: $crate::kvs::key_id($name),
+        };
+    };
+}
 
 #[derive(clap::Parser)]
 #[command(name = "kvs", no_binary_name = true)]
@@ -33,10 +69,10 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
     async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = KvsCli::try_parse_from(args)?;
         let args = match cli.action {
-            KvsAction::Get { key } => Args::get(&key),
-            KvsAction::Set { key, value } => Args::set(&key, &Value::String(value))?,
-            KvsAction::Delete { key } => Args::delete(&key),
-            KvsAction::Exists { key } => Args::exists(&key),
+            KvsAction::Get { key } => Args::get(key_id(&key)),
+            KvsAction::Set { key, value } => Args::set(key_id(&key), &Value::String(value))?,
+            KvsAction::Delete { key } => Args::delete(key_id(&key)),
+            KvsAction::Exists { key } => Args::exists(key_id(&key)),
             KvsAction::Bind => Args::bind(),
         };
         Ok(args.as_program_args()?)
@@ -51,11 +87,11 @@ pub fn sh_entry() -> ShEntry {
             name: "kvs",
             short_description: "key-value store",
             long_description: r#"
-The `kvs` program is a key-value store under construction. Its operations are
-wired end to end but nothing is stored yet, so every read answers the way an
-empty store would: `get` yields null, `exists` and `delete` yield false, and
-`set` yields nothing.
-* `kvs get <key>` reads the value stored under `<key>`.
+The `kvs` program reads and writes a key-value store held by the node.
+The key-value store is in-memory and shared across all programs on the node.
+
+* `kvs get <key>` prints the value stored under `<key>`, and fails if there is
+  none.
 * `kvs set <key> <value>` stores `<value>` under `<key>`. Values typed at the
   prompt are stored as strings.
 * `kvs delete <key>` removes `<key>` and reports whether it was present.

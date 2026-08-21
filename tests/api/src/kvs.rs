@@ -1,11 +1,14 @@
-//! Both `kvs` interfaces driven end to end against a live node. No store yet,
-//! so the assertions marked `empty store` are the ones that change when it lands.
+//! Both `kvs` interfaces driven end to end against a live node.
+//!
+//! The store lives in the launcher, so the args interface reads back across
+//! processes: each action below is its own process, and a value one of them
+//! sets is there for the next.
 
 use capnp::capability::{FromClientHook as _, Promise};
 use dusk_capnp::dusk_capnp::{dusk, stream};
 use dusk_connection::Connection;
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_kvs::{Args as KvsArgs, Value, kvs_capnp};
+use dusk_program_kvs::{Args as KvsArgs, Value, kvs::key_id, kvs_capnp};
 use dusk_program_sh::sh_capnp;
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use std::cell::{Cell, RefCell};
@@ -138,9 +141,11 @@ async fn test_kvs_args_interface() {
             let connection = Connection::connect(address).await.unwrap();
             let client = connection.client().await;
 
+            let key = key_id("args.interface.key");
+
             let (pid, values, done) = run_action(
                 &client,
-                KvsArgs::set("a", &Value::String("1".to_string()))
+                KvsArgs::set(key, &Value::String("1".to_string()))
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -151,30 +156,29 @@ async fn test_kvs_args_interface() {
             stop(&client, pid).await;
 
             let (pid, values, done) =
-                run_action(&client, KvsArgs::get("a").as_program_args().unwrap()).await;
-            assert_eq!(values, vec![Value::Null], "empty store: get is null"); // empty store
+                run_action(&client, KvsArgs::get(key).as_program_args().unwrap()).await;
+            assert_eq!(
+                values,
+                vec![Value::String("1".to_string())],
+                "get must read back what an earlier process set"
+            );
             assert!(done);
             stop(&client, pid).await;
 
             let (pid, values, done) =
-                run_action(&client, KvsArgs::exists("a").as_program_args().unwrap()).await;
-            assert_eq!(
-                values,
-                vec![Value::Bool(false)],
-                "empty store: exists is false"
-            ); // empty store
+                run_action(&client, KvsArgs::exists(key).as_program_args().unwrap()).await;
+            assert_eq!(values, vec![Value::Bool(true)], "the key is present");
             assert!(done);
             stop(&client, pid).await;
 
             let (pid, values, done) =
-                run_action(&client, KvsArgs::delete("a").as_program_args().unwrap()).await;
-            assert_eq!(
-                values,
-                vec![Value::Bool(false)],
-                "empty store: delete removed nothing"
-            ); // empty store
+                run_action(&client, KvsArgs::delete(key).as_program_args().unwrap()).await;
+            assert_eq!(values, vec![Value::Bool(true)], "delete removed the key");
             assert!(done);
             stop(&client, pid).await;
+
+            // Reading the deleted key is covered by the portal test: here it
+            // would exit `main` before the portal `run_action` needs exists.
 
             // bind withholds `done`, so the shell must leave it running.
             let (pid, values, done) =
@@ -210,8 +214,10 @@ async fn test_kvs_portal_interface() {
             let (pid, portal) = start(&client, KvsArgs::bind().as_program_args().unwrap()).await;
             let kvs = portal.cast_to::<kvs_capnp::kvs_portal::Client>();
 
+            let key = key_id("portal.interface.key");
+
             let mut set_request = kvs.set_request();
-            set_request.get().set_key("a");
+            set_request.get().set_key(key);
             Value::String("1".to_string())
                 .write_to_builder(set_request.get().init_value())
                 .unwrap();
@@ -219,14 +225,18 @@ async fn test_kvs_portal_interface() {
 
             let get_reply = {
                 let mut get_request = kvs.get_request();
-                get_request.get().set_key("a");
+                get_request.get().set_key(key);
                 get_request.send().promise.await.unwrap()
             };
             let value = Value::from_reader(get_reply.get().unwrap().get_value().unwrap()).unwrap();
-            assert_eq!(value, Value::Null, "empty store: get is null"); // empty store
+            assert_eq!(
+                value,
+                Value::String("1".to_string()),
+                "get must read back what set stored"
+            );
 
             let mut exists_request = kvs.exists_request();
-            exists_request.get().set_key("a");
+            exists_request.get().set_key(key);
             let exists = exists_request
                 .send()
                 .promise
@@ -235,10 +245,10 @@ async fn test_kvs_portal_interface() {
                 .get()
                 .unwrap()
                 .get_exists();
-            assert!(!exists, "empty store: exists is false"); // empty store
+            assert!(exists, "the key is present");
 
             let mut delete_request = kvs.delete_request();
-            delete_request.get().set_key("a");
+            delete_request.get().set_key(key);
             let deleted = delete_request
                 .send()
                 .promise
@@ -247,7 +257,39 @@ async fn test_kvs_portal_interface() {
                 .get()
                 .unwrap()
                 .get_deleted();
-            assert!(!deleted, "empty store: delete removed nothing"); // empty store
+            assert!(deleted, "delete removed the key");
+
+            let error = {
+                let mut get_request = kvs.get_request();
+                get_request.get().set_key(key);
+                match get_request.send().promise.await {
+                    Ok(_) => panic!("reading a deleted key must fail"),
+                    Err(error) => error,
+                }
+            };
+            assert!(
+                error.to_string().contains("not found"),
+                "the failure must name the cause: {error}"
+            );
+
+            // A stored null is a value: it reads back, where an absent key failed.
+            let mut set_request = kvs.set_request();
+            set_request.get().set_key(key);
+            Value::Null
+                .write_to_builder(set_request.get().init_value())
+                .unwrap();
+            set_request.send().promise.await.unwrap();
+
+            let get_reply = {
+                let mut get_request = kvs.get_request();
+                get_request.get().set_key(key);
+                get_request.send().promise.await.unwrap()
+            };
+            assert_eq!(
+                Value::from_reader(get_reply.get().unwrap().get_value().unwrap()).unwrap(),
+                Value::Null,
+                "the stored null reads back as null"
+            );
 
             stop(&client, pid).await;
             connection.disconnect().await.unwrap();
