@@ -169,8 +169,12 @@ the stack.
 
 - **`ProgramArgs`** → `Execution::program_args` (`execution.rs`): `Dusk.process`
   then `Dusk.run`, fetch the process portal, cast it to `OutputPortal`, and call
-  `output(stream)` with an `UndoneStream` wrapper. It then `select`s the output
-  call against the `stop` signal. When output completes the process is killed
+  `output(stream)` with an `UndoneStream` wrapper. Both the portal fetch and the
+  output call are `select`ed against the `stop` signal — the fetch as well as the
+  call, because a program that does its work before reporting itself ready (as
+  `sleep` does) parks the shell on the portal for the whole command, and a
+  `stop` raced only against `output` would go unobserved until the work it was
+  meant to interrupt had finished. When output completes the process is killed
   (`SIGTERM`) and reaped (`waitpid`) — **unless** the stream reports `done ==
   false`, the wire signal for intentional daemonisation, in which case the
   process is left running. These RPCs go through `dusk_core::local_client` — an

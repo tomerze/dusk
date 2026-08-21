@@ -222,10 +222,12 @@ impl process::Server for dyn Process {
                 ps_ready_map.get(&pid).cloned()
             };
             if let Some(ready) = ready {
-                let mut rcv = ready.receiver().unwrap();
+                let mut receiver = ready.receiver().ok_or_else(|| {
+                    capnp::Error::failed("couldn't acquire receiver for process ready watch, maximum amount of receivers reached".into())
+                })?;
 
-                while !rcv.get().await {
-                    rcv.changed().await;
+                while !receiver.get().await {
+                    receiver.changed().await;
                 }
 
                 let portal = <Self as ProcessMixin>::portal(&*process);
