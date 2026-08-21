@@ -67,13 +67,22 @@ impl Execution {
             .get_result();
 
         let (done, portal_error) = 'output: {
-            let portal_reply = match process.portal_request().send().promise.await {
-                Ok(reply) => reply,
-                Err(err) => {
+            let portal_promise = process.portal_request().send().promise;
+            let portal_reply = match select(portal_promise, stop.wait()).await {
+                Either::First(Ok(reply)) => reply,
+                Either::First(Err(err)) => {
                     tracing::error!(
                         pid = pid,
                         error = err.to_string(),
                         "failed to get process portal"
+                    );
+                    break 'output (true, None);
+                }
+                Either::Second(()) => {
+                    stop.signal(());
+                    tracing::info!(
+                        pid,
+                        "stop signal sent to process while awaiting portal request"
                     );
                     break 'output (true, None);
                 }
