@@ -113,13 +113,22 @@ class ConnectionRegistry:
                 connection.disconnect()
 
 
-def app():
+def app(ip: str = "127.0.0.1"):
     """Build the dusk MCP server's streamable-HTTP ASGI application.
+
+    ``ip`` is the address the returned app will be served on. It binds nothing —
+    that is the ASGI server's job — but FastMCP derives its DNS-rebinding
+    protection from it: told a loopback address it rejects every request whose
+    Host header is not loopback, and told anything else it leaves the Host check
+    off. An app served somewhere other than where it was told therefore answers
+    ``421 Misdirected Request`` to every client that reaches it on a real
+    interface address. Pass the same address you will serve on; :func:`serve`
+    passes the address it binds.
 
     Hand the returned app to your own ASGI server when you want full control
     over the run parameters::
 
-        uvicorn.run(dusk.mcp.app(), host="0.0.0.0", port=9100,
+        uvicorn.run(dusk.mcp.app("0.0.0.0"), host="0.0.0.0", port=9100,
                     ssl_keyfile=..., log_config=...)
 
     :func:`serve` is the batteries-included wrapper that runs uvicorn for you.
@@ -144,6 +153,7 @@ def app():
 
     server = FastMCP(
         "Dusk",
+        host=ip,
         instructions=(
             """
 Think of each Dusk Node as its own self-contained operating system — not a Linux box.
@@ -256,4 +266,4 @@ def serve(ip: str, port: int) -> None:
     The streamable-HTTP endpoint is at the ``/mcp`` path, so MCP clients connect
     to ``http://<ip>:<port>/mcp`` — the bare host:port returns 404.
     """
-    uvicorn.run(app(), host=ip, port=port)
+    uvicorn.run(app(ip), host=ip, port=port)

@@ -48,9 +48,26 @@ dusk.mcp.serve("0.0.0.0", 9100)   # blocks, runs uvicorn for you
 import uvicorn
 import dusk.mcp
 
-uvicorn.run(dusk.mcp.app(), host="0.0.0.0", port=9100,
+uvicorn.run(dusk.mcp.app("0.0.0.0"), host="0.0.0.0", port=9100,
             ssl_keyfile=..., log_config=...)
 ```
+
+### Bind address
+
+`app()`'s argument is the address you will serve on. It binds nothing, but the
+MCP endpoint carries DNS-rebinding protection armed from it:
+
+- served on a **loopback** address (`127.0.0.1`, `localhost`, `::1`), the server
+  accepts only requests whose `Host` header is a loopback address;
+- served on **anything else** (`0.0.0.0`, a specific interface), the `Host` check
+  is off, since binding a routable address is an explicit decision to serve the
+  network.
+
+`python -m dusk.mcp <ip> <port>` and `serve(ip, port)` pass the address they
+bind, so this is handled for you. If you build the app yourself, **pass the same
+address you will serve on**: an app built with the default `127.0.0.1` but served
+on `0.0.0.0` answers `421 Misdirected Request` to every client that reaches it on
+a real interface address.
 
 ## Workflow
 
