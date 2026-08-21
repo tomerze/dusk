@@ -5,9 +5,7 @@
 extern crate alloc;
 extern crate capnp;
 
-use alloc::rc::Rc;
 use dusk_program::embassy_futures::select::select;
-use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_time::{Duration, Timer};
 use dusk_program::{ready::Ready, signal::SignalReceiver};
 
@@ -64,15 +62,11 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 pub struct Process {
     #[process_context]
     pub ctx: ProcessContext,
-    terminated: Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, ()>>,
 }
 
 impl Process {
     pub async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self> {
-        Ok(Process {
-            ctx,
-            terminated: Rc::new(dusk_program::embassy_sync::signal::Signal::new()),
-        })
+        Ok(Process { ctx })
     }
 }
 
@@ -90,16 +84,25 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        ready.sender().send(true);
-        loop {
-            match signal_receiver.receive().await {
-                Signal::Terminate => {
-                    self.terminated.signal(());
-                    return Ok(());
+        let duration_ms = self
+            .ctx
+            .program_args
+            .with_data::<sleep_capnp::sleep_args::data::Owned, _, _>(|data| {
+                Ok(data.get_duration_ms())
+            })?;
+
+        let terminate = async {
+            loop {
+                match signal_receiver.receive().await {
+                    Signal::Terminate => return,
+                    Signal::Unknown(_signal) => continue,
                 }
-                Signal::Unknown(_signal) => {}
             }
-        }
+        };
+        select(Timer::after(Duration::from_millis(duration_ms)), terminate).await;
+
+        ready.sender().send(true);
+        Ok(())
     }
 }
 
@@ -119,21 +122,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-        let duration_ms = dusk_capnp::pry!(
-            self.process
-                .ctx
-                .program_args
-                .with_data::<sleep_capnp::sleep_args::data::Owned, _, _>(|data| {
-                    Ok(data.get_duration_ms())
-                })
-        );
-        let terminated = self.process.terminated.clone();
         Promise::from_future(async move {
-            select(
-                Timer::after(Duration::from_millis(duration_ms)),
-                terminated.wait(),
-            )
-            .await;
             stream.done_request().send().promise.await?;
             Ok(())
         })
