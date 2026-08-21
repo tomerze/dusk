@@ -27,6 +27,22 @@ ps            # list every process on the node
 ps 0x1a2b     # show just the process with this pid (hex or decimal)
 ```
 
+## `programs`
+
+Lists the programs the node can launch — what it was *compiled with*, as opposed
+to what is currently running (`ps`) or what this client knows how to invoke
+(`help`). A node and a client are built separately, so the two sets can differ,
+in membership and in version.
+
+```sh
+programs      # list every program the node can launch
+```
+
+The node identifies a program by its id and holds no name for it, so the list is
+sent back to the client, which names each id from its own shell entries. A
+program this client has no entry for shows `N/A`; a program with more than one
+entry shows all of them, separated by ` | `.
+
 ## `logs`
 
 Reads the node's rolling log buffer — live in an interactive viewer, or streamed
