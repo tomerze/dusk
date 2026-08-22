@@ -49,7 +49,7 @@ pub fn sh_entry() -> ShEntry {
         info: EntryInfo {
             program_id: Some(kvs_capnp::PROGRAM_ID),
             name: "kvs",
-            short_description: "key-value store (skeleton: operations answer as an empty store)",
+            short_description: "key-value store",
             long_description: r#"
 The `kvs` command is a key-value store under construction. Its operations are
 wired end to end but nothing is stored yet, so every read answers the way an
