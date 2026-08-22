@@ -24,7 +24,7 @@ header (`artifacts/dusk_node/include/dusk.h`):
 ```c
 #include "dusk.h"
 
-int32_t dusk_node_run(void);
+int32_t dusk_node_run(void *user);
 ```
 
 Link `libdusk_node` and call `dusk_node_run()` — typically on its own thread,
@@ -32,17 +32,34 @@ since it runs the node until shutdown:
 
 ```c
 // in your app's startup
-dusk_node_run();   // runs a Dusk node; returns an exit code
+dusk_node_run(NULL);              // a node on 0.0.0.0:9090; returns an exit code
+dusk_node_run("127.0.0.1:9090");  // the same node, listening on loopback
 ```
 
 From Rust, link the `dusk_node` rlib and call `dusk_node::dusk_node_run()`. From
 any other language, bind the C function. That's the whole integration: one
 library, one call.
 
-> **TODO:** `dusk_node_run()` currently starts a node with the default program
-> set on a fixed address. Configuration — which programs to include, the listen
-> address, node identity, and the encrypted transport — is part of the
-> connection-layer work; this guide will grow as that lands.
+## The `user` pointer
+
+`dusk_node` is a template — you copy it, put your programs and your impl in it,
+and ship the result, so `dusk_node_run` is a function in **your** library. See
+[Make it yours](#make-it-yours).
+
+Editing the template settles what your node is *built from*. `user` is the other
+half: what your application knows only once it is **running**. It is the one
+channel from the program running the node into the node, and what it points at
+is between the two of them — Dusk itself never looks at it.
+
+The template spends it on the node's listen address: `user` is a NUL-terminated
+`ip:port`, and `NULL` means `0.0.0.0:9090`. That is a decision the template
+makes, not a rule — your node can read the pointer as a config struct, a device
+handle, a callback table, or the identifier the device was provisioned with. The
+address is just what a node with nothing else to be told does with it.
+
+> **TODO:** node identity and the encrypted transport are part of the
+> connection-layer work, and neither is configurable yet, through `user` or
+> otherwise. This guide will grow as that lands.
 
 ## What it gives you
 

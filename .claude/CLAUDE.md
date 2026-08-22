@@ -271,19 +271,31 @@ node. Its body is tiny — `default_launcher_set()` builds every Base program at
 its default configuration (building the logs launcher inside it also installs
 the global tracing subscriber, since `dusk_node` enables the logs program's
 `console` feature), and `dusk_nix::run` starts the node with an `init` bound to
-`0.0.0.0:9090`:
+the address it is given:
 
 ```rust
-pub extern "C" fn dusk_node_run() -> i32 {
+pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
+    let Some(listen_address) = (unsafe { listen_address(user.cast::<c_char>()) }) else {
+        eprintln!("dusk_node: not a valid ip:port");
+        return 64;
+    };
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let Ok(init_args) = InitArgs::new("0.0.0.0", 9090).as_program_args() else {
-        return 1;
+    let Ok(init_args) =
+        InitArgs::new(&listen_address.ip().to_string(), listen_address.port()).as_program_args()
+    else {
+        return 2;
     };
     dusk_nix::run(dusk_nix::BasicLauncherSetBuilder::new(launcher_set), init_args)
 }
 ```
+
+There is one entry point, and `user` is the only thing a caller gives it. This
+template reads it as a NUL-terminated `ip:port`, falling back to
+`DEFAULT_LISTEN_ADDRESS` (`0.0.0.0:9090`) when it is null — a node built from
+the template can read the pointer as anything it likes. `dusk_node_bin` passes
+its own optional `ip:port` argument straight through.
 
 For custom launcher arguments (e.g. a different `LogsConfig`), skip
 `default_launcher_set` and assemble the set yourself with
@@ -297,10 +309,13 @@ three ways:
 - **As a C library** — the `staticlib`/`cdylib` expose one entry point, declared
   in `artifacts/dusk_node/include/dusk.h`:
   ```c
-  int32_t dusk_node_run(void);
+  int32_t dusk_node_run(void *user);
   ```
-  Link `libdusk_node` and call `dusk_node_run()` to run a node and get its exit
-  code. Dusk drops into an existing C/C++ program with no Rust on the surface.
+  Link `libdusk_node` and call `dusk_node_run(NULL)` to run a node and get its
+  exit code. Dusk drops into an existing C/C++ program with no Rust on the
+  surface. `user` carries what the program running the node gives it at run
+  time — editing the template settles what a node is built from, `user` carries
+  what is only known once it runs. Dusk itself never looks at it.
 - **As a Rust rlib** — call `dusk_node::dusk_node_run()` directly, or copy its
   body to assemble your own node (different programs, different impl).
 
