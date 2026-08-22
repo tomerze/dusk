@@ -604,6 +604,20 @@ You are bad at naming. Any identifier you invent is a placeholder.
 
 Exception: mechanical renames where the user already picked a name.
 
+## Every user-facing string goes to review — marked
+
+Any text an end user reads is the product, not a detail of it: CLI output and help text, error messages, prompts, the strings in a UI, API titles and descriptions, anything rendered on a page the user opens. I do not ship that wording on my own judgement, for the same reason I do not pick names on my own judgement.
+
+So, exactly as in the [naming routine](#naming-routine--your-names-are-placeholders):
+
+1. Write something workable mid-task. Don't stall.
+2. Note every user-facing string I added or changed (path + where the user sees it).
+3. **Before claiming done, surface them for review — quoted in full, under their own clearly marked heading, never folded into a paragraph about something else.** Apply what the user says.
+
+A user-facing string is **straight to the point**: it tells the reader what they need in order to do the thing. What the code does internally, what it replaced, how it is put together, what it is the half of — none of that belongs in text a user reads. That is the same error as [explaining the change in a comment](#dont-add-comments-everywhere), and it is worse here, because the reader is not even a programmer on this project.
+
+Past failure: I wrote the description at the top of the gateway's Swagger UI page — the first thing anyone sees when they open the API — as four paragraphs of design commentary. It opened "The REST half of the dusk API gateway. Every endpoint mirrors one method of the `Dusk` Python class", told the reader "the gateway holds no dusk connection of its own", and closed on MCP "negotiating its own capabilities in the protocol handshake". Every sentence was true and not one of them helped somebody who had opened the page to call an endpoint. I had written it for a reviewer of my diff. Worse, I shipped it in a PR without ever listing it as a string a user would read, so it was never reviewed as one.
+
 ## Terminology lives on one side of a boundary
 
 Code is named for what its own side does and knows — never for what the other side does with the output. If a stated invariant says "X doesn't know about Y", then no module name, identifier, doc, or comment on X's side may say Y. When writing or reviewing code at a boundary, check the names against the invariants written beside them — grep the side for the other side's vocabulary.
