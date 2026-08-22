@@ -19,7 +19,8 @@ layer you embedded, not the host operating system's process table.
   that's enough to recover a stuck workload.
 - **Drive it programmatically** — the
   [Python API](../getting-started/guides/connect-a-client.md) and the
-  [MCP gateway](mcp.md) do all of the above from a script or an AI agent.
+  [API gateway](gateway.md) do all of the above from a script, over HTTP, or
+  from an AI agent.
 
 What you can see and do is exactly what the node's programs expose. The
 [Base programs](../getting-started/concepts/base.md) cover the Dusk layer itself
@@ -31,4 +32,5 @@ What you can see and do is exactly what the node's programs expose. The
 
 Diagnosis happens through whatever client is handy: the interactive
 [shell](shell.md) for a person, the Python API for a script, or the
-[MCP gateway](mcp.md) for an agent. They all drive the same node.
+[API gateway](gateway.md) for anything over HTTP, an agent included. They all
+drive the same node.

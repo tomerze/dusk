@@ -60,5 +60,5 @@ environment variable (to any value) before running commands. Interactive
 commands then refuse to run, with an error naming a non-interactive alternative
 (`logs view` points at `logs dump`), instead of hanging the caller forever.
 
-The [MCP gateway](../features/mcp.md#no-interactive-views) sets it
+The [API gateway](../features/gateway.md#no-interactive-views) sets it
 automatically in its own process.

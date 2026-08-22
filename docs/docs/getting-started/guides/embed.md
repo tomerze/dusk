@@ -49,7 +49,8 @@ library, one call.
 Once your app is a node, point a client at it to get the [analytics and
 diagnosis](../index.md#what-you-get) Dusk is for — see its processes, read its
 logs, and drive it from the [shell](../../features/shell.md), the
-[Python API](connect-a-client.md), or an [MCP agent](../../features/mcp.md).
+[Python API](connect-a-client.md), or the
+[API gateway](../../features/gateway.md).
 Multiply that across every device running your app and you have a managed fleet.
 
 ## Make it yours

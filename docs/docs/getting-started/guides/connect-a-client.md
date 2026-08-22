@@ -48,9 +48,45 @@ static `dusk.Dusk.help()` lists the available programs without a connection. Thi
 is the programmatic entry point — scripting fleet operations, integrating with
 existing tooling.
 
-## The MCP gateway
+## The HTTP API gateway
 
-For LLM agents and IDEs, Dusk ships an MCP server that exposes a node's programs
-as MCP tools. An agent connects to nodes through the gateway and runs commands on
-them much like the CLI, but driven by a model. See
-[Features › MCP](../../features/mcp.md) for the gateway model and how to run it.
+For everything that isn't Rust or Python — a dashboard, a CI job, another
+service, an AI agent — Dusk ships `dusk_gw`, an API gateway that puts a node's
+programs behind HTTP. It comes with the same `dusk` package:
+
+```bash
+uv run maturin develop          # builds the dusk package, which ships dusk_gw
+uv run dusk_gw 0.0.0.0 9100
+```
+
+The gateway is what holds the connection. Ask it to open one to a node, and keep
+the descriptor it hands back:
+
+```bash
+curl -s localhost:9100/v1/connect \
+     -H 'content-type: application/json' \
+     -d '{"host": "127.0.0.1", "port": 9090}'
+```
+
+```json
+{"descriptor": "a3f91c07"}
+```
+
+Then run commands on that node by naming the descriptor:
+
+```bash
+curl -s localhost:9100/v1/sh \
+     -H 'content-type: application/json' \
+     -d '{"descriptor": "a3f91c07", "command": "ps"}'
+```
+
+The API describes itself: open **`http://localhost:9100/v1/docs`** in a browser
+for a Swagger UI you can call every endpoint from, and point a client generator
+at `/v1/openapi.json` to get a typed client in your language. Neither needs
+internet access.
+
+An **MCP** server for LLM agents and IDEs is always served on the same port at
+`/mcp`, exposing each of the node's programs as a tool.
+
+See [Features › API gateway](../../features/gateway.md) for the full endpoint
+reference, the connection model, and how to serve it over HTTPS.

@@ -7,10 +7,18 @@ Mirrors the PyO3 surface defined in ``dusk/src/dusk_py``. Keep in sync with the
 from typing import Any
 
 class ShellOutput:
-    """Iterator over a shell command's output objects (unpickled Values)."""
+    """A shell command's output objects (unpickled Values), as they arrive.
+
+    Read it either way. Iterating blocks the calling thread until the next value
+    arrives; awaiting :meth:`next_value` does not, which is what lets one thread
+    read many commands at once.
+    """
 
     def __iter__(self) -> ShellOutput: ...
     def __next__(self) -> Any: ...
+    async def next_value(self) -> Any:
+        """The next value. Raises ``StopAsyncIteration`` once the command ends."""
+        ...
 
 class Dusk:
     """Client connection to a Dusk server."""

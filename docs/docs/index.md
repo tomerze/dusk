@@ -33,6 +33,15 @@
 
     [See your fleet →](getting-started/guides/connect-a-client.md)
 
+-   **Drive it over HTTP**
+
+    ---
+
+    Run the API gateway and reach any node from curl, a script, a dashboard or a
+    browser. AI agents get an MCP server on the same port.
+
+    [Open the gateway →](features/gateway.md)
+
 -   **Customize & extend**
 
     ---

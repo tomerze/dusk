@@ -139,5 +139,5 @@ downcasting, and `ps`/`programs` output all key off this id.
 
 An out-of-tree client talks to a node by depending on `dusk_capnp` and driving the
 `Dusk` capability directly — exactly what the CLI, the Python extension, and the
-MCP gateway do. The schemas are the only contract you need; nothing about a
+API gateway do. The schemas are the only contract you need; nothing about a
 node's impl leaks across the wire.

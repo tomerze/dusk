@@ -73,7 +73,7 @@ nav:
       - Shell: features/shell.md
       - Logs: features/logs.md
       - Ask Dusk: features/ask-dusk.md
-      - MCP: features/mcp.md
+      - MCP: features/gateway.md
       - Base programs: getting-started/concepts/base.md
   - Customize:
       - customize/index.md

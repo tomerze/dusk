@@ -6,13 +6,18 @@ readme = "README.md"
 dependencies = [
     "maturin>=1.10.2",
     "pre-commit>=4.3.0",
-    "mcp>=1.9.0",
+    # Capped below 2: dusk.gw.mcp is built on mcp.server.fastmcp, which 2.0
+    # removed. Lifting the cap means porting the MCP surface to its
+    # replacement, not relaxing this line.
+    "mcp>=1.9.0,<2",
+    "fastapi>=0.115.0",
+    "starlette>=0.40.0",
     "uvicorn>=0.30.0",
     "click>=8.1.0",
 ]
 
 [project.scripts]
-dusk_mcp = "dusk.mcp.__main__:main"
+dusk_gw = "dusk.gw.__main__:main"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
@@ -22,7 +27,12 @@ build-backend = "maturin"
 manifest-path = "artifacts/dusk_py/Cargo.toml"
 module-name = "dusk"
 python-source = "dusk/src/dusk_py/python"
-include = ["dusk/src/dusk_py/python/dusk/dusk.pyi"]
+include = [
+    "dusk/src/dusk_py/python/dusk/dusk.pyi",
+    # The vendored Swagger UI. Without these in the wheel, /v1/docs is a
+    # broken page wherever dusk_gw is installed from one.
+    "dusk/src/dusk_py/python/dusk/gw/static/*",
+]
 
 [tool.uv.workspace]
 members = [
@@ -38,14 +48,20 @@ select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.pyright]
 include = [
-    "dusk/src/dusk_py/python/dusk/mcp",
+    "dusk/src/dusk_py/python/dusk/gw",
     "dusk/src/dusk_py/python/dusk/__init__.py",
+    "tests/gw",
 ]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.14.3"
 
+[tool.pytest.ini_options]
+testpaths = ["tests/gw"]
+
 [dependency-groups]
 dev = [
     "ipython>=9.14.0",
+    "pytest>=8.3.0",
+    "httpx>=0.27.0",
 ]

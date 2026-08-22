@@ -2,10 +2,11 @@ use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_program::anyhow::Result;
 use dusk_program::value::Value;
+use pyo3::exceptions::PyStopAsyncIteration;
 use pyo3::prelude::*;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use tokio::sync::{Notify, mpsc, oneshot};
+use std::sync::Arc;
+use tokio::sync::{Mutex, Notify, mpsc, oneshot};
 
 use crate::SHELL_OUTPUT_BUFFER_SIZE;
 
@@ -39,31 +40,49 @@ impl ShellOutput {
     fn __next__(&mut self, py: Python) -> Option<PyResult<Py<PyAny>>> {
         // Release the GIL while parking on the channel. A never-ending command
         // (a live `logs stream`) blocks here forever; holding the GIL across it
-        // would freeze every other Python thread — the MCP gateway's whole
-        // event loop — so a concurrent command on the same connection could
-        // never run.
+        // would freeze every other Python thread, so a concurrent command on the
+        // same connection could never run.
         let rx = self.rx.clone();
-        let received = py.detach(move || rx.lock().ok()?.blocking_recv());
+        let received = py.detach(move || rx.blocking_lock().blocking_recv());
         match received {
-            Some(Ok(pickle_bytes)) => {
-                // Deserialize pickle bytes to Python object
-                match pyo3::types::PyModule::import(py, "pickle") {
-                    Ok(pickle_mod) => match pickle_mod.getattr("loads") {
-                        Ok(loads) => match loads.call1((pickle_bytes.as_slice(),)) {
-                            Ok(obj) => Some(Ok(obj.unbind())),
-                            Err(e) => Some(Err(e)),
-                        },
-                        Err(e) => Some(Err(e)),
-                    },
-                    Err(e) => Some(Err(e)),
-                }
-            }
+            Some(Ok(pickle_bytes)) => Some(Python::attach(|py| unpickle(py, &pickle_bytes))),
             Some(Err(e)) => Some(Err(pyo3::exceptions::PyRuntimeError::new_err(
                 e.to_string(),
             ))),
             None => None,
         }
     }
+
+    /// Await the next value, without occupying a thread while waiting.
+    ///
+    /// `__next__` parks a whole OS thread on the channel for as long as the node
+    /// stays quiet, so a caller reading many commands at once needs a thread for
+    /// each. Awaiting this instead costs a task. The channel is `tokio`'s, whose
+    /// `recv` needs no reactor of its own, so the future is driven by whatever
+    /// event loop the caller is running — asyncio included.
+    ///
+    /// Raises `StopAsyncIteration` once the command has finished, so a caller can
+    /// drive it exactly as they would an async iterator. It is not spelled
+    /// `__anext__` because pyo3 fills that slot from a plain method rather than
+    /// from an `async fn`; `ShellOutput` is the awaitable's owner either way.
+    async fn next_value(&self) -> PyResult<Py<PyAny>> {
+        let rx = self.rx.clone();
+        let received = {
+            let mut receiver = rx.lock().await;
+            receiver.recv().await
+        };
+        match received {
+            Some(Ok(pickle_bytes)) => Python::attach(|py| unpickle(py, &pickle_bytes)),
+            Some(Err(e)) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+            None => Err(PyStopAsyncIteration::new_err(())),
+        }
+    }
+}
+
+/// Turn one output value back into the Python object the node sent.
+fn unpickle(py: Python<'_>, pickle_bytes: &[u8]) -> PyResult<Py<PyAny>> {
+    let loads = pyo3::types::PyModule::import(py, "pickle")?.getattr("loads")?;
+    Ok(loads.call1((pickle_bytes,))?.unbind())
 }
 
 pub struct StreamServer {
