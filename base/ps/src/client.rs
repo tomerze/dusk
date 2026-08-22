@@ -39,7 +39,7 @@ pub fn sh_entry() -> ShEntry {
             name: "ps",
             short_description: "list processes",
             long_description: r#"
-The `ps` command is used to display information about the currently running processes.
+The `ps` program is used to display information about the currently running processes.
 * Use `ps` to list all currently running processes.
 * Use `ps <pid>` to show only the process with that PID.
 "#,

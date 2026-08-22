@@ -2,7 +2,7 @@
 
 Every Dusk node keeps a rolling buffer of the structured log records its programs
 emit — and the [tracing spans](../development/tracing.md) behind them. The `logs`
-command reads that buffer three ways: live in an interactive viewer (`logs view`),
+program reads that buffer three ways: live in an interactive viewer (`logs view`),
 returned to the caller as Dusk values (`logs dump`), or streamed out to a file or
 a collector (`logs stream`). It's a
 [Base program](../getting-started/concepts/base.md), reached from the
@@ -66,9 +66,9 @@ logs dump --follow-only   # skip the history; follow new logs as values
 ```
 
 `logs dump` returns the logs to the caller — one record per log entry — on the
-command's own output stream, instead of painting a terminal (`view`) or sending
+program's own output stream, instead of painting a terminal (`view`) or sending
 them to an external sink (`stream`). It's the way to read logs from a script, the
-Python REPL, and the [MCP gateway](mcp.md): the records come back as the command's
+Python REPL, and the [MCP gateway](mcp.md): the records come back as the program's
 result.
 
 Each record carries `sequence`, `severity`, `timeUnixNano` (nanoseconds since the

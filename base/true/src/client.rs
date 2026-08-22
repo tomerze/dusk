@@ -27,7 +27,7 @@ pub fn sh_entry() -> ShEntry {
             name: "true",
             short_description: "do nothing successfully",
             long_description: r#"
-The `true` command does nothing and exits successfully. Useful as a placeholder
+The `true` program does nothing and exits successfully. Useful as a placeholder
 in shell scripts where a command is syntactically required but no behaviour is.
 "#,
             version: VERSION,

@@ -14,6 +14,7 @@ dusk_program_init = { path = "../../../base/init", public = true }
 dusk_program_kill = { path = "../../../base/kill", public = true }
 dusk_program_kvs = { path = "../../../base/kvs", public = true }
 dusk_program_logs = { path = "../../../base/logs", public = true }
+dusk_program_programs = { path = "../../../base/programs", public = true }
 dusk_program_ps = { path = "../../../base/ps", public = true }
 dusk_program_sh = { path = "../../../base/sh", public = true }
 dusk_program_sleep = { path = "../../../base/sleep", public = true }
@@ -28,6 +29,7 @@ client = [
     "dusk_program_kill/client",
     "dusk_program_kvs/client",
     "dusk_program_logs/client",
+    "dusk_program_programs/client",
     "dusk_program_ps/client",
     "dusk_program_sh/client",
     "dusk_program_sleep/client",

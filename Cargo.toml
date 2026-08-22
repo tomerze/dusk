@@ -19,6 +19,7 @@ members = [
     "impls/nix",
     "base/kill",
     "base/init",
+    "base/programs",
     "base/ps",
     "base/sh",
     "base/false",

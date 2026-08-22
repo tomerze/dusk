@@ -997,7 +997,9 @@ Multi-line help text shown by `help <name>` in the shell.
 - Defaults belong in clap (`#[arg(long, default_value_t = 15)]`), not in the program logic, when they're user-facing.
 - Long descriptions are raw strings (`r#"…"#`) so they can contain backticks and quotes for in-prompt help formatting.
 
-The `#[dusk_program_sh_proc::sh_entry]` attribute (1) registers `sh_entry()` into the `SH_ENTRIES` `#[distributed_slice]` so the shell discovers it at link time, and (2) drops a JSON sidecar describing the entry at `<target>/.dusk_sh_entries/<crate>__sh_entry.json` for the compile-time LLM warm-up pipeline to consume. There is no central registry to update — adding a new program is purely additive.
+The `#[dusk_program_sh_proc::sh_entry]` attribute registers `sh_entry()` into the `SH_ENTRIES` `#[distributed_slice]`, which is how the shell discovers the entry at link time. There is no central registry to update — adding a new program is purely additive.
+
+The entry's metadata is read from `SH_ENTRIES` at runtime: `dusk_prompt` holds an `EntryInfo` per shell-invocable program and uses it for both `help` and the `{{PROGRAMS}}` block of the LLM system prompt. Earlier that prompt was assembled at compile time, so the macro also wrote each entry to `target/.dusk_sh_entries/<crate>__sh_entry.json` for a build script to glob back up; that side-channel was removed in e06c5c2 and the macro writes nothing to disk today. Stale JSON files left in a `target/` directory from before that commit mean nothing — see `docs/docs/development/ask_dusk.md`.
 
 ---
 

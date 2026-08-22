@@ -9,7 +9,7 @@ and most never need it. Like nobody writes their own SSH server — though they
 absolutely could — most fleets run the built-ins. But nothing here is locked
 down:
 
-- **Add your own programs** — new commands a node can run, built from the same
+- **Add your own programs** — new programs a node can run, built from the same
   five-part contract as `ps` and the shell. See
   [Write a program](../getting-started/guides/first-program.md).
 - **Swap the platform backend** — a Dusk *impl* is what makes a node run on a

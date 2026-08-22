@@ -57,7 +57,7 @@ uvicorn.run(dusk.mcp.app(), host="0.0.0.0", port=9100,
 From the client's side, a session looks like:
 
 1. Call **`connect`** with a node's host and port. Keep the returned descriptor.
-2. Call the **per-program tools** (`ps`, `kill`, …) with that descriptor and any arguments to run commands and read their output.
+2. Call the **per-program tools** (`ps`, `kill`, …) with that descriptor and any arguments to run programs and read their output.
 3. Call **`disconnect`** with the descriptor when finished.
 
 ## Long-running programs

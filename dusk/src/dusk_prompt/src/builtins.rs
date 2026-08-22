@@ -9,7 +9,7 @@ use crate::display_engine::DisplayEngine;
 use crate::highlighter::CustomHighlighter;
 use dusk_shell::shell::Shell;
 
-pub(crate) const BUILTIN_COMMANDS: [EntryInfo; 4] = [
+pub(crate) const BUILTINS: [EntryInfo; 4] = [
     EntryInfo {
         name: "clear",
         version: "builtin",
@@ -32,9 +32,10 @@ pub(crate) const BUILTIN_COMMANDS: [EntryInfo; 4] = [
         program_id: None,
         short_description: "help, try `help help`",
         long_description: r#"
-The `help` command displays information about available commands.
-* Use `help` to list all available commands.
-* Use `help <command>` to get more information about a specific command.
+The `help` builtin displays information about the programs this client can run,
+and about the shell's own builtins.
+* Use `help` to list every program and builtin.
+* Use `help <program>` to get more information about a specific one.
 "#,
     },
     EntryInfo {
@@ -43,7 +44,7 @@ The `help` command displays information about available commands.
         program_id: None,
         short_description: "list all defined shell functions",
         long_description: r#"
-The `functions` command lists all functions defined in any shell
+The `functions` builtin lists all functions defined in any shell
 "#,
     },
 ];
@@ -58,17 +59,17 @@ pub(crate) fn help<D: DisplayEngine>(
     available_programs_info: &[EntryInfo],
     display_engine: &D,
 ) -> Result<()> {
-    let command = line.split_whitespace().nth(1);
-    let draw = if let Some(command) = command {
+    let program = line.split_whitespace().nth(1);
+    let draw = if let Some(program) = program {
         if let Some(markdown) =
-            get_program_info_markdown(command, available_programs_info, display_engine)?
+            get_program_info_markdown(program, available_programs_info, display_engine)?
         {
             markdown
         } else {
-            format!("No help found for command: {}", command)
+            format!("No help found for program: {}", program)
         }
     } else {
-        get_available_commands_table(available_programs_info, display_engine)?
+        get_available_programs_table(available_programs_info, display_engine)?
     };
 
     println!("{}", draw);
@@ -124,20 +125,20 @@ pub(crate) async fn print_functions<D: DisplayEngine>(
     Ok(())
 }
 
-fn get_available_commands_table<D: DisplayEngine>(
+fn get_available_programs_table<D: DisplayEngine>(
     available_programs_info: &[EntryInfo],
     display_engine: &D,
 ) -> Result<String> {
     let mut table = NuTable::new(available_programs_info.len() + 1, 4);
     let headers = vec![
-        NuRecordsValue::new("Command".into()),
+        NuRecordsValue::new("Shell Entry".into()),
         NuRecordsValue::new("Description".into()),
-        NuRecordsValue::new("Local Version".into()),
+        NuRecordsValue::new("Version On Client".into()),
         NuRecordsValue::new("Program ID".into()),
     ];
     table.set_row(0, headers);
-    for (i, command) in available_programs_info.iter().enumerate() {
-        let program_id = command
+    for (i, program_info) in available_programs_info.iter().enumerate() {
+        let program_id = program_info
             .program_id
             .map(|id| {
                 if id > u32::MAX as u64 {
@@ -149,11 +150,15 @@ fn get_available_commands_table<D: DisplayEngine>(
             .unwrap_or_else(|| "N/A".to_string());
         let row = vec![
             NuRecordsValue::new(
-                display_engine.render_markdown_inline(format!("**{}**", command.name).as_str()),
+                display_engine
+                    .render_markdown_inline(format!("**{}**", program_info.name).as_str()),
             ),
-            NuRecordsValue::new(display_engine.render_markdown_inline(command.short_description)),
             NuRecordsValue::new(
-                display_engine.render_markdown_inline(format!("`{}`", command.version).as_str()),
+                display_engine.render_markdown_inline(program_info.short_description),
+            ),
+            NuRecordsValue::new(
+                display_engine
+                    .render_markdown_inline(format!("`{}`", program_info.version).as_str()),
             ),
             NuRecordsValue::new(
                 display_engine.render_markdown_inline(format!("`{}`", program_id).as_str()),
@@ -182,7 +187,7 @@ fn get_program_info_markdown<D: DisplayEngine>(
 
     let markdown = r#"# {name}
 ## Info:
-Local version: `{version}`
+Version On Client: `{version}`
 Program ID: `{program_id}`
 ## Description:
 **{short_description}**{long_description}

@@ -23,7 +23,7 @@ layer you embedded, not the host operating system's process table.
 
 What you can see and do is exactly what the node's programs expose. The
 [Base programs](../getting-started/concepts/base.md) cover the Dusk layer itself
-(see that page for each command's full usage); to surface something host-specific
+(see that page for each program's full usage); to surface something host-specific
 (a sensor, a hardware register, an app-internal metric), that's a
 [program you write](../getting-started/guides/first-program.md).
 

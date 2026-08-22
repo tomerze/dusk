@@ -517,6 +517,31 @@ own commit on top. Both were fixups to the first commit: the directive was dead
 own spinner. The history recorded my discovery order instead of the change, and
 the user had to tell me to collapse it.
 
+## Stale project instructions get fixed, in their own commit
+
+`CLAUDE.md` and the skills under `.claude/skills/` are part of the product, held
+to the same standard as the runtime. They describe a tree that keeps moving, so
+they go stale — and a stale instruction is worse than a missing one, because the
+next reader has no reason to doubt it and acts on it.
+
+So when I find that this file or a project skill describes something the code no
+longer does, I fix it in the session I found it. I don't ask first and I don't
+file it as a follow-up: the correction is cheap, and the guess it prevents is
+not.
+
+It lands as **its own commit**, never folded into the work that uncovered it. A
+stale line is not a fixup to whatever change I happen to be making — it is its
+own concern, and its subject line says what the instruction now says. If the
+branch I'm on is unrelated to it, I say so and let the user decide whether it
+rides along or goes out on its own.
+
+Past failure: writing the `programs` program I found the `authoring-a-program`
+skill still documenting a `target/.dusk_sh_entries/*.json` sidecar that commit
+e06c5c2 had removed, and that `docs/docs/development/ask_dusk.md` already
+described as gone. I noted it at the bottom of a pull request and moved on,
+leaving the next program author to follow an instruction that had been false for
+weeks.
+
 ## Don't write near-duplicate functions
 
 If two functions differ in a single field or a single line, that's one function with a parameter, not two. Copy-pasting a handler and tweaking an identifier is the failure mode.

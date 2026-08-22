@@ -18,7 +18,7 @@ foo                         # call a function
 
 Commands are bare token sequences: the first word is the program name, the rest are its arguments. Single-quoted (`'…'`) and double-quoted (`"…"`) strings are supported as arguments.
 
-The available command names come from the programs registered in your dusk impl. Type `help` in the interactive prompt to see what is available.
+The available program names come from the programs registered in your dusk impl. Type `help` in the interactive prompt to see what is available.
 
 ## Functions
 
@@ -63,9 +63,9 @@ Statement separators (`;`, newline) do not short-circuit — every statement run
 
 ## Daemonization
 
-Daemonization is a shell concept, not a core process behaviour. When the shell runs a command, it drives that command's `output(stream)` portal method and watches whether the command finishes the stream with `done`:
+Daemonization is a shell concept, not a core process behaviour. When the shell runs a program, it drives that program's `output(stream)` portal method and watches whether the program finishes the stream with `done`:
 
-- If the command calls `done`, the shell reaps it (kill + `waitpid`).
-- If the command returns from `output` **without** calling `done`, the shell treats that as "this process intends to keep running" and leaves it alive. The process has daemonized.
+- If the program calls `done`, the shell reaps it (kill + `waitpid`).
+- If the program returns from `output` **without** calling `done`, the shell treats that as "this process intends to keep running" and leaves it alive. The process has daemonized.
 
-The shell installs a wrapper (`UndoneStream`) between itself and the command so the command's `done` is read as a private "you may reap me" signal rather than ending the shell's own output stream. `sh -d` is the canonical case: it runs its command against a discard sink at startup and then omits the `done` ack, so the `sh` process daemonizes. Nothing in Dusk Core inspects or acts on the stream's done state — the policy lives entirely in the shell.
+The shell installs a wrapper (`UndoneStream`) between itself and the program so the program's `done` is read as a private "you may reap me" signal rather than ending the shell's own output stream. `sh -d` is the canonical case: it runs its command against a discard sink at startup and then omits the `done` ack, so the `sh` process daemonizes. Nothing in Dusk Core inspects or acts on the stream's done state — the policy lives entirely in the shell.
