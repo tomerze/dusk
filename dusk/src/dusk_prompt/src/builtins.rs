@@ -130,9 +130,9 @@ fn get_available_commands_table<D: DisplayEngine>(
 ) -> Result<String> {
     let mut table = NuTable::new(available_programs_info.len() + 1, 4);
     let headers = vec![
-        NuRecordsValue::new("Command".into()),
+        NuRecordsValue::new("Shell Entry".into()),
         NuRecordsValue::new("Description".into()),
-        NuRecordsValue::new("Local Version".into()),
+        NuRecordsValue::new("Version On Client".into()),
         NuRecordsValue::new("Program ID".into()),
     ];
     table.set_row(0, headers);
@@ -182,7 +182,7 @@ fn get_program_info_markdown<D: DisplayEngine>(
 
     let markdown = r#"# {name}
 ## Info:
-Local version: `{version}`
+Version On Client: `{version}`
 Program ID: `{program_id}`
 ## Description:
 **{short_description}**{long_description}
