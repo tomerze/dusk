@@ -30,7 +30,7 @@ pub fn sh_entry() -> ShEntry {
             name: "echo",
             short_description: "echo text back",
             long_description: r#"
-The `echo` command prints its arguments back as a string.
+The `echo` program prints its arguments back as a string.
 * Use `echo <text>` to print `<text>`.
 * Multiple words are joined with single spaces.
 "#,

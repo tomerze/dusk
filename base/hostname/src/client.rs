@@ -27,7 +27,7 @@ pub fn sh_entry() -> ShEntry {
             name: "hostname",
             short_description: "show the hostname",
             long_description: r#"
-The `hostname` command prints the hostname of the dusk node.
+The `hostname` program prints the hostname of the dusk node.
 "#,
             version: VERSION,
         },

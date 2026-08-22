@@ -27,7 +27,7 @@ pub fn sh_entry() -> ShEntry {
             name: "false",
             short_description: "do nothing, unsuccessfully",
             long_description: r#"
-The `false` command does nothing and exits with failure. Useful as a placeholder
+The `false` program does nothing and exits with failure. Useful as a placeholder
 in shell scripts where a command is syntactically required but must report
 failure.
 "#,

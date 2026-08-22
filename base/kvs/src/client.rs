@@ -51,7 +51,7 @@ pub fn sh_entry() -> ShEntry {
             name: "kvs",
             short_description: "key-value store",
             long_description: r#"
-The `kvs` command is a key-value store under construction. Its operations are
+The `kvs` program is a key-value store under construction. Its operations are
 wired end to end but nothing is stored yet, so every read answers the way an
 empty store would: `get` yields null, `exists` and `delete` yield false, and
 `set` yields nothing.

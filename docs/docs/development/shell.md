@@ -134,7 +134,7 @@ The instruction set (`inst.rs`):
 
 | Inst | Meaning |
 |------|---------|
-| `ProgramArgs(Rc<ProgramArgs>)` | run one external command |
+| `ProgramArgs(Rc<ProgramArgs>)` | run one external program |
 | `Call(symbol)` / `TailCall(symbol)` | invoke a shell function |
 | `DefineFunction{ symbol, body }` | define / redefine / (empty body) undefine |
 | `JumpIfOk(target)` / `JumpIfError(target)` | conditional jump on the result register |
@@ -152,7 +152,7 @@ known function it emits `Call`. Otherwise it calls
 resolves the program name against the `SH_ENTRIES` table and returns a fully-built
 `ProgramArgs` capability (itself wrapping client-side capabilities). That becomes
 `Inst::ProgramArgs`. So compilation is *not* a local server operation: every
-external command in a script requires the client that launched the `sh` process
+external program in a script requires the client that launched the `sh` process
 to be connected and answering. (`ShArgs.Server` is hosted wherever the
 `ProgramArgs` were created — for the interactive shell, that's the CLI process.)
 
@@ -229,7 +229,7 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 |-----------|-----------------------------------|
 | Parsing text → `Script` | No — runs entirely client-side, before anything is sent |
 | Submitting a line / awaiting its output | Yes — `ShPortal.sh`, then await `done` |
-| **Compiling** each external command | **Yes** — `build_program_args` RPCs *back* to the client per command |
+| **Compiling** each external program | **Yes** — `build_program_args` RPCs *back* to the client per program |
 | Spawning / killing the resulting process | No network — uses the server-local `dusk_core::local_client` |
 | Listing functions (highlighter, `functions` builtin) | Yes — `ShPortal.functions`, once per prompt |
 

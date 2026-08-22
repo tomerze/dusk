@@ -37,7 +37,7 @@ pub fn sh_entry() -> ShEntry {
             name: "programs",
             short_description: "list available programs",
             long_description: r#"
-The `programs` command lists the programs available on this node.
+`programs` lists the programs available on this node.
 * Simpliy run `programs` to use it
 
 The node identifies a program by its id and has no name for it, so the node

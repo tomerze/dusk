@@ -30,7 +30,7 @@ pub fn sh_entry() -> ShEntry {
             name: "sleep",
             short_description: "sleep for a duration",
             long_description: r#"
-The `sleep` command pauses for `<ms>` milliseconds. Then exists.
+The `sleep` program pauses for `<ms>` milliseconds. Then exists.
 
 Example:
 * `sleep 1000`   sleep one second

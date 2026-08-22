@@ -62,7 +62,7 @@ where
         stream_factory: F,
         stop_signal: Rc<Notify>,
     ) -> Result<Self> {
-        let mut available_programs_info = builtins::BUILTIN_COMMANDS.to_vec();
+        let mut available_programs_info = builtins::BUILTINS.to_vec();
 
         available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
 

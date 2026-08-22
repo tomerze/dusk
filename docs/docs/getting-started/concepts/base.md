@@ -1,6 +1,6 @@
 # Base programs
 
-Dusk Base is the set of programs that ship with Dusk — the commands a node can
+Dusk Base is the set of programs that ship with Dusk — the programs a node can
 run out of the box. They're optional and swappable: you can write your own
 out-of-tree set and link that into your nodes instead. The relationship between
 Dusk Base and Dusk is like the one between GNU Coreutils and the Linux kernel —

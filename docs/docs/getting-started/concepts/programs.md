@@ -5,7 +5,7 @@
 > programs without ever writing one. Reach for this when you're
 > [customizing Dusk](../../customize/index.md).
 
-A **program** is a unit of work a node can run — a command like `ps`, or one of
+A **program** is a unit of work a node can run — something like `ps`, or one of
 your own. Programs are static: each is compiled into a node (there is no dynamic
 loading), and a client turns one into a running [process](processes.md) by
 calling `Dusk.process`.
@@ -101,5 +101,5 @@ On the Rust side, `#[derive(Portal)]` serves the base `programId` method and
 
 The five parts make a program runnable over `Dusk.process`. To also run it from
 the [shell](../../features/shell.md) by name, give its client side an
-`#[sh_entry]` function that registers the command name and its help text. That
+`#[sh_entry]` function that registers the shell entry name and its help text. That
 registration is part of the shell, not of the core program model.

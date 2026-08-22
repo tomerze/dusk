@@ -42,7 +42,7 @@ pub fn sh_entry() -> ShEntry {
             name: "kill",
             short_description: "send a signal to a process",
             long_description: r#"
-The `kill` command is used to send a signal to a process.
+The `kill` program is used to send a signal to a process.
 By default, it sends the `Terminate` (15) signal, which requests that the process terminates.
 You can specify a different signal using the `--signal <signal>` option.
 * Use `kill <pid>` to send the `Terminate` (15) signal to the process with the specified `<pid>`.

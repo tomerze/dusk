@@ -6,7 +6,7 @@ integrations run the Base programs and never need this; you write a program when
 you want a node to do something the built-ins don't. It's also where Dusk's
 modularity shows: a program is a self-contained unit you drop into a node.
 
-A program is a unit of work a node can run — a command like `ps`, or one of your
+A program is a unit of work a node can run — something like `ps`, or one of your
 own. This guide walks the five parts in order, using a `sleep`-style program as
 the example. For the reference on each part, follow the links into
 [Concepts](../concepts/programs.md).
@@ -123,7 +123,7 @@ See [Portals & Streams](../concepts/portals-and-streams.md).
 ## Make it shell-invocable
 
 To run the program from the [shell](../../features/shell.md) by name, add a
-client-side entry that supplies the command name and help text:
+client-side entry that supplies the shell entry name and help text:
 
 ```rust
 #[dusk_program_sh_proc::sh_entry]

@@ -54,8 +54,8 @@ Two seams are resolved by the linker rather than by data:
   symbols. See [Drivers & Impls](../getting-started/concepts/drivers-and-impls.md).
 - **The shell entry table.** Shell-invocable programs register into a
   `#[distributed_slice]` `SH_ENTRIES` table at link time — in the client binary,
-  where command resolution happens — so the shell can resolve a command name to a
-  program without any registry being built at runtime.
+  where shell entry resolution happens — so the shell can resolve a shell entry
+  name to a program without any registry being built at runtime.
 
 Both seams are what let the pieces be mixed and matched — programs and impls
 into a node, shell-invocable programs into a client — without any of them
