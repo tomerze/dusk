@@ -5,17 +5,19 @@ using Sh = import "/capnp/sh.capnp";
 
 const programId :UInt64 = 0xa491d262995861be;
 
+const salt :UInt64 = 0x93968e6e30a593d6;
+
+# key is fnv1a of the key name, salted with salt.
 struct KvsArgs {
-  # `bind` has no KvsPortal counterpart: it is the absence of an operation.
   struct Data {
     union {
-      get @0 :Text;
+      get @0 :UInt64;
       set :group {
-        key @1 :Text;
+        key @1 :UInt64;
         value @2 :Dusk.Value;
       }
-      delete @3 :Text;
-      exists @4 :Text;
+      delete @3 :UInt64;
+      exists @4 :UInt64;
       bind @5 :Void;
     }
   }
@@ -23,8 +25,8 @@ struct KvsArgs {
 }
 
 interface KvsPortal extends(Dusk.Portal, Sh.OutputPortal) {
-  get @0 (key :Text) -> (value :Dusk.Value);
-  set @1 (key :Text, value :Dusk.Value) -> ();
-  delete @2 (key :Text) -> (deleted :Bool);
-  exists @3 (key :Text) -> (exists :Bool);
+  get @0 (key :UInt64) -> (value :Dusk.Value);
+  set @1 (key :UInt64, value :Dusk.Value) -> ();
+  delete @2 (key :UInt64) -> (deleted :Bool);
+  exists @3 (key :UInt64) -> (exists :Bool);
 }

@@ -13,7 +13,9 @@ dusk_core = { path = "../../dusk/src/dusk_core/" }
 anyhow = { version = "1.0", public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "0.21", public = false }
-linkme = { version = "*", optional = true, public = false }
+linkme = { version = "0.3", optional = true, public = true }
+nohash-hasher = { version = "0.2", default-features = false, public = false }
+tracing = { version = "0.1.41", default-features = false }
 clap = { version = "4", features = ["derive"], optional = true }
 
 [build-dependencies]

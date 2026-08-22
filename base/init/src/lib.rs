@@ -12,6 +12,12 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
 
+// Hashed in const context, so the node carries the ids and never the names.
+const VERSION_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.version");
+const GIT_REV_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.git_rev");
+const NAMESPACE_ID_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.namespace_id");
+const HOSTNAME_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.hostname");
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
@@ -87,6 +93,23 @@ impl dusk_program::process::ProcessMixin for Process {
                 Ok((address, port))
             })?;
         let listener = async_net::TcpListener::bind(format!("{}:{}", address, port)).await?;
+
+        let namespace_id = self.ctx.namespace.id;
+        let kvs = dusk_program_kvs::kvs::get_kvs(namespace_id);
+        kvs.set(
+            VERSION_KEY,
+            Value::String(String::from(dusk_capnp::VERSION)),
+        )
+        .await;
+        kvs.set(
+            GIT_REV_KEY,
+            Value::String(String::from(dusk_capnp::GIT_REV)),
+        )
+        .await;
+        kvs.set(NAMESPACE_ID_KEY, Value::Uint(namespace_id)).await;
+        kvs.set(HOSTNAME_KEY, Value::String(dusk_core::driver::hostname()?))
+            .await;
+
         ready.sender().send(true);
 
         let dusk_client = dusk_core::local_client(self.namespace().clone()).await;

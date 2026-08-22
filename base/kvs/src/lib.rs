@@ -1,3 +1,8 @@
+//! A key-value store, one per namespace, shared by every program on the node.
+//!
+//! Keys are named on the client and travel as ids ([`kvs::key_id`]); the node
+//! holds no key strings. In memory only, and lost when the node restarts.
+//! Two names can hash to one id and silently share an entry.
 #![allow(internal_features)]
 #![feature(prelude_import)]
 #![cfg_attr(not(feature = "client"), no_std)]
@@ -12,6 +17,12 @@ extern crate capnp;
 
 #[cfg(feature = "client")]
 pub mod client;
+pub mod kvs;
+
+/// Re-exported so [`known_key!`] expands in a crate that does not depend on
+/// `linkme` itself.
+#[cfg(feature = "client")]
+pub use linkme;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -24,13 +35,13 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn get(key: &str) -> Self {
+    pub fn get(key: u64) -> Self {
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_get(key);
         Args { data }
     }
 
-    pub fn set(key: &str, value: &Value) -> capnp::Result<Self> {
+    pub fn set(key: u64, value: &Value) -> capnp::Result<Self> {
         let mut data = ArgsDataBuilder::new_default();
         {
             let mut set = data.init_root().init_set();
@@ -40,13 +51,13 @@ impl Args {
         Ok(Args { data })
     }
 
-    pub fn delete(key: &str) -> Self {
+    pub fn delete(key: u64) -> Self {
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_delete(key);
         Args { data }
     }
 
-    pub fn exists(key: &str) -> Self {
+    pub fn exists(key: u64) -> Self {
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_exists(key);
         Args { data }
@@ -86,34 +97,20 @@ pub struct Process {
     /// What `output` streams; `None` streams nothing.
     result: Rc<RefCell<Option<Value>>>,
     bound: Rc<Cell<bool>>,
+    kvs: alloc::sync::Arc<kvs::Kvs>,
     #[process_context]
     pub ctx: ProcessContext,
 }
 
 impl Process {
     pub async fn with_context(ctx: dusk_program::process::ProcessContext) -> anyhow::Result<Self> {
+        let kvs = kvs::get_kvs(ctx.namespace.id);
         Ok(Process {
             result: Rc::new(RefCell::new(None)),
             bound: Rc::new(Cell::new(false)),
+            kvs,
             ctx,
         })
-    }
-}
-
-/// No store yet: these answer as an empty store would.
-impl Process {
-    async fn get(&self, _key: &str) -> Option<Value> {
-        None
-    }
-
-    async fn set(&self, _key: &str, _value: Value) {}
-
-    async fn delete(&self, _key: &str) -> bool {
-        false
-    }
-
-    async fn exists(&self, _key: &str) -> bool {
-        false
     }
 }
 
@@ -137,19 +134,23 @@ impl dusk_program::process::ProcessMixin for Process {
             .data_owned::<kvs_capnp::kvs_args::data::Owned>()?;
         match data.get_root_as_reader()?.which()? {
             kvs_capnp::kvs_args::data::Which::Get(key) => {
-                let value = self.get(key?.to_str()?).await;
-                *self.result.borrow_mut() = Some(value.unwrap_or(Value::Null));
+                let value = self
+                    .kvs
+                    .get(key)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("key {key:#018x} not found"))?;
+                *self.result.borrow_mut() = Some(value);
             }
             kvs_capnp::kvs_args::data::Which::Set(set) => {
                 let value = Value::from_reader(set.get_value()?)?;
-                self.set(set.get_key()?.to_str()?, value).await;
+                self.kvs.set(set.get_key(), value).await;
             }
             kvs_capnp::kvs_args::data::Which::Delete(key) => {
-                let deleted = self.delete(key?.to_str()?).await;
+                let deleted = self.kvs.delete(key).await;
                 *self.result.borrow_mut() = Some(Value::Bool(deleted));
             }
             kvs_capnp::kvs_args::data::Which::Exists(key) => {
-                let exists = self.exists(key?.to_str()?).await;
+                let exists = self.kvs.exists(key).await;
                 *self.result.borrow_mut() = Some(Value::Bool(exists));
             }
             kvs_capnp::kvs_args::data::Which::Bind(()) => self.bound.set(true),
@@ -178,12 +179,13 @@ impl Portal {
         params: kvs_capnp::kvs_portal::GetParams,
         mut results: kvs_capnp::kvs_portal::GetResults,
     ) -> Promise<(), ::capnp::Error> {
-        let key = String::from(dusk_capnp::pry!(
-            dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_key()).to_str()
-        ));
-        let process = self.process.clone();
+        let key = dusk_capnp::pry!(params.get()).get_key();
+        let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            let value = process.get(&key).await.unwrap_or(Value::Null);
+            let value = kvs
+                .get(key)
+                .await
+                .ok_or_else(|| ::capnp::Error::failed(format!("key {key:#018x} not found")))?;
             value.write_to_builder(results.get().init_value())?;
             Ok(())
         })
@@ -195,13 +197,11 @@ impl Portal {
         _results: kvs_capnp::kvs_portal::SetResults,
     ) -> Promise<(), ::capnp::Error> {
         let params = dusk_capnp::pry!(params.get());
-        let key = String::from(dusk_capnp::pry!(
-            dusk_capnp::pry!(params.get_key()).to_str()
-        ));
+        let key = params.get_key();
         let value = dusk_capnp::pry!(Value::from_reader(dusk_capnp::pry!(params.get_value())));
-        let process = self.process.clone();
+        let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            process.set(&key, value).await;
+            kvs.set(key, value).await;
             Ok(())
         })
     }
@@ -211,12 +211,10 @@ impl Portal {
         params: kvs_capnp::kvs_portal::DeleteParams,
         mut results: kvs_capnp::kvs_portal::DeleteResults,
     ) -> Promise<(), ::capnp::Error> {
-        let key = String::from(dusk_capnp::pry!(
-            dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_key()).to_str()
-        ));
-        let process = self.process.clone();
+        let key = dusk_capnp::pry!(params.get()).get_key();
+        let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            results.get().set_deleted(process.delete(&key).await);
+            results.get().set_deleted(kvs.delete(key).await);
             Ok(())
         })
     }
@@ -226,12 +224,10 @@ impl Portal {
         params: kvs_capnp::kvs_portal::ExistsParams,
         mut results: kvs_capnp::kvs_portal::ExistsResults,
     ) -> Promise<(), ::capnp::Error> {
-        let key = String::from(dusk_capnp::pry!(
-            dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_key()).to_str()
-        ));
-        let process = self.process.clone();
+        let key = dusk_capnp::pry!(params.get()).get_key();
+        let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            results.get().set_exists(process.exists(&key).await);
+            results.get().set_exists(kvs.exists(key).await);
             Ok(())
         })
     }

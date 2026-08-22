@@ -92,6 +92,36 @@ with an error that named neither the symlink nor the branch that removed it.
   whose target directory each one is writing to).
 - **Never state a number you did not measure**, and never explain a slow build
   before timing it. Measure, then decide.
+- **A full disk reports itself as a compiler bug.** When the volume fills, rustc
+  and the linker fail with `No space left on device` mixed in among
+  `rustc-LLVM ERROR` and `ld terminated with signal 7 [Bus error]`, which read
+  like a broken toolchain. Run `df -h` before believing any of it. Every
+  worktree carries its own `target`, so measure them with `du -sh` rather than
+  assuming a size — they differ by more than an order of magnitude. Reclaiming
+  space means deleting the user's build caches, so **ask first**, and name the
+  measured sizes and which branches are already merged so the choice is theirs.
+
+## Step 4b — Driving the node by hand
+
+Running the thing beats reasoning about it, and it is not the test suite, so it
+is available even when tests are not. Build with
+`cargo build --bin dusk_node --bin dusk`, start the node, and drive it with
+one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
+
+- **The `dusk_node` binary always binds 9090**, because
+  `artifacts/dusk_node/src/lib.rs` hardcodes it — that is a property of the
+  prebuilt deliverable, not of the runtime. `dusk_nix::run` takes whatever
+  address and port you hand its `InitArgs`, which is how
+  `tests/common/src/lib.rs` runs many nodes at once. So check
+  `pgrep -af dusk_node` before starting one: another session's node may already
+  hold 9090, in which case yours exits and your CLI silently talks to *theirs*.
+  Do not kill a node you did not start. Point your own elsewhere — and if you do
+  that by editing the hardcoded port, `git diff` that file before committing,
+  since pre-commit stashes unstaged work and the hooks will never see it.
+- A node built from a different revision answers with the wrong schema, and the
+  error names neither the port nor the process: a changed capnp union surfaces as
+  `Enum value or union discriminant <n> was not present in the schema`, which
+  reads like a schema bug in the branch you just wrote.
 
 ## Step 5 — Commit
 
