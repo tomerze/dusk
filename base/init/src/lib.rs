@@ -92,7 +92,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 let port = data.get_port();
                 Ok((address, port))
             })?;
-        let listener = async_net::TcpListener::bind(format!("{}:{}", address, port)).await?;
+        let listener = async_net::TcpListener::bind((address.as_str(), port)).await?;
 
         let namespace_id = self.ctx.namespace.id;
         let kvs = dusk_program_kvs::kvs::get_kvs(namespace_id);
