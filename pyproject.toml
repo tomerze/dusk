@@ -6,7 +6,10 @@ readme = "README.md"
 dependencies = [
     "maturin>=1.10.2",
     "pre-commit>=4.3.0",
-    "mcp>=1.9.0",
+    # Capped below 2: dusk.gw.mcp is built on mcp.server.fastmcp, which 2.0
+    # removed. Lifting the cap means porting the MCP surface to its
+    # replacement, not relaxing this line.
+    "mcp>=1.9.0,<2",
     "fastapi>=0.115.0",
     "starlette>=0.40.0",
     "uvicorn>=0.30.0",
