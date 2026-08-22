@@ -32,6 +32,40 @@ The boundaries between these layers are real public contracts — see
 [API boundaries](#api-boundaries-to-downstream-authors-are-ship-once-contracts)
 in the working agreements.
 
+## The people
+
+Those layers exist because different people work at each of them. Know which one
+you are writing for before you write anything — code, name, error message,
+comment, or doc.
+
+- **Program developers** write the units of work a node runs, against the
+  `dusk_program` SDK. A program is platform-independent: written once, it runs
+  on every impl.
+- **Impl developers** carry Dusk to a platform — a `Driver`, an executor, an
+  `embassy-time` driver, a `critical-section` implementation. Nothing above them
+  names their crate.
+- **Node developers** put the two together: they take an impl and a set of
+  programs, wrap them into a node, and ship it — most often embedded in an
+  application they already ship. `artifacts/` is theirs, and `dusk_node` is
+  **not a library they consume — it is a template they are expected to change.**
+  Their programs, their impl, their entry point. The Base programs and the nix
+  impl are where they start, not what they are stuck with. Dusk can *always* be
+  customised; that is the philosophy, and anything written for a node developer
+  that treats the shipped defaults as fixed — "the stock library", "if you
+  outgrow it" — is written for someone who does not exist. Embedding is what
+  they do with a node, not who they are.
+- **Dusk users** drive a running node: the shell, the `dusk` CLI, `dusk_py`, an
+  MCP agent. They see programs and processes, not crates.
+- **Dusk infra admins** operate a fleet of nodes — deploying them, watching
+  them, shipping their logs somewhere they can be read.
+- **Dusk developers** work in this repository, on the core, the programs, the
+  impls and the clients that ship with it.
+
+The three developer roles are the three
+[API boundaries](#api-boundaries-to-downstream-authors-are-ship-once-contracts):
+each is a Cargo dependency someone builds against and cannot send a fix back
+through.
+
 ## Repository layout
 
 ```
@@ -659,6 +693,12 @@ So, exactly as in the [naming routine](#naming-routine--your-names-are-placehold
 A user-facing string is **straight to the point**: it tells the reader what they need in order to do the thing. What the code does internally, what it replaced, how it is put together, what it is the half of — none of that belongs in text a user reads. That is the same error as [explaining the change in a comment](#dont-add-comments-everywhere), and it is worse here, because the reader is not even a programmer on this project.
 
 Past failure: I wrote the description at the top of the gateway's Swagger UI page — the first thing anyone sees when they open the API — as four paragraphs of design commentary. It opened "The REST half of the dusk API gateway. Every endpoint mirrors one method of the `Dusk` Python class", told the reader "the gateway holds no dusk connection of its own", and closed on MCP "negotiating its own capabilities in the protocol handshake". Every sentence was true and not one of them helped somebody who had opened the page to call an endpoint. I had written it for a reviewer of my diff. Worse, I shipped it in a PR without ever listing it as a string a user would read, so it was never reviewed as one.
+
+## Name the reader before writing the line
+
+Every comment, doc, error message and identifier is addressed to somebody, and Dusk has more than one somebody: [program developers, impl developers, node developers, users, infra admins, and Dusk's own developers](#the-people). Before writing a line of prose, name which of them it is for, then check that every claim in it is true *for that person*. A sentence that is accurate for one reader is often false for another, and prose is where a wrong model of the reader shows up first — the code around it can be perfectly correct while the paragraph describing it addresses a person who does not exist.
+
+Past failure: documenting the `void *user` in `dusk_node_run`, I wrote that it was there for "an embedder whose node outgrows the stock library", and told the reader to "pass NULL". Both sentences assume a canonical `dusk_node.a` that most people consume as-is and a few of them fork. There is no such thing — `dusk_node` is a template, changing it is the expected path, and the person reading that header is the person about to change it. Writing to a consumer instead of to the person assembling a node also made me state the wrong reason for the pointer: I argued it kept an ABI stable across forks, when what it actually does is carry what is only known at run time, which editing a template cannot do. The user had to tell me who their people are — and then that "embedder" was the wrong name for this one, because it names them for what an application does with their node rather than for the node they build.
 
 ## Terminology lives on one side of a boundary
 
