@@ -108,16 +108,12 @@ is available even when tests are not. Build with
 `cargo build --bin dusk_node --bin dusk`, start the node, and drive it with
 one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
 
-- **The `dusk_node` binary always binds 9090**, because
-  `artifacts/dusk_node/src/lib.rs` hardcodes it — that is a property of the
-  prebuilt deliverable, not of the runtime. `dusk_nix::run` takes whatever
-  address and port you hand its `InitArgs`, which is how
-  `tests/common/src/lib.rs` runs many nodes at once. So check
-  `pgrep -af dusk_node` before starting one: another session's node may already
-  hold 9090, in which case yours exits and your CLI silently talks to *theirs*.
-  Do not kill a node you did not start. Point your own elsewhere — and if you do
-  that by editing the hardcoded port, `git diff` that file before committing,
-  since pre-commit stashes unstaged work and the hooks will never see it.
+- **`dusk_node` binds `0.0.0.0:9090` unless you give it an `ip:port`**
+  (`./target/debug/dusk_node 127.0.0.1:9431`). Other sessions' nodes are
+  running at the same time, so check `pgrep -af dusk_node` before starting
+  one: if yours lands on a port already held, it exits and your CLI silently
+  talks to *theirs*. Do not kill a node you did not start; pick a free port of
+  your own and pass it to both the node and the CLI.
 - A node built from a different revision answers with the wrong schema, and the
   error names neither the port nor the process: a changed capnp union surfaces as
   `Enum value or union discriminant <n> was not present in the schema`, which
