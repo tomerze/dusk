@@ -2,19 +2,41 @@ use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_program::anyhow::Result;
 use dusk_program::value::Value;
-use pyo3::exceptions::PyStopAsyncIteration;
+use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
+use pyo3::types::PyList;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 
 use crate::SHELL_OUTPUT_BUFFER_SIZE;
 
+struct Output {
+    rx: mpsc::Receiver<Result<Vec<u8>>>,
+    shown: VecDeque<Result<Vec<u8>>>,
+}
+
 #[pyclass]
 pub struct ShellOutput {
-    rx: Arc<Mutex<mpsc::Receiver<Result<Vec<u8>>>>>,
+    output: Arc<Mutex<Output>>,
 }
 
 impl ShellOutput {
+    fn value_at(&self, py: Python, index: usize) -> Option<std::result::Result<Vec<u8>, String>> {
+        let output = self.output.clone();
+        py.detach(move || {
+            let mut output = output.blocking_lock();
+            if index >= output.shown.len() {
+                let value = output.rx.blocking_recv()?;
+                output.shown.push_back(value);
+            }
+            match output.shown.get(index)? {
+                Ok(pickle_bytes) => Some(Ok(pickle_bytes.clone())),
+                Err(error) => Some(Err(error.to_string())),
+            }
+        })
+    }
+
     pub(crate) fn new(
         command: String,
         message_tx: &mpsc::UnboundedSender<crate::Message>,
@@ -25,7 +47,10 @@ impl ShellOutput {
             .map_err(|e| format!("{:?}", e))?;
 
         Ok(Self {
-            rx: Arc::new(Mutex::new(output_rx)),
+            output: Arc::new(Mutex::new(Output {
+                rx: output_rx,
+                shown: VecDeque::new(),
+            })),
         })
     }
 }
@@ -36,18 +61,22 @@ impl ShellOutput {
         slf
     }
 
-    fn __next__(&mut self, py: Python) -> Option<PyResult<Py<PyAny>>> {
+    fn __next__(&self, py: Python) -> Option<PyResult<Py<PyAny>>> {
         // Release the GIL while parking on the channel. A never-ending command
         // (a live `logs stream`) blocks here forever; holding the GIL across it
         // would freeze every other Python thread, so a concurrent command on the
         // same connection could never run.
-        let rx = self.rx.clone();
-        let received = py.detach(move || rx.blocking_lock().blocking_recv());
+        let output = self.output.clone();
+        let received = py.detach(move || {
+            let mut output = output.blocking_lock();
+            match output.shown.pop_front() {
+                Some(value) => Some(value),
+                None => output.rx.blocking_recv(),
+            }
+        });
         match received {
             Some(Ok(pickle_bytes)) => Some(Python::attach(|py| unpickle(py, &pickle_bytes))),
-            Some(Err(e)) => Some(Err(pyo3::exceptions::PyRuntimeError::new_err(
-                e.to_string(),
-            ))),
+            Some(Err(e)) => Some(Err(PyRuntimeError::new_err(e.to_string()))),
             None => None,
         }
     }
@@ -65,16 +94,44 @@ impl ShellOutput {
     /// `__anext__` because pyo3 fills that slot from a plain method rather than
     /// from an `async fn`; `ShellOutput` is the awaitable's owner either way.
     async fn next_value(&self) -> PyResult<Py<PyAny>> {
-        let rx = self.rx.clone();
+        let output = self.output.clone();
         let received = {
-            let mut receiver = rx.lock().await;
-            receiver.recv().await
+            let mut output = output.lock().await;
+            match output.shown.pop_front() {
+                Some(value) => Some(value),
+                None => output.rx.recv().await,
+            }
         };
         match received {
             Some(Ok(pickle_bytes)) => Python::attach(|py| unpickle(py, &pickle_bytes)),
-            Some(Err(e)) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+            Some(Err(e)) => Err(PyRuntimeError::new_err(e.to_string())),
             None => Err(PyStopAsyncIteration::new_err(())),
         }
+    }
+
+    fn __repr__(&self, py: Python) -> PyResult<String> {
+        let values = PyList::empty(py);
+        let mut index = 0;
+        while let Some(value) = self.value_at(py, index) {
+            let pickle_bytes = value.map_err(PyRuntimeError::new_err)?;
+            values.append(unpickle(py, &pickle_bytes)?)?;
+            index += 1;
+        }
+        Ok(values.repr()?.to_str()?.to_string())
+    }
+
+    fn _ipython_display_(&self, py: Python) -> PyResult<()> {
+        let mut index = 0;
+        while let Some(value) = self.value_at(py, index) {
+            let pickle_bytes = value.map_err(PyRuntimeError::new_err)?;
+            let rendered = unpickle(py, &pickle_bytes)?;
+            let line = format!("{}\n", rendered.bind(py).repr()?.to_str()?);
+            let stdout = py.import("sys")?.getattr("stdout")?;
+            stdout.call_method1("write", (line,))?;
+            stdout.call_method0("flush")?;
+            index += 1;
+        }
+        Ok(())
     }
 }
 
