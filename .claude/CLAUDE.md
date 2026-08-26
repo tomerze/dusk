@@ -70,7 +70,7 @@ through.
 
 ```
 dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
-               dusk_program, dusk_program_proc, dusk_prompt, dusk_shell,
+               dusk_program, dusk_program_proc, dusk_connection, dusk_llm,
                dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
                true, false, init, logs)
@@ -90,7 +90,8 @@ vendor/        External libs submodules
 | `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
-| `dusk_prompt` / `dusk_shell` | The interactive shell client — the prompt UI and the `Shell`/`Connection` that drive a long-lived `sh` process. |
+| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side — the prompt UI and the `Shell` that drives a long-lived `sh` process. |
+| `dusk_connection` | `Connection` — the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
 | `dusk_py` | The Python extension (the `dusk` module, built with maturin). |
 | `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
@@ -412,10 +413,10 @@ sides, separated by a `client` Cargo feature:
   `client` feature.
 
 The same rule holds for the non-program crates: `dusk_core` and `dusk_program`
-are `no_std`; impls and the client crates (`dusk_prompt`, `dusk_shell`,
-`dusk_cli`) are `std`. A quick sanity check:
+are `no_std`; impls and the client crates (`dusk_connection`, `dusk_cli`,
+`dusk_py`) are `std`. A quick sanity check:
 `grep -rn "std::\|use std" base/ --include="*.rs"` should only hit `client.rs`
-files or `#[cfg(feature = "client")]` modules.
+files, `client/` directories, or `#[cfg(feature = "client")]` modules.
 
 ## Development
 

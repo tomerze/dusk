@@ -1,4 +1,6 @@
 use capnp::capability::Promise;
+use std::print;
+use std::string::ToString;
 
 use dusk_capnp::{dusk_capnp::stream, pry};
 use dusk_program::value::Value;

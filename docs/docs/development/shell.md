@@ -11,14 +11,15 @@ travel back.
 
 | Crate | Side | Role |
 |-------|------|------|
-| `dusk_prompt` | client (`std`) | reedline UI, builtins, draws output |
-| `dusk_shell` | client (`std`) | `Shell` — drives one long-lived `sh` process; `Connection` — the TCP/RPC link |
-| `base/sh` | both | the `sh` program. `parser/` + `client.rs` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh` | both | the `sh` program. `parser/` and `client/` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
+| `base/sh/src/client/shell/` | client (`std`) | `Shell` — drives one long-lived `sh` process |
+| `dusk_connection` | client (`std`) | `Connection` — the TCP/RPC link |
 
 ## Representations at a glance
 
 ```
-raw text            "ps && date  # comment"           reedline buffer (dusk_prompt)
+raw text            "ps && date  # comment"           reedline buffer (client/prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
    │ nom (parser/tokenize.rs)
@@ -43,7 +44,7 @@ the `sh` process.
 There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
-**Interactive prompt.** `dusk_prompt` creates exactly *one* long-lived `sh`
+**Interactive prompt.** The prompt creates exactly *one* long-lived `sh`
 process in `ShMode::Server` at startup (`Shell::create_sh_process`) and then
 drives it for the whole session. Each accepted line goes
 `Prompt::execute_command` → `Shell::sh`, which **parses the text on the client**

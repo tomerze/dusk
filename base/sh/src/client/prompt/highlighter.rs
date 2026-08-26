@@ -1,4 +1,6 @@
+use std::string::{String, ToString};
 use std::sync::{Arc, Mutex};
+use std::vec::Vec;
 
 use nu_ansi_term::{Color, Style};
 use reedline::{Highlighter, StyledText};
