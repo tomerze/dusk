@@ -95,10 +95,10 @@ tool with arguments `dump --replay-only`. To follow the live logs, run `dump` (w
 --replay-only) as an MCP task and `kill` it when you're done — a plain follow never returns on its
 own. Add `-l <level>` (error|warn|info|debug|trace) to raise the severity floor.
 
-Do NOT use `logs view` (the interactive terminal pager; it is unavailable here) or `logs stream
-<url>` to read logs back: a stream's url sink (file://, otlp://, http://) is written on THIS
-gateway host, not delivered to you, and a plain stream never returns. Only `dump` hands the logs
-to you.
+Do NOT use `logs view` (the interactive terminal pager; it is unavailable here — as is `sh`
+with no arguments, the interactive shell) or `logs stream <url>` to read logs back: a stream's
+url sink (file://, otlp://, http://) is written on THIS gateway host, not delivered to you, and a
+plain stream never returns. Only `dump` hands the logs to you.
 
 Each dumped entry is a typed record — read it as described in "Reading program output" above (the
 single `0x…` key is the entry's Cap'n Proto type id; the fields are nested underneath). A `time`

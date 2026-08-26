@@ -7,11 +7,14 @@ mod highlighter;
 pub mod stream;
 pub mod ui;
 
-use crate::entry::{EntryInfo, GetAvailableProgramsInfo};
+use crate::entry::{EntryInfo, GetAvailableProgramsInfo, ShEntriesBuilder};
 use dusk_program::anyhow::Result;
+use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread_local;
 use std::{format, println};
 use tokio::sync::Notify;
 
@@ -26,7 +29,7 @@ use reedline::Signal;
 use std::io::stdout;
 
 use crate::client::shell::Shell;
-use display_engine::DisplayEngine;
+use display_engine::{DefaultDisplayEngine, DisplayEngine};
 use dusk_llm::Chat;
 use ui::spinner::with_spinner;
 use ui::{
@@ -50,6 +53,7 @@ where
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
 {
     shell: &'a mut Shell,
+    terminal: TerminalHeld,
     available_entries_info: Vec<EntryInfo>,
     display_engine: D,
     stream_factory: F,
@@ -66,6 +70,7 @@ where
 {
     pub async fn new(
         shell: &'a mut Shell,
+        terminal: TerminalHeld,
         get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
         stream_factory: F,
@@ -77,6 +82,7 @@ where
 
         Ok(Prompt {
             shell,
+            terminal,
             available_entries_info: available_programs_info,
             display_engine,
             stream_factory,
@@ -129,11 +135,15 @@ where
                 }
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
-                if let Err(e) = self
+                let serving_before = serving();
+                self.terminal.lend();
+                let result = self
                     .shell
                     .sh(line, stream, done_receiver, self.stop_signal.clone())
-                    .await
-                {
+                    .await;
+                wait_serving(serving_before).await;
+                self.terminal.resume().await;
+                if let Err(e) = result {
                     tracing::error!("{:?} error:\n{:?}", first_word, e);
                 }
             }
@@ -423,4 +433,221 @@ where
 
         Ok(())
     }
+}
+
+thread_local! {
+    static SERVING: Cell<usize> = const { Cell::new(0) };
+    static SERVING_CHANGED: Rc<Notify> = Rc::new(Notify::new());
+}
+
+pub fn serving() -> usize {
+    SERVING.with(|serving| serving.get())
+}
+
+thread_local! {
+    static TERMINAL: RefCell<Terminal> = const {
+        RefCell::new(Terminal {
+            holder: None,
+            waiting: VecDeque::new(),
+            opened: 0,
+        })
+    };
+}
+
+struct Terminal {
+    holder: Option<u64>,
+    waiting: VecDeque<(u64, Rc<Notify>)>,
+    opened: u64,
+}
+
+pub struct TerminalHeld {
+    prompt: u64,
+}
+
+impl TerminalHeld {
+    async fn take() -> Self {
+        let prompt = TERMINAL.with_borrow_mut(|terminal| {
+            terminal.opened += 1;
+            terminal.opened
+        });
+        wait_for_terminal(prompt, false).await;
+        TerminalHeld { prompt }
+    }
+
+    fn lend(&self) {
+        TERMINAL.with_borrow_mut(|terminal| {
+            if terminal.holder == Some(self.prompt) {
+                terminal.holder = None;
+            }
+        });
+    }
+
+    async fn resume(&self) {
+        wait_for_terminal(self.prompt, true).await;
+    }
+}
+
+impl Drop for TerminalHeld {
+    fn drop(&mut self) {
+        TERMINAL.with_borrow_mut(|terminal| {
+            if terminal.holder != Some(self.prompt) {
+                terminal
+                    .waiting
+                    .retain(|(prompt, _)| *prompt != self.prompt);
+                return;
+            }
+            match terminal.waiting.pop_front() {
+                Some((prompt, waiter)) => {
+                    terminal.holder = Some(prompt);
+                    waiter.notify_one();
+                }
+                None => terminal.holder = None,
+            }
+        });
+    }
+}
+
+async fn wait_for_terminal(prompt: u64, resuming: bool) {
+    let waiter = TERMINAL.with_borrow_mut(|terminal| {
+        if terminal.holder.is_none() {
+            terminal.holder = Some(prompt);
+            return None;
+        }
+        let waiter = Rc::new(Notify::new());
+        match resuming {
+            true => terminal.waiting.push_front((prompt, waiter.clone())),
+            false => terminal.waiting.push_back((prompt, waiter.clone())),
+        }
+        Some(waiter)
+    });
+    if let Some(waiter) = waiter {
+        waiter.notified().await;
+    }
+}
+
+struct Serving;
+
+impl Serving {
+    fn open() -> Self {
+        SERVING.with(|serving| serving.set(serving.get() + 1));
+        Serving
+    }
+}
+
+impl Drop for Serving {
+    fn drop(&mut self) {
+        SERVING.with(|serving| serving.set(serving.get() - 1));
+        SERVING_CHANGED.with(|changed| changed.notify_waiters());
+    }
+}
+
+pub async fn wait_serving(count: usize) {
+    let changed = SERVING_CHANGED.with(|changed| changed.clone());
+    loop {
+        if serving() <= count {
+            return;
+        }
+        let mut notified = std::pin::pin!(changed.notified());
+        notified.as_mut().enable();
+        if serving() <= count {
+            return;
+        }
+        notified.await;
+    }
+}
+
+pub fn serve<S: ShEntriesBuilder>(
+    client: dusk_capnp::dusk_capnp::dusk::Client,
+    process: dusk_capnp::dusk_capnp::process::Client,
+    sh_entries_builder: S,
+) {
+    let serving = Serving::open();
+    tokio::task::spawn_local(async move {
+        let _serving = serving;
+        if let Err(error) = serve_prompt(client, process, sh_entries_builder).await {
+            tracing::error!("served sh prompt failed: {error:#}");
+        }
+    });
+}
+
+fn kill_abandoned(
+    client: dusk_capnp::dusk_capnp::dusk::Client,
+    process: dusk_capnp::dusk_capnp::process::Client,
+) {
+    tokio::task::spawn_local(async move {
+        let killed = async {
+            let pid = process
+                .pid_request()
+                .send()
+                .promise
+                .await?
+                .get()?
+                .get_result();
+            let mut kill_request = client.kill_request();
+            kill_request.get().set_pid(pid);
+            kill_request.get().set_signal(15); // SIGTERM
+            kill_request.send().promise.await?;
+            Ok::<u64, capnp::Error>(pid)
+        }
+        .await;
+        match killed {
+            Ok(pid) => tracing::info!(pid, "killed an sh no prompt could be opened on"),
+            Err(error) => tracing::error!("failed to kill an unserved sh: {error:#}"),
+        }
+    });
+}
+
+async fn serve_prompt<S: ShEntriesBuilder>(
+    client: dusk_capnp::dusk_capnp::dusk::Client,
+    process: dusk_capnp::dusk_capnp::process::Client,
+    sh_entries_builder: S,
+) -> Result<()> {
+    let abandoned = process.clone();
+    let adopted = Shell::adopt(
+        client.clone(),
+        sh_entries_builder.clone(),
+        process,
+        crate::parser::Parser::new(),
+    )
+    .await;
+    let mut shell = match adopted.inspect_err(|_| kill_abandoned(client, abandoned))? {
+        Some(shell) => shell,
+        None => return Ok(()),
+    };
+    let terminal = TerminalHeld::take().await;
+    tracing::info!("prompt open");
+    let stop_signal = Rc::new(Notify::new());
+    let _stop_scope = crate::client::shell::stop::StopScope::enter(stop_signal.clone());
+
+    let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
+        StreamRequest::Raw => {
+            let (json_stream, done_receiver) =
+                stream::json_stream::JsonStream::new_with_receiver(true);
+            (capnp_rpc::new_client(json_stream), done_receiver)
+        }
+        StreamRequest::Display { display_engine } => {
+            let (display_stream, done_receiver) =
+                stream::display_stream::DisplayStream::new_with_receiver(display_engine.clone());
+            (capnp_rpc::new_client(display_stream), done_receiver)
+        }
+    };
+
+    let result = async {
+        let prompt = Prompt::new(
+            &mut shell,
+            terminal,
+            sh_entries_builder,
+            DefaultDisplayEngine::default(),
+            stream_factory,
+            stop_signal,
+        )
+        .await?;
+        prompt.run().await
+    }
+    .await;
+    if let Err(error) = shell.kill().await {
+        tracing::error!("failed to kill the served sh: {error:#}");
+    }
+    tracing::info!("prompt closed");
+    result
 }

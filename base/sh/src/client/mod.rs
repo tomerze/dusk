@@ -24,7 +24,15 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
         let mode = match cli.command {
-            None => ShMode::Server,
+            None => {
+                if std::env::var_os("DUSK_NON_INTERACTIVE").is_some() {
+                    anyhow::bail!(
+                        "`sh` on its own is an interactive shell and unavailable here. \
+                         To run a command, pass it: `sh <command>`."
+                    );
+                }
+                ShMode::Server
+            }
             Some(command) if cli.detach => ShMode::DetachedScript(command),
             Some(command) => ShMode::Script(command),
         };
@@ -45,6 +53,8 @@ shell. Dusk shell commands run Dusk programs built into the Dusk Node.
 
 * Use `sh <command>` (or `sh "<command>"`) to run a command.
 * Use `sh -d <command>` to run it detached from the current session.
+* Use `sh` on its own to open an interactive shell; `exit` returns to where
+  you were.
 "#,
             version: VERSION,
         },

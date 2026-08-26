@@ -13,7 +13,7 @@ travel back.
 |-------|------|------|
 | `base/sh` | both | the `sh` program. `parser/` and `client/` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
-| `base/sh/src/client/shell/` | client (`std`) | `Shell` — drives one long-lived `sh` process |
+| `base/sh/src/client/shell/` | client (`std`) | `Shell` — owns and drives a server-mode `sh` process; the ctrl+c stop scopes |
 | `dusk_connection` | client (`std`) | `Connection` — the TCP/RPC link |
 
 ## Representations at a glance
@@ -44,20 +44,38 @@ the `sh` process.
 There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
-**Interactive prompt.** The prompt creates exactly *one* long-lived `sh`
-process in `ShMode::Server` at startup (`Shell::create_sh_process`) and then
-drives it for the whole session. Each accepted line goes
-`Prompt::execute_command` → `Shell::sh`, which **parses the text on the client**
-into a `Script` and ships it via `ShPortal.sh(script, output, stop)`. One line =
-one `sh` RPC carrying a freshly-parsed `Script`.
+**`sh` as a program.** `sh` is always run as a program — nested in another
+script, launched from the CLI, or from `dusk.sh(...)` in Python. The caller
+builds its args (`ShArgs::new`, `base/sh/src/client/mod.rs`) and drives the
+process's `OutputPortal.output`, exactly as it would for any other program. With
+a command, `sh <command>` (or `sh -d <command>`), the command string is parsed at
+args-build time into a `Script` baked into the args as `ShMode::Script` /
+`DetachedScript`, and runs when `output` is called (or, for a detached script,
+immediately in `Process::main` against a discard sink).
 
-**`sh` as a program.** When `sh <command>` (or `sh -d <command>`) runs as a
-program — nested in another script, or launched directly — the command string is
-parsed at args-build time (`ShArgs::new`, `base/sh/src/client.rs`) into a
-`Script` baked into the program's args as `ShMode::Script` / `DetachedScript`.
-The script then runs when the caller drives the process's `OutputPortal.output`
-(or, for a detached script, immediately in `Process::main` against a discard
-sink).
+**Interactive prompt.** `sh` on its own is `ShMode::Server`: it has no script of
+its own. As soon as it is running (`Process::main`, just before `ready`) it
+calls **back into the client** — `ShArgs.Server.serve(process)`, handing over
+its own `Process` capability — and its `output`, when a caller drives it,
+returns *without* `done`. The client side of `sh` answers `serve` at once and
+opens its reedline prompt (`client/prompt/`) on that process as a task of its
+own; from here on the process belongs to the prompt. Each
+accepted line goes `Prompt::execute_command` → `Shell::sh`, which **parses the
+text on the client** into a `Script` and ships it via
+`ShPortal.sh(script, output, stop)`. One line = one `sh` RPC carrying a
+freshly-parsed `Script`. `exit` ends the prompt, which kills the process
+(`Shell::kill`) — the missing `done` had told whoever ran `sh` to leave it
+alone, the way a daemon is left alone. That caller — the CLI, `dusk.sh(...)` in
+Python, or the outer prompt for a nested `sh` — waits for the prompts its
+command opened (`prompt::wait_serving`) before it carries on, so two prompts
+never read one terminal.
+
+That is why the CLI is nothing but "run `sh`": `dusk <address>` runs it in
+server mode and the prompt appears, `dusk <address> "<command>"` runs it in
+script mode. It is also why `sh` typed at the prompt opens a second prompt on a
+second `sh` process, and why the first `exit` only returns to the first one.
+A client that sets `DUSK_NON_INTERACTIVE` — the API gateway does — refuses a
+bare `sh` at args-build time, the same way `logs view` is refused there.
 
 Either way the server side is identical: a `Script` reader handed to
 `Interpreter::exec`.
@@ -234,10 +252,15 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 | Spawning / killing the resulting process | No network — uses the server-local `dusk_core::local_client` |
 | Listing functions (highlighter, `functions` builtin) | Yes — `ShPortal.functions`, once per prompt |
 
-The connection itself is resilient: `Connection` and `Shell::create_sh_process`
-both wrap their capabilities in `capnp_rpc::auto_reconnect`, and a keepalive task
-pings `pid()` on an RTT-adaptive interval to measure latency and keep the
-reconnect warm.
+The connection itself is resilient: `Connection` wraps its client in
+`capnp_rpc::auto_reconnect`, and so does `Shell` its `sh` process — the served
+one is its first incarnation, and when a call finds the node gone
+(`Shell::create_sh_process`) a fresh server-mode `sh` is created on the node
+that answers next. That replacement serves itself on start like any
+server-mode `sh`, and `serve` is idempotent on the client: a process a `Shell`
+already holds opens nothing, so no second prompt appears. A keepalive task pings the process's `pid()` on an
+RTT-adaptive interval to measure the latency the prompt displays and to keep the
+reconnect warm; while it fails the status line reads `disconnected`.
 
 ## Error handling
 

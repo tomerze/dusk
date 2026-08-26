@@ -1,15 +1,21 @@
+pub mod stop;
+
 use crate::entry::ShEntriesBuilder;
+use crate::parser::Parser;
 use crate::sh_capnp::{sh_portal, sh_stop};
-use crate::{ShArgs, ShMode, parser::Parser};
+use crate::{ShArgs, ShMode};
 use anyhow::Result;
 use capnp::capability::{FromClientHook, Promise};
-use dusk_capnp::dusk_capnp::stream;
-use dusk_capnp::dusk_capnp::{dusk, process};
+use dusk_capnp::dusk_capnp::{dusk, process, stream};
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::format;
-use std::prelude::rust_2024::*;
 use std::rc::Rc;
+use std::string::{String, ToString};
 use std::sync::{Arc, Mutex};
+use std::thread_local;
 use std::time::{Duration, Instant};
+use std::vec::Vec;
 use tokio::sync::{Notify, oneshot};
 use tokio::task::JoinHandle;
 
@@ -33,6 +39,10 @@ impl sh_stop::Server for Stop {
 
 pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
+thread_local! {
+    static HELD: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
+}
+
 pub struct Shell {
     client: dusk::Client,
     parser: Parser,
@@ -40,11 +50,10 @@ pub struct Shell {
     sh_process: process::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
-    pub sh_pid: u64,
 }
 
 impl Shell {
-    async fn create_sh_process_reconnect_callback<S: ShEntriesBuilder>(
+    async fn create_sh_process<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
     ) -> capnp::Result<process::Client> {
@@ -64,6 +73,14 @@ impl Shell {
             match process_request.send().promise.await {
                 Ok(process_reply) => {
                     let process = process_reply.get()?.get_result()?;
+                    let pid = process
+                        .pid_request()
+                        .send()
+                        .promise
+                        .await?
+                        .get()?
+                        .get_result();
+                    HELD.with_borrow_mut(|held| held.insert(pid));
                     let mut run_request = client.run_request();
                     run_request.get().set_process(process.clone());
                     let _run_reply = run_request.send().promise.await?;
@@ -76,22 +93,6 @@ impl Shell {
                 Err(err) => return Err(err),
             }
         }
-    }
-
-    async fn create_sh_process<S: ShEntriesBuilder>(
-        client: dusk::Client,
-        sh_entries_builder: S,
-    ) -> Result<process::Client> {
-        let (process, _) = capnp_rpc::auto_reconnect(move || {
-            Ok(capnp_rpc::new_future_client(
-                Self::create_sh_process_reconnect_callback(
-                    client.clone(),
-                    sh_entries_builder.clone(),
-                ),
-            ))
-        })?;
-
-        Ok(process)
     }
 
     fn spawn_keepalive_task(sh_process: process::Client, rtt_handle: RttHandle) -> JoinHandle<()> {
@@ -117,30 +118,61 @@ impl Shell {
         })
     }
 
-    pub async fn new<S: ShEntriesBuilder>(
+    pub async fn adopt<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
+        served: process::Client,
         parser: Parser,
-    ) -> Result<Self> {
+    ) -> Result<Option<Self>> {
+        let served_pid = served
+            .pid_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_result();
+        if HELD.with_borrow(|held| held.contains(&served_pid)) {
+            tracing::debug!(pid = served_pid, "served an sh this shell already holds");
+            return Ok(None);
+        }
+
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
+        HELD.with_borrow_mut(|held| held.insert(served_pid));
 
-        let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
+        let (sh_process, set_target) = {
+            let client = client.clone();
+            capnp_rpc::auto_reconnect(move || {
+                Ok(capnp_rpc::new_future_client(Self::create_sh_process(
+                    client.clone(),
+                    sh_entries_builder.clone(),
+                )))
+            })?
+        };
+        set_target.set_target(served);
 
-        let pid_reply = sh_process.pid_request().send().promise.await?;
-        let sh_pid = pid_reply.get()?.get_result();
-
+        tracing::info!(pid = served_pid, "took over a served sh");
         let rtt_handle: RttHandle = Arc::new(Mutex::new(None));
         let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());
 
-        Ok(Shell {
-            client: client.clone(),
+        Ok(Some(Shell {
+            client,
             parser,
             sh_process,
             hostname: hostname.into(),
-            sh_pid,
             rtt_handle,
             keepalive_task,
+        }))
+    }
+
+    fn sh_portal(&self) -> sh_portal::Client {
+        let sh_process = self.sh_process.clone();
+        capnp_rpc::new_future_client(async move {
+            let portal_reply = sh_process.portal_request().send().promise.await?;
+            Ok(portal_reply
+                .get()?
+                .get_result()?
+                .cast_to::<sh_portal::Client>())
         })
     }
 
@@ -151,22 +183,11 @@ impl Shell {
         done_receiver: oneshot::Receiver<()>,
         stop_signal: Rc<Notify>,
     ) -> Result<()> {
-        let sh_process = self.sh_process.clone();
-
-        let sh_portal = capnp_rpc::new_future_client(async move {
-            let portal_request = sh_process.portal_request();
-            let portal_reply = portal_request.send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_portal::Client>())
-        });
-
         let stop_cap: sh_stop::Client = capnp_rpc::new_client(Stop {
             notify: stop_signal,
         });
 
-        let mut sh_request = sh_portal.sh_request();
+        let mut sh_request = self.sh_portal().sh_request();
         let script_builder = sh_request.get().init_script();
         self.parser.parse(script, script_builder)?;
         sh_request.get().set_output(stream);
@@ -179,15 +200,7 @@ impl Shell {
 
     /// Returns the names of functions currently defined in the sh process.
     pub async fn functions(&self) -> Result<Vec<String>> {
-        let sh_process = self.sh_process.clone();
-        let sh_portal = capnp_rpc::new_future_client(async move {
-            let portal_reply = sh_process.portal_request().send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_portal::Client>())
-        });
-        let reply = sh_portal.functions_request().send().promise.await?;
+        let reply = self.sh_portal().functions_request().send().promise.await?;
         let symbols = reply.get()?.get_symbols()?;
         let mut out = Vec::with_capacity(symbols.len() as usize);
         for symbol in symbols.iter() {
@@ -200,21 +213,20 @@ impl Shell {
     /// Isn't in Drop to allow async cleanup.
     pub async fn kill(self) -> Result<()> {
         self.keepalive_task.abort();
-        let client = self.client.clone();
-        let sh_process = self.sh_process.clone();
-        let pid = sh_process
+        let pid = self
+            .sh_process
             .pid_request()
             .send()
             .promise
             .await?
             .get()?
             .get_result();
-        let mut kill_request = client.kill_request();
+        HELD.with_borrow_mut(|held| held.remove(&pid));
+        let mut kill_request = self.client.kill_request();
         kill_request.get().set_pid(pid);
         kill_request.get().set_signal(15); // SIGTERM
-
         let _ = kill_request.send().promise.await?;
-
+        tracing::info!(pid, "killed the sh this shell drove");
         Ok(())
     }
 }

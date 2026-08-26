@@ -19,7 +19,7 @@ pub use execution::Stop;
 use inst::{Frame, Inst, ScriptWrapper};
 
 mod compiler;
-mod execution;
+pub(crate) mod execution;
 mod inst;
 
 pub(crate) type FunctionTable =
