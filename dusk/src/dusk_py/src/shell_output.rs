@@ -33,7 +33,7 @@ impl ShellOutput {
             }
             match output.shown.get(index)? {
                 Ok(pickle_bytes) => Some(Ok(pickle_bytes.clone())),
-                Err(error) => Some(Err(error.to_string())),
+                Err(error) => Some(Err(format!("{error:#}"))),
             }
         })
     }
@@ -77,7 +77,7 @@ impl ShellOutput {
         });
         match received {
             Some(Ok(pickle_bytes)) => Some(Python::attach(|py| unpickle(py, &pickle_bytes))),
-            Some(Err(e)) => Some(Err(PyRuntimeError::new_err(e.to_string()))),
+            Some(Err(e)) => Some(Err(PyRuntimeError::new_err(format!("{e:#}")))),
             None => None,
         }
     }
@@ -105,7 +105,7 @@ impl ShellOutput {
         };
         match received {
             Some(Ok(pickle_bytes)) => Python::attach(|py| unpickle(py, &pickle_bytes)),
-            Some(Err(e)) => Err(PyRuntimeError::new_err(e.to_string())),
+            Some(Err(e)) => Err(PyRuntimeError::new_err(format!("{e:#}"))),
             None => Err(PyStopAsyncIteration::new_err(())),
         }
     }
