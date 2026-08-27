@@ -77,6 +77,9 @@ second `sh` process, and why the first `exit` only returns to the first one.
 A client that sets `DUSK_NON_INTERACTIVE` — the API gateway does — refuses a
 bare `sh` at args-build time, the same way `logs view` is refused there.
 
+Why the prompt is opened from a call the node does not wait on, and what has
+to make up for that on the client, is [The Trinity Problem](trinity.md).
+
 Either way the server side is identical: a `Script` reader handed to
 `Interpreter::exec`.
 

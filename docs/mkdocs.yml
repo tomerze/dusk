@@ -91,6 +91,7 @@ nav:
       - development/index.md
       - Architecture: development/architecture.md
       - Shell: development/shell.md
+      - The Trinity Problem: development/trinity.md
       - Logs: development/logs.md
       - Tracing and spans: development/tracing.md
       - Ask Dusk: development/ask_dusk.md
