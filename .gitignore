@@ -16,4 +16,5 @@
 /**/__pycache__
 /**/dusk*.so
 /.claude/settings.local.json
+/.claude/worktrees/**
 .superpowers/
