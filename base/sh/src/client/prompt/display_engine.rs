@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use std::format;
+use std::string::{String, ToString};
+use std::vec::Vec;
 
 use base64::prelude::*;
 use crossterm::style::Stylize;

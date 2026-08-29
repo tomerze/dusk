@@ -1,3 +1,7 @@
+use std::boxed::Box;
+use std::string::{String, ToString};
+use std::vec::Vec;
+use std::{format, vec};
 pub mod spinner;
 
 use std::borrow::Cow;
@@ -18,8 +22,8 @@ use reedline::{
     default_vi_insert_keybindings, default_vi_normal_keybindings,
 };
 
-use crate::highlighter::CustomHighlighter;
-use dusk_shell::shell::RttHandle;
+use crate::client::prompt::highlighter::CustomHighlighter;
+use crate::client::shell::RttHandle;
 
 static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
@@ -142,7 +146,7 @@ impl reedline::Prompt for CommandPrompt {
 
 pub(crate) fn get_line_editor(
     commands: Vec<String>,
-    functions: crate::highlighter::FunctionNames,
+    functions: crate::client::prompt::highlighter::FunctionNames,
 ) -> Result<Reedline> {
     let history = Box::new(
         reedline::SqliteBackedHistory::with_file("history.sqlite3".into(), None, None)
