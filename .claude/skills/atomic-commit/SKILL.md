@@ -198,13 +198,6 @@ writing this file.
 Between those failures is the actual skill, and neither file count nor diff size
 nor what-breaks-if-I-split will find it. Only the statement will.
 
-## Issue Integration
-- Check user message or branch name for issue number
-- IF no issue: ask if user wants to create one
-  - IF user does not want to provider, leave it blank
-- IF yes: help write description, offer `gh issue create` or `glab issue create`
-  - Include in commits: `"Add the thing (#42)"`
-
 ## Mechanics
 
 **Before rewriting any history, snapshot the final tree.** `git add -A && git
