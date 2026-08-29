@@ -18,6 +18,14 @@ pub enum ExecutionError {
     Program(anyhow::Error),
 }
 
+impl From<ExecutionError> for anyhow::Error {
+    fn from(error: ExecutionError) -> Self {
+        match error {
+            ExecutionError::Runtime(error) | ExecutionError::Program(error) => error,
+        }
+    }
+}
+
 pub struct Execution {
     client: dusk::Client,
     output: stream::Client,

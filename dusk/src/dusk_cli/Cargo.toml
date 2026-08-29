@@ -17,3 +17,6 @@ dusk_connection = { path = "../dusk_connection/" }
 dusk_base = { path = "../dusk_base", features = ["client"], public = true }
 capnp-rpc = "0.21.0"
 atty = "0.2.14"
+# The critical-section impl `Execution`'s stop signal needs on the client
+# (the node gets it from the nix impl).
+critical-section = { version = "1", features = ["std"] }

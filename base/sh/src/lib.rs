@@ -39,7 +39,11 @@ pub mod client;
 
 mod interpreter;
 
-use interpreter::{FunctionTable, Interpreter, Stop};
+#[cfg(not(feature = "client"))]
+use interpreter::Stop;
+#[cfg(feature = "client")]
+pub use interpreter::execution::{Execution, ExecutionError, Stop};
+use interpreter::{FunctionTable, Interpreter};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
