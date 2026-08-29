@@ -25,6 +25,7 @@ use capnp::capability::FromClientHook as _;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_connection::Connection;
+use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
@@ -55,18 +56,12 @@ const ARRIVAL_TIMEOUT: Duration = Duration::from_secs(15);
 /// it only exists because `Shell::sh` requires an output stream.
 struct OutputSink;
 
-impl stream::Server for OutputSink {
-    fn send(&mut self, _params: stream::SendParams) -> Promise<(), capnp::Error> {
+impl StreamMixin for OutputSink {
+    fn send(&mut self, _value: dusk_program::value::Value) -> Promise<(), capnp::Error> {
         Promise::ok(())
     }
 
-    fn done(
-        &mut self,
-        _params: stream::DoneParams,
-        _results: stream::DoneResults,
-    ) -> Promise<(), capnp::Error> {
-        Promise::ok(())
-    }
+    fn end(&mut self) {}
 }
 
 /// Poll `predicate` until it holds or `timeout` elapses; returns whether it
@@ -112,7 +107,7 @@ async fn drive_logs_stream(
     // `logs stream` runs until torn down, so its done long-poll never fires and
     // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
     let (_done_sender, done_receiver) = oneshot::channel::<()>();
-    let output: stream::Client = capnp_rpc::new_client(OutputSink);
+    let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
     let stop_signal = Rc::new(Notify::new());
 
     let found = tokio::select! {
@@ -364,7 +359,7 @@ async fn test_logs_stream_to_custom_stream() {
             let mut output_request = portal.output_request();
             output_request
                 .get()
-                .set_stream(capnp_rpc::new_client(OutputSink));
+                .set_stream(capnp_rpc::new_client(Stream::new(OutputSink)));
 
             // Emit the marker on a loop so the live stream is guaranteed to
             // carry it, independent of how much history the replay walks first.

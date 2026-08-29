@@ -8,6 +8,7 @@ use capnp::capability::{FromClientHook as _, Promise};
 use dusk_capnp::dusk_capnp::{dusk, stream};
 use dusk_connection::Connection;
 use dusk_program::program_args::ProgramArgs;
+use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_kvs::{Args as KvsArgs, Value, kvs::key_id, kvs_capnp};
 use dusk_program_sh::sh_capnp;
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
@@ -20,27 +21,14 @@ struct CaptureStream {
     done: Rc<Cell<bool>>,
 }
 
-impl stream::Server for CaptureStream {
-    fn send(&mut self, params: stream::SendParams) -> Promise<(), capnp::Error> {
-        let value = match params
-            .get()
-            .and_then(|params| params.get_value())
-            .and_then(Value::from_reader)
-        {
-            Ok(value) => value,
-            Err(error) => return Promise::err(error),
-        };
+impl StreamMixin for CaptureStream {
+    fn send(&mut self, value: Value) -> Promise<(), capnp::Error> {
         self.values.borrow_mut().push(value);
         Promise::ok(())
     }
 
-    fn done(
-        &mut self,
-        _params: stream::DoneParams,
-        _results: stream::DoneResults,
-    ) -> Promise<(), capnp::Error> {
+    fn end(&mut self) {
         self.done.set(true);
-        Promise::ok(())
     }
 }
 
@@ -117,10 +105,10 @@ async fn run_action(
         .output_request();
     output_request
         .get()
-        .set_stream(capnp_rpc::new_client(CaptureStream {
+        .set_stream(capnp_rpc::new_client(Stream::new(CaptureStream {
             values: values.clone(),
             done: done.clone(),
-        }));
+        })));
     output_request.send().promise.await.unwrap();
 
     let values = values.borrow().clone();
