@@ -32,8 +32,7 @@ Each Base program is its own crate, named `dusk_program_<name>` — `dusk_progra
 
 | Crate | Role |
 |-------|------|
-| `dusk_prompt` | The interactive prompt — reedline UI, builtins, output rendering. Hosts [Ask Dusk](../features/ask-dusk.md). |
-| `dusk_shell` | The client-side `Shell` (drives a long-lived `sh` process) and the link to a node. |
+| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive prompt — reedline UI, builtins, output rendering, host of [Ask Dusk](../features/ask-dusk.md) — and the `Shell` that drives a served `sh` process through its portal. Both are the `sh` program's client side. |
 | `dusk_cli` | The `dusk` [CLI](cli.md). |
 | `dusk_py` | The [Python](python-api.md) extension (PyO3, built with maturin). |
 

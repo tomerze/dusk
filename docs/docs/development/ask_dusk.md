@@ -16,7 +16,7 @@ Two workspace crates, no C, no build script:
 - **`dusk/src/dusk_llm/`** owns the prompt and the HTTP call: `prompts/system.md`
   (persona, grammar, output contract), `prompts/examples.json` (the few-shot
   exchanges), and `src/chat.rs` (`Endpoint`, `Chat`, `LlmReply`).
-- **`dusk/src/dusk_prompt/`** consumes `dusk_llm::Chat` like any other
+- **`base/sh/src/client/prompt/`** consumes `dusk_llm::Chat` like any other
   dependency, and supplies the list of programs the connected node can run.
 
 The whole crate is about 300 lines of Rust and one `reqwest` client.
@@ -89,7 +89,7 @@ be refused outright rather than gradually degrade.
 
 ## Where the program list comes from
 
-`dusk_prompt` already holds an `EntryInfo` per shell-invocable program — name,
+The prompt already holds an `EntryInfo` per shell-invocable program — name,
 short description, long description — and uses it for `help`. `chat_submit`
 sorts that list by name and renders it into the `{{PROGRAMS}}` block.
 
