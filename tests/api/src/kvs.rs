@@ -5,20 +5,18 @@
 //! sets is there for the next.
 
 use capnp::capability::{FromClientHook as _, Promise};
-use dusk_capnp::dusk_capnp::{dusk, stream};
+use dusk_capnp::dusk_capnp::dusk;
 use dusk_connection::Connection;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_kvs::{Args as KvsArgs, Value, kvs::key_id, kvs_capnp};
 use dusk_program_sh::sh_capnp;
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Records what a program streams, and whether it called `done`.
 struct CaptureStream {
     values: Rc<RefCell<Vec<Value>>>,
-    done: Rc<Cell<bool>>,
 }
 
 impl StreamMixin for CaptureStream {
@@ -27,9 +25,7 @@ impl StreamMixin for CaptureStream {
         Promise::ok(())
     }
 
-    fn end(&mut self) {
-        self.done.set(true);
-    }
+    fn end(&mut self) {}
 }
 
 /// `Dusk.process`, then `Dusk.run`, then `Process.portal` — as the shell does.
@@ -99,7 +95,6 @@ async fn run_action(
     let (pid, portal) = start(client, program_args).await;
 
     let values = Rc::new(RefCell::new(Vec::new()));
-    let done = Rc::new(Cell::new(false));
     let mut output_request = portal
         .cast_to::<sh_capnp::output_portal::Client>()
         .output_request();
@@ -107,12 +102,12 @@ async fn run_action(
         .get()
         .set_stream(capnp_rpc::new_client(Stream::new(CaptureStream {
             values: values.clone(),
-            done: done.clone(),
         })));
-    output_request.send().promise.await.unwrap();
+    let output_reply = output_request.send().promise.await.unwrap();
+    let daemonize = output_reply.get().unwrap().get_daemonize();
 
     let values = values.borrow().clone();
-    (pid, values, done.get())
+    (pid, values, daemonize)
 }
 
 /// The interface the shell drives: one action per invocation, carried in args.
@@ -131,7 +126,7 @@ async fn test_kvs_args_interface() {
 
             let key = key_id("args.interface.key");
 
-            let (pid, values, done) = run_action(
+            let (pid, values, daemonize) = run_action(
                 &client,
                 KvsArgs::set(key, &Value::String("1".to_string()))
                     .unwrap()
@@ -140,39 +135,38 @@ async fn test_kvs_args_interface() {
             )
             .await;
             assert!(values.is_empty(), "set streamed {values:?}");
-            assert!(done, "set must release the shell by calling done");
+            assert!(!daemonize, "set must let the shell reap it");
             stop(&client, pid).await;
 
-            let (pid, values, done) =
+            let (pid, values, daemonize) =
                 run_action(&client, KvsArgs::get(key).as_program_args().unwrap()).await;
             assert_eq!(
                 values,
                 vec![Value::String("1".to_string())],
                 "get must read back what an earlier process set"
             );
-            assert!(done);
+            assert!(!daemonize);
             stop(&client, pid).await;
 
-            let (pid, values, done) =
+            let (pid, values, daemonize) =
                 run_action(&client, KvsArgs::exists(key).as_program_args().unwrap()).await;
             assert_eq!(values, vec![Value::Bool(true)], "the key is present");
-            assert!(done);
+            assert!(!daemonize);
             stop(&client, pid).await;
 
-            let (pid, values, done) =
+            let (pid, values, daemonize) =
                 run_action(&client, KvsArgs::delete(key).as_program_args().unwrap()).await;
             assert_eq!(values, vec![Value::Bool(true)], "delete removed the key");
-            assert!(done);
+            assert!(!daemonize);
             stop(&client, pid).await;
 
             // Reading the deleted key is covered by the portal test: here it
             // would exit `main` before the portal `run_action` needs exists.
 
-            // bind withholds `done`, so the shell must leave it running.
-            let (pid, values, done) =
+            let (pid, values, daemonize) =
                 run_action(&client, KvsArgs::bind().as_program_args().unwrap()).await;
             assert!(values.is_empty(), "bind streamed {values:?}");
-            assert!(!done, "bind must daemonize by withholding done");
+            assert!(daemonize, "bind must daemonize");
 
             let ps_reply = client.ps_request().send().promise.await.unwrap();
             let entries = ps_reply.get().unwrap().get_process_entries().unwrap();
