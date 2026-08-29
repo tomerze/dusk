@@ -12,7 +12,6 @@
 //! waits for it to arrive.
 
 use std::net::SocketAddr;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -29,10 +28,8 @@ use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
-use dusk_program_sh::client::shell::Shell;
 use dusk_program_sh::entry::StaticShEntriesBuilder;
-use dusk_program_sh::parser::Parser;
-use dusk_program_sh::sh_capnp;
+use dusk_program_sh::{Execution, ShArgs, ShMode, Stop, sh_capnp};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 
 use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::{
@@ -43,7 +40,6 @@ use opentelemetry_proto::tonic::collector::logs::v1::{
 };
 use opentelemetry_proto::tonic::logs::v1::LogRecord as OtlpLogRecord;
 
-use tokio::sync::{Notify, oneshot};
 use tokio::task::LocalSet;
 
 /// How long to wait for a record to reach the destination before failing.
@@ -53,7 +49,7 @@ const ARRIVAL_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The sh result stream. `logs stream` never pushes command output here (it
 /// streams records to the args server instead), so both methods are no-ops —
-/// it only exists because `Shell::sh` requires an output stream.
+/// it only exists because `Execution` requires an output stream.
 struct OutputSink;
 
 impl StreamMixin for OutputSink {
@@ -91,9 +87,16 @@ async fn drive_logs_stream(
     let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
     let connection = Connection::connect(address).await.unwrap();
     let client = connection.client().await;
-    let mut shell = Shell::new(client, StaticShEntriesBuilder::default(), Parser::new())
-        .await
-        .unwrap();
+    let program_args = ShArgs::new(
+        client.clone(),
+        StaticShEntriesBuilder::default(),
+        ShMode::Script(command.to_string()),
+    )
+    .unwrap()
+    .as_program_args()
+    .unwrap();
+    let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
+    let execution = Execution::new(client, output);
 
     // Emit the marker on a loop so the live stream is guaranteed to carry it,
     // independent of how much history the replay walks first.
@@ -104,23 +107,25 @@ async fn drive_logs_stream(
         }
     });
 
-    // `logs stream` runs until torn down, so its done long-poll never fires and
-    // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
-    let (_done_sender, done_receiver) = oneshot::channel::<()>();
-    let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
-    let stop_signal = Rc::new(Notify::new());
+    let stop = Stop::new();
+    let mut execution_future = std::pin::pin!(execution.program_args(program_args, &stop));
 
     let found = tokio::select! {
-        result = shell.sh(command, output, done_receiver, stop_signal) => {
+        result = &mut execution_future => {
             // `logs stream` should outlive the wait; if it returned, surface why.
-            result.unwrap();
+            result.map_err(dusk_program::anyhow::Error::from).unwrap();
             false
         }
-        found = wait_until(predicate, ARRIVAL_TIMEOUT) => found,
+        found = wait_until(predicate, ARRIVAL_TIMEOUT) => {
+            stop.signal(());
+            if let Err(error) = execution_future.await {
+                tracing::warn!(error = ?dusk_program::anyhow::Error::from(error), "sh did not stop cleanly");
+            }
+            found
+        }
     };
 
     marker_task.abort();
-    let _ = shell.kill().await;
     let _ = connection.disconnect().await;
     found
 }
