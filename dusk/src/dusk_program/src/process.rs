@@ -1,9 +1,10 @@
-use alloc::{boxed::Box, rc::Rc, string::ToString};
+use alloc::{boxed::Box, format, rc::Rc, string::ToString};
 use anyhow::{Context, Result};
 use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::portal;
 use dusk_capnp::dusk_capnp::process;
+use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::DynamicReceiver;
 use embassy_sync::signal::Signal;
@@ -123,26 +124,12 @@ impl dyn Process {
         let error = result.as_ref().err().map(|e| e.to_string());
         tracing::info!(error = error, "main exit");
 
-        {
-            let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
-            ps_signal_channel_map.remove(&self.pid());
-        }
-        {
-            let mut ps_map = namespace.ps_map.lock().await;
-            ps_map.remove(&self.pid());
-        }
-
         exit_watch
             .sender()
             .send(Some(result.map_err(|e| e.to_string())));
 
         {
             let mut ps_ready_map = namespace.ps_ready_map.lock().await;
-            if let Some(ready) = ps_ready_map.get_mut(&self.pid()) {
-                ready.sender().send(true);
-            } else {
-                tracing::error!("couldn't ensure process is ready after main exited");
-            }
             ps_ready_map.remove(&self.pid());
         }
         {
@@ -221,22 +208,67 @@ impl process::Server for dyn Process {
                 let ps_ready_map = namespace.ps_ready_map.lock().await;
                 ps_ready_map.get(&pid).cloned()
             };
-            if let Some(ready) = ready {
-                let mut receiver = ready.receiver().ok_or_else(|| {
-                    capnp::Error::failed("couldn't acquire receiver for process ready watch, maximum amount of receivers reached".into())
-                })?;
-
-                while !receiver.get().await {
-                    receiver.changed().await;
+            let exit = {
+                let ps_exit_map = namespace.ps_exit_map.lock().await;
+                ps_exit_map.get(&pid).cloned()
+            };
+            let (ready, exit) = match (ready, exit) {
+                (Some(ready), Some(exit)) => (ready, exit),
+                (None, Some(_)) => {
+                    return Err(capnp::Error::failed(
+                        "process does not appear in the ready map, but does appear in exit map, likely mid-teardown".to_string(),
+                    ));
                 }
+                (Some(_), None) => {
+                    return Err(capnp::Error::failed(
+                        "process does not appear in the exit map, but does appear in ready map, this is a faulty state".to_string(),
+                    ));
+                }
+                (None, None) => {
+                    return Err(capnp::Error::failed(
+                        "process likely not running".to_string(),
+                    ));
+                }
+            };
 
-                let portal = <Self as ProcessMixin>::portal(&*process);
-                results.get().set_result(portal);
-                Ok(())
-            } else {
-                Err(capnp::Error::failed(
-                    "process does not appear in the ready map, likely not running".to_string(),
-                ))
+            let mut ready_receiver = ready.receiver().ok_or_else(|| {
+                capnp::Error::failed("couldn't acquire receiver for process ready watch".into())
+            })?;
+            let mut exit_receiver = exit.receiver().ok_or_else(|| {
+                capnp::Error::failed("couldn't acquire receiver for process exit watch".into())
+            })?;
+
+            let became_ready = async {
+                while !ready_receiver.get().await {
+                    ready_receiver.changed().await;
+                }
+            };
+            let exited = async {
+                loop {
+                    if let Some(result) = exit_receiver.get().await {
+                        return result;
+                    }
+                    exit_receiver.changed().await;
+                }
+            };
+
+            let outcome = select(exited, became_ready).await;
+            let exit_result = match outcome {
+                Either::First(exit_result) if !ready_receiver.get().await => Some(exit_result),
+                _ => None,
+            };
+            match exit_result {
+                Some(Err(error)) => Err(capnp::Error::failed(format!(
+                    "while waiting for process to become ready it exited with error: {error}"
+                ))),
+                Some(Ok(())) => Err(capnp::Error::failed(
+                    "while waiting for process to become ready it exited with no error".to_string(),
+                )),
+                None => {
+                    let portal = <Self as ProcessMixin>::portal(&*process);
+                    results.get().set_result(portal);
+                    Ok(())
+                }
             }
         })
     }
