@@ -6,9 +6,8 @@ use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use std::collections::VecDeque;
-use std::rc::Rc;
 use std::sync::Arc;
-use tokio::sync::{Mutex, Notify, mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc};
 
 use crate::SHELL_OUTPUT_BUFFER_SIZE;
 
@@ -144,7 +143,6 @@ fn unpickle(py: Python<'_>, pickle_bytes: &[u8]) -> PyResult<Py<PyAny>> {
 
 pub struct StreamServer {
     pub(crate) tx: mpsc::Sender<Result<Vec<u8>>>,
-    pub(crate) done_tx: Option<oneshot::Sender<()>>,
 }
 
 impl StreamMixin for StreamServer {
@@ -162,46 +160,32 @@ impl StreamMixin for StreamServer {
         })
     }
 
-    fn end(&mut self) {
-        if let Some(tx) = self.done_tx.take() {
-            let _ = tx.send(());
-        }
-    }
+    fn end(&mut self) {}
 }
 
 pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result<Vec<u8>>>) {
-    let (done_tx, done_rx) = oneshot::channel();
     let stream_server = Stream::new(StreamServer {
         tx: output_tx.clone(),
-        done_tx: Some(done_tx),
     });
     let stream_client = capnp_rpc::new_client(stream_server);
 
     tokio::task::spawn_local(async move {
-        // Create a new shell for this command
-        let shell_result = dusk_program_sh::client::shell::Shell::new(
-            client.clone(),
-            dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-            dusk_program_sh::parser::Parser::new(),
-        )
+        let result = async {
+            let program_args = dusk_program_sh::ShArgs::new(
+                client.clone(),
+                dusk_program_sh::entry::StaticShEntriesBuilder::default(),
+                dusk_program_sh::ShMode::Script(command),
+            )?
+            .as_program_args()?;
+            let stop = dusk_program_sh::Stop::new();
+            let serving_before = dusk_program_sh::client::prompt::serving();
+            dusk_program_sh::Execution::new(client, stream_client)
+                .program_args(program_args, &stop)
+                .await?;
+            dusk_program_sh::client::prompt::wait_serving(serving_before).await;
+            Ok::<(), dusk_program::anyhow::Error>(())
+        }
         .await;
-
-        let mut shell = match shell_result {
-            Ok(s) => s,
-            Err(e) => {
-                let _ = output_tx.send(Err(e)).await;
-                return;
-            }
-        };
-
-        // No external stop source in the Python embedding; a fresh Notify that
-        // nothing ever fires keeps the server's stop_cap.stop() pending forever.
-        let result = shell
-            .sh(&command, stream_client, done_rx, Rc::new(Notify::new()))
-            .await;
-
-        // Kill the shell now that the command has completed
-        let _ = shell.kill().await;
 
         if let Err(e) = result {
             let _ = output_tx.send(Err(e)).await;
