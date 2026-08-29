@@ -1,4 +1,6 @@
 use capnp::capability::Promise;
+use std::print;
+use std::string::ToString;
 
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program::value::Value;

@@ -1,11 +1,13 @@
 use capnp::capability::Promise;
+use std::println;
+use std::string::ToString;
 
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program::value::Value;
 
 use tokio::sync::oneshot;
 
-use crate::display_engine::DisplayEngine;
+use crate::client::prompt::display_engine::DisplayEngine;
 
 pub struct DisplayStream<D: DisplayEngine> {
     pub done_sender: Option<oneshot::Sender<()>>,

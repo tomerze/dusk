@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 pyo3 = { version = "0.27.0", features = ["experimental-async", "extension-module"] }
 tokio = { version = "1.47.1", features = ["full"] }
-dusk_shell = { path = "../dusk_shell" }
 dusk_connection = { path = "../dusk_connection" }
 dusk_capnp = { path = "../dusk_capnp" }
 dusk_program = { path = "../dusk_program" }
