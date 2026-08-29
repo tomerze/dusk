@@ -7,7 +7,7 @@ mod highlighter;
 pub mod stream;
 pub mod ui;
 
-use crate::entry::{EntryInfo, GetAvailableProgramsInfo};
+use crate::entry::{EntryInfo, GetAvailableProgramsInfo, ShEntriesBuilder};
 use dusk_program::anyhow::Result;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -26,7 +26,7 @@ use reedline::Signal;
 use std::io::stdout;
 
 use crate::client::shell::Shell;
-use display_engine::DisplayEngine;
+use display_engine::{DefaultDisplayEngine, DisplayEngine};
 use dusk_llm::Chat;
 use ui::spinner::with_spinner;
 use ui::{
@@ -423,4 +423,92 @@ where
 
         Ok(())
     }
+}
+
+pub fn serve<S: ShEntriesBuilder>(
+    client: dusk_capnp::dusk_capnp::dusk::Client,
+    process: dusk_capnp::dusk_capnp::process::Client,
+    sh_entries_builder: S,
+) {
+    tokio::task::spawn_local(async move {
+        if let Err(error) = serve_prompt(client, process, sh_entries_builder).await {
+            tracing::error!("served sh prompt failed: {error:#}");
+        }
+    });
+}
+
+fn kill_abandoned(
+    client: dusk_capnp::dusk_capnp::dusk::Client,
+    process: dusk_capnp::dusk_capnp::process::Client,
+) {
+    tokio::task::spawn_local(async move {
+        let killed = async {
+            let pid = process
+                .pid_request()
+                .send()
+                .promise
+                .await?
+                .get()?
+                .get_result();
+            let mut kill_request = client.kill_request();
+            kill_request.get().set_pid(pid);
+            kill_request.get().set_signal(15); // SIGTERM
+            kill_request.send().promise.await?;
+            Ok::<u64, capnp::Error>(pid)
+        }
+        .await;
+        match killed {
+            Ok(pid) => tracing::info!(pid, "killed an sh no prompt could be opened on"),
+            Err(error) => tracing::error!("failed to kill an unserved sh: {error:#}"),
+        }
+    });
+}
+
+async fn serve_prompt<S: ShEntriesBuilder>(
+    client: dusk_capnp::dusk_capnp::dusk::Client,
+    process: dusk_capnp::dusk_capnp::process::Client,
+    sh_entries_builder: S,
+) -> Result<()> {
+    let abandoned = process.clone();
+    let adopted = Shell::adopt(
+        client.clone(),
+        sh_entries_builder.clone(),
+        process,
+        crate::parser::Parser::new(),
+    )
+    .await;
+    let mut shell = adopted.inspect_err(|_| kill_abandoned(client, abandoned))?;
+    tracing::info!("prompt open");
+    let stop_signal = Rc::new(Notify::new());
+
+    let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
+        StreamRequest::Raw => {
+            let (json_stream, done_receiver) =
+                stream::json_stream::JsonStream::new_with_receiver(true);
+            (capnp_rpc::new_client(json_stream), done_receiver)
+        }
+        StreamRequest::Display { display_engine } => {
+            let (display_stream, done_receiver) =
+                stream::display_stream::DisplayStream::new_with_receiver(display_engine.clone());
+            (capnp_rpc::new_client(display_stream), done_receiver)
+        }
+    };
+
+    let result = async {
+        let prompt = Prompt::new(
+            &mut shell,
+            sh_entries_builder,
+            DefaultDisplayEngine::default(),
+            stream_factory,
+            stop_signal,
+        )
+        .await?;
+        prompt.run().await
+    }
+    .await;
+    if let Err(error) = shell.kill().await {
+        tracing::error!("failed to kill the served sh: {error:#}");
+    }
+    tracing::info!("prompt closed");
+    result
 }

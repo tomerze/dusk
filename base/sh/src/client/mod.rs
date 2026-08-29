@@ -45,6 +45,8 @@ shell. Dusk shell commands run Dusk programs built into the Dusk Node.
 
 * Use `sh <command>` (or `sh "<command>"`) to run a command.
 * Use `sh -d <command>` to run it detached from the current session.
+* Use `sh` on its own to open an interactive shell; `exit` returns to where
+  you were.
 "#,
             version: VERSION,
         },
