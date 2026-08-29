@@ -140,6 +140,20 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
             Ok(())
         })
     }
+
+    fn serve(
+        &mut self,
+        params: sh_capnp::sh_args::server::ServeParams,
+        _results: sh_capnp::sh_args::server::ServeResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let process = pry!(pry!(params.get()).get_process());
+        client::prompt::serve(
+            self.client.clone(),
+            process,
+            self.sh_entries_builder.clone(),
+        );
+        capnp::capability::Promise::ok(())
+    }
 }
 
 #[derive(dusk_program_proc::Launcher)]
@@ -299,23 +313,25 @@ impl dusk_program::process::ProcessMixin for Process {
             .server_as::<sh_capnp::sh_args::server::Client>()?;
         let client = dusk_core::local_client(self.namespace().clone()).await;
 
-        let (name_suffix, is_detached) = self
+        let (name_suffix, is_detached, is_server) = self
             .ctx
             .program_args
-            .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
+            .with_data::<sh_capnp::sh_args::data::Owned, _, _>(
+            |data| {
                 Ok(match data.which()? {
-                    sh_capnp::sh_args::data::Which::Server(_) => ("server", false),
-                    sh_capnp::sh_args::data::Which::Script(_) => ("script", false),
-                    sh_capnp::sh_args::data::Which::DetachedScript(_) => ("detached", true),
+                    sh_capnp::sh_args::data::Which::Server(_) => ("server", false, true),
+                    sh_capnp::sh_args::data::Which::Script(_) => ("script", false, false),
+                    sh_capnp::sh_args::data::Which::DetachedScript(_) => ("detached", true, false),
                 })
-            })?;
+            },
+        )?;
         self.ctx
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
 
         self.state.borrow_mut().interpreter = Some(Interpreter::new(
             client,
-            sh_args_client,
+            sh_args_client.clone(),
             self.function_table.clone(),
         ));
 
@@ -338,6 +354,15 @@ impl dusk_program::process::ProcessMixin for Process {
                     }
                     Ok(())
                 })?;
+        }
+        if is_server {
+            let process_client = capnp_rpc::new_client::<
+                dusk_capnp::dusk_capnp::process::Client,
+                Box<dyn dusk_program::process::Process>,
+            >(dusk_program::process::Process::clone_box(self));
+            let mut serve_request = sh_args_client.serve_request();
+            serve_request.get().set_process(process_client);
+            serve_request.send().promise.await?;
         }
         ready.sender().send(true);
 
@@ -440,12 +465,10 @@ impl sh_capnp::output_portal::Server for Portal {
                 .data_owned::<sh_capnp::sh_args::data::Owned>()?;
             match data.get_root_as_reader()?.which()? {
                 sh_capnp::sh_args::data::Which::Server(_) => {
-                    let mut request = stream.send_request();
-                    let value_builder = request.get().init_value();
-                    Value::Text("running in server mode".to_string())
-                        .write_to_builder(value_builder)?;
-                    request.send().await?;
-                    results.get().set_daemonize(false);
+                    // Handed to the client in `main`, which drives it and
+                    // kills it when its user is done. Whoever ran this `sh`
+                    // must leave it alone in the meantime.
+                    results.get().set_daemonize(true);
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();

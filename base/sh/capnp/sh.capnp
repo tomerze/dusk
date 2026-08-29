@@ -40,6 +40,10 @@ struct ShArgs {
   interface Server {
     buildProgramArgs @0 (command :Text)
       -> (programArgs :Dusk.ProgramArgs(AnyPointer, AnyPointer));
+    # Called by a `server`-mode sh as soon as it is running. The client takes
+    # `process` over — drives it through its portal and kills it when its
+    # user is done — and answers at once; the sh does not wait.
+    serve @1 (process :Dusk.Process) -> ();
   }
 }
 
