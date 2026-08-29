@@ -76,11 +76,7 @@ impl Interpreter {
             "script frame disassembly"
         );
         let frame = Arc::new(frame);
-        let result = self.exec_inner(frame, output.clone(), stop).await;
-        if let Err(error) = output.done_request().send().promise.await {
-            tracing::warn!(error = %error, "failed to send done on output stream");
-        }
-        result
+        self.exec_inner(frame, output, stop).await
     }
 
     fn exec_inner<'a>(

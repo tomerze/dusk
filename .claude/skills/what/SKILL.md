@@ -53,3 +53,10 @@ only what is true, only what I have checked, in as few words as it takes.
 writing the report is fine. Editing, committing, pushing, or starting the next
 piece of work is not — even if the last thing the user said was to do it. They
 asked where things are; answer that and stop.
+
+## I do not write comments
+
+Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
+in this codebase. When something genuinely needs saying in one, I say it to the
+user in my reply and let them decide; my explanations go in the commit message.
+See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).

@@ -242,7 +242,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         if self.process.bound.get() {
-            // Withholding `done` is the caller's signal that we daemonized.
+            results.get().set_daemonize(true);
             return Promise::ok(());
         }
         let result = self.process.result.borrow_mut().take();
@@ -253,7 +253,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 value.write_to_builder(value_builder)?;
                 send_request.send().await?;
             }
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             Ok(())
         })
     }

@@ -282,3 +282,10 @@ next agent is a defect exactly like a wrong comment.
 
 On `drive-issue continue`, the first two lines are already done, nothing new is
 created, and the work absorbs into the commits that are already there.
+
+## I do not write comments
+
+Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
+in this codebase. When something genuinely needs saying in one, I say it to the
+user in my reply and let them decide; my explanations go in the commit message.
+See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).

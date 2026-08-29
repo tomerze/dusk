@@ -381,7 +381,7 @@ impl Portal {
             &self.process.ctx,
             interpreter,
             script,
-            output,
+            output.clone(),
             self.process.state.clone(),
             stop.clone(),
         ));
@@ -395,6 +395,9 @@ impl Portal {
                 Either::First(result) => result,
                 Either::Second(()) => unreachable!(),
             };
+            if let Err(error) = output.done_request().send().promise.await {
+                tracing::warn!(error = %error, "failed to close the caller's stream");
+            }
             result.map_err(|error| capnp::Error::failed(format!("{error:?}")))
         })
     }
@@ -438,6 +441,7 @@ impl sh_capnp::output_portal::Server for Portal {
                     Value::Text("running in server mode".to_string())
                         .write_to_builder(value_builder)?;
                     request.send().await?;
+                    results.get().set_daemonize(false);
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
@@ -445,7 +449,7 @@ impl sh_capnp::output_portal::Server for Portal {
                         &ctx,
                         interpreter,
                         script?,
-                        stream.clone(),
+                        stream,
                         state_cell.clone(),
                         Rc::new(Stop::new()),
                     )?;
@@ -453,13 +457,10 @@ impl sh_capnp::output_portal::Server for Portal {
                         .wait()
                         .await
                         .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
+                    results.get().set_daemonize(false);
                 }
                 sh_capnp::sh_args::data::Which::DetachedScript(_) => {
-                    // Already ran in `main` against a discard sink.
-                    // Daemonize by returning without calling `done` on the
-                    // caller's stream — the caller treats a missing `done`
-                    // as "the process intends to keep running" and skips
-                    // the kill.
+                    results.get().set_daemonize(true);
                 }
             }
             Ok(())

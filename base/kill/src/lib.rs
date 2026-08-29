@@ -115,14 +115,12 @@ impl Portal {}
 impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
     fn output(
         &mut self,
-        params: dusk_program_sh::sh_capnp::output_portal::OutputParams,
+        _params: dusk_program_sh::sh_capnp::output_portal::OutputParams,
         mut results: dusk_program_sh::sh_capnp::output_portal::OutputResults,
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
-        let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-        let _process = self.process.clone();
         Promise::from_future(async move {
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             Ok(())
         })
     }

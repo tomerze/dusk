@@ -63,9 +63,9 @@ Statement separators (`;`, newline) do not short-circuit — every statement run
 
 ## Daemonization
 
-Daemonization is a shell concept, not a core process behaviour. When the shell runs a program, it drives that program's `output(stream)` portal method and watches whether the program finishes the stream with `done`:
+Daemonization is a shell concept, not a core process behaviour. When the shell runs a program, it drives that program's `output(stream)` portal method. Returning from `output` says the program is finished; what it answers says whether it means to keep running anyway:
 
-- If the program calls `done`, the shell reaps it (kill + `waitpid`).
-- If the program returns from `output` **without** calling `done`, the shell treats that as "this process intends to keep running" and leaves it alive. The process has daemonized.
+- A program that says nothing, or says `daemonize` is false, is reaped (kill + `waitpid`).
+- A program that answers `daemonize` is left alive. It has daemonized.
 
-The shell installs a wrapper (`UndoneStream`) between itself and the program so the program's `done` is read as a private "you may reap me" signal rather than ending the shell's own output stream. `sh -d` is the canonical case: it runs its command against a discard sink at startup and then omits the `done` ack, so the `sh` process daemonizes. Nothing in Dusk Core inspects or acts on the stream's done state — the policy lives entirely in the shell.
+The program is not asked to close the shell's output, because one line of shell may run several programs into the same stream; the shell closes it when the line is finished. `sh -d` is the canonical daemon: it runs its command against a discard stream at startup and answers `daemonize`, so the `sh` process is left running. Nothing in Dusk Core inspects or acts on this — the policy lives entirely in the shell.

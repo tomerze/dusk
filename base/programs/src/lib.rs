@@ -233,8 +233,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 builder.set_output(stream.clone());
             }
             let transposed = request.send().promise.await;
-
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             transposed.map(|_| ())
         })
     }

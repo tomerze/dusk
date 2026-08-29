@@ -146,10 +146,18 @@ id, and downcasts to the concrete portal type.
 
 Processes move data over **streams** (`Dusk.Stream`), which carry `Value`s — a
 schemaless-but-typed union (`uint`, `string`, `text`/Markdown, `bytes`, `bool`,
-`list`, `record`). A `Record` carries a type id plus `(key, value)` fields, which
-is how a program returns structured, tabular output without a compiled schema on
-the wire. `Stream`, `Value`, and `Record` all live in `dusk.capnp`;
-`stream.capnp` holds only the `StreamResult` streaming shim.
+`list`, `record`). A program writes into the stream it is handed, returns from
+`output` to say it is finished, and answers `daemonize` to say whether it means
+to keep running anyway. It is not asked to close the stream: one line of shell
+runs several programs into the same one, and `sh` closes it when the line is
+over. **`done` is idempotent** — a program may end a stream early if it has
+reason to, and `Drop` ends one nobody closed, so a second `done` is normal and
+must do nothing. `dusk_program::stream::StreamMixin` is the way to implement
+one. A `Record` carries a type id plus `(key, value)` fields, which is how a
+program returns structured, tabular output without a compiled schema on the
+wire.
+`Stream`, `Value`, and `Record` all live in `dusk.capnp`; `stream.capnp`
+holds only the `StreamResult` streaming shim.
 
 ### The driver
 
@@ -285,12 +293,13 @@ process) lives in `docs/docs/development/shell.md`.
 ## The shell is a program
 
 `sh` is just another program — but it's where a lot of behaviour that people
-mistake for "core" actually lives. **Daemonization** (a process kept alive by
-*not* acknowledging a stream's `done`), the `output(stream)` portal method
-(`OutputPortal`), `sh -d` detached scripts, the shell language and its
-`Script`/function/interpreter machinery, `ShStop`, and the `SH_ENTRIES` registry
-are all part of `sh`, not of Dusk Core. When documenting or reasoning about the
-core process model, keep these on the shell side of the line.
+mistake for "core" actually lives. **Daemonization** (a process that answers
+`output` with `daemonize`, and is left running instead of killed), the
+`output(stream)` portal method (`OutputPortal`), `sh -d` detached scripts, the
+shell language and its `Script`/function/interpreter machinery, `ShStop`, and
+the `SH_ENTRIES` registry are all part of `sh`, not of Dusk Core. When
+documenting or reasoning about the core process model, keep these on the shell
+side of the line.
 
 ## Artifacts and clients
 
@@ -660,15 +669,35 @@ Past failure: planning a fix for the Two Strikes Bug, I narrowed the fix space t
 
 Do not add tests as part of an implementation task. Do not run the test suite (`cargo test`, `cargo nextest`, integration tests) unless asked. `cargo check` is fine. Tests are a separate workstream.
 
-## Don't add comments everywhere
+## I do not write comments
 
-Default to no comments. Add one only when the WHY is non-obvious — a hidden constraint, a workaround for a specific bug, behaviour that would surprise a reader. **Never** add explanatory comments to code you didn't change in this task. Comments that restate what the code does are noise.
+**Not one. Not `//`, not `///`, not `#` in a schema, not a docstring. None.**
 
-**A comment is not the place to explain the change.** Before writing one, ask where the explanation belongs. Why this code exists, what it replaced, what was rejected, what it is a step towards, what still has to land — all of that is the commit message's job, and the commit message is where a reader looks for it. A comment that would read as a sentence in a commit message is one that has been put in the wrong file: it is written for whoever reviews this diff, and then it stays in the source forever, addressing a reader who no longer exists and describing a change they cannot see.
+This is absolute and it is not a style preference. Every comment I have written
+in this repository has turned out to be a commit message in the wrong file: an
+explanation of the change I was making, addressed to whoever was about to review
+that diff, left in the source forever for readers who cannot see it. I have been
+told this many times and I keep doing it, so the rule is now that I do not get to
+judge. The user writes the comments in this codebase. They are the only one who
+does.
 
-So: if it is already in the commit message, delete it. If it *could* be in the commit message, put it there instead. What survives in the source is only what the next person editing this line needs in order not to break it — and that is nearly always one line, not a paragraph.
+**When something genuinely needs saying, I say it to the user and stop.** Not in
+the file — in my reply. "`Stream.done` has to be implemented idempotently, and
+nothing in the file says so" is exactly the right thing to raise, and exactly the
+wrong thing to write down myself. The user decides whether it becomes a comment
+and what it says.
 
-Length is the signal. A multi-line comment on ordinary code is almost always a commit message that leaked.
+Where my explanations go instead:
+
+- Why this code exists, what it replaced, what was rejected → the commit message.
+- A rule the next implementer must follow → say it to the user.
+- What the code does → the code. If that is not clear enough, the fix is the
+  code, not a sentence apologising for it.
+
+The same holds for anything a person reads: user-facing strings are drafted by me
+and approved by the user, per
+[the review rule](#every-user-facing-string-goes-to-review--marked). Nobody
+should encounter my prose in this product without the user having passed it.
 
 ## Naming routine — your names are placeholders
 

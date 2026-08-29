@@ -1,6 +1,6 @@
 use capnp::capability::Promise;
 
-use dusk_capnp::{dusk_capnp::stream, pry};
+use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program::value::Value;
 
 use tokio::sync::oneshot;
@@ -14,66 +14,50 @@ pub struct JsonStream {
 }
 
 impl JsonStream {
-    pub fn new_with_receiver(colored: bool) -> (Self, oneshot::Receiver<()>) {
+    pub fn new_with_receiver(colored: bool) -> (Stream<Self>, oneshot::Receiver<()>) {
         let (done_sender, done_receiver) = oneshot::channel();
         (
-            JsonStream {
+            Stream::new(JsonStream {
                 done_sender: Some(done_sender),
                 colored,
-            },
+            }),
             done_receiver,
         )
     }
 }
 
-impl stream::Server for JsonStream {
-    fn send(
-        &mut self,
-        params: dusk_capnp::dusk_capnp::stream::SendParams,
-    ) -> Promise<(), capnp::Error> {
-        let value = pry!(pry!(params.get()).get_value());
-        let mut json = pry!(
-            pry!(Value::from_reader(value).map_err(|e| capnp::Error::failed(e.to_string())))
-                .to_json_string()
-                .map_err(|e| capnp::Error::failed(e.to_string()))
-        );
+impl StreamMixin for JsonStream {
+    fn send(&mut self, value: Value) -> Promise<(), capnp::Error> {
+        let mut json = match value.to_json_string() {
+            Ok(json) => json,
+            Err(error) => return Promise::err(capnp::Error::failed(error.to_string())),
+        };
 
         if self.colored {
-            json = pry!(
-                json.to_colored_json_with_styler(
-                    ColorMode::default().eval(),
-                    Styler {
-                        key: Color::Green.bold(),
-                        string_value: Color::Blue.bold(),
-                        integer_value: Color::Cyan.bold(),
-                        float_value: Color::Magenta.italic(),
-                        object_brackets: Color::Yellow.bold(),
-                        array_brackets: Color::Yellow.bold(),
-                        ..Default::default()
-                    }
-                )
-                .map_err(|e| capnp::Error::failed(e.to_string()))
-            );
+            json = match json.to_colored_json_with_styler(
+                ColorMode::default().eval(),
+                Styler {
+                    key: Color::Green.bold(),
+                    string_value: Color::Blue.bold(),
+                    integer_value: Color::Cyan.bold(),
+                    float_value: Color::Magenta.italic(),
+                    object_brackets: Color::Yellow.bold(),
+                    array_brackets: Color::Yellow.bold(),
+                    ..Default::default()
+                },
+            ) {
+                Ok(json) => json,
+                Err(error) => return Promise::err(capnp::Error::failed(error.to_string())),
+            };
         }
 
         print!("{}\n\n", json); // Json objects are delimited by an empty line
         Promise::ok(())
     }
 
-    fn done(
-        &mut self,
-        _: dusk_capnp::dusk_capnp::stream::DoneParams,
-        _: dusk_capnp::dusk_capnp::stream::DoneResults,
-    ) -> Promise<(), capnp::Error> {
+    fn end(&mut self) {
         if let Some(done_sender) = self.done_sender.take() {
-            pry!(
-                done_sender
-                    .send(())
-                    .map_err(|_| capnp::Error::failed("failed to send done signal".to_string()))
-            );
-            Promise::ok(())
-        } else {
-            Promise::err(capnp::Error::failed("done already called".to_string()))
+            let _ = done_sender.send(());
         }
     }
 }

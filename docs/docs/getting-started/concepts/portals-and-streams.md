@@ -31,13 +31,16 @@ A `Stream` is a process's stdin/stdout. It is defined in `dusk.capnp`:
 ```capnp
 interface Stream {
   send @0 (value :Value) -> stream;   # streaming return → automatic back-pressure
-  done @1 () -> ();
+  done @1 () -> ();                   # idempotent: later calls do nothing
 }
 ```
 
 `send` carries a `Value`. Its streaming return lets the RPC layer apply
 back-pressure: a fast producer is throttled to the rate the consumer drains.
-`done` marks the end of the stream.
+`done` marks the end of the stream. It is idempotent, and it has to be: a
+program may end a stream early, `sh` ends it when a line of shell is over, and
+a stream nobody ended is ended when its server object is dropped. Every call
+after the first must succeed and do nothing.
 
 ## Values
 

@@ -44,7 +44,7 @@ struct ShArgs {
 }
 
 interface OutputPortal extends(Dusk.Portal) {
-  output @0 (stream :Dusk.Stream) -> ();
+  output @0 (stream :Dusk.Stream) -> (daemonize :Bool);
 }
 
 interface ShStop {

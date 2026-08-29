@@ -10,7 +10,6 @@ use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::signal::Signal;
 use dusk_program::prelude::dusk;
 use dusk_program::program_args::ProgramArgs;
-use dusk_program::stream::UndoneStream;
 
 pub type Stop = Signal<CriticalSectionRawMutex, ()>;
 
@@ -66,7 +65,7 @@ impl Execution {
             .map_err(|e| ExecutionError::Runtime(e.into()))?
             .get_result();
 
-        let (done, portal_error) = 'output: {
+        let (daemonize, portal_error) = 'output: {
             let portal_promise = process.portal_request().send().promise;
             let portal_reply = match select(portal_promise, stop.wait()).await {
                 Either::First(Ok(reply)) => reply,
@@ -76,7 +75,7 @@ impl Execution {
                         error = err.to_string(),
                         "failed to get process portal"
                     );
-                    break 'output (true, None);
+                    break 'output (false, None);
                 }
                 Either::Second(()) => {
                     stop.signal(());
@@ -84,7 +83,7 @@ impl Execution {
                         pid,
                         "stop signal sent to process while awaiting portal request"
                     );
-                    break 'output (true, None);
+                    break 'output (false, None);
                 }
             };
             let portal = match portal_reply.get().and_then(|r| r.get_result()) {
@@ -95,38 +94,39 @@ impl Execution {
                         error = err.to_string(),
                         "failed to get process portal reply"
                     );
-                    break 'output (true, None);
+                    break 'output (false, None);
                 }
             };
 
-            let (undone_stream, done_receiver) =
-                UndoneStream::new_with_done_receiver(self.output.clone());
             let mut output_request = portal.output_request();
-            output_request
-                .get()
-                .set_stream(capnp_rpc::new_client(undone_stream));
+            output_request.get().set_stream(self.output.clone());
 
             match select(output_request.send().promise, stop.wait()).await {
-                Either::First(result) => {
-                    let done = done_receiver.await.is_ok();
-                    let error = result.err().map(|e| {
-                        ExecutionError::Program(
-                            anyhow::Error::from(e).context("program output portal returned error"),
-                        )
-                    });
-                    (done, error)
-                }
+                Either::First(Ok(reply)) => match reply.get() {
+                    Ok(reply) => (reply.get_daemonize(), None),
+                    Err(error) => (
+                        false,
+                        Some(ExecutionError::Program(
+                            anyhow::Error::from(error)
+                                .context("program output portal returned error"),
+                        )),
+                    ),
+                },
+                Either::First(Err(error)) => (
+                    false,
+                    Some(ExecutionError::Program(
+                        anyhow::Error::from(error).context("program output portal returned error"),
+                    )),
+                ),
                 Either::Second(()) => {
                     stop.signal(());
                     tracing::info!(pid, "stop signal sent to process");
-                    (true, None)
+                    (false, None)
                 }
             }
         };
 
-        // `done == false` is the wire-level signal for intentional
-        // daemonization. Leave the process running and skip cleanup.
-        let program_error = if done {
+        let program_error = if !daemonize {
             let mut kill_request = self.client.kill_request();
             kill_request.get().set_pid(pid);
             kill_request.get().set_signal(15);

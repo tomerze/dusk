@@ -1,6 +1,6 @@
 use dusk_capnp::dusk_capnp::dusk::Client;
-use dusk_capnp::dusk_capnp::stream;
 use dusk_program::anyhow::Result;
+use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program::value::Value;
 use pyo3::exceptions::PyStopAsyncIteration;
 use pyo3::prelude::*;
@@ -90,19 +90,11 @@ pub struct StreamServer {
     pub(crate) done_tx: Option<oneshot::Sender<()>>,
 }
 
-impl stream::Server for StreamServer {
-    fn send(&mut self, params: stream::SendParams) -> capnp::capability::Promise<(), capnp::Error> {
+impl StreamMixin for StreamServer {
+    fn send(&mut self, value: Value) -> capnp::capability::Promise<(), capnp::Error> {
         let tx = self.tx.clone();
-        let result = params
-            .get()
-            .and_then(|p| p.get_value())
-            .and_then(|value_reader| {
-                Value::from_reader(value_reader).map_err(|e| capnp::Error::failed(e.to_string()))
-            })
-            .and_then(|value| {
-                serde_pickle::to_vec(&value, Default::default())
-                    .map_err(|e| capnp::Error::failed(e.to_string()))
-            });
+        let result = serde_pickle::to_vec(&value, Default::default())
+            .map_err(|e| capnp::Error::failed(e.to_string()));
 
         capnp::capability::Promise::from_future(async move {
             if let Ok(pickle_bytes) = result {
@@ -113,24 +105,19 @@ impl stream::Server for StreamServer {
         })
     }
 
-    fn done(
-        &mut self,
-        _: stream::DoneParams,
-        _: stream::DoneResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
+    fn end(&mut self) {
         if let Some(tx) = self.done_tx.take() {
             let _ = tx.send(());
         }
-        capnp::capability::Promise::ok(())
     }
 }
 
 pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result<Vec<u8>>>) {
     let (done_tx, done_rx) = oneshot::channel();
-    let stream_server = StreamServer {
+    let stream_server = Stream::new(StreamServer {
         tx: output_tx.clone(),
         done_tx: Some(done_tx),
-    };
+    });
     let stream_client = capnp_rpc::new_client(stream_server);
 
     tokio::task::spawn_local(async move {
