@@ -343,7 +343,8 @@ A REST descriptor's owner is the gateway process itself, so a REST connection no
 ## No interactive views
 
 The gateway sets `DUSK_NON_INTERACTIVE=1` in its process. Interactive
-programs — `logs view` — refuse to run under it, since they would take over
-a terminal the caller doesn't have and hang the request forever. To read logs
-over the gateway, use `logs dump` (add `--replay-only` for a bounded snapshot),
-which returns the entries as the result.
+programs — `logs view`, and `sh` with no command — refuse to run under it,
+since they would take over a terminal the caller doesn't have and hang the
+request forever. To read logs over the gateway, use `logs dump` (add
+`--replay-only` for a bounded snapshot), which returns the entries as the
+result; to run shell commands, pass them to `sh`.

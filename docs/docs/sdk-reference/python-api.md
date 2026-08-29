@@ -81,11 +81,13 @@ it instead.
 ## `DUSK_NON_INTERACTIVE`
 
 Some programs are interactive: `logs view` takes over the calling terminal until
-the user quits it. If the process embedding this API has no terminal to give
+the user quits it, and `sh` on its own opens the interactive Dusk shell there
+until `exit`. If the process embedding this API has no terminal to give
 away — a service, a notebook kernel, a gateway — set the `DUSK_NON_INTERACTIVE`
 environment variable (to any value) before running commands. Interactive
 commands then refuse to run, with an error naming a non-interactive alternative
-(`logs view` points at `logs dump`), instead of hanging the caller forever.
+(`logs view` points at `logs dump`, a bare `sh` at `sh <command>`), instead of
+hanging the caller forever.
 
 The [API gateway](../features/gateway.md#no-interactive-views) sets it
 automatically in its own process.
