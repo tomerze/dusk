@@ -1,10 +1,12 @@
+use crate::entry::ShEntriesBuilder;
+use crate::sh_capnp::{sh_portal, sh_stop};
+use crate::{ShArgs, ShMode, parser::Parser};
 use anyhow::Result;
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
-use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::{sh_portal, sh_stop};
-use dusk_program_sh::{ShArgs, ShMode, parser::Parser};
+use std::format;
+use std::prelude::rust_2024::*;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

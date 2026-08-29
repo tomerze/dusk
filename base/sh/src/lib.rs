@@ -35,7 +35,7 @@ pub mod entry;
 pub mod parser;
 
 #[cfg(feature = "client")]
-mod client;
+pub mod client;
 
 mod interpreter;
 

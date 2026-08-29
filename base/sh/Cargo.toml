@@ -18,9 +18,58 @@ capnp = { version = "0.21", public = false }
 nom = { version = "8.0.0", optional = true, public = true }
 clap = { version = "4", features = ["derive"], optional = true }
 dusk_program_sh_proc = { path = "proc", optional = true }
+shellfish = { version = "0.9.0", features = ["app", "async", "rustyline"], optional = true }
+rustyline = { version = "14.0.0", optional = true }
+tokio-util = { version = "0.7.16", features = ["compat"], optional = true }
+anyhow = { version = "1.0", features = ["backtrace"], optional = true, public = true }
+capnp-rpc = { version = "0.21.0", optional = true }
+tokio = { version = "1.47.1", features = ["full", "tracing"], optional = true, public = true }
+reedline = { version = "0.47", features = ["sqlite", "idle_callback"], optional = true, public = true }
+crossterm = { version = "0.29", optional = true }
+nu-ansi-term = { version = "0.50.1", optional = true }
+nu-table = { version = "0.107.0", optional = true }
+nu-color-config = { version = "0.107.0", optional = true }
+nu-protocol = { version = "0.107.0", optional = true }
+termimad = { version = "0.20", optional = true, public = true }
+colored = { version = "2.2.0", optional = true }
+colored_json = { version = "5.0.0", optional = true }
+chrono = { version = "0.4.42", optional = true }
+pretty-duration = { version = "0.1.1", optional = true }
+unicode-width = { version = "0.2", optional = true }
+base64 = { version = "0.22.1", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+dusk_llm = { path = "../../dusk/src/dusk_llm", optional = true }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
-client = ["linkme", "nom", "clap", "dusk_program_sh_proc"]
+client = [
+    "linkme",
+    "nom",
+    "clap",
+    "dusk_program_sh_proc",
+    "shellfish",
+    "rustyline",
+    "tokio-util",
+    "anyhow",
+    "capnp-rpc",
+    "tokio",
+    "reedline",
+    "crossterm",
+    "nu-ansi-term",
+    "nu-table",
+    "nu-color-config",
+    "nu-protocol",
+    "termimad",
+    "colored",
+    "colored_json",
+    "chrono",
+    "pretty-duration",
+    "unicode-width",
+    "base64",
+    "serde",
+    "serde_json",
+    "dusk_llm",
+]
