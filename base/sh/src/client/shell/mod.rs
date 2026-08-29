@@ -144,6 +144,17 @@ impl Shell {
         })
     }
 
+    fn sh_portal(&self) -> sh_portal::Client {
+        let sh_process = self.sh_process.clone();
+        capnp_rpc::new_future_client(async move {
+            let portal_reply = sh_process.portal_request().send().promise.await?;
+            Ok(portal_reply
+                .get()?
+                .get_result()?
+                .cast_to::<sh_portal::Client>())
+        })
+    }
+
     pub async fn sh(
         &mut self,
         script: &str,
@@ -151,22 +162,11 @@ impl Shell {
         done_receiver: oneshot::Receiver<()>,
         stop_signal: Rc<Notify>,
     ) -> Result<()> {
-        let sh_process = self.sh_process.clone();
-
-        let sh_portal = capnp_rpc::new_future_client(async move {
-            let portal_request = sh_process.portal_request();
-            let portal_reply = portal_request.send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_portal::Client>())
-        });
-
         let stop_cap: sh_stop::Client = capnp_rpc::new_client(Stop {
             notify: stop_signal,
         });
 
-        let mut sh_request = sh_portal.sh_request();
+        let mut sh_request = self.sh_portal().sh_request();
         let script_builder = sh_request.get().init_script();
         self.parser.parse(script, script_builder)?;
         sh_request.get().set_output(stream);
@@ -179,15 +179,7 @@ impl Shell {
 
     /// Returns the names of functions currently defined in the sh process.
     pub async fn functions(&self) -> Result<Vec<String>> {
-        let sh_process = self.sh_process.clone();
-        let sh_portal = capnp_rpc::new_future_client(async move {
-            let portal_reply = sh_process.portal_request().send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_portal::Client>())
-        });
-        let reply = sh_portal.functions_request().send().promise.await?;
+        let reply = self.sh_portal().functions_request().send().promise.await?;
         let symbols = reply.get()?.get_symbols()?;
         let mut out = Vec::with_capacity(symbols.len() as usize);
         for symbol in symbols.iter() {
