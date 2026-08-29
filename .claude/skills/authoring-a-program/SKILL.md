@@ -13,7 +13,7 @@ The four reference programs are `base/init`, `base/sh`, `base/ps`, `base/kill`. 
 |---|---|---|
 | `init` | First daemon / TCP listener; `std`-only program | `futures::select!` between `listener.accept()` and the signal channel; spawns `dusk_core::session` tasks per connection |
 | `kill` | One-shot RPC, then sit and wait for `Terminate` | Reads `(pid, signal)` from args, calls `client.kill_request()`, signals `ready`, loops on the signal receiver |
-| `ps` | Snapshot the namespace, emit a typed `Record` over a `Stream` from a portal method | Walks `client.ps_request()` results in `main`, materialises a `PsResult` into `Rc<RefCell<…>>`, and in `output()` builds `Record::with_fields(RESULT_TYPE_ID, …)` and pushes through `stream.send_request()` then `stream.done_request()` |
+| `ps` | Snapshot the namespace, emit a typed `Record` into a `Stream` from a portal method | Walks `client.ps_request()` results in `main`, materialises a `PsResult` into `Rc<RefCell<…>>`, and in `output()` builds `Record::with_fields(RESULT_TYPE_ID, …)`, writes it with `stream.send_request()` and answers `set_daemonize(false)` |
 | `sh` | Multi-mode args (`Server` / `Script` / `DetachedScript`), daemonization, cross-task shared state, in-portal RPC with cancellation token | `with_data(...).which()?` dispatch; `spawn_<…>_task` fire-and-forget; `Rc<RefCell<State>>` for in-task state and `Arc<Mutex<…>>` for cross-task; `Stop = Signal<CriticalSectionRawMutex, ()>` cancellation; `active_stops: Vec<Rc<Stop>>` fanned out on `Signal::Terminate` |
 
 When reading the rest of this skill, treat the four programs as canonical — quote and adapt rather than invent. **If you find yourself writing something none of the four does, stop and ask before continuing.**
@@ -161,7 +161,8 @@ $ capnp id
 The base schema (`dusk/src/dusk_capnp/capnp/dusk.capnp`) defines:
 
 - `Value` (union of `null`, `uint`, `text`, `string`, `bytes`, `bool`, `record`, `list`) and `Value.Record { typeId :UInt64; fields :List(Field); }`.
-- `Stream { send(value :Value); done(); }` — what portals pump output into.
+- `Stream { send(value :Value); done(); }` — what a program writes its output
+  into. `done` is idempotent; see **Streams and Values**.
 - `ProgramArgs(D, S) { programId :UInt64; data :D; server :S; }` — the wire form of `Args`.
 - `Process { pid(); programId(); name(); version(); run(); portal(); }` — the capability you hold for a running process.
 - `Portal { programId() -> (result :UInt64); }` — the base every program portal extends.
@@ -532,21 +533,36 @@ fn <method_name>(
 
 `pry!` is `dusk_capnp::pry`. It unwraps a `Result<T, capnp::Error>` or short-circuits with `Promise::err`. Use it for the synchronous setup before `Promise::from_future`.
 
-### The `done` contract on `output()` — read this first
+### What `output()` has to say — read this first
 
-The shell's interpreter (`base/sh/src/interpreter/execution.rs:52-138`) wraps the caller's stream in an `UndoneStream` before passing it to your `output()`. When your code calls `stream.done_request().send().promise.await?`, the `UndoneStream` fires a private oneshot — and **only then** does the shell run the kill+waitpid path that cleans your process up.
+Your `output()` is handed a **`Dusk.Stream`**: somewhere to write values. It
+belongs to whoever called you, it outlives your program, and for a shell command
+several programs write into the same one, so closing it is not your job — `sh`
+does that when the line is finished. You *may* call `done` if ending the stream
+early means something to the reader, and nothing breaks if you do, because
+`done` is idempotent. Most programs simply never mention it.
 
-If your `output()` returns *without* having called `done` on the stream, the shell treats your process as **intentionally daemonized**. It does not kill you; you stay parked on your signal channel until the namespace tears down. This is how `sh` itself implements detached scripts (`base/sh/src/lib.rs:446-452`).
+Two things you say, and both of them by returning:
 
-The rule:
+1. **"I am finished"** — return from `output()`. There is no other signal, and
+   nothing to call first.
+2. **"…but I keep running"** — `results.get().set_daemonize(true)` before you
+   return. The caller then leaves your process alone instead of killing and
+   reaping it. Two programs in the tree say it: `sh -d`
+   (`base/sh/src/lib.rs`, the `DetachedScript` arm) and `kvs bind`
+   (`base/kvs/src/lib.rs`), which answers it from a flag `main` set earlier.
 
-| Your program | `done` semantics |
+| Your program | what it does |
 |---|---|
-| Finishes its work normally | Call `done` before returning `Ok` |
-| Wants to fail | Call `done` *first*, then return `Err` |
-| Wants to daemonize | Return without calling `done` |
+| Finishes its work | write values, `set_daemonize(false)`, return `Ok` |
+| Wants to fail | return `Err`; a failed program is finished by definition |
+| Wants to daemonize | `set_daemonize(true)`, return `Ok` |
 
-There is no fourth case. "Forgot to call `done`" and "intentionally daemonized" are the same wire-level state, so there's no way for the shell to distinguish them — and that means every `output()` you write must consciously pick one of the three.
+**Set the flag even when it is `false`.** Nothing forces you to: an unset
+`Bool` reads as `false`, so a program that forgets is treated as finished and
+reaped — which is right for almost every program, and silently wrong for the
+one that meant to daemonize. Say it anyway, so the next reader can see that you
+chose.
 
 #### Minimal no-output success — the `true` idiom
 
@@ -556,13 +572,12 @@ For a program that does nothing visible but exits cleanly (analogous to `/bin/tr
 impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
     fn output(
         &mut self,
-        params: dusk_program_sh::sh_capnp::output_portal::OutputParams,
+        _params: dusk_program_sh::sh_capnp::output_portal::OutputParams,
         mut results: dusk_program_sh::sh_capnp::output_portal::OutputResults,
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
-        let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         Promise::from_future(async move {
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             Ok(())
         })
     }
@@ -577,14 +592,14 @@ For a program that signals failure with no output (analogous to `/bin/false`):
 
 ```rust
 Promise::from_future(async move {
-    stream.done_request().send().promise.await?;   // <-- mandatory, even on failure
+    results.get().set_daemonize(false);
     Err(::capnp::Error::failed("false".to_string()))
 })
 ```
 
-The `done` call **must** come before the `Err`. Skipping it means the shell treats your process as an intentional daemon and never kills it — every invocation accumulates a parked process. With `done` called first, the shell (`base/sh/src/interpreter/execution.rs`) runs its kill+waitpid path *then* propagates your error, so the cleanup happens cleanly and the failure still surfaces to the caller.
+An `Err` never sends results, so the flag does not reach the caller here — the shell (`base/sh/src/interpreter/execution.rs`) treats an error as finished on its own, runs its kill+waitpid path, and propagates your error. Set it anyway, on this path like every other: the next person to read `output` should be able to see what you chose without working out which returns carry a result.
 
-### Pumping a typed `Record` into a `Stream` — the `ps` idiom
+### Writing a typed `Record` into a `Stream` — the `ps` idiom
 
 ```rust
 impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
@@ -615,7 +630,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
             Value::Record(fields).write_to_builder(send_request.get().init_value())?;
 
             send_request.send().await?;
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             Ok(())
         })
     }
@@ -626,7 +641,7 @@ Notes:
 
 - Always call `results.set_pipeline()` at the top of an `output`-shaped method that the caller may chain pipeline calls onto.
 - A typed record needs a `RESULT_TYPE_ID` constant declared in your schema, e.g. `const resultTypeId :UInt64 = 0xcef2c7c974bf44ec;` in `ps.capnp`.
-- The `done` call at the end is mandatory — see the **`done` contract on `output()`** section above. Omitting it daemonizes the process.
+- Answer `daemonize` before you return — see **What `output()` has to say** above. `ps` finishes, so it answers `false`.
 
 ### Cancellable RPC — the `sh.sh()` idiom
 
@@ -819,7 +834,7 @@ loop {
 }
 ```
 
-- `NoopStream::new()` from `dusk_program::stream` is the canonical discard sink. Use it when the spawned work produces output that the caller will not consume.
+- `NoopStream::new()` from `dusk_program::stream` is the canonical discard stream. Use it when the spawned work produces output that the caller will not consume.
 - The completion `Rc<Signal>` is discarded — errors inside the task surface through whatever logging the task itself emits. **Do not** double-log here: the rule from the project's CLAUDE.md "code must be diagnosable after the fact" says to log where the result would otherwise be lost; if the task already logs its own errors (as `sh_exec_task` does via the interpreter's `tracing::error!`), the spawn site stays quiet.
 - On `Signal::Terminate`, fan out to every `active_stops` entry. The tasks observe their stop and unwind cleanly.
 
@@ -852,20 +867,42 @@ A `Stream` is a Cap'n Proto interface from `dusk.capnp` with two methods:
 
 ```capnp
 interface Stream {
-  send @0 (value :Value) -> (result :StreamResult);
+  send @0 (value :Value) -> stream;
   done @1 ();
 }
 ```
 
-To send into a stream you already hold a `stream::Client` for:
+**`done` is idempotent, and that is a rule of the design, not an accident of
+one implementation.** A stream is handed to programs that may each end it, `sh`
+ends it when a line of shell is over, and a stream nobody ended is ended when
+its server object is dropped — so a second `done` is ordinary traffic. An
+implementation that errors on it turns working shell output into a failure.
+
+Which is why you do not implement `stream::Server` by hand. Implement
+`dusk_program::stream::StreamMixin` and wrap it in `Stream`:
+
+```rust
+use dusk_program::stream::{Stream, StreamMixin};
+
+impl StreamMixin for MyStream {
+    fn send(&mut self, value: Value) -> Promise<(), capnp::Error> { … }
+    fn end(&mut self) { … }   // runs at most once, however many `done`s arrive
+}
+
+let client: stream::Client = capnp_rpc::new_client(Stream::new(MyStream { … }));
+```
+
+`Stream` decodes the `Value` for you, calls `end` at most once, and calls it
+from `Drop` if `done` never arrives at all — so a reader waiting for the end of
+a stream is never left waiting because a connection died.
+
+To write into a stream you already hold a `stream::Client` for:
 
 ```rust
 let mut request = stream.send_request();
 let value_builder = request.get().init_value();
 my_value.write_to_builder(value_builder)?;
 request.send().await?;
-// when done streaming:
-stream.done_request().send().promise.await?;
 ```
 
 The `Value` type is in `dusk_program::value`. Variants:
@@ -896,7 +933,7 @@ Value::Record(record).write_to_builder(value_builder)?;
 
 `Value::write_to_builder` and `Value::from_reader` are the (de)serialisation points to/from `value::Builder` / `value::Reader`. Both `Value` and `Record` implement `Serialize`/`Deserialize` for JSON dumps in tests and logs.
 
-`NoopStream` is the discard sink: `capnp_rpc::new_client(NoopStream::new())` produces a `stream::Client` that silently drops everything sent to it.
+`NoopStream` is the discard stream: `capnp_rpc::new_client(NoopStream::new())` produces a `stream::Client` that silently drops everything written to it.
 
 ---
 
@@ -1103,7 +1140,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | Forgetting `results.set_pipeline()` in an `output`-shaped portal method | Add it as the first statement after the signature. Without it, pipelining from the caller breaks. |
 | Spawning a task without an `info_span!` and `.instrument()` | Required for observability. Use the `task_id` then domain-fields pattern. |
 | Adding `basic_launcher!` because CLAUDE.md mentions it | It doesn't exist. Write `impl LauncherMixin` by hand. |
-| Missing `done` on the output stream | "Not calling `done`" is the wire-level signal for "I have daemonized." The shell will not kill the process. If you want the shell to clean you up, call `done` — **including before returning `Err`**. The only intentional omission is genuine daemonization. |
+| Returning from `output()` without setting `daemonize` | An unset `Bool` reads as `false`, so you are saying "I am finished" by accident. Right for almost every program, silently fatal for one that meant to stay running — its process is killed and reaped the moment `output` returns. Set it explicitly on every path. |
 | Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::launcher_set()`, so the impl knows nothing about specific programs. |
 | Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` to `dusk_base::link_anchors()` and `"dusk_program_<name>/client"` to `dusk_base`'s `client` feature. |
 | Forgetting to add `"base/<name>"` to the workspace `Cargo.toml` `members` list | The crate won't be picked up by workspace-wide `cargo check`. Add the line. |
@@ -1135,3 +1172,10 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] Workspace `Cargo.toml` lists `"base/<name>"` under `[workspace] members`
 - [ ] `cargo check -p dusk_program_<name>` passes
 - [ ] `cargo check -p dusk_base` (and `-p dusk_node` if you touched its vec) passes
+
+## I do not write comments
+
+Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
+in this codebase. When something genuinely needs saying in one, I say it to the
+user in my reply and let them decide; my explanations go in the commit message.
+See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).

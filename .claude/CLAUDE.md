@@ -146,10 +146,18 @@ id, and downcasts to the concrete portal type.
 
 Processes move data over **streams** (`Dusk.Stream`), which carry `Value`s — a
 schemaless-but-typed union (`uint`, `string`, `text`/Markdown, `bytes`, `bool`,
-`list`, `record`). A `Record` carries a type id plus `(key, value)` fields, which
-is how a program returns structured, tabular output without a compiled schema on
-the wire. `Stream`, `Value`, and `Record` all live in `dusk.capnp`;
-`stream.capnp` holds only the `StreamResult` streaming shim.
+`list`, `record`). A program writes into the stream it is handed, returns from
+`output` to say it is finished, and answers `daemonize` to say whether it means
+to keep running anyway. It is not asked to close the stream: one line of shell
+runs several programs into the same one, and `sh` closes it when the line is
+over. **`done` is idempotent** — a program may end a stream early if it has
+reason to, and `Drop` ends one nobody closed, so a second `done` is normal and
+must do nothing. `dusk_program::stream::StreamMixin` is the way to implement
+one. A `Record` carries a type id plus `(key, value)` fields, which is how a
+program returns structured, tabular output without a compiled schema on the
+wire.
+`Stream`, `Value`, and `Record` all live in `dusk.capnp`; `stream.capnp`
+holds only the `StreamResult` streaming shim.
 
 ### The driver
 
@@ -285,12 +293,13 @@ process) lives in `docs/docs/development/shell.md`.
 ## The shell is a program
 
 `sh` is just another program — but it's where a lot of behaviour that people
-mistake for "core" actually lives. **Daemonization** (a process kept alive by
-*not* acknowledging a stream's `done`), the `output(stream)` portal method
-(`OutputPortal`), `sh -d` detached scripts, the shell language and its
-`Script`/function/interpreter machinery, `ShStop`, and the `SH_ENTRIES` registry
-are all part of `sh`, not of Dusk Core. When documenting or reasoning about the
-core process model, keep these on the shell side of the line.
+mistake for "core" actually lives. **Daemonization** (a process that answers
+`output` with `daemonize`, and is left running instead of killed), the
+`output(stream)` portal method (`OutputPortal`), `sh -d` detached scripts, the
+shell language and its `Script`/function/interpreter machinery, `ShStop`, and
+the `SH_ENTRIES` registry are all part of `sh`, not of Dusk Core. When
+documenting or reasoning about the core process model, keep these on the shell
+side of the line.
 
 ## Artifacts and clients
 
