@@ -477,7 +477,10 @@ async fn serve_prompt<S: ShEntriesBuilder>(
         crate::parser::Parser::new(),
     )
     .await;
-    let mut shell = adopted.inspect_err(|_| kill_abandoned(client, abandoned))?;
+    let mut shell = match adopted.inspect_err(|_| kill_abandoned(client, abandoned))? {
+        Some(shell) => shell,
+        None => return Ok(()),
+    };
     tracing::info!("prompt open");
     let stop_signal = Rc::new(Notify::new());
 
