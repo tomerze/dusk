@@ -9,9 +9,12 @@ pub mod ui;
 
 use crate::entry::{EntryInfo, GetAvailableProgramsInfo, ShEntriesBuilder};
 use dusk_program::anyhow::Result;
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread_local;
 use std::{format, println};
 use tokio::sync::Notify;
 
@@ -50,6 +53,7 @@ where
     F: for<'d> Fn(StreamRequest<'d, D>) -> (dusk_capnp::dusk_capnp::stream::Client, DoneReceiver),
 {
     shell: &'a mut Shell,
+    terminal: TerminalHeld,
     available_entries_info: Vec<EntryInfo>,
     display_engine: D,
     stream_factory: F,
@@ -66,6 +70,7 @@ where
 {
     pub async fn new(
         shell: &'a mut Shell,
+        terminal: TerminalHeld,
         get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
         stream_factory: F,
@@ -77,6 +82,7 @@ where
 
         Ok(Prompt {
             shell,
+            terminal,
             available_entries_info: available_programs_info,
             display_engine,
             stream_factory,
@@ -129,11 +135,13 @@ where
                 }
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
-                if let Err(e) = self
+                self.terminal.lend();
+                let result = self
                     .shell
                     .sh(line, stream, done_receiver, self.stop_signal.clone())
-                    .await
-                {
+                    .await;
+                self.terminal.resume().await;
+                if let Err(e) = result {
                     tracing::error!("{:?} error:\n{:?}", first_word, e);
                 }
             }
@@ -425,6 +433,87 @@ where
     }
 }
 
+thread_local! {
+    static TERMINAL: RefCell<Terminal> = const {
+        RefCell::new(Terminal {
+            holder: None,
+            waiting: VecDeque::new(),
+            opened: 0,
+        })
+    };
+}
+
+struct Terminal {
+    holder: Option<u64>,
+    waiting: VecDeque<(u64, Rc<Notify>)>,
+    opened: u64,
+}
+
+pub struct TerminalHeld {
+    prompt: u64,
+}
+
+impl TerminalHeld {
+    async fn take() -> Self {
+        let prompt = TERMINAL.with_borrow_mut(|terminal| {
+            terminal.opened += 1;
+            terminal.opened
+        });
+        wait_for_terminal(prompt, false).await;
+        TerminalHeld { prompt }
+    }
+
+    fn lend(&self) {
+        TERMINAL.with_borrow_mut(|terminal| {
+            if terminal.holder == Some(self.prompt) {
+                terminal.holder = None;
+            }
+        });
+    }
+
+    async fn resume(&self) {
+        wait_for_terminal(self.prompt, true).await;
+    }
+}
+
+impl Drop for TerminalHeld {
+    fn drop(&mut self) {
+        TERMINAL.with_borrow_mut(|terminal| {
+            if terminal.holder != Some(self.prompt) {
+                terminal
+                    .waiting
+                    .retain(|(prompt, _)| *prompt != self.prompt);
+                return;
+            }
+            match terminal.waiting.pop_front() {
+                Some((prompt, waiter)) => {
+                    terminal.holder = Some(prompt);
+                    waiter.notify_one();
+                }
+                None => terminal.holder = None,
+            }
+        });
+    }
+}
+
+async fn wait_for_terminal(prompt: u64, resuming: bool) {
+    let waiter = TERMINAL.with_borrow_mut(|terminal| {
+        if terminal.holder.is_none() {
+            terminal.holder = Some(prompt);
+            return None;
+        }
+        let waiter = Rc::new(Notify::new());
+        match resuming {
+            true => terminal.waiting.push_front((prompt, waiter.clone())),
+            false => terminal.waiting.push_back((prompt, waiter.clone())),
+        }
+        Some(waiter)
+    });
+    if let Some(waiter) = waiter {
+        waiter.notified().await;
+    }
+}
+
 pub fn serve<S: ShEntriesBuilder>(
     client: dusk_capnp::dusk_capnp::dusk::Client,
     process: dusk_capnp::dusk_capnp::process::Client,
@@ -481,6 +570,7 @@ async fn serve_prompt<S: ShEntriesBuilder>(
         Some(shell) => shell,
         None => return Ok(()),
     };
+    let terminal = TerminalHeld::take().await;
     tracing::info!("prompt open");
     let stop_signal = Rc::new(Notify::new());
 
@@ -500,6 +590,7 @@ async fn serve_prompt<S: ShEntriesBuilder>(
     let result = async {
         let prompt = Prompt::new(
             &mut shell,
+            terminal,
             sh_entries_builder,
             DefaultDisplayEngine::default(),
             stream_factory,
