@@ -147,11 +147,18 @@ not written the commit message yet. Write it there.
 No conventional-commit prefixes. No `feat:`, `fix:`, `chore:`, `docs:`,
 `refactor:`. One imperative sentence, in the style of `git log --oneline -20`.
 
-### 8. Present the subject lines and wait
+### 8. Commit, then report the subject lines
 
-Show the user **the list of subject lines, in order** — not the file groupings,
-not a script. The subject lines are what they are approving, because the subject
-lines are the statements. Wait for the nod before staging anything.
+Do not ask for the split to be approved before making it. The review happens
+on the commits, because commits are the thing being reviewed — a list of
+subject lines in a chat message is not reviewable, it cannot be checked out,
+diffed, or reverted, and asking for a verdict on it buys nothing except a
+round-trip.
+
+So build the commits and then show **the list of subject lines, in order** —
+not the file groupings, not a script — as a report of what is now on the
+branch. Getting the split wrong is cheap: the branch is rewritten, which is
+what a rewrite is for.
 
 ## What a commit does *not* have to do
 
@@ -242,9 +249,9 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
       order it next to the commit instead of inside it
 - ☐ Run the consequence test on every hunk; fold consequences into their decision
 - ☐ Pull prose out into its own commits, split by reader
-- ☐ Show the user the subject lines in order, and wait
 - ☐ Snapshot, then rebuild forward, staging named paths only
 - ☐ `git diff <snapshot> HEAD` is empty
+- ☐ Report the subject lines in order, once the commits exist
 
 ## I do not write comments
 
