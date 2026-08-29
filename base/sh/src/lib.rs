@@ -381,7 +381,7 @@ impl Portal {
             &self.process.ctx,
             interpreter,
             script,
-            output,
+            output.clone(),
             self.process.state.clone(),
             stop.clone(),
         ));
@@ -395,6 +395,9 @@ impl Portal {
                 Either::First(result) => result,
                 Either::Second(()) => unreachable!(),
             };
+            if let Err(error) = output.done_request().send().promise.await {
+                tracing::warn!(error = %error, "failed to close the caller's stream");
+            }
             result.map_err(|error| capnp::Error::failed(format!("{error:?}")))
         })
     }
