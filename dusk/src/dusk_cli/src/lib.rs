@@ -1,16 +1,12 @@
 use anyhow::Result;
 use clap::Parser;
 use dusk_base::dusk_program_sh::{
+    Execution, ShArgs, ShMode, Stop,
     client::{
-        prompt::{
-            Prompt, StreamRequest,
-            display_engine::DefaultDisplayEngine,
-            stream::{display_stream, json_stream},
-        },
-        shell::{Shell, stop::stop_innermost},
+        prompt::{serving, stream::json_stream::JsonStream, wait_serving},
+        shell::stop::{StopScope, stop_innermost},
     },
-    entry::{ShEntriesBuilder, StaticShEntriesBuilder},
-    parser::Parser as ShParser,
+    entry::StaticShEntriesBuilder,
 };
 use dusk_connection::Connection;
 use std::net::SocketAddr;
@@ -30,50 +26,38 @@ struct Cli {
     debug_console: bool,
 }
 
-async fn single_command(shell: &mut Shell, command: String, stop_signal: Rc<Notify>) -> Result<()> {
-    // Check if we are running in a terminal
-    let colored = atty::is(atty::Stream::Stdout);
-    let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(colored);
-    shell
-        .sh(
-            command.as_str(),
-            capnp_rpc::new_client(json_stream),
-            done_receiver,
-            stop_signal,
-        )
-        .await?;
-    Ok(())
-}
-
-async fn interactive_prompt(
-    shell: &mut Shell,
-    sh_entries_builder: impl ShEntriesBuilder,
+async fn run_sh(
+    connection: &Connection,
+    command: Option<String>,
     stop_signal: Rc<Notify>,
 ) -> Result<()> {
-    let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
-        StreamRequest::Raw => {
-            let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(true);
-            let json_stream = capnp_rpc::new_client(json_stream);
-            (json_stream, done_receiver)
-        }
-        StreamRequest::Display { display_engine } => {
-            let (display_stream, done_receiver) =
-                display_stream::DisplayStream::new_with_receiver(display_engine.clone());
-            let display_stream = capnp_rpc::new_client(display_stream);
-            (display_stream, done_receiver)
+    let client = connection.client().await;
+    let mode = match command {
+        Some(command) => ShMode::Script(command),
+        None => ShMode::Server,
+    };
+    let program_args =
+        ShArgs::new(client.clone(), StaticShEntriesBuilder::default(), mode)?.as_program_args()?;
+
+    let colored = atty::is(atty::Stream::Stdout);
+    let (json_stream, _) = JsonStream::new_with_receiver(colored);
+    let execution = Execution::new(client, capnp_rpc::new_client(json_stream));
+
+    let _stop_scope = StopScope::enter(stop_signal.clone());
+    let serving_before = serving();
+    let stop = Stop::new();
+    let mut notified = std::pin::pin!(stop_signal.notified());
+    notified.as_mut().enable();
+    let mut execution_future = std::pin::pin!(execution.program_args(program_args, &stop));
+    let result = tokio::select! {
+        result = &mut execution_future => result,
+        _ = &mut notified => {
+            stop.signal(());
+            execution_future.await
         }
     };
-
-    let prompt = Prompt::new(
-        shell,
-        sh_entries_builder,
-        DefaultDisplayEngine::default(),
-        stream_factory,
-        stop_signal,
-    )
-    .await?;
-    prompt.run().await?;
-    Ok(())
+    wait_serving(serving_before).await;
+    Ok(result?)
 }
 
 async fn stop_on_ctrl_c() {
@@ -97,35 +81,10 @@ async fn run(cli: Cli) {
             let connection = Connection::connect(cli.address).await?;
             let stop_signal = Rc::new(Notify::new());
             tokio::select! {
-                result = async {
-                    let client = connection.client().await;
-                    let sh_entries_builder = StaticShEntriesBuilder::default();
-                    let mut shell = Shell::new(
-                        client.clone(),
-                        sh_entries_builder.clone(),
-                        ShParser::new(),
-                    )
-                    .await?;
-                    let session_result = match cli.command {
-                        Some(command) => {
-                            single_command(&mut shell, command, stop_signal.clone()).await
-                        }
-                        None => {
-                            interactive_prompt(&mut shell, sh_entries_builder, stop_signal.clone())
-                                .await
-                        }
-                    };
-                    let shell_kill_result = shell.kill().await;
-                    // Print both shell kill errors and command errors
-                    if let Err(err) = shell_kill_result {
-                        error!("error killing shell: {:?}", err);
-                    }
-                    if let Err(err) = session_result {
+                result = run_sh(&connection, cli.command, stop_signal) => {
+                    if let Err(err) = result {
                         error!("{:?}", err);
                     }
-                    Ok::<(), anyhow::Error>(())
-                } => {
-                    result?;
                     info!("exiting");
                 }
                 _ = stop_on_ctrl_c() => {}
