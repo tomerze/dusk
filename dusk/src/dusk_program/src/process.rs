@@ -123,15 +123,6 @@ impl dyn Process {
         let error = result.as_ref().err().map(|e| e.to_string());
         tracing::info!(error = error, "main exit");
 
-        {
-            let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
-            ps_signal_channel_map.remove(&self.pid());
-        }
-        {
-            let mut ps_map = namespace.ps_map.lock().await;
-            ps_map.remove(&self.pid());
-        }
-
         exit_watch
             .sender()
             .send(Some(result.map_err(|e| e.to_string())));
