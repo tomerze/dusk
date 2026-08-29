@@ -1,3 +1,5 @@
+pub mod stop;
+
 use crate::entry::ShEntriesBuilder;
 use crate::parser::Parser;
 use crate::sh_capnp::{sh_portal, sh_stop};

@@ -617,6 +617,7 @@ async fn serve_prompt<S: ShEntriesBuilder>(
     let terminal = TerminalHeld::take().await;
     tracing::info!("prompt open");
     let stop_signal = Rc::new(Notify::new());
+    let _stop_scope = crate::client::shell::stop::StopScope::enter(stop_signal.clone());
 
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
         StreamRequest::Raw => {

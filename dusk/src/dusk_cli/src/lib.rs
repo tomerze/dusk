@@ -7,7 +7,7 @@ use dusk_base::dusk_program_sh::{
             display_engine::DefaultDisplayEngine,
             stream::{display_stream, json_stream},
         },
-        shell::Shell,
+        shell::{Shell, stop::stop_innermost},
     },
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
     parser::Parser as ShParser,
@@ -76,14 +76,16 @@ async fn interactive_prompt(
     Ok(())
 }
 
-async fn stop_on_ctrl_c(stop_signal: Rc<Notify>) {
+async fn stop_on_ctrl_c() {
     loop {
         if signal::ctrl_c().await.is_err() {
             // SIGINT listener registration failed; park so the work arm drives shutdown.
             error!("couldn't register listener for ctrl+c");
             std::future::pending::<()>().await;
         }
-        stop_signal.notify_waiters();
+        if !stop_innermost() {
+            tracing::warn!("ctrl+c with nothing to stop");
+        }
     }
 }
 
@@ -126,7 +128,7 @@ async fn run(cli: Cli) {
                     result?;
                     info!("exiting");
                 }
-                _ = stop_on_ctrl_c(stop_signal.clone()) => {}
+                _ = stop_on_ctrl_c() => {}
             };
             connection.disconnect().await?;
             Ok::<(), anyhow::Error>(())
