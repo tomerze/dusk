@@ -9,7 +9,7 @@ pub mod ui;
 
 use crate::entry::{EntryInfo, GetAvailableProgramsInfo, ShEntriesBuilder};
 use dusk_program::anyhow::Result;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -135,11 +135,13 @@ where
                 }
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
+                let serving_before = serving();
                 self.terminal.lend();
                 let result = self
                     .shell
                     .sh(line, stream, done_receiver, self.stop_signal.clone())
                     .await;
+                wait_serving(serving_before).await;
                 self.terminal.resume().await;
                 if let Err(e) = result {
                     tracing::error!("{:?} error:\n{:?}", first_word, e);
@@ -434,6 +436,15 @@ where
 }
 
 thread_local! {
+    static SERVING: Cell<usize> = const { Cell::new(0) };
+    static SERVING_CHANGED: Rc<Notify> = Rc::new(Notify::new());
+}
+
+pub fn serving() -> usize {
+    SERVING.with(|serving| serving.get())
+}
+
+thread_local! {
     static TERMINAL: RefCell<Terminal> = const {
         RefCell::new(Terminal {
             holder: None,
@@ -514,12 +525,45 @@ async fn wait_for_terminal(prompt: u64, resuming: bool) {
     }
 }
 
+struct Serving;
+
+impl Serving {
+    fn open() -> Self {
+        SERVING.with(|serving| serving.set(serving.get() + 1));
+        Serving
+    }
+}
+
+impl Drop for Serving {
+    fn drop(&mut self) {
+        SERVING.with(|serving| serving.set(serving.get() - 1));
+        SERVING_CHANGED.with(|changed| changed.notify_waiters());
+    }
+}
+
+pub async fn wait_serving(count: usize) {
+    let changed = SERVING_CHANGED.with(|changed| changed.clone());
+    loop {
+        if serving() <= count {
+            return;
+        }
+        let mut notified = std::pin::pin!(changed.notified());
+        notified.as_mut().enable();
+        if serving() <= count {
+            return;
+        }
+        notified.await;
+    }
+}
+
 pub fn serve<S: ShEntriesBuilder>(
     client: dusk_capnp::dusk_capnp::dusk::Client,
     process: dusk_capnp::dusk_capnp::process::Client,
     sh_entries_builder: S,
 ) {
+    let serving = Serving::open();
     tokio::task::spawn_local(async move {
+        let _serving = serving;
         if let Err(error) = serve_prompt(client, process, sh_entries_builder).await {
             tracing::error!("served sh prompt failed: {error:#}");
         }
