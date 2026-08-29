@@ -51,6 +51,33 @@ output stream, converted to a native Python value. It's lazy: each step blocks
 until the next value arrives, and the iterator is exhausted when the command
 signals it's done.
 
+Displaying one — at a prompt, or with `print` — runs the command to completion
+and shows everything it wrote, so a bare `node.sh('ps')` is a whole command:
+
+```python
+>>> node.sh('echo hello')
+['hello']
+```
+
+Under IPython and Jupyter the same expression *streams*: each value is written
+the moment the node sends it, one per line, so a command that takes a while
+shows its output while it runs rather than in one lump at the end.
+
+```
+In [1]: node.sh('echo first; sleep 3000; echo second')
+Out[1]: 'first'
+'second'
+```
+
+IPython still records the result, so `Out[1]` and `_1` work as they do for any
+other value. Because Python runs between values there, ctrl+c interrupts a
+command that is still producing them.
+
+Either way the values are kept, so iterating the same `ShellOutput` afterwards
+still yields them. A command that never finishes on its own (`logs stream
+<url>`) blocks where it is displayed, exactly as `list()` on it would; iterate
+it instead.
+
 ## `DUSK_NON_INTERACTIVE`
 
 Some programs are interactive: `logs view` takes over the calling terminal until
