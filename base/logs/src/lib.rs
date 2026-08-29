@@ -224,7 +224,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 Ok::<(), capnp::Error>(())
             }
             .await;
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             dump_result
         })
     }

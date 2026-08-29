@@ -129,7 +129,7 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 Value::String(text).write_to_builder(value_builder)?;
                 send_request.send().await?;
             }
-            stream.done_request().send().promise.await?;
+            results.get().set_daemonize(false);
             Ok(())
         })
     }
