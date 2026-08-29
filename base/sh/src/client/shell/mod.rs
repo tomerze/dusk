@@ -1,15 +1,16 @@
 use crate::entry::ShEntriesBuilder;
+use crate::parser::Parser;
 use crate::sh_capnp::{sh_portal, sh_stop};
-use crate::{ShArgs, ShMode, parser::Parser};
+use crate::{ShArgs, ShMode};
 use anyhow::Result;
 use capnp::capability::{FromClientHook, Promise};
-use dusk_capnp::dusk_capnp::stream;
-use dusk_capnp::dusk_capnp::{dusk, process};
+use dusk_capnp::dusk_capnp::{dusk, process, stream};
 use std::format;
-use std::prelude::rust_2024::*;
 use std::rc::Rc;
+use std::string::{String, ToString};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use std::vec::Vec;
 use tokio::sync::{Notify, oneshot};
 use tokio::task::JoinHandle;
 
@@ -40,11 +41,10 @@ pub struct Shell {
     sh_process: process::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
-    pub sh_pid: u64,
 }
 
 impl Shell {
-    async fn create_sh_process_reconnect_callback<S: ShEntriesBuilder>(
+    async fn create_sh_process<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
     ) -> capnp::Result<process::Client> {
@@ -78,22 +78,6 @@ impl Shell {
         }
     }
 
-    async fn create_sh_process<S: ShEntriesBuilder>(
-        client: dusk::Client,
-        sh_entries_builder: S,
-    ) -> Result<process::Client> {
-        let (process, _) = capnp_rpc::auto_reconnect(move || {
-            Ok(capnp_rpc::new_future_client(
-                Self::create_sh_process_reconnect_callback(
-                    client.clone(),
-                    sh_entries_builder.clone(),
-                ),
-            ))
-        })?;
-
-        Ok(process)
-    }
-
     fn spawn_keepalive_task(sh_process: process::Client, rtt_handle: RttHandle) -> JoinHandle<()> {
         const MIN_INTERVAL: Duration = Duration::from_millis(50);
         const MAX_INTERVAL: Duration = Duration::from_secs(10);
@@ -117,28 +101,42 @@ impl Shell {
         })
     }
 
-    pub async fn new<S: ShEntriesBuilder>(
+    pub async fn adopt<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
+        served: process::Client,
         parser: Parser,
     ) -> Result<Self> {
+        let served_pid = served
+            .pid_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_result();
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
-        let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
+        let (sh_process, set_target) = {
+            let client = client.clone();
+            capnp_rpc::auto_reconnect(move || {
+                Ok(capnp_rpc::new_future_client(Self::create_sh_process(
+                    client.clone(),
+                    sh_entries_builder.clone(),
+                )))
+            })?
+        };
+        set_target.set_target(served);
 
-        let pid_reply = sh_process.pid_request().send().promise.await?;
-        let sh_pid = pid_reply.get()?.get_result();
-
+        tracing::info!(pid = served_pid, "took over a served sh");
         let rtt_handle: RttHandle = Arc::new(Mutex::new(None));
         let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());
 
         Ok(Shell {
-            client: client.clone(),
+            client,
             parser,
             sh_process,
             hostname: hostname.into(),
-            sh_pid,
             rtt_handle,
             keepalive_task,
         })
@@ -192,21 +190,19 @@ impl Shell {
     /// Isn't in Drop to allow async cleanup.
     pub async fn kill(self) -> Result<()> {
         self.keepalive_task.abort();
-        let client = self.client.clone();
-        let sh_process = self.sh_process.clone();
-        let pid = sh_process
+        let pid = self
+            .sh_process
             .pid_request()
             .send()
             .promise
             .await?
             .get()?
             .get_result();
-        let mut kill_request = client.kill_request();
+        let mut kill_request = self.client.kill_request();
         kill_request.get().set_pid(pid);
         kill_request.get().set_signal(15); // SIGTERM
-
         let _ = kill_request.send().promise.await?;
-
+        tracing::info!(pid, "killed the sh this shell drove");
         Ok(())
     }
 }
