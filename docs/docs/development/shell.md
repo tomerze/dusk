@@ -56,7 +56,7 @@ parsed at args-build time (`ShArgs::new`, `base/sh/src/client.rs`) into a
 `Script` baked into the program's args as `ShMode::Script` / `DetachedScript`.
 The script then runs when the caller drives the process's `OutputPortal.output`
 (or, for a detached script, immediately in `Process::main` against a discard
-sink).
+stream).
 
 Either way the server side is identical: a `Script` reader handed to
 `Interpreter::exec`.
@@ -169,25 +169,26 @@ the stack.
 
 - **`ProgramArgs`** → `Execution::program_args` (`execution.rs`): `Dusk.process`
   then `Dusk.run`, fetch the process portal, cast it to `OutputPortal`, and call
-  `output(stream)` with an `UndoneStream` wrapper. Both the portal fetch and the
+  `output(stream)` with the caller's own stream. Both the portal fetch and the
   output call are `select`ed against the `stop` signal — the fetch as well as the
   call, because a program that does its work before reporting itself ready (as
   `sleep` does) parks the shell on the portal for the whole command, and a
   `stop` raced only against `output` would go unobserved until the work it was
-  meant to interrupt had finished. When output completes the process is killed
-  (`SIGTERM`) and reaped (`waitpid`) — **unless** the stream reports `done ==
-  false`, the wire signal for intentional daemonisation, in which case the
-  process is left running. These RPCs go through `dusk_core::local_client` — an
-  **in-process, server-local** `Dusk` client — so spawning/killing does not touch
-  the network. (The launched program may still hold the *remote* client embedded
-  in its args.)
+  meant to interrupt had finished. Returning from `output` is how a program says
+  it is finished, and the `daemonize` it answers with is how it says whether it
+  means to keep running: the process is killed (`SIGTERM`) and reaped
+  (`waitpid`) unless it asked to be left alone. These RPCs go through
+  `dusk_core::local_client` — an **in-process, server-local** `Dusk` client — so
+  spawning/killing does not touch the network. (The launched program may still
+  hold the *remote* client embedded in its args.)
 - **`Call`** resolves the function's frame and runs it as a nested `exec_inner`;
   **`TailCall`** swaps the current frame and resets `pc` to 0.
 - **`DefineFunction`** mutates the function table (see below).
 - **Jumps** set `pc` from the result register.
 
-`exec` always sends `done` on the output stream when the frame finishes, error or
-not (a failure to send is logged at `warn`).
+`exec` writes into the caller's stream and never closes it — one line of shell
+runs many programs into the same one. `ShPortal.sh` closes it once the line is
+finished, error or not (a failure to close is logged at `warn`).
 
 ## Functions
 
@@ -259,6 +260,5 @@ script came in on.
 - **Eager dependency compilation** deliberately swallows errors — a missing or
   broken function body is left for the runtime `Call` to surface, so defining a
   function that references a not-yet-defined one is not itself an error.
-- **`done == false`** is not an error at all: it is the wire-level signal that a
-  process means to keep running (daemonisation), and tells the interpreter to
-  skip the kill/reap.
+- **`daemonize`** is not an error at all: it is a program saying it means to
+  keep running, and tells the interpreter to skip the kill/reap.

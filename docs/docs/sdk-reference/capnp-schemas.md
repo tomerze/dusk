@@ -96,7 +96,7 @@ described below). `Stream` is a process's stdin/stdout, carrying `Value`s:
 ```capnp
 interface Stream {
   send @0 (value :Value) -> stream;   # streaming return → automatic back-pressure
-  done @1 () -> ();
+  done @1 () -> ();                   # idempotent: later calls do nothing
 }
 ```
 

@@ -337,11 +337,11 @@ unused and never reaches a `LogsArgs.Stream` — `main` never calls `openStream`
 and the builder `logs dump` carries fails if it ever is
 called. The same node-side `Reader` drains the buffer, but each signal is
 converted into a `Value::Record` (tagged with `signalTypeId`, its attributes a
-nested record tagged with `attributesTypeId`) and sent on the
-output stream the shell already handed every program — the channel `ps` and the
-rest write to — so a non-interactive caller receives the entries as the program's
-result. `--replay-only` returns once the replay history is drained (the stream's
-`done`); a follow runs until the shell stops the program, which drops the
+nested record tagged with `attributesTypeId`) and written into the
+output stream the shell already handed every program — the channel `ps` and
+the rest write to — so a non-interactive caller receives the entries as the
+program's result. `--replay-only` returns once the replay history is drained; a
+follow runs until the shell stops the program, which drops the
 `output()` call and kills the process, exactly as a `file://` follow is stopped.
 Backpressure is the output stream's own send credit. The conversion lives
 node-side (`dump.rs`) because, unlike the viewer and network sinks, there is no
