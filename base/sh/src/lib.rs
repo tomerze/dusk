@@ -478,12 +478,20 @@ impl sh_capnp::output_portal::Server for Portal {
                 .data_owned::<sh_capnp::sh_args::data::Owned>()?;
             match data.get_root_as_reader()?.which()? {
                 sh_capnp::sh_args::data::Which::Server(_) => {
+                    results.get().set_daemonize(true);
                     let mut request = stream.send_request();
-                    let value_builder = request.get().init_value();
-                    Value::Text("running in server mode".to_string())
-                        .write_to_builder(value_builder)?;
-                    request.send().await?;
-                    results.get().set_daemonize(false);
+                    let written = Value::Text("already attached to this node's shell".to_string())
+                        .write_to_builder(request.get().init_value());
+                    match written {
+                        Ok(()) => {
+                            if let Err(error) = request.send().await {
+                                tracing::warn!(error = %error, "couldn't write to the caller's stream");
+                            }
+                        }
+                        Err(error) => {
+                            tracing::warn!(error = %error, "couldn't build the value for the caller");
+                        }
+                    }
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
                     let compiler = ctx
