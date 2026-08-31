@@ -381,11 +381,44 @@ impl dusk_program::process::ProcessMixin for Process {
         ready.sender().send(true);
 
         loop {
-            if let Signal::Terminate = signal_receiver.receive().await {
-                for stop in self.state.borrow().active_stops.iter() {
-                    stop.signal(());
+            match signal_receiver.receive().await {
+                Signal::Terminate => {
+                    for stop in self.state.borrow().active_stops.iter() {
+                        stop.signal(());
+                    }
+                    return Ok(());
                 }
-                return Ok(());
+                Signal::Rerun(program_args) => {
+                    let created = match program_args.created() {
+                        Ok(created) => created,
+                        Err(error) => {
+                            tracing::warn!(
+                                error = %error,
+                                pid = self.ctx.pid,
+                                "couldn't read the created callback out of the rerun args"
+                            );
+                            None
+                        }
+                    };
+                    let process_client = self
+                        .ctx
+                        .namespace
+                        .entry(self.ctx.pid)
+                        .await
+                        .map(|entry| entry.process);
+                    if let (Some(created), Some(process_client)) = (created, process_client) {
+                        let mut request = created.created_request();
+                        request.get().set_process(process_client);
+                        if let Err(error) = request.send().promise.await {
+                            tracing::warn!(
+                                error = %error,
+                                pid = self.ctx.pid,
+                                "the process's created callback failed"
+                            );
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
