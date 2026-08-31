@@ -63,6 +63,7 @@ async fn nested_prompt(
         return Ok(());
     }
     let _drive = terminal::drive(pid);
+    let client_for_kill = client.clone();
     let compiler = capnp_rpc::new_client(crate::ShCompiler {
         client: client.clone(),
         sh_entries_builder: StaticShEntriesBuilder::default(),
@@ -99,6 +100,13 @@ async fn nested_prompt(
     }
     .await;
     shell.detach();
+
+    let mut kill_request = client_for_kill.kill_request();
+    kill_request.get().set_pid(pid);
+    kill_request.get().set_signal(15);
+    if let Err(error) = kill_request.send().promise.await {
+        tracing::warn!(pid, error = %error, "couldn't end the shell this prompt opened");
+    }
     result
 }
 
