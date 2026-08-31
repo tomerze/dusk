@@ -10,6 +10,7 @@ thread_local! {
     static OPEN_PROMPTS: Cell<usize> = const { Cell::new(0) };
     static DRIVEN: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
     static CLOSED: Rc<Notify> = Rc::new(Notify::new());
+    static STOP: RefCell<Option<Rc<Notify>>> = const { RefCell::new(None) };
 }
 
 /// Claims the terminal for reading, or returns `None` if somebody already holds
@@ -103,4 +104,16 @@ impl Drop for DriveGuard {
             }
         });
     }
+}
+
+/// Hands the client's stop signal to prompts opened on this terminal, so a
+/// prompt the client did not build itself can still be interrupted.
+pub fn set_stop_signal(stop_signal: Rc<Notify>) {
+    STOP.with(|stop| *stop.borrow_mut() = Some(stop_signal));
+}
+
+/// The client's stop signal, or one nothing ever fires if it set none.
+pub fn stop_signal() -> Rc<Notify> {
+    STOP.with(|stop| stop.borrow().clone())
+        .unwrap_or_else(|| Rc::new(Notify::new()))
 }

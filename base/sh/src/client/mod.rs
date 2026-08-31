@@ -91,7 +91,7 @@ async fn nested_prompt(
             StaticShEntriesBuilder::default(),
             prompt::display_engine::DefaultDisplayEngine::default(),
             stream_factory,
-            Rc::new(tokio::sync::Notify::new()),
+            terminal::stop_signal(),
         )
         .await?
         .run(reading)

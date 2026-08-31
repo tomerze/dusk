@@ -101,6 +101,7 @@ async fn run(cli: Cli) {
         .run_until(async move {
             let connection = Connection::connect(cli.address).await?;
             let stop_signal = Rc::new(Notify::new());
+            terminal::set_stop_signal(stop_signal.clone());
             tokio::select! {
                 result = async {
                     let client = connection.client().await;
