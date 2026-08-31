@@ -91,9 +91,10 @@ async fn drive_logs_stream(
     let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
     let connection = Connection::connect(address).await.unwrap();
     let client = connection.client().await;
-    let mut shell = Shell::new(client, StaticShEntriesBuilder::default(), Parser::new())
+    let sh_process = Shell::create_sh_process(client.clone(), StaticShEntriesBuilder::default())
         .await
         .unwrap();
+    let mut shell = Shell::new(client, sh_process, Parser::new()).await.unwrap();
 
     // Emit the marker on a loop so the live stream is guaranteed to carry it,
     // independent of how much history the replay walks first.

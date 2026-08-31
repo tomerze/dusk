@@ -179,12 +179,22 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
 
     tokio::task::spawn_local(async move {
         // Create a new shell for this command
-        let shell_result = dusk_program_sh::client::shell::Shell::new(
+        let shell_result = match dusk_program_sh::client::shell::Shell::create_sh_process(
             client.clone(),
             dusk_program_sh::entry::StaticShEntriesBuilder::default(),
-            dusk_program_sh::parser::Parser::new(),
         )
-        .await;
+        .await
+        {
+            Ok(sh_process) => {
+                dusk_program_sh::client::shell::Shell::new(
+                    client.clone(),
+                    sh_process,
+                    dusk_program_sh::parser::Parser::new(),
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        };
 
         let mut shell = match shell_result {
             Ok(s) => s,

@@ -98,12 +98,11 @@ async fn run(cli: Cli) {
                 result = async {
                     let client = connection.client().await;
                     let sh_entries_builder = StaticShEntriesBuilder::default();
-                    let mut shell = Shell::new(
-                        client.clone(),
-                        sh_entries_builder.clone(),
-                        ShParser::new(),
-                    )
-                    .await?;
+                    let sh_process =
+                        Shell::create_sh_process(client.clone(), sh_entries_builder.clone())
+                            .await?;
+                    let mut shell =
+                        Shell::new(client.clone(), sh_process, ShParser::new()).await?;
                     let session_result = match cli.command {
                         Some(command) => {
                             single_command(&mut shell, command, stop_signal.clone()).await

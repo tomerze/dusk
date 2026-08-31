@@ -78,7 +78,7 @@ impl Shell {
         }
     }
 
-    async fn create_sh_process<S: ShEntriesBuilder>(
+    pub async fn create_sh_process<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
     ) -> Result<process::Client> {
@@ -117,15 +117,13 @@ impl Shell {
         })
     }
 
-    pub async fn new<S: ShEntriesBuilder>(
+    pub async fn new(
         client: dusk::Client,
-        sh_entries_builder: S,
+        sh_process: process::Client,
         parser: Parser,
     ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
-
-        let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
 
         let pid_reply = sh_process.pid_request().send().promise.await?;
         let sh_pid = pid_reply.get()?.get_result();
