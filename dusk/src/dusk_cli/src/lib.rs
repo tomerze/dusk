@@ -9,6 +9,7 @@ use dusk_base::dusk_program_sh::{
             stream::{display_stream, json_stream},
         },
         shell::Shell,
+        terminal,
     },
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
     parser::Parser as ShParser,
@@ -73,7 +74,10 @@ async fn interactive_prompt(
         stop_signal,
     )
     .await?;
-    prompt.run().await?;
+    let Some(reading) = terminal::try_read() else {
+        anyhow::bail!("something else on this terminal is already reading it");
+    };
+    prompt.run(reading).await?;
     Ok(())
 }
 

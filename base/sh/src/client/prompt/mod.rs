@@ -57,6 +57,7 @@ where
     stop_signal: Rc<Notify>,
     llm_chat: Option<Chat>,
     mode: PromptModeFlag,
+    reading: Option<crate::client::terminal::ReadingGuard>,
 }
 
 impl<'a, D, F> Prompt<'a, D, F>
@@ -83,6 +84,7 @@ where
             stop_signal,
             llm_chat: None,
             mode: PromptModeFlag::default(),
+            reading: None,
         })
     }
 
@@ -129,12 +131,17 @@ where
                 }
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
+                self.reading = None;
                 if let Err(e) = self
                     .shell
                     .sh(line, stream, done_receiver, self.stop_signal.clone())
                     .await
                 {
                     tracing::error!("{:?} error:\n{:?}", first_word, e);
+                }
+                self.reading = crate::client::terminal::try_read();
+                if self.reading.is_none() {
+                    tracing::warn!("the terminal was taken while a command was running");
                 }
             }
         };
@@ -305,7 +312,8 @@ where
         }
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(mut self, reading: crate::client::terminal::ReadingGuard) -> Result<()> {
+        self.reading = Some(reading);
         let function_names: crate::client::prompt::highlighter::FunctionNames =
             std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut line_editor = get_line_editor(

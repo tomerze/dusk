@@ -1,5 +1,6 @@
 pub mod prompt;
 pub mod shell;
+pub mod terminal;
 
 use super::*;
 use crate::ShMode;
@@ -30,9 +31,13 @@ impl dusk_program::dusk_capnp::dusk_capnp::created::Server for NestedPrompt {
         _results: dusk_program::dusk_capnp::dusk_capnp::created::CreatedResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let process = pry!(pry!(params.get()).get_process());
+        let Some(reading) = terminal::try_read() else {
+            tracing::info!("the terminal is taken, the new shell gets no prompt");
+            return capnp::capability::Promise::ok(());
+        };
         let client = self.client.clone();
         tokio::task::spawn_local(async move {
-            if let Err(error) = nested_prompt(client, process).await {
+            if let Err(error) = nested_prompt(client, process, reading).await {
                 tracing::error!("nested prompt failed: {error:?}");
             }
         });
@@ -43,6 +48,7 @@ impl dusk_program::dusk_capnp::dusk_capnp::created::Server for NestedPrompt {
 async fn nested_prompt(
     client: dusk::Client,
     process: dusk_program::dusk_capnp::dusk_capnp::process::Client,
+    reading: terminal::ReadingGuard,
 ) -> anyhow::Result<()> {
     let compiler = capnp_rpc::new_client(crate::ShCompiler {
         client: client.clone(),
@@ -75,7 +81,7 @@ async fn nested_prompt(
             Rc::new(tokio::sync::Notify::new()),
         )
         .await?
-        .run()
+        .run(reading)
         .await
     }
     .await;
