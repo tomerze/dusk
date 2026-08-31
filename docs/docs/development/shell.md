@@ -11,14 +11,15 @@ travel back.
 
 | Crate | Side | Role |
 |-------|------|------|
-| `dusk_prompt` | client (`std`) | reedline UI, builtins, draws output |
-| `dusk_shell` | client (`std`) | `Shell` — drives one long-lived `sh` process; `Connection` — the TCP/RPC link |
-| `base/sh` | both | the `sh` program. `parser/` + `client.rs` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh` | both | the `sh` program. `parser/` + `client/` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh` → `client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
+| `base/sh` → `client/shell/` | client (`std`) | `Shell` — drives one long-lived `sh` process |
+| `dusk_connection` | client (`std`) | `Connection` — the TCP/RPC link |
 
 ## Representations at a glance
 
 ```
-raw text            "ps && date  # comment"           reedline buffer (dusk_prompt)
+raw text            "ps && date  # comment"           reedline buffer (client/prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
    │ nom (parser/tokenize.rs)
@@ -43,16 +44,18 @@ the `sh` process.
 There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
-**Interactive prompt.** `dusk_prompt` creates exactly *one* long-lived `sh`
-process in `ShMode::Server` at startup (`Shell::create_sh_process`) and then
+**Interactive prompt.** `base/sh/src/client/prompt/` drives exactly *one*
+long-lived `sh` process in `ShMode::Server`, created at startup by
+`Shell::create_sh_process` at the node's fixed `sh_capnp::SERVER_PID`, and then
 drives it for the whole session. Each accepted line goes
 `Prompt::execute_command` → `Shell::sh`, which **parses the text on the client**
-into a `Script` and ships it via `ShPortal.sh(script, output, stop)`. One line =
-one `sh` RPC carrying a freshly-parsed `Script`.
+into a `Script` and ships it via `ShPortal.sh(script, output, stop, compiler)`.
+One line = one `sh` RPC carrying a freshly-parsed `Script`, and the `Compiler`
+the node resolves that line's command words against.
 
 **`sh` as a program.** When `sh <command>` (or `sh -d <command>`) runs as a
 program — nested in another script, or launched directly — the command string is
-parsed at args-build time (`ShArgs::new`, `base/sh/src/client.rs`) into a
+parsed at args-build time (`ShArgs::new`, `base/sh/src/client/mod.rs`) into a
 `Script` baked into the program's args as `ShMode::Script` / `DetachedScript`.
 The script then runs when the caller drives the process's `OutputPortal.output`
 (or, for a detached script, immediately in `Process::main` against a discard
