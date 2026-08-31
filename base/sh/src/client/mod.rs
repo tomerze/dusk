@@ -19,6 +19,70 @@ struct ShCli {
     command: Option<String>,
 }
 
+struct NestedPrompt {
+    client: dusk::Client,
+}
+
+impl dusk_program::dusk_capnp::dusk_capnp::created::Server for NestedPrompt {
+    fn created(
+        &mut self,
+        params: dusk_program::dusk_capnp::dusk_capnp::created::CreatedParams,
+        _results: dusk_program::dusk_capnp::dusk_capnp::created::CreatedResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let process = pry!(pry!(params.get()).get_process());
+        let client = self.client.clone();
+        tokio::task::spawn_local(async move {
+            if let Err(error) = nested_prompt(client, process).await {
+                tracing::error!("nested prompt failed: {error:?}");
+            }
+        });
+        capnp::capability::Promise::ok(())
+    }
+}
+
+async fn nested_prompt(
+    client: dusk::Client,
+    process: dusk_program::dusk_capnp::dusk_capnp::process::Client,
+) -> anyhow::Result<()> {
+    let compiler = capnp_rpc::new_client(crate::ShCompiler {
+        client: client.clone(),
+        sh_entries_builder: StaticShEntriesBuilder::default(),
+    });
+    let mut shell =
+        shell::Shell::new(client, process, compiler, crate::parser::Parser::new()).await?;
+    let stream_factory = |request: prompt::StreamRequest<
+        prompt::display_engine::DefaultDisplayEngine,
+    >| match request {
+        prompt::StreamRequest::Raw => {
+            let (json_stream, done_receiver) =
+                prompt::stream::json_stream::JsonStream::new_with_receiver(true);
+            (capnp_rpc::new_client(json_stream), done_receiver)
+        }
+        prompt::StreamRequest::Display { display_engine } => {
+            let (display_stream, done_receiver) =
+                prompt::stream::display_stream::DisplayStream::new_with_receiver(
+                    display_engine.clone(),
+                );
+            (capnp_rpc::new_client(display_stream), done_receiver)
+        }
+    };
+    let result = async {
+        prompt::Prompt::new(
+            &mut shell,
+            StaticShEntriesBuilder::default(),
+            prompt::display_engine::DefaultDisplayEngine::default(),
+            stream_factory,
+            Rc::new(tokio::sync::Notify::new()),
+        )
+        .await?
+        .run()
+        .await
+    }
+    .await;
+    shell.detach();
+    result
+}
+
 struct ShProgramArgsBuilder {}
 
 #[dusk_program::async_trait::async_trait(?Send)]
@@ -31,10 +95,14 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
             Some(command) => ShMode::Script(command),
         };
         let is_server = matches!(mode, ShMode::Server);
-        let program_args =
-            ShArgs::new(client, StaticShEntriesBuilder::default(), mode)?.as_program_args()?;
-        if is_server && !cli.new {
-            program_args.set_pid(Some(sh_capnp::SERVER_PID))?;
+        let program_args = ShArgs::new(client.clone(), StaticShEntriesBuilder::default(), mode)?
+            .as_program_args()?;
+        if is_server {
+            if cli.new {
+                program_args.set_created(capnp_rpc::new_client(NestedPrompt { client }))?;
+            } else {
+                program_args.set_pid(Some(sh_capnp::SERVER_PID))?;
+            }
         }
         Ok(program_args)
     }
