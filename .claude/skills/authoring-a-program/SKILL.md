@@ -347,7 +347,7 @@ impl dusk_program::process::ProcessMixin for Process {
         loop {
             match signal_receiver.receive().await {
                 Signal::Terminate => return Ok(()),
-                Signal::Unknown(_) => {}
+                _ => {}
             }
         }
     }
@@ -409,7 +409,7 @@ async fn main(
     loop {
         match signal_receiver.receive().await {
             Signal::Terminate => return Ok(()),
-            Signal::Unknown(_) => {}
+            _ => {}
         }
     }
 }
@@ -439,7 +439,7 @@ async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
     loop {
         match signal_receiver.receive().await {
             Signal::Terminate => return Ok(()),
-            Signal::Unknown(_) => {}
+            _ => {}
         }
     }
 }
@@ -477,7 +477,7 @@ async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
             signal = signal_receiver.receive().fuse() => {
                 match signal {
                     Signal::Terminate => return Ok(()),
-                    Signal::Unknown(_) => {}
+                    _ => {}
                 }
             }
         }
@@ -829,7 +829,7 @@ loop {
             }
             return Ok(());
         }
-        Signal::Unknown(_) => {}
+        _ => {}
     }
 }
 ```
