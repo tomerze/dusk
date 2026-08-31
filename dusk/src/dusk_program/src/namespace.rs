@@ -33,7 +33,7 @@ pub type ExitWatch = alloc::rc::Rc<
     embassy_sync::watch::Watch<
         CriticalSectionRawMutex,
         Option<Result<(), alloc::string::String>>,
-        8,
+        16,
     >,
 >;
 pub type PsExitMap = HashMap<u64, ExitWatch, BuildNoHashHasher<u64>>;
