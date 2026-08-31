@@ -14,6 +14,8 @@ use std::rc::Rc;
 struct ShCli {
     #[arg(short = 'd', long = "detach")]
     detach: bool,
+    #[arg(long = "new", conflicts_with = "command")]
+    new: bool,
     command: Option<String>,
 }
 
@@ -31,7 +33,7 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
         let is_server = matches!(mode, ShMode::Server);
         let program_args =
             ShArgs::new(client, StaticShEntriesBuilder::default(), mode)?.as_program_args()?;
-        if is_server {
+        if is_server && !cli.new {
             program_args.set_pid(Some(sh_capnp::SERVER_PID))?;
         }
         Ok(program_args)
@@ -52,6 +54,7 @@ shell. Dusk shell commands run Dusk programs built into the Dusk Node.
 * Use `sh` on its own to attach to the node's shell.
 * Use `sh <command>` (or `sh "<command>"`) to run a command.
 * Use `sh -d <command>` to run it detached from the current session.
+* Use `sh --new` to start a shell of its own rather than attach to the node's.
 "#,
             version: VERSION,
         },

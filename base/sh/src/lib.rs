@@ -513,8 +513,13 @@ impl sh_capnp::output_portal::Server for Portal {
                 sh_capnp::sh_args::data::Which::Server(_) => {
                     results.get().set_daemonize(true);
                     let mut request = stream.send_request();
-                    let written = Value::Text("already attached to this node's shell".to_string())
-                        .write_to_builder(request.get().init_value());
+                    let said = if ctx.pid == sh_capnp::SERVER_PID {
+                        "already attached to this node's shell"
+                    } else {
+                        "started a shell of its own"
+                    };
+                    let written =
+                        Value::Text(said.to_string()).write_to_builder(request.get().init_value());
                     match written {
                         Ok(()) => {
                             if let Err(error) = request.send().await {
