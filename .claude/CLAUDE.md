@@ -227,13 +227,15 @@ side. So data flows through a process in both directions:
 - **client → program** — the typed [portal](#portals-and-streams) and its streams.
 - **program → client** — the `Server` capability carried in the args.
 
-The shell is the clearest example. `ShArgs.Server` exposes
-`buildProgramArgs(command)`; when the `sh` interpreter on a node compiles a
-command word, it calls *back to the client* to build that command's
-`ProgramArgs` — because the program registry and each command's client-side
-capabilities live on the client. A `Script` running on the node therefore
-resolves every command against the connected client. This callback channel is
-also why the connection has to stay live while a script runs.
+The shell is the clearest example. `ShArgs.Server` exposes `compiler()`, which
+hands back a `Compiler`; when the `sh` interpreter on a node compiles a command
+word, it calls that capability's `buildProgramArgs(command)` *back on the client*
+to build the command's `ProgramArgs` — because the program registry and each
+command's client-side capabilities live on the client. A `Script` running on the
+node therefore resolves every command against a connected client: the one whose
+args started the process, or — for `ShPortal.sh`, which takes a `Compiler` of its
+own — the one that sent the line. This callback channel is also why the
+connection has to stay live while a script runs.
 
 ## Driver registration (the extern-shim pattern)
 
