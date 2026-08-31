@@ -107,9 +107,6 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         mut results: dusk_program_sh::sh_capnp::output_portal::OutputResults,
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
-        Promise::from_future(async move {
-            results.get().set_daemonize(false);
-            Err(::capnp::Error::failed("false".to_string()))
-        })
+        Promise::from_future(async move { Err(::capnp::Error::failed("false".to_string())) })
     }
 }
