@@ -82,7 +82,7 @@ impl dusk_program::process::ProcessMixin for Process {
         loop {
             match signal_receiver.receive().await {
                 Signal::Terminate => return Ok(()),
-                Signal::Unknown(_) => {}
+                _ => {}
             }
         }
     }
