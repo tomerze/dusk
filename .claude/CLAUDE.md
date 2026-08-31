@@ -117,9 +117,11 @@ the node's single executor.
 ### Programs and processes
 
 A **program** is a static unit of work compiled into a node — there is no dynamic
-loading. A **process** is a running instance of a program. `ps` lists the
-processes running on the node you're connected to; `kill` signals one by pid;
-`waitpid` waits for one to exit.
+loading. A **process** is an instance of a program. It exists from the moment it
+is created — it has a pid, it appears in `ps` and it answers to `kill`. A process
+is either running or **suspended**; it is created suspended, and running it lifts
+the suspension. `ps` lists the processes on the node you're connected to; `kill`
+signals one by pid; `waitpid` waits for one to exit.
 
 ### The `Dusk` capability
 
@@ -127,8 +129,8 @@ When a client connects, it receives a `Dusk` capability — the node's whole API
 
 | Method | What it does |
 |--------|--------------|
-| `process(programArgs)` | Build a process from its args; returns a `Process` handle. |
-| `run(process)` | Spawn a process as its own task (a daemon that outlives the session). |
+| `process(programArgs)` | Build a process from its args and register it suspended; returns a `Process` handle. |
+| `run(process)` | Spawn a process as its own task (a daemon that outlives the session). Does nothing if it is already running. |
 | `ps()` | List the processes on the node. |
 | `kill(pid, signal)` | Send a signal to a process. |
 | `waitpid(pid)` | Wait for a process to exit. |
@@ -270,16 +272,26 @@ don't lean on its specifics.
 node's `LauncherSet` (`driver::launchers(namespace)`) and dispatches: it reads
 `program_args.program_id()` — a **local** read of the in-memory args message, not
 a network call — and runs the matching launcher's `launch`, which returns a
-`Box<dyn Process>`. The client then chooses the process's lifetime:
+`Box<dyn Process>`. The new process is registered in the namespace there and
+then, **suspended** — it has a pid, it appears in `ps` and it answers to `kill`
+before anything has run it. Args that fix a pid (`ProgramArgs.pid`) get the
+process already registered under that pid instead of a second one, and it
+receives the second set of args as `Signal::Rerun`. If the args carry the
+process's created callback, the namespace calls it with the new process.
+
+The client then chooses the process's lifetime:
 
 - `Dusk.run(process)` spawns it as its own task — it outlives the session.
 - `process.run()` runs it inside the calling session.
 
-Either way the process is entered through `bootstrap`, which registers it in the
-namespace and cleans it up when `main` returns.
+Either way the process is entered through `bootstrap`, which lifts the
+suspension and cleans the process out of the namespace when `main` returns.
+Running a process that is already running does nothing.
 
-**Portals and kill.** `process.portal()` waits for the process's `Ready` watch,
-then returns the portal for the client to downcast. `Dusk.kill(pid, signal)` looks
+**Portals and kill.** `process.portal()` waits for the process to be un-suspended
+and then for its `Ready` watch, so a client can ask a process it has just created
+for its portal and get one once it runs. It then returns the portal for the
+client to downcast. `Dusk.kill(pid, signal)` looks
 up the process's signal channel in the namespace and sends the signal, which the
 process receives on its `signal_receiver`.
 
