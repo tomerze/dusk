@@ -127,7 +127,7 @@ async fn drive_logs_stream(
     };
 
     marker_task.abort();
-    let _ = shell.kill().await;
+    shell.detach();
     let _ = connection.disconnect().await;
     found
 }
