@@ -52,6 +52,7 @@ impl Shell {
         let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
             .map_err(|err| capnp::Error::failed(format!("{err:?}")))?;
         let program_args = sh_args.as_program_args()?;
+        program_args.set_pid(Some(crate::sh_capnp::SERVER_PID))?;
 
         // capnp auto_reconnect returns the first call's Disconnected error while
         // refreshing its current capability in the background; the next call uses

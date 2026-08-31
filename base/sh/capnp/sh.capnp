@@ -4,6 +4,8 @@ using Dusk = import "/capnp/dusk.capnp";
 
 const programId :UInt64 = 0x8d0e0504ec994ea4;
 
+const serverPid :UInt64 = 0xfb29d65d96256a86;
+
 struct Script {
   struct Statement {
     struct Expr {

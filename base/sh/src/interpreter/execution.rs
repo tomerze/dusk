@@ -53,6 +53,10 @@ impl Execution {
         program_args: Rc<ProgramArgs>,
         stop: &Stop,
     ) -> Result<(), ExecutionError> {
+        let attached = program_args
+            .pid()
+            .map_err(|error| ExecutionError::Runtime(error.into()))?
+            .is_some();
         let process = self.execute_process(program_args).await?;
 
         let pid = process
@@ -126,7 +130,7 @@ impl Execution {
             }
         };
 
-        let program_error = if !daemonize {
+        let program_error = if !daemonize && !attached {
             let mut kill_request = self.client.kill_request();
             kill_request.get().set_pid(pid);
             kill_request.get().set_signal(15);

@@ -28,7 +28,13 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
             Some(command) if cli.detach => ShMode::DetachedScript(command),
             Some(command) => ShMode::Script(command),
         };
-        Ok(ShArgs::new(client, StaticShEntriesBuilder::default(), mode)?.as_program_args()?)
+        let is_server = matches!(mode, ShMode::Server);
+        let program_args =
+            ShArgs::new(client, StaticShEntriesBuilder::default(), mode)?.as_program_args()?;
+        if is_server {
+            program_args.set_pid(Some(sh_capnp::SERVER_PID))?;
+        }
+        Ok(program_args)
     }
 }
 
@@ -43,6 +49,7 @@ pub fn sh_entry() -> ShEntry {
 `sh` runs commands in the Dusk shell — Dusk's own shell language, not a Unix
 shell. Dusk shell commands run Dusk programs built into the Dusk Node.
 
+* Use `sh` on its own to attach to the node's shell.
 * Use `sh <command>` (or `sh "<command>"`) to run a command.
 * Use `sh -d <command>` to run it detached from the current session.
 "#,
