@@ -1,5 +1,6 @@
 use embassy_sync::channel::DynamicReceiver;
 
+#[non_exhaustive]
 pub enum Signal {
     Terminate,
     Unknown(u64),

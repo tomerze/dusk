@@ -338,14 +338,11 @@ impl dusk_program::process::ProcessMixin for Process {
         ready.sender().send(true);
 
         loop {
-            match signal_receiver.receive().await {
-                Signal::Terminate => {
-                    for stop in self.state.borrow().active_stops.iter() {
-                        stop.signal(());
-                    }
-                    return Ok(());
+            if let Signal::Terminate = signal_receiver.receive().await {
+                for stop in self.state.borrow().active_stops.iter() {
+                    stop.signal(());
                 }
-                Signal::Unknown(_signal) => {}
+                return Ok(());
             }
         }
     }

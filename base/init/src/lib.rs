@@ -142,10 +142,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     self.ctx.namespace.spawner.spawn(session_task);
                 }
                 signal = signal_receiver.receive().fuse() => {
-                    match signal {
-                        Signal::Terminate => return Ok(()),
-                        Signal::Unknown(_signal) => {}
-                    }
+                    if let Signal::Terminate = signal { return Ok(()) }
                 }
             }
         }
