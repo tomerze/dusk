@@ -94,7 +94,13 @@ async fn drive_logs_stream(
     let sh_process = Shell::create_sh_process(client.clone(), StaticShEntriesBuilder::default())
         .await
         .unwrap();
-    let mut shell = Shell::new(client, sh_process, Parser::new()).await.unwrap();
+    let compiler = capnp_rpc::new_client(dusk_program_sh::ShCompiler {
+        client: client.clone(),
+        sh_entries_builder: StaticShEntriesBuilder::default(),
+    });
+    let mut shell = Shell::new(client, sh_process, compiler, Parser::new())
+        .await
+        .unwrap();
 
     // Emit the marker on a loop so the live stream is guaranteed to carry it,
     // independent of how much history the replay walks first.

@@ -1,5 +1,5 @@
 use crate::entry::ShEntriesBuilder;
-use crate::sh_capnp::{sh_portal, sh_stop};
+use crate::sh_capnp::{compiler, sh_portal, sh_stop};
 use crate::{ShArgs, ShMode, parser::Parser};
 use anyhow::Result;
 use capnp::capability::{FromClientHook, Promise};
@@ -38,6 +38,7 @@ pub struct Shell {
     parser: Parser,
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
+    compiler: compiler::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
@@ -120,6 +121,7 @@ impl Shell {
     pub async fn new(
         client: dusk::Client,
         sh_process: process::Client,
+        compiler: compiler::Client,
         parser: Parser,
     ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
@@ -135,6 +137,7 @@ impl Shell {
             client: client.clone(),
             parser,
             sh_process,
+            compiler,
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -169,6 +172,7 @@ impl Shell {
         self.parser.parse(script, script_builder)?;
         sh_request.get().set_output(stream);
         sh_request.get().set_stop(stop_cap);
+        sh_request.get().set_compiler(self.compiler.clone());
 
         sh_request.send().promise.await?;
         let _ = done_receiver.await;

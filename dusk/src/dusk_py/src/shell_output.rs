@@ -186,9 +186,14 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
         .await
         {
             Ok(sh_process) => {
+                let compiler = capnp_rpc::new_client(dusk_program_sh::ShCompiler {
+                    client: client.clone(),
+                    sh_entries_builder: dusk_program_sh::entry::StaticShEntriesBuilder::default(),
+                });
                 dusk_program_sh::client::shell::Shell::new(
                     client.clone(),
                     sh_process,
+                    compiler,
                     dusk_program_sh::parser::Parser::new(),
                 )
                 .await

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use dusk_base::dusk_program_sh::ShCompiler;
 use dusk_base::dusk_program_sh::{
     client::{
         prompt::{
@@ -101,8 +102,12 @@ async fn run(cli: Cli) {
                     let sh_process =
                         Shell::create_sh_process(client.clone(), sh_entries_builder.clone())
                             .await?;
+                    let compiler = capnp_rpc::new_client(ShCompiler {
+                        client: client.clone(),
+                        sh_entries_builder: sh_entries_builder.clone(),
+                    });
                     let mut shell =
-                        Shell::new(client.clone(), sh_process, ShParser::new()).await?;
+                        Shell::new(client.clone(), sh_process, compiler, ShParser::new()).await?;
                     let session_result = match cli.command {
                         Some(command) => {
                             single_command(&mut shell, command, stop_signal.clone()).await
