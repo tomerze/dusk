@@ -130,6 +130,7 @@ where
                     is_raw = true;
                 }
 
+                let already_open = crate::client::terminal::open_prompts();
                 let (stream, done_receiver) = self.get_stream(is_raw);
                 self.reading = None;
                 if let Err(e) = self
@@ -139,6 +140,7 @@ where
                 {
                     tracing::error!("{:?} error:\n{:?}", first_word, e);
                 }
+                crate::client::terminal::wait_until_prompts_closed(already_open).await;
                 self.reading = crate::client::terminal::try_read();
                 if self.reading.is_none() {
                     tracing::warn!("the terminal was taken while a command was running");

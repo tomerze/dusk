@@ -36,6 +36,7 @@ async fn single_command(shell: &mut Shell, command: String, stop_signal: Rc<Noti
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
     let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(colored);
+    let already_open = terminal::open_prompts();
     shell
         .sh(
             command.as_str(),
@@ -44,6 +45,7 @@ async fn single_command(shell: &mut Shell, command: String, stop_signal: Rc<Noti
             stop_signal,
         )
         .await?;
+    terminal::wait_until_prompts_closed(already_open).await;
     Ok(())
 }
 

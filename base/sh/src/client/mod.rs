@@ -36,7 +36,9 @@ impl dusk_program::dusk_capnp::dusk_capnp::created::Server for NestedPrompt {
             return capnp::capability::Promise::ok(());
         };
         let client = self.client.clone();
+        let open_prompt = terminal::open_prompt();
         tokio::task::spawn_local(async move {
+            let _open_prompt = open_prompt;
             if let Err(error) = nested_prompt(client, process, reading).await {
                 tracing::error!("nested prompt failed: {error:?}");
             }
