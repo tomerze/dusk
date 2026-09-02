@@ -91,9 +91,10 @@ async fn drive_logs_stream(
     let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
     let connection = Connection::connect(address).await.unwrap();
     let client = connection.client().await;
-    let sh_process = Shell::create_sh_process(client.clone(), StaticShEntriesBuilder::default())
-        .await
-        .unwrap();
+    let (sh_process, _drive) =
+        Shell::create_sh_process(client.clone(), StaticShEntriesBuilder::default())
+            .await
+            .unwrap();
     let compiler = capnp_rpc::new_client(dusk_program_sh::ShCompiler {
         client: client.clone(),
         sh_entries_builder: StaticShEntriesBuilder::default(),

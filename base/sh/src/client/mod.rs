@@ -52,6 +52,17 @@ async fn nested_prompt(
     process: dusk_program::dusk_capnp::dusk_capnp::process::Client,
     reading: terminal::ReadingGuard,
 ) -> anyhow::Result<()> {
+    let pid = process
+        .pid_request()
+        .send()
+        .promise
+        .await?
+        .get()?
+        .get_result();
+    if terminal::drives(pid) {
+        return Ok(());
+    }
+    let _drive = terminal::drive(pid);
     let compiler = capnp_rpc::new_client(crate::ShCompiler {
         client: client.clone(),
         sh_entries_builder: StaticShEntriesBuilder::default(),
@@ -106,11 +117,10 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
         let program_args = ShArgs::new(client.clone(), StaticShEntriesBuilder::default(), mode)?
             .as_program_args()?;
         if is_server {
-            if cli.new {
-                program_args.set_created(capnp_rpc::new_client(NestedPrompt { client }))?;
-            } else {
+            if !cli.new {
                 program_args.set_pid(Some(sh_capnp::SERVER_PID))?;
             }
+            program_args.set_created(capnp_rpc::new_client(NestedPrompt { client }))?;
         }
         Ok(program_args)
     }

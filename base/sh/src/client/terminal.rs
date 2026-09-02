@@ -1,11 +1,14 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread_local;
+use std::vec::Vec;
 use tokio::sync::Notify;
 
 thread_local! {
     static READING: Cell<bool> = const { Cell::new(false) };
     static OPEN_PROMPTS: Cell<usize> = const { Cell::new(0) };
+    static DRIVEN: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
     static CLOSED: Rc<Notify> = Rc::new(Notify::new());
 }
 
@@ -70,5 +73,34 @@ pub async fn wait_until_prompts_closed(count: usize) {
             return;
         }
         notified.await;
+    }
+}
+
+/// Records that this client drives the process at `pid` until the returned
+/// guard is dropped.
+///
+/// Take it before the process is created, not after: the node answers the
+/// process's created callback while creating it, and a callback that arrives
+/// before the pid is recorded opens a prompt this client did not ask for.
+pub fn drive(pid: u64) -> DriveGuard {
+    DRIVEN.with(|driven| driven.borrow_mut().push(pid));
+    DriveGuard(pid)
+}
+
+/// Whether this client already drives the process at `pid`.
+pub fn drives(pid: u64) -> bool {
+    DRIVEN.with(|driven| driven.borrow().contains(&pid))
+}
+
+pub struct DriveGuard(u64);
+
+impl Drop for DriveGuard {
+    fn drop(&mut self) {
+        DRIVEN.with(|driven| {
+            let mut driven = driven.borrow_mut();
+            if let Some(index) = driven.iter().position(|pid| *pid == self.0) {
+                driven.remove(index);
+            }
+        });
     }
 }

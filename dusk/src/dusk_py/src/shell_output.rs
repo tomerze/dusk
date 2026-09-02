@@ -185,24 +185,25 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
         )
         .await
         {
-            Ok(sh_process) => {
+            Ok((sh_process, drive)) => {
                 let compiler = capnp_rpc::new_client(dusk_program_sh::ShCompiler {
                     client: client.clone(),
                     sh_entries_builder: dusk_program_sh::entry::StaticShEntriesBuilder::default(),
                 });
-                dusk_program_sh::client::shell::Shell::new(
+                let shell = dusk_program_sh::client::shell::Shell::new(
                     client.clone(),
                     sh_process,
                     compiler,
                     dusk_program_sh::parser::Parser::new(),
                 )
-                .await
+                .await;
+                shell.map(|shell| (shell, drive))
             }
             Err(error) => Err(error),
         };
 
-        let mut shell = match shell_result {
-            Ok(s) => s,
+        let (mut shell, _drive) = match shell_result {
+            Ok(shell) => shell,
             Err(e) => {
                 let _ = output_tx.send(Err(e)).await;
                 return;

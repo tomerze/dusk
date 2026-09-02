@@ -105,9 +105,11 @@ async fn run(cli: Cli) {
                 result = async {
                     let client = connection.client().await;
                     let sh_entries_builder = StaticShEntriesBuilder::default();
-                    let sh_process =
-                        Shell::create_sh_process(client.clone(), sh_entries_builder.clone())
-                            .await?;
+                    let (sh_process, _drive) = Shell::create_sh_process(
+                        client.clone(),
+                        sh_entries_builder.clone(),
+                    )
+                    .await?;
                     let compiler = capnp_rpc::new_client(ShCompiler {
                         client: client.clone(),
                         sh_entries_builder: sh_entries_builder.clone(),

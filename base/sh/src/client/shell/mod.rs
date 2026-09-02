@@ -82,7 +82,8 @@ impl Shell {
     pub async fn create_sh_process<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
-    ) -> Result<process::Client> {
+    ) -> Result<(process::Client, crate::client::terminal::DriveGuard)> {
+        let drive = crate::client::terminal::drive(crate::sh_capnp::SERVER_PID);
         let (process, _) = capnp_rpc::auto_reconnect(move || {
             Ok(capnp_rpc::new_future_client(
                 Self::create_sh_process_reconnect_callback(
@@ -92,7 +93,7 @@ impl Shell {
             ))
         })?;
 
-        Ok(process)
+        Ok((process, drive))
     }
 
     fn spawn_keepalive_task(sh_process: process::Client, rtt_handle: RttHandle) -> JoinHandle<()> {
