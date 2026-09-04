@@ -22,6 +22,7 @@ use rand_core::{RngCore, SeedableRng};
 use sha2::{Digest, Sha256};
 
 use tracing::info;
+use tracing::warn;
 
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
 
@@ -112,18 +113,26 @@ impl Namespace {
             .await
     }
 
+    pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        let channel = self
+            .ps_signal_channel_map
+            .lock()
+            .await
+            .get(&pid)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("couldn't find signal channel for process"))?;
+        channel.sender().send(signal).await;
+        Ok(())
+    }
+
     /// Send SIGTERM to every process in the namespace, yielding between each so
     /// the signalled processes get a chance to run their termination paths.
     pub async fn terminate(&self) {
-        // Clone the channels out from under the lock before awaiting on the
-        // sends, so the map isn't held across `.await`.
-        let channels: Vec<Rc<SignalChannel>> = {
-            let ps_signal_channel_map = self.ps_signal_channel_map.lock().await;
-            ps_signal_channel_map.values().cloned().collect()
-        };
-
-        for channel in channels {
-            channel.sender().send(signal::Signal::Terminate).await;
+        let pids: Vec<u64> = self.ps_map.lock().await.keys().copied().collect();
+        for pid in pids {
+            if let Err(error) = self.kill(pid, signal::Signal::Terminate).await {
+                warn!(pid, error = %error, "couldn't terminate process");
+            }
             embassy_futures::yield_now().await;
         }
     }

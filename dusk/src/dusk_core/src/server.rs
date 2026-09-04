@@ -218,22 +218,7 @@ impl dusk::Server for DuskServer {
         debug!(method = "Dusk.kill", pid, signal, "rpc call");
 
         let namespace = self.namespace.clone();
-        Promise::from_future(async move {
-            let channel = {
-                let ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
-                ps_signal_channel_map.get(&pid).cloned()
-            };
-
-            match channel {
-                Some(channel) => {
-                    channel.sender().send(signal.into()).await;
-                    Ok(())
-                }
-                None => Err(capnp::Error::failed(
-                    "couldn't find signal channel for process".to_string(),
-                )),
-            }
-        })
+        Promise::from_future(async move { namespace.kill(pid, signal.into()).await.into_capnp() })
     }
 
     fn waitpid(
