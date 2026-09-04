@@ -102,9 +102,7 @@ impl dyn Process {
         let error = result.as_ref().err().map(|e| e.to_string());
         tracing::info!(error = error, "main exit");
 
-        namespace
-            .unregister(pid, result.map_err(|e| e.to_string()))
-            .await;
+        namespace.exit(pid, result.map_err(|e| e.to_string())).await;
         Ok(())
     }
 }
@@ -165,6 +163,11 @@ impl process::Server for dyn Process {
                     "process no longer exists, cannot get portal".to_string(),
                 ));
             };
+            if entry.exit.try_get().flatten().is_some() {
+                return Err(capnp::Error::failed(
+                    "process has exited, cannot get portal".to_string(),
+                ));
+            }
             let mut suspended_receiver = entry.suspended.receiver().ok_or_else(|| {
                 capnp::Error::failed("couldn't acquire receiver for process suspended watch".into())
             })?;

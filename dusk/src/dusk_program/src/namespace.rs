@@ -126,10 +126,19 @@ impl Namespace {
             .map(|entry| entry.suspended.try_get().unwrap_or(false))
     }
 
+    pub async fn exited(&self, pid: u64) -> Option<bool> {
+        self.entry(pid)
+            .await
+            .map(|entry| entry.exit.try_get().flatten().is_some())
+    }
+
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        if self.exited(pid).await == Some(true) {
+            return Err(anyhow::anyhow!("process has exited"));
+        }
         if matches!(signal, signal::Signal::Terminate) && self.suspended(pid).await == Some(true) {
             info!(pid, "killed a suspended process");
-            self.unregister(pid, Ok(())).await;
+            self.exit(pid, Ok(())).await;
             return Ok(());
         }
         let entry = self
@@ -166,12 +175,16 @@ impl Namespace {
         Ok(client)
     }
 
-    pub async fn unregister(&self, pid: u64, exit: Result<(), String>) {
-        let Some(entry) = self.ps_map.lock().await.remove(&pid) else {
+    pub async fn exit(&self, pid: u64, exit: Result<(), String>) {
+        let Some(entry) = self.entry(pid).await else {
             return;
         };
         entry.exit.sender().send(Some(exit));
         entry.suspended.sender().send(false);
+    }
+
+    pub async fn unregister(&self, pid: u64) -> Option<PsEntry> {
+        self.ps_map.lock().await.remove(&pid)
     }
 
     /// Send SIGTERM to every process in the namespace, yielding between each so
@@ -179,6 +192,9 @@ impl Namespace {
     pub async fn terminate(&self) {
         let pids: Vec<u64> = self.ps_map.lock().await.keys().copied().collect();
         for pid in pids {
+            if self.exited(pid).await == Some(true) {
+                continue;
+            }
             if let Err(error) = self.kill(pid, signal::Signal::Terminate).await {
                 warn!(pid, error = %error, "couldn't terminate process");
             }
