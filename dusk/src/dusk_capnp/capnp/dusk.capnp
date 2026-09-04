@@ -36,6 +36,10 @@ struct ProgramArgs(D, S) {
     data @1 :D;
     server @2 :S;
   }
+  pid :union {
+    auto @3 :Void;
+    fixed @4 :UInt64;
+  }
 }
 
 interface Process {
