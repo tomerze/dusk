@@ -71,6 +71,7 @@ struct PsResult {
     pub program_ids: Vec<u64>,
     pub process_names: Vec<String>,
     pub program_versions: Vec<String>,
+    pub stats: Vec<String>,
 }
 
 #[derive(Clone, dusk_program_proc::Process)]
@@ -125,6 +126,13 @@ impl dusk_program::process::ProcessMixin for Process {
                 continue;
             }
             self.result.borrow_mut().pids.push(entry.get_pid());
+            let stat = match (entry.get_ready(), entry.get_suspended()) {
+                (true, false) => "RR",
+                (false, false) => "R",
+                (false, true) => "S",
+                (true, true) => "RS",
+            };
+            self.result.borrow_mut().stats.push(stat.to_string());
 
             let process = entry.get_process()?;
             let program_id_reply = process.program_id_request().send().promise.await?;
@@ -207,12 +215,21 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 .cloned()
                 .map(Value::String)
                 .collect();
+            let stat_values = process
+                .result
+                .borrow()
+                .stats
+                .iter()
+                .cloned()
+                .map(Value::String)
+                .collect();
             let fields = Record::with_fields(
                 ps_capnp::RESULT_TYPE_ID,
                 [
                     (b"name".to_vec(), Value::List(name_values)),
                     (b"version".to_vec(), Value::List(version_values)),
                     (b"pid".to_vec(), Value::List(pid_values)),
+                    (b"stat".to_vec(), Value::List(stat_values)),
                     (b"program_id".to_vec(), Value::List(program_id_values)),
                 ],
             );
