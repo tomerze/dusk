@@ -145,9 +145,8 @@ impl dusk_program::process::ProcessMixin for Process {
             ready.sender().send(true);
             loop {
                 let signal = signal_receiver.receive().await;
-                match signal {
-                    Signal::Terminate => return Ok(()),
-                    Signal::Unknown(_signal) => {}
+                if let Signal::Terminate = signal {
+                    return Ok(());
                 }
             }
         }
@@ -169,9 +168,8 @@ impl dusk_program::process::ProcessMixin for Process {
             .instrument(span);
         let terminated = async {
             loop {
-                match signal_receiver.receive().await {
-                    Signal::Terminate => return,
-                    Signal::Unknown(_signal) => {}
+                if let Signal::Terminate = signal_receiver.receive().await {
+                    return;
                 }
             }
         };

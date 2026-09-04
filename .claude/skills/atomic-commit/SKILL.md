@@ -137,7 +137,7 @@ and the repository's own working agreements are two commits, not one.
 
 Everything I wanted to say in a comment goes here instead: why this exists, what
 it replaced, what was rejected, what it is a step toward. See the
-[no-comments rule](../../CLAUDE.md#dont-add-comments-everywhere) — a comment
+[no-comments rule](../../CLAUDE.md#i-do-not-write-comments) — a comment
 explaining the change is a commit message that leaked into the source and will
 outlive the reader it was written for.
 

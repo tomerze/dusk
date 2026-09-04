@@ -97,9 +97,8 @@ impl dusk_program::process::ProcessMixin for Process {
         ready.sender().send(true);
         loop {
             let signal = signal_receiver.receive().await;
-            match signal {
-                Signal::Terminate => return Ok(()),
-                Signal::Unknown(_signal) => {}
+            if let Signal::Terminate = signal {
+                return Ok(());
             }
         }
     }

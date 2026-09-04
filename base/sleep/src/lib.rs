@@ -95,7 +95,7 @@ impl dusk_program::process::ProcessMixin for Process {
             loop {
                 match signal_receiver.receive().await {
                     Signal::Terminate => return,
-                    Signal::Unknown(_signal) => continue,
+                    _ => continue,
                 }
             }
         };
