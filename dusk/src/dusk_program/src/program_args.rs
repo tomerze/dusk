@@ -56,6 +56,28 @@ impl ProgramArgs {
         Ok(root.into_reader().get_program_id())
     }
 
+    pub fn pid(&self) -> capnp::Result<Option<u64>> {
+        let mut message_builder = self.inner.borrow_mut();
+        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        match root.into_reader().get_pid().which()? {
+            program_args::pid::Which::Auto(()) => Ok(None),
+            program_args::pid::Which::Fixed(pid) => Ok(Some(pid)),
+        }
+    }
+
+    /// Set a fixed pid or None for auto.
+    pub fn set_pid(&self, pid: Option<u64>) -> capnp::Result<()> {
+        let mut message_builder = self.inner.borrow_mut();
+        let mut root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
+            message_builder.get_root()?;
+        match pid {
+            Some(pid) => root.reborrow().get_pid().set_fixed(pid),
+            None => root.reborrow().get_pid().set_auto(()),
+        }
+        Ok(())
+    }
+
     /// Read the `args.data` slot as the typed reader of `T` and feed it into
     /// `f`.
     pub fn with_data<T, R, F>(&self, f: F) -> capnp::Result<R>

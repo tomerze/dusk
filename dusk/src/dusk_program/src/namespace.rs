@@ -94,7 +94,13 @@ impl Namespace {
         launcher_set: LauncherSet,
         program_args: Rc<ProgramArgs>,
     ) -> anyhow::Result<process::Client> {
-        let pid = self.rng.lock().await.next_u64();
+        let fixed_pid = program_args
+            .pid()
+            .map_err(|error| anyhow::anyhow!("failed reading a fixed pid: {error}"))?;
+        let pid = match fixed_pid {
+            Some(pid) => pid,
+            None => self.rng.lock().await.next_u64(),
+        };
         let process = launcher_set
             .launch(ProcessContext {
                 pid,
