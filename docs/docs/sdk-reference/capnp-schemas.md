@@ -84,7 +84,7 @@ client-side callbacks.
 ### `ProcessEntry` / `ProgramEntry`
 
 Returned by `ps` and `programs` respectively: `ProcessEntry` pairs a `pid` with a
-`Process` and says whether it is `ready` and whether it is `suspended`;
+`Process` and says whether it is `ready`, `suspended` or `exited`;
 `ProgramEntry` carries a program's `programId`, `version`, and `gitRevision`.
 
 ## Streams and values

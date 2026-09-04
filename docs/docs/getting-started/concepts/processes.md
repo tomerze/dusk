@@ -53,9 +53,11 @@ The client then chooses the process's lifetime:
 - **`process.run()`** runs the process inside the calling session, so it is torn
   down when that session ends.
 
-Running a process that is already running does nothing. Terminating a suspended
-one takes it out of the namespace where it stands; there is nothing running to
-deliver a signal to. The runtime machinery behind this is internal; see
+Running a process that is already running does nothing. A process that has
+exited — or was terminated while suspended, which has nothing running to deliver
+a signal to — stays in the namespace with its exit status until something
+`waitpid`s it, the way a Unix zombie does. `waitpid` is what takes a process
+out. The runtime machinery behind this is internal; see
 [Architecture](../../development/architecture.md). A
 process that wants to keep running after a one-shot shell command does so through
 a [shell](../../features/shell.md) convention, not a core process mechanism.
