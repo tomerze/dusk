@@ -106,17 +106,14 @@ impl dyn Process {
             .get(&pid)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("pid {pid} has no suspended watch"))?;
-        if !suspended.try_get().unwrap_or(false) {
-            return Err(anyhow::anyhow!(
-                "pid {pid} is already running in namespace {}",
-                namespace.id
-            ));
-        }
-        suspended.sender().send(false);
-
         if let Some(registered) = registered {
             registered.signal(());
         }
+        if !suspended.try_get().unwrap_or(false) {
+            tracing::info!(pid, "process is already running");
+            return Ok(());
+        }
+        suspended.sender().send(false);
 
         tracing::info!("main run");
         let result = self
