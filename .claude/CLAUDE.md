@@ -285,8 +285,10 @@ The client then chooses the process's lifetime:
 - `process.run()` runs it inside the calling session.
 
 Either way the process is entered through `bootstrap`, which lifts the
-suspension and cleans the process out of the namespace when `main` returns.
-Running a process that is already running does nothing.
+suspension, runs `main`, and marks the exit when it returns. The process stays
+in the namespace, exited, until `Dusk.waitpid` takes it out: `process`
+registers, `waitpid` unregisters, and `bootstrap` only changes state. Running a
+process that is already running does nothing.
 
 **Portals and kill.** `process.portal()` waits for the process to be un-suspended
 and then for its `Ready` watch, so a client can ask a process it has just created

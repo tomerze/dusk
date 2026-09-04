@@ -126,11 +126,12 @@ impl dusk_program::process::ProcessMixin for Process {
                 continue;
             }
             self.result.borrow_mut().pids.push(entry.get_pid());
-            let stat = match (entry.get_ready(), entry.get_suspended()) {
-                (true, false) => "RR",
-                (false, false) => "R",
-                (false, true) => "S",
-                (true, true) => "RS",
+            let stat = match (entry.get_exited(), entry.get_ready(), entry.get_suspended()) {
+                (true, _, _) => "Z",
+                (false, true, false) => "RR",
+                (false, false, false) => "R",
+                (false, false, true) => "S",
+                (false, true, true) => "RS",
             };
             self.result.borrow_mut().stats.push(stat.to_string());
 

@@ -15,6 +15,7 @@ use dusk_program::anyhow::Context;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::signal::Signal;
 use dusk_program::namespace::Namespace;
+use dusk_program::namespace::PsEntry;
 use dusk_program::process::Process;
 use tracing::Instrument;
 use tracing::debug;
@@ -139,23 +140,24 @@ impl dusk::Server for DuskServer {
         debug!(method = "Dusk.ps", "rpc call");
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
-            let ps_vec: Vec<(u64, process::Client)> = {
+            let ps_vec: Vec<(u64, PsEntry)> = {
                 let ps_map = namespace.ps_map.lock().await;
                 ps_map
                     .iter()
-                    .map(|(pid, process)| (*pid, process.clone()))
+                    .map(|(pid, entry)| (*pid, entry.clone()))
                     .collect()
             };
             let mut process_entries = results.get().init_process_entries(ps_vec.len() as u32);
-            for (i, (pid, process)) in ps_vec.into_iter().enumerate() {
-                let mut entry = process_entries.reborrow().get(
+            for (i, (pid, entry)) in ps_vec.into_iter().enumerate() {
+                let mut process_entry = process_entries.reborrow().get(
                     i.try_into()
                         .map_err(|e: TryFromIntError| capnp::Error::failed(e.to_string()))?,
                 );
-                entry.set_pid(pid);
-                entry.set_process(process);
-                entry.set_ready(namespace.ready(pid).await.unwrap_or(false));
-                entry.set_suspended(namespace.suspended(pid).await.unwrap_or(false));
+                process_entry.set_pid(pid);
+                process_entry.set_process(entry.process);
+                process_entry.set_ready(entry.ready.try_get().unwrap_or(false));
+                process_entry.set_suspended(entry.suspended.try_get().unwrap_or(false));
+                process_entry.set_exited(entry.exit.try_get().flatten().is_some());
             }
             Ok(())
         })
@@ -213,14 +215,11 @@ impl dusk::Server for DuskServer {
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
-            let exit_watch = namespace.ps_exit_map.lock().await.get(&pid).cloned();
-            let Some(exit_watch) = exit_watch else {
-                return Err(capnp::Error::failed(
-                    "couldn't find exit watch for process".to_string(),
-                ));
+            let Some(entry) = namespace.entry(pid).await else {
+                return Err(capnp::Error::failed("couldn't find process".to_string()));
             };
 
-            let mut receiver = exit_watch.receiver().ok_or_else(|| {
+            let mut receiver = entry.exit.receiver().ok_or_else(|| {
                 capnp::Error::failed("couldn't acquire receiver for process exit watch, maximum amount of receivers reached".into())
             })?;
 
@@ -238,7 +237,7 @@ impl dusk::Server for DuskServer {
                 changed = true;
             };
 
-            namespace.ps_exit_map.lock().await.remove(&pid);
+            namespace.unregister(pid).await;
 
             result.map_err(capnp::Error::failed)
         })
