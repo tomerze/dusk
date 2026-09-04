@@ -1,10 +1,14 @@
 # Processes
 
-A **process** is a running instance of a [program](programs.md) on a node.
-Programs are compiled into a node; processes are the live thing doing work.
-`ps` lists the processes running **inside the node** — Dusk's own, like
-`docker ps`, not the host operating system's — `kill` signals one by pid, and
-`waitpid` waits for one to exit.
+A **process** is an instance of a [program](programs.md) on a node. Programs
+are compiled into a node; processes are the live thing doing work. A process
+exists from the moment it is created: it has a pid, it appears in `ps`, and it
+answers to `kill`. It is either **running** or **suspended** — created
+suspended, and running it lifts the suspension.
+
+`ps` lists the processes **inside the node** — Dusk's own, like `docker ps`, not
+the host operating system's — `kill` signals one by pid, and `waitpid` waits for
+one to exit.
 
 ## What you implement
 
@@ -40,8 +44,8 @@ without racing its startup.
 
 ## Daemon vs in-session
 
-After a client builds a process with `Dusk.process`, it chooses the process's
-lifetime:
+`Dusk.process` creates a process and registers it in the namespace, suspended.
+The client then chooses the process's lifetime:
 
 - **`Dusk.run(process)`** spawns the process as its own task on the node, so it
   outlives the client session that created it. This is how long-lived processes
@@ -49,7 +53,9 @@ lifetime:
 - **`process.run()`** runs the process inside the calling session, so it is torn
   down when that session ends.
 
-The runtime machinery that registers a process in the namespace and cleans it up
-afterward is internal; see [Architecture](../../development/architecture.md). A
+Running a process that is already running does nothing. Terminating a suspended
+one takes it out of the namespace where it stands; there is nothing running to
+deliver a signal to. The runtime machinery behind this is internal; see
+[Architecture](../../development/architecture.md). A
 process that wants to keep running after a one-shot shell command does so through
 a [shell](../../features/shell.md) convention, not a core process mechanism.
