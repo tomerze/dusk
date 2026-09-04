@@ -15,6 +15,7 @@ use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
+use embassy_sync::watch::Watch;
 use hashbrown::HashMap;
 use nohash_hasher::BuildNoHashHasher;
 use rand_chacha::ChaCha20Rng;
@@ -22,6 +23,7 @@ use rand_core::{RngCore, SeedableRng};
 use sha2::{Digest, Sha256};
 
 use tracing::info;
+use tracing::warn;
 
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
 
@@ -112,18 +114,62 @@ impl Namespace {
             .await
     }
 
+    pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        let channel = self
+            .ps_signal_channel_map
+            .lock()
+            .await
+            .get(&pid)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("couldn't find signal channel for process"))?;
+        channel.sender().send(signal).await;
+        Ok(())
+    }
+
+    pub async fn register(
+        &self,
+        pid: u64,
+        process: Box<dyn Process>,
+    ) -> anyhow::Result<(Rc<SignalChannel>, Ready)> {
+        let mut ps_map = self.ps_map.lock().await;
+        if ps_map.contains_key(&pid) {
+            return Err(anyhow::anyhow!(
+                "pid {pid} is already in use in namespace {}",
+                self.id
+            ));
+        }
+        ps_map.insert(pid, process);
+        let channel = Rc::new(SignalChannel::new());
+        self.ps_signal_channel_map
+            .lock()
+            .await
+            .insert(pid, channel.clone());
+        let ready: Ready = Rc::new(Watch::new_with(false));
+        self.ps_ready_map.lock().await.insert(pid, ready.clone());
+        self.ps_exit_map
+            .lock()
+            .await
+            .insert(pid, Rc::new(Watch::new_with(None)));
+        Ok((channel, ready))
+    }
+
+    pub async fn unregister(&self, pid: u64, exit: Result<(), alloc::string::String>) {
+        if let Some(exit_watch) = self.ps_exit_map.lock().await.get(&pid) {
+            exit_watch.sender().send(Some(exit));
+        }
+        self.ps_ready_map.lock().await.remove(&pid);
+        self.ps_signal_channel_map.lock().await.remove(&pid);
+        self.ps_map.lock().await.remove(&pid);
+    }
+
     /// Send SIGTERM to every process in the namespace, yielding between each so
     /// the signalled processes get a chance to run their termination paths.
     pub async fn terminate(&self) {
-        // Clone the channels out from under the lock before awaiting on the
-        // sends, so the map isn't held across `.await`.
-        let channels: Vec<Rc<SignalChannel>> = {
-            let ps_signal_channel_map = self.ps_signal_channel_map.lock().await;
-            ps_signal_channel_map.values().cloned().collect()
-        };
-
-        for channel in channels {
-            channel.sender().send(signal::Signal::Terminate).await;
+        let pids: Vec<u64> = self.ps_map.lock().await.keys().copied().collect();
+        for pid in pids {
+            if let Err(error) = self.kill(pid, signal::Signal::Terminate).await {
+                warn!(pid, error = %error, "couldn't terminate process");
+            }
             embassy_futures::yield_now().await;
         }
     }
