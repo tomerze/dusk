@@ -43,6 +43,11 @@ pub struct PsEntry {
 
 pub type PsMap = HashMap<u64, PsEntry, BuildNoHashHasher<u64>>;
 
+pub enum Registration {
+    Created(process::Client),
+    Existing(process::Client),
+}
+
 /// A namespace is a container for processes and potentially other driver resources.
 ///
 /// It is not `Send` or `Sync` and is intended to be used within a single thread or executor context.
@@ -111,9 +116,16 @@ impl Namespace {
                 )),
             })
             .await?;
-        let client = self.register(pid, process).await?;
-        info!(pid, "process created");
-        Ok(client)
+        match self.register(pid, process).await {
+            Registration::Created(client) => {
+                info!(pid, "process created");
+                Ok(client)
+            }
+            Registration::Existing(client) => {
+                info!(pid, "process already exists at this pid");
+                Ok(client)
+            }
+        }
     }
 
     pub async fn entry(&self, pid: u64) -> Option<PsEntry> {
@@ -166,17 +178,10 @@ impl Namespace {
         Ok(())
     }
 
-    async fn register(
-        &self,
-        pid: u64,
-        process: Box<dyn Process>,
-    ) -> anyhow::Result<process::Client> {
+    async fn register(&self, pid: u64, process: Box<dyn Process>) -> Registration {
         let mut ps_map = self.ps_map.lock().await;
-        if ps_map.contains_key(&pid) {
-            return Err(anyhow::anyhow!(
-                "pid {pid} is already in use in namespace {}",
-                self.id
-            ));
+        if let Some(entry) = ps_map.get(&pid) {
+            return Registration::Existing(entry.process.clone());
         }
         let client = self.ps_server_set.lock().await.new_client(process);
         ps_map.insert(
@@ -189,7 +194,7 @@ impl Namespace {
                 suspended: Rc::new(Watch::new_with(true)),
             },
         );
-        Ok(client)
+        Registration::Created(client)
     }
 
     pub async fn exit(&self, pid: u64, exit: Result<(), String>) {
