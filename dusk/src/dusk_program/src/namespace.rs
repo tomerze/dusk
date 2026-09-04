@@ -28,7 +28,7 @@ use tracing::warn;
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
 
 pub type PsCapabilityServerSet = CapabilityServerSet<Box<dyn Process>, process::Client>;
-pub type PsMap = HashMap<u64, Box<dyn Process>, BuildNoHashHasher<u64>>;
+pub type PsMap = HashMap<u64, process::Client, BuildNoHashHasher<u64>>;
 pub type PsSignalChannelMap = HashMap<u64, Rc<SignalChannel>, BuildNoHashHasher<u64>>;
 pub type PsReadyMap = HashMap<u64, Ready, BuildNoHashHasher<u64>>;
 pub type ExitWatch = alloc::rc::Rc<
@@ -106,7 +106,7 @@ impl Namespace {
         self: Rc<Self>,
         launcher_set: LauncherSet,
         program_args: Rc<ProgramArgs>,
-    ) -> anyhow::Result<Box<dyn Process>> {
+    ) -> anyhow::Result<process::Client> {
         let pid = self.rng.lock().await.next_u64();
         let process = launcher_set
             .launch(ProcessContext {
@@ -118,9 +118,9 @@ impl Namespace {
                 )),
             })
             .await?;
-        self.register(pid, process.clone_box()).await?;
+        let client = self.register(pid, process).await?;
         info!(pid, "process created");
-        Ok(process)
+        Ok(client)
     }
 
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
@@ -135,7 +135,11 @@ impl Namespace {
         Ok(())
     }
 
-    async fn register(&self, pid: u64, process: Box<dyn Process>) -> anyhow::Result<()> {
+    async fn register(
+        &self,
+        pid: u64,
+        process: Box<dyn Process>,
+    ) -> anyhow::Result<process::Client> {
         let mut ps_map = self.ps_map.lock().await;
         if ps_map.contains_key(&pid) {
             return Err(anyhow::anyhow!(
@@ -143,7 +147,8 @@ impl Namespace {
                 self.id
             ));
         }
-        ps_map.insert(pid, process);
+        let client = self.ps_server_set.lock().await.new_client(process);
+        ps_map.insert(pid, client.clone());
         self.ps_signal_channel_map
             .lock()
             .await
@@ -160,7 +165,7 @@ impl Namespace {
             .lock()
             .await
             .insert(pid, Rc::new(Watch::new_with(true)));
-        Ok(())
+        Ok(client)
     }
 
     pub async fn unregister(&self, pid: u64, exit: Result<(), alloc::string::String>) {

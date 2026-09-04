@@ -7,7 +7,6 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
-use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::process;
 use dusk_capnp::pry;
@@ -53,16 +52,6 @@ impl DuskServer {
         } else {
             Err(capnp::Error::failed("process not found".to_string()))
         }
-    }
-
-    async fn new_process_client(
-        process: Box<dyn Process>,
-        namespace: Rc<Namespace>,
-    ) -> Result<process::Client, capnp::Error> {
-        let mut ps_server_set = namespace.ps_server_set.lock().await;
-        // Creates a new client from the server and append the server to the set
-        let client = ps_server_set.new_client(process);
-        Ok(client)
     }
 }
 
@@ -126,9 +115,7 @@ impl dusk::Server for DuskServer {
                 .context("process creation failed")
                 .into_capnp()?;
 
-            let process_client = Self::new_process_client(process, namespace).await?;
-
-            results.get().set_result(process_client);
+            results.get().set_result(process);
             Ok(())
         })
     }
@@ -153,17 +140,10 @@ impl dusk::Server for DuskServer {
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
             let ps_vec: Vec<(u64, process::Client)> = {
-                let ps_map_guard = namespace.ps_map.lock().await;
-                ps_map_guard
+                let ps_map = namespace.ps_map.lock().await;
+                ps_map
                     .iter()
-                    .map(|(k, v)| {
-                        (
-                            *k,
-                            capnp_rpc::new_client::<process::Client, Box<dyn Process>>(
-                                v.clone_box(),
-                            ),
-                        )
-                    })
+                    .map(|(pid, process)| (*pid, process.clone()))
                     .collect()
             };
             let mut process_entries = results.get().init_process_entries(ps_vec.len() as u32);
