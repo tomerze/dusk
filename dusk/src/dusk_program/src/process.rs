@@ -8,12 +8,10 @@ use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::DynamicReceiver;
 use embassy_sync::signal::Signal;
-use embassy_sync::watch::Watch;
 use tracing::Instrument;
 
 use crate::IntoCapnp;
 use crate::namespace::Namespace;
-use crate::namespace::SignalChannel;
 use crate::program_args::ProgramArgs;
 use crate::ready::Ready;
 use crate::signal;
@@ -83,32 +81,9 @@ impl dyn Process {
         registered: Option<&Signal<CriticalSectionRawMutex, ()>>,
     ) -> Result<()> {
         let namespace = self.namespace();
-        {
-            let mut ps_map = namespace.ps_map.lock().await;
-            if ps_map.contains_key(&self.pid()) {
-                return Err(anyhow::anyhow!(
-                    "pid {} is already in use in namespace {}",
-                    self.pid(),
-                    namespace.id
-                ));
-            }
-            ps_map.insert(self.pid(), self.clone_box());
-        }
-        let channel = Rc::new(SignalChannel::new());
+        let pid = self.pid();
+        let (channel, ready) = namespace.register(pid, self.clone_box()).await?;
         let signal_receiver = channel.dyn_receiver();
-        {
-            let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
-            ps_signal_channel_map.insert(self.pid(), channel.clone());
-        }
-        let ready = Rc::new(Watch::new_with(false));
-        {
-            let mut ps_ready_map = namespace.ps_ready_map.lock().await;
-            ps_ready_map.insert(self.pid(), ready.clone());
-        }
-        {
-            let mut ps_exit_map = namespace.ps_exit_map.lock().await;
-            ps_exit_map.insert(self.pid(), Rc::new(Watch::new_with(None)));
-        }
 
         if let Some(registered) = registered {
             registered.signal(());
@@ -123,7 +98,7 @@ impl dyn Process {
         tracing::info!(error = error, "main exit");
 
         namespace
-            .unregister(self.pid(), result.map_err(|e| e.to_string()))
+            .unregister(pid, result.map_err(|e| e.to_string()))
             .await;
         Ok(())
     }

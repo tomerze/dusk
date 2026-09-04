@@ -15,6 +15,7 @@ use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
+use embassy_sync::watch::Watch;
 use hashbrown::HashMap;
 use nohash_hasher::BuildNoHashHasher;
 use rand_chacha::ChaCha20Rng;
@@ -123,6 +124,33 @@ impl Namespace {
             .ok_or_else(|| anyhow::anyhow!("couldn't find signal channel for process"))?;
         channel.sender().send(signal).await;
         Ok(())
+    }
+
+    pub async fn register(
+        &self,
+        pid: u64,
+        process: Box<dyn Process>,
+    ) -> anyhow::Result<(Rc<SignalChannel>, Ready)> {
+        let mut ps_map = self.ps_map.lock().await;
+        if ps_map.contains_key(&pid) {
+            return Err(anyhow::anyhow!(
+                "pid {pid} is already in use in namespace {}",
+                self.id
+            ));
+        }
+        ps_map.insert(pid, process);
+        let channel = Rc::new(SignalChannel::new());
+        self.ps_signal_channel_map
+            .lock()
+            .await
+            .insert(pid, channel.clone());
+        let ready: Ready = Rc::new(Watch::new_with(false));
+        self.ps_ready_map.lock().await.insert(pid, ready.clone());
+        self.ps_exit_map
+            .lock()
+            .await
+            .insert(pid, Rc::new(Watch::new_with(None)));
+        Ok((channel, ready))
     }
 
     pub async fn unregister(&self, pid: u64, exit: Result<(), alloc::string::String>) {
