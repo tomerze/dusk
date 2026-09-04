@@ -56,6 +56,7 @@ struct ProcessEntry {
   process @1 :Process;
   ready @2 :Bool;
   suspended @3 :Bool;
+  exited @4 :Bool;
 }
 
 struct ProgramEntry {

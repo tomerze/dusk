@@ -157,6 +157,7 @@ impl dusk::Server for DuskServer {
                 process_entry.set_process(entry.process);
                 process_entry.set_ready(entry.ready.try_get().unwrap_or(false));
                 process_entry.set_suspended(entry.suspended.try_get().unwrap_or(false));
+                process_entry.set_exited(entry.exit.try_get().flatten().is_some());
             }
             Ok(())
         })
