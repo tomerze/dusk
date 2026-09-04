@@ -18,9 +18,14 @@ define functions. It's what you talk to through the `dusk` CLI. See
 
 ## `ps`
 
-Lists the Dusk processes running *inside* the node — the programs Dusk is
-running, like `docker ps` (not the host's process table) — each with its pid,
-name, version, and program id.
+Lists the Dusk processes *inside* the node — the programs Dusk is running,
+like `docker ps` (not the host's process table) — each with its name, version,
+pid, state and program id.
+
+The `stat` column is one or two letters, the way `ps(1)` does it: `R` for
+running, `S` for suspended, and a leading `R` once the process has said it is
+ready. So `RR` is ready and running, `R` running but not yet ready, and `S`
+suspended — created but not yet run.
 
 ```sh
 ps            # list every process on the node

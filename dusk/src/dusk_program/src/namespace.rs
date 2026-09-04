@@ -28,7 +28,7 @@ use tracing::warn;
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
 
 pub type PsCapabilityServerSet = CapabilityServerSet<Box<dyn Process>, process::Client>;
-pub type PsMap = HashMap<u64, Box<dyn Process>, BuildNoHashHasher<u64>>;
+pub type PsMap = HashMap<u64, process::Client, BuildNoHashHasher<u64>>;
 pub type PsSignalChannelMap = HashMap<u64, Rc<SignalChannel>, BuildNoHashHasher<u64>>;
 pub type PsReadyMap = HashMap<u64, Ready, BuildNoHashHasher<u64>>;
 pub type ExitWatch = alloc::rc::Rc<
@@ -39,6 +39,8 @@ pub type ExitWatch = alloc::rc::Rc<
     >,
 >;
 pub type PsExitMap = HashMap<u64, ExitWatch, BuildNoHashHasher<u64>>;
+pub type Suspended = Rc<Watch<CriticalSectionRawMutex, bool, 16>>;
+pub type PsSuspendedMap = HashMap<u64, Suspended, BuildNoHashHasher<u64>>;
 
 /// A namespace is a container for processes and potentially other driver resources.
 ///
@@ -54,6 +56,7 @@ pub struct Namespace {
     pub ps_signal_channel_map: Mutex<CriticalSectionRawMutex, PsSignalChannelMap>,
     pub ps_ready_map: Mutex<CriticalSectionRawMutex, PsReadyMap>,
     pub ps_exit_map: Mutex<CriticalSectionRawMutex, PsExitMap>,
+    pub ps_suspended_map: Mutex<CriticalSectionRawMutex, PsSuspendedMap>,
 }
 
 impl Namespace {
@@ -82,6 +85,8 @@ impl Namespace {
             Mutex::<CriticalSectionRawMutex, PsSignalChannelMap>::new(HashMap::default());
         let ps_ready_map = Mutex::<CriticalSectionRawMutex, PsReadyMap>::new(HashMap::default());
         let ps_exit_map = Mutex::<CriticalSectionRawMutex, PsExitMap>::new(HashMap::default());
+        let ps_suspended_map =
+            Mutex::<CriticalSectionRawMutex, PsSuspendedMap>::new(HashMap::default());
 
         Namespace {
             id,
@@ -93,6 +98,7 @@ impl Namespace {
             ps_signal_channel_map,
             ps_ready_map,
             ps_exit_map,
+            ps_suspended_map,
         }
     }
 
@@ -100,9 +106,9 @@ impl Namespace {
         self: Rc<Self>,
         launcher_set: LauncherSet,
         program_args: Rc<ProgramArgs>,
-    ) -> anyhow::Result<Box<dyn Process>> {
+    ) -> anyhow::Result<process::Client> {
         let pid = self.rng.lock().await.next_u64();
-        launcher_set
+        let process = launcher_set
             .launch(ProcessContext {
                 pid,
                 namespace: self.clone(),
@@ -111,10 +117,34 @@ impl Namespace {
                     core::cell::RefCell::new(None),
                 )),
             })
+            .await?;
+        let client = self.register(pid, process).await?;
+        info!(pid, "process created");
+        Ok(client)
+    }
+
+    pub async fn ready(&self, pid: u64) -> Option<bool> {
+        self.ps_ready_map
+            .lock()
             .await
+            .get(&pid)
+            .map(|ready| ready.try_get().unwrap_or(false))
+    }
+
+    pub async fn suspended(&self, pid: u64) -> Option<bool> {
+        self.ps_suspended_map
+            .lock()
+            .await
+            .get(&pid)
+            .map(|suspended| suspended.try_get().unwrap_or(false))
     }
 
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        if matches!(signal, signal::Signal::Terminate) && self.suspended(pid).await == Some(true) {
+            info!(pid, "killed a suspended process");
+            self.unregister(pid, Ok(())).await;
+            return Ok(());
+        }
         let channel = self
             .ps_signal_channel_map
             .lock()
@@ -126,11 +156,11 @@ impl Namespace {
         Ok(())
     }
 
-    pub async fn register(
+    async fn register(
         &self,
         pid: u64,
         process: Box<dyn Process>,
-    ) -> anyhow::Result<(Rc<SignalChannel>, Ready)> {
+    ) -> anyhow::Result<process::Client> {
         let mut ps_map = self.ps_map.lock().await;
         if ps_map.contains_key(&pid) {
             return Err(anyhow::anyhow!(
@@ -138,19 +168,25 @@ impl Namespace {
                 self.id
             ));
         }
-        ps_map.insert(pid, process);
-        let channel = Rc::new(SignalChannel::new());
+        let client = self.ps_server_set.lock().await.new_client(process);
+        ps_map.insert(pid, client.clone());
         self.ps_signal_channel_map
             .lock()
             .await
-            .insert(pid, channel.clone());
-        let ready: Ready = Rc::new(Watch::new_with(false));
-        self.ps_ready_map.lock().await.insert(pid, ready.clone());
+            .insert(pid, Rc::new(SignalChannel::new()));
+        self.ps_ready_map
+            .lock()
+            .await
+            .insert(pid, Rc::new(Watch::new_with(false)));
         self.ps_exit_map
             .lock()
             .await
             .insert(pid, Rc::new(Watch::new_with(None)));
-        Ok((channel, ready))
+        self.ps_suspended_map
+            .lock()
+            .await
+            .insert(pid, Rc::new(Watch::new_with(true)));
+        Ok(client)
     }
 
     pub async fn unregister(&self, pid: u64, exit: Result<(), alloc::string::String>) {
@@ -159,6 +195,9 @@ impl Namespace {
         }
         self.ps_ready_map.lock().await.remove(&pid);
         self.ps_signal_channel_map.lock().await.remove(&pid);
+        if let Some(suspended) = self.ps_suspended_map.lock().await.remove(&pid) {
+            suspended.sender().send(false);
+        }
         self.ps_map.lock().await.remove(&pid);
     }
 

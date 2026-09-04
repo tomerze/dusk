@@ -54,6 +54,8 @@ interface Portal {
 struct ProcessEntry {
   pid @0 :UInt64;
   process @1 :Process;
+  ready @2 :Bool;
+  suspended @3 :Bool;
 }
 
 struct ProgramEntry {

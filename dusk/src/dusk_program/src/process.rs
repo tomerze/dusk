@@ -82,12 +82,38 @@ impl dyn Process {
     ) -> Result<()> {
         let namespace = self.namespace();
         let pid = self.pid();
-        let (channel, ready) = namespace.register(pid, self.clone_box()).await?;
+        let channel = namespace
+            .ps_signal_channel_map
+            .lock()
+            .await
+            .get(&pid)
+            .cloned()
+            .ok_or_else(|| {
+                anyhow::anyhow!("pid {pid} does not exist in namespace {}", namespace.id)
+            })?;
         let signal_receiver = channel.dyn_receiver();
-
+        let ready = namespace
+            .ps_ready_map
+            .lock()
+            .await
+            .get(&pid)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("pid {pid} has no ready watch"))?;
+        let suspended = namespace
+            .ps_suspended_map
+            .lock()
+            .await
+            .get(&pid)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("pid {pid} has no suspended watch"))?;
         if let Some(registered) = registered {
             registered.signal(());
         }
+        if !suspended.try_get().unwrap_or(false) {
+            tracing::info!(pid, "process is already running");
+            return Ok(());
+        }
+        suspended.sender().send(false);
 
         tracing::info!("main run");
         let result = self
@@ -155,14 +181,28 @@ impl process::Server for dyn Process {
 
         let process = self.clone_box();
         Promise::from_future(async move {
-            let is_process_running = {
+            let process_exists = {
                 let ps_map = namespace.ps_map.lock().await;
                 ps_map.contains_key(&pid)
             };
-            if !is_process_running {
+            if !process_exists {
                 return Err(capnp::Error::failed(
-                    "process is not running, cannot get portal".to_string(),
+                    "process no longer exists, cannot get portal".to_string(),
                 ));
+            }
+            let suspended = {
+                let ps_suspended_map = namespace.ps_suspended_map.lock().await;
+                ps_suspended_map.get(&pid).cloned()
+            };
+            if let Some(suspended) = suspended {
+                let mut suspended_receiver = suspended.receiver().ok_or_else(|| {
+                    capnp::Error::failed(
+                        "couldn't acquire receiver for process suspended watch".into(),
+                    )
+                })?;
+                while suspended_receiver.get().await {
+                    suspended_receiver.changed().await;
+                }
             }
             let ready = {
                 let ps_ready_map = namespace.ps_ready_map.lock().await;
@@ -186,7 +226,7 @@ impl process::Server for dyn Process {
                 }
                 (None, None) => {
                     return Err(capnp::Error::failed(
-                        "process likely not running".to_string(),
+                        "process likely no longer exists".to_string(),
                     ));
                 }
             };
