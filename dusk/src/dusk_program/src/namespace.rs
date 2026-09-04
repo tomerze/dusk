@@ -123,6 +123,14 @@ impl Namespace {
         Ok(client)
     }
 
+    pub async fn ready(&self, pid: u64) -> Option<bool> {
+        self.ps_ready_map
+            .lock()
+            .await
+            .get(&pid)
+            .map(|ready| ready.try_get().unwrap_or(false))
+    }
+
     pub async fn suspended(&self, pid: u64) -> Option<bool> {
         self.ps_suspended_map
             .lock()

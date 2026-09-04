@@ -154,6 +154,8 @@ impl dusk::Server for DuskServer {
                 );
                 entry.set_pid(pid);
                 entry.set_process(process);
+                entry.set_ready(namespace.ready(pid).await.unwrap_or(false));
+                entry.set_suspended(namespace.suspended(pid).await.unwrap_or(false));
             }
             Ok(())
         })
