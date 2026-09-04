@@ -82,42 +82,21 @@ impl dyn Process {
     ) -> Result<()> {
         let namespace = self.namespace();
         let pid = self.pid();
-        let channel = namespace
-            .ps_signal_channel_map
-            .lock()
-            .await
-            .get(&pid)
-            .cloned()
-            .ok_or_else(|| {
-                anyhow::anyhow!("pid {pid} does not exist in namespace {}", namespace.id)
-            })?;
-        let signal_receiver = channel.dyn_receiver();
-        let ready = namespace
-            .ps_ready_map
-            .lock()
-            .await
-            .get(&pid)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("pid {pid} has no ready watch"))?;
-        let suspended = namespace
-            .ps_suspended_map
-            .lock()
-            .await
-            .get(&pid)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("pid {pid} has no suspended watch"))?;
+        let entry = namespace.entry(pid).await.ok_or_else(|| {
+            anyhow::anyhow!("pid {pid} does not exist in namespace {}", namespace.id)
+        })?;
         if let Some(registered) = registered {
             registered.signal(());
         }
-        if !suspended.try_get().unwrap_or(false) {
+        if !entry.suspended.try_get().unwrap_or(false) {
             tracing::info!(pid, "process is already running");
             return Ok(());
         }
-        suspended.sender().send(false);
+        entry.suspended.sender().send(false);
 
         tracing::info!("main run");
         let result = self
-            .main(signal_receiver, ready)
+            .main(entry.channel.dyn_receiver(), entry.ready)
             .instrument(tracing::Span::current())
             .await;
         let error = result.as_ref().err().map(|e| e.to_string());
@@ -181,60 +160,22 @@ impl process::Server for dyn Process {
 
         let process = self.clone_box();
         Promise::from_future(async move {
-            let process_exists = {
-                let ps_map = namespace.ps_map.lock().await;
-                ps_map.contains_key(&pid)
-            };
-            if !process_exists {
+            let Some(entry) = namespace.entry(pid).await else {
                 return Err(capnp::Error::failed(
                     "process no longer exists, cannot get portal".to_string(),
                 ));
+            };
+            let mut suspended_receiver = entry.suspended.receiver().ok_or_else(|| {
+                capnp::Error::failed("couldn't acquire receiver for process suspended watch".into())
+            })?;
+            while suspended_receiver.get().await {
+                suspended_receiver.changed().await;
             }
-            let suspended = {
-                let ps_suspended_map = namespace.ps_suspended_map.lock().await;
-                ps_suspended_map.get(&pid).cloned()
-            };
-            if let Some(suspended) = suspended {
-                let mut suspended_receiver = suspended.receiver().ok_or_else(|| {
-                    capnp::Error::failed(
-                        "couldn't acquire receiver for process suspended watch".into(),
-                    )
-                })?;
-                while suspended_receiver.get().await {
-                    suspended_receiver.changed().await;
-                }
-            }
-            let ready = {
-                let ps_ready_map = namespace.ps_ready_map.lock().await;
-                ps_ready_map.get(&pid).cloned()
-            };
-            let exit = {
-                let ps_exit_map = namespace.ps_exit_map.lock().await;
-                ps_exit_map.get(&pid).cloned()
-            };
-            let (ready, exit) = match (ready, exit) {
-                (Some(ready), Some(exit)) => (ready, exit),
-                (None, Some(_)) => {
-                    return Err(capnp::Error::failed(
-                        "process does not appear in the ready map, but does appear in exit map, likely mid-teardown".to_string(),
-                    ));
-                }
-                (Some(_), None) => {
-                    return Err(capnp::Error::failed(
-                        "process does not appear in the exit map, but does appear in ready map, this is a faulty state".to_string(),
-                    ));
-                }
-                (None, None) => {
-                    return Err(capnp::Error::failed(
-                        "process likely no longer exists".to_string(),
-                    ));
-                }
-            };
 
-            let mut ready_receiver = ready.receiver().ok_or_else(|| {
+            let mut ready_receiver = entry.ready.receiver().ok_or_else(|| {
                 capnp::Error::failed("couldn't acquire receiver for process ready watch".into())
             })?;
-            let mut exit_receiver = exit.receiver().ok_or_else(|| {
+            let mut exit_receiver = entry.exit.receiver().ok_or_else(|| {
                 capnp::Error::failed("couldn't acquire receiver for process exit watch".into())
             })?;
 
