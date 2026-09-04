@@ -40,6 +40,11 @@ struct ProgramArgs(D, S) {
     auto @3 :Void;
     fixed @4 :UInt64;
   }
+  created @5 :Created;
+}
+
+interface Created {
+  created @0 (process :Process) -> ();
 }
 
 interface Process {

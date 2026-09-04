@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
 use dusk_capnp::GIT_REV;
 use dusk_capnp::capnp_rpc::CapabilityServerSet;
+use dusk_capnp::dusk_capnp::created;
 use dusk_capnp::dusk_capnp::process;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
@@ -42,6 +43,14 @@ pub struct PsEntry {
 }
 
 pub type PsMap = HashMap<u64, PsEntry, BuildNoHashHasher<u64>>;
+
+async fn call_created(pid: u64, created: created::Client, process: process::Client) {
+    let mut request = created.created_request();
+    request.get().set_process(process);
+    if let Err(error) = request.send().promise.await {
+        warn!(pid, error = %error, "the process's created callback failed");
+    }
+}
 
 pub enum Registration {
     Created(process::Client),
@@ -106,6 +115,9 @@ impl Namespace {
             Some(pid) => pid,
             None => self.rng.lock().await.next_u64(),
         };
+        let created = program_args.created().map_err(|error| {
+            anyhow::anyhow!("reading the process's created callback failed: {error}")
+        })?;
         let process = launcher_set
             .launch(ProcessContext {
                 pid,
@@ -119,6 +131,9 @@ impl Namespace {
         match self.register(pid, process).await {
             Registration::Created(client) => {
                 info!(pid, "process created");
+                if let Some(created) = created {
+                    call_created(pid, created, client.clone()).await;
+                }
                 Ok(client)
             }
             Registration::Existing(client) if fixed_pid.is_some() => {
