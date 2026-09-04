@@ -123,7 +123,20 @@ impl Namespace {
         Ok(client)
     }
 
+    pub async fn suspended(&self, pid: u64) -> Option<bool> {
+        self.ps_suspended_map
+            .lock()
+            .await
+            .get(&pid)
+            .map(|suspended| suspended.try_get().unwrap_or(false))
+    }
+
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        if matches!(signal, signal::Signal::Terminate) && self.suspended(pid).await == Some(true) {
+            info!(pid, "killed a suspended process");
+            self.unregister(pid, Ok(())).await;
+            return Ok(());
+        }
         let channel = self
             .ps_signal_channel_map
             .lock()
@@ -174,7 +187,9 @@ impl Namespace {
         }
         self.ps_ready_map.lock().await.remove(&pid);
         self.ps_signal_channel_map.lock().await.remove(&pid);
-        self.ps_suspended_map.lock().await.remove(&pid);
+        if let Some(suspended) = self.ps_suspended_map.lock().await.remove(&pid) {
+            suspended.sender().send(false);
+        }
         self.ps_map.lock().await.remove(&pid);
     }
 
