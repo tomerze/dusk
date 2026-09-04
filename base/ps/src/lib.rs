@@ -229,8 +229,8 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 [
                     (b"Name".to_vec(), Value::List(name_values)),
                     (b"Version".to_vec(), Value::List(version_values)),
-                    (b"Pid".to_vec(), Value::List(pid_values)),
                     (b"Program ID".to_vec(), Value::List(program_id_values)),
+                    (b"PID".to_vec(), Value::List(pid_values)),
                     (b"State".to_vec(), Value::List(stat_values)),
                 ],
             );
