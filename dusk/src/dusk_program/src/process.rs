@@ -12,7 +12,6 @@ use embassy_sync::watch::Watch;
 use tracing::Instrument;
 
 use crate::IntoCapnp;
-use crate::namespace::ExitWatch;
 use crate::namespace::Namespace;
 use crate::namespace::SignalChannel;
 use crate::program_args::ProgramArgs;
@@ -106,10 +105,9 @@ impl dyn Process {
             let mut ps_ready_map = namespace.ps_ready_map.lock().await;
             ps_ready_map.insert(self.pid(), ready.clone());
         }
-        let exit_watch: ExitWatch = Rc::new(Watch::new_with(None));
         {
             let mut ps_exit_map = namespace.ps_exit_map.lock().await;
-            ps_exit_map.insert(self.pid(), exit_watch.clone());
+            ps_exit_map.insert(self.pid(), Rc::new(Watch::new_with(None)));
         }
 
         if let Some(registered) = registered {
@@ -124,22 +122,9 @@ impl dyn Process {
         let error = result.as_ref().err().map(|e| e.to_string());
         tracing::info!(error = error, "main exit");
 
-        exit_watch
-            .sender()
-            .send(Some(result.map_err(|e| e.to_string())));
-
-        {
-            let mut ps_ready_map = namespace.ps_ready_map.lock().await;
-            ps_ready_map.remove(&self.pid());
-        }
-        {
-            let mut ps_signal_channel_map = namespace.ps_signal_channel_map.lock().await;
-            ps_signal_channel_map.remove(&self.pid());
-        }
-        {
-            let mut ps_map = namespace.ps_map.lock().await;
-            ps_map.remove(&self.pid());
-        }
+        namespace
+            .unregister(self.pid(), result.map_err(|e| e.to_string()))
+            .await;
         Ok(())
     }
 }

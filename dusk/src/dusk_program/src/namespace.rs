@@ -125,6 +125,15 @@ impl Namespace {
         Ok(())
     }
 
+    pub async fn unregister(&self, pid: u64, exit: Result<(), alloc::string::String>) {
+        if let Some(exit_watch) = self.ps_exit_map.lock().await.get(&pid) {
+            exit_watch.sender().send(Some(exit));
+        }
+        self.ps_ready_map.lock().await.remove(&pid);
+        self.ps_signal_channel_map.lock().await.remove(&pid);
+        self.ps_map.lock().await.remove(&pid);
+    }
+
     /// Send SIGTERM to every process in the namespace, yielding between each so
     /// the signalled processes get a chance to run their termination paths.
     pub async fn terminate(&self) {
