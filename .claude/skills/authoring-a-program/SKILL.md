@@ -206,7 +206,7 @@ linkme            = { version = "*", optional = true, public = false }
 clap              = { version = "4", features = ["derive"], optional = true }
 
 [build-dependencies]
-dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
+dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
 client = ["linkme", "dusk_program_sh/client", "clap"]
@@ -224,7 +224,7 @@ If your schema imports only `dusk.capnp`:
 
 ```rust
 fn main() {
-    dusk_capnp::build_capnp_file("capnp/<name>.capnp");
+    dusk_build::build(&[("capnp/<name>.capnp", &[])]);
 }
 ```
 
@@ -232,14 +232,14 @@ If you also import a sibling program's schema, declare each as a `CapnpDep`:
 
 ```rust
 fn main() {
-    dusk_capnp::build_capnp(
+    dusk_build::build(&[(
         "capnp/<name>.capnp",
-        &[dusk_capnp::CapnpDep {
+        &[dusk_build::CapnpDep {
             schema: concat!(env!("CARGO_MANIFEST_DIR"), "/../sh/capnp/sh.capnp"),
             crate_name: "dusk_program_sh",
             schema_ids: &[0xb25a041190c0e845], // top-level @<id> of sh.capnp
         }],
-    );
+    )]);
 }
 ```
 
@@ -1152,7 +1152,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] `base/<name>/` directory with `Cargo.toml`, `build.rs`, `capnp/<name>.capnp`, `src/lib.rs`
 - [ ] `Cargo.toml` lists `dusk_program`, `dusk_capnp`, `dusk_program_proc`, `dusk_core` as path deps with `public = true` where appropriate
 - [ ] `capnp/<name>.capnp` declares a fresh file-level `@0x…;` ID and a `const programId :UInt64 = 0x…;` (both generated with `capnp id`, never hand-typed)
-- [ ] `build.rs` calls `dusk_capnp::build_capnp_file(...)` or `dusk_capnp::build_capnp(..., deps)`
+- [ ] `build.rs` calls `dusk_build::build(&[(schema, deps)])`
 - [ ] `lib.rs` invokes `dusk_program_proc::metadata!("<name>", VERSION, <name>_capnp::PROGRAM_ID)` before any derive
 - [ ] `Args` struct has exactly one `#[data]` field and a constructor matching the surface the program needs
 - [ ] `impl_args_rpc_server` on the args impl block (usually empty)
