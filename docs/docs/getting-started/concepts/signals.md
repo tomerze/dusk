@@ -10,6 +10,7 @@ Dusk maps the wire signal number to a small enum:
 ```rust
 #[non_exhaustive]
 pub enum Signal {
+    Reap,                    // signal number 8
     Terminate,               // signal number 15
     Unknown(u64),            // any other number, carried through unchanged
 }
@@ -18,6 +19,9 @@ pub enum Signal {
 `Signal` is `#[non_exhaustive]`, so a `match` on it needs a wildcard arm. Dusk can
 then add a signal without breaking programs that were written before it existed.
 
+- **`Reap`** (8) is handled by the node and never reaches a process. It reaps a
+  zombie process, logging its exit result and taking it out of the namespace, and
+  does nothing to a non-zombie process.
 - **`Terminate`** (15) is the request to exit; a well-behaved process returns from
   `main` when it sees it. It's the default sent by [`kill`](base.md#kill).
 - **`Unknown(n)`** carries any other number through as-is, so a program can give

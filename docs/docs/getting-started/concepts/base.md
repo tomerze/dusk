@@ -68,8 +68,12 @@ asking the process to exit.
 
 ```sh
 kill 0x1a2b              # send Terminate (15)
+kill --signal 8 0x1a2b   # send Reap (8), reaping a zombie
 kill --signal 9 0x1a2b   # send a different signal
 ```
+
+Signal `8` is [`Reap`](signals.md#the-signal-type): it reaps a zombie process,
+logging its exit result, and does nothing to a non-zombie process.
 
 ## `sleep`
 
