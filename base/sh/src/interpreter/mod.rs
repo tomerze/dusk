@@ -30,33 +30,31 @@ pub(crate) type CompiledFunctions = Rc<RefCell<HashMap<String, Arc<Frame>>>>;
 #[derive(Clone)]
 pub struct Interpreter {
     client: dusk::Client,
-    sh_args_client: sh_capnp::sh_args::server::Client,
     function_table: FunctionTable,
     compiled_functions: CompiledFunctions,
 }
 
 impl Interpreter {
-    pub(crate) fn new(
-        client: dusk::Client,
-        sh_args_client: sh_capnp::sh_args::server::Client,
-        function_table: FunctionTable,
-    ) -> Self {
+    pub(crate) fn new(client: dusk::Client, function_table: FunctionTable) -> Self {
         Interpreter {
             client,
-            sh_args_client,
             function_table,
             compiled_functions: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
-    async fn resolve_function(&self, symbol: &str) -> Result<Arc<Frame>> {
+    async fn resolve_function(
+        &self,
+        symbol: &str,
+        compiler: &sh_capnp::compiler::Client,
+    ) -> Result<Arc<Frame>> {
         if let Some(frame) = self.compiled_functions.borrow().get(symbol).cloned() {
             return Ok(frame);
         }
         compiler::compile_function(
             &self.function_table,
             &self.compiled_functions,
-            self.sh_args_client.clone(),
+            compiler.clone(),
             symbol,
         )
         .await
@@ -68,15 +66,16 @@ impl Interpreter {
         script: script::Reader<'_>,
         output: stream::Client,
         stop: &Stop,
+        compiler: sh_capnp::compiler::Client,
     ) -> Result<()> {
         let symbols: HashSet<String> = self.function_table.lock().await.keys().cloned().collect();
-        let frame = compiler::compile(script, self.sh_args_client.clone(), symbols).await?;
+        let frame = compiler::compile(script, compiler.clone(), symbols).await?;
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
             "script frame disassembly"
         );
         let frame = Arc::new(frame);
-        self.exec_inner(frame, output, stop).await
+        self.exec_inner(frame, output, stop, compiler).await
     }
 
     fn exec_inner<'a>(
@@ -84,6 +83,7 @@ impl Interpreter {
         frame: Arc<Frame>,
         output: stream::Client,
         stop: &'a Stop,
+        compiler: sh_capnp::compiler::Client,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
         Box::pin(async move {
             let mut current_frame = frame;
@@ -114,10 +114,11 @@ impl Interpreter {
                     }
                     Inst::Call(symbol) => {
                         let symbol = symbol.clone();
-                        match self.resolve_function(&symbol).await {
+                        match self.resolve_function(&symbol, &compiler).await {
                             Ok(frame) => {
-                                result_register =
-                                    self.exec_inner(frame, output.clone(), stop).await;
+                                result_register = self
+                                    .exec_inner(frame, output.clone(), stop, compiler.clone())
+                                    .await;
                             }
                             Err(e) => result_register = Err(e),
                         }
@@ -125,7 +126,7 @@ impl Interpreter {
                     }
                     Inst::TailCall(symbol) => {
                         let symbol = symbol.clone();
-                        match self.resolve_function(&symbol).await {
+                        match self.resolve_function(&symbol, &compiler).await {
                             Ok(frame) => {
                                 current_frame = frame;
                                 pc = 0;
@@ -162,7 +163,7 @@ impl Interpreter {
                             if let Err(e) = compiler::compile_function(
                                 &self.function_table,
                                 &self.compiled_functions,
-                                self.sh_args_client.clone(),
+                                compiler.clone(),
                                 &symbol,
                             )
                             .await
