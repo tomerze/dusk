@@ -123,9 +123,23 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
   `Enum value or union discriminant <n> was not present in the schema`, which
   reads like a schema bug in the branch you just wrote.
 
-## Step 5 — Commit
+## Step 5 — One commit while you work, split it just before review
 
-Use the `atomic-commit` skill and follow it.
+**Everything goes into a single commit until the work is finished.** Amend it as
+you go. Do not split it, do not absorb anything into it, do not reach for
+`--fixup` and an autosquash rebase while there is still work coming: each of
+those rewrites history that the next change rewrites again, and that churn costs
+far more than the whole split costs once.
+
+The split happens **once**, at the end, when the tree is final and just before
+Step 6: run the `atomic-commit` skill over that one commit and cut it into the
+commits the work actually is.
+
+Review works the same way. A round of comments that changes anything substantial
+is not a handful of fixups aimed at five different commits — squash the affected
+commits, or the whole branch, back into one, make the changes there, and split
+again. Threading a change into commits you are about to rewrite anyway is the
+work done twice.
 
 **Do not put the issue number in the commit subject.** A subject is one
 imperative sentence about what the commit does; `(#N)` is metadata about why the
@@ -153,6 +167,11 @@ read as pull-request merge numbers, which they are not.
   and anything else you created during setup must stay out of the commit.
 
 ## Step 6 — Push and open the PR over the MCP
+
+**Say what you are about to open before you open it.** A pull request appears in
+the user's repository under their name; they should read that it is coming in
+your message, not discover it as a link in the same breath that announces it is
+already there.
 
 **A drive-issue session produces exactly one pull request.** Whatever else the
 work turns up — a stale skill, a broken config, a fix to something adjacent —
@@ -225,7 +244,31 @@ git -C ~/git/dusk worktree remove --force .claude/worktrees/<name>
 That takes the directory and its `target` and leaves the branch, which is the
 half the user needs.
 
+**Check the pull request is still open, and that it has what you pushed**, before
+handing it over:
+
+```
+mcp__github__pull_request_read(method="get", owner="tomerze", repo="dusk", pullNumber=N)
+```
+
+`merged: true` means the review is over. Anything pushed to that branch after the
+merge is on no branch anyone will merge, so it needs a **new** pull request, not
+another push and a link to a closed one. `head.sha` must also equal the tip you
+pushed; if it does not, the push did not land.
+
+This has gone wrong twice, both times silently. #44 and #46 were each merged from
+the state of the branch before the last push, so in both cases the commit that
+push carried never reached master — and both times it was the commit that fixed
+the very instruction the pull request existed to fix.
+
 Then give the user the PR URL and ask them to review. Then wait.
+
+**End that message with `Ready for review.` on its own line, and write nothing
+after it.** It is the one sentence the user is looking for, and it means every
+check above has actually passed — not that the work is nearly there, not that it
+is pushed and something is still running. If anything is outstanding, say what it
+is instead and do not write the line at all. Nothing follows it: no summary, no
+caveat, no offer, no question. The line is the end of the message.
 
 Do not merge, do not tidy the branch, and do not read silence or a question as
 approval. When comments arrive, verify a claim before implementing it and say so
@@ -274,12 +317,14 @@ mcp__github__pull_request_read(method="get_review_comments", …)
 
 Then:
 
-- **Absorb, do not append.** A correction, an omission, an answer to a review
-  comment, a bug introduced three commits ago — each belongs in the commit whose
-  concern it is, per the working agreement on fixups. `git commit --fixup=<sha>`
-  then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>` does it in
-  seconds, and a rebase does not re-run the pre-commit hooks on replayed commits.
-  Only a genuinely separate concern earns a commit of its own.
+- **Squash, change, re-split — not one fixup at a time.** For anything
+  substantial, `git reset --soft <base>` the affected commits, or the whole
+  branch, into one; make the changes there; and run `atomic-commit` over it
+  again just before you push. Only a one-line answer to a single comment is
+  worth `git commit --fixup=<sha>` plus
+  `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash <base>`. Anything larger is
+  cheaper to re-split than to thread through five commits, and either way the
+  history states what the work is, never the order you discovered it in.
 - **The user's edits in the tree are theirs.** Read them before staging: they are
   a decision, not a draft to improve on. If one looks wrong, say so rather than
   quietly rewriting it.
@@ -313,13 +358,16 @@ next agent is a defect exactly like a wrong comment.
 ☐ Baseline built and measured first, if the issue asks for a comparison
 ☐ `origin/master` re-checked before pushing; rebased, then the build re-run
 ☐ `cargo build --release --bin dusk` green; no tests run unless asked
-☐ One commit per concern, committed in the foreground with a long timeout
+☐ Worked in one commit; split once with `atomic-commit` just before pushing
+☐ Committed in the foreground with a long timeout
 ☐ No issue number in any commit subject
 ☐ PR body written in the first person, addressed to no one
 ☐ Pushed; **one** PR opened over the MCP, with `Closes #N`
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ Worktree removed, so the branch is free for the user to check out
-☐ Review requested; **waited**
+☐ PR confirmed still open and carrying the pushed tip, not already merged
+☐ Review requested, the message ending `Ready for review.` and nothing after it
+☐ **Waited**
 ☐ Merged only after explicit approval; issue confirmed closed
 
 On `drive-issue continue`, the issue is already read and the branch and PR
