@@ -1,16 +1,18 @@
 use anyhow::Result;
 use clap::Parser;
-use dusk_base::dusk_program_sh::client::shell::Shell;
 use dusk_base::dusk_program_sh::{
+    client::{
+        prompt::{
+            Prompt, StreamRequest,
+            display_engine::DefaultDisplayEngine,
+            stream::{display_stream, json_stream},
+        },
+        shell::Shell,
+    },
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
     parser::Parser as ShParser,
 };
 use dusk_connection::Connection;
-use dusk_prompt::{
-    display_engine::DefaultDisplayEngine,
-    prompt::{Prompt, StreamRequest},
-    stream::{display_stream, json_stream},
-};
 use std::net::SocketAddr;
 use std::rc::Rc;
 use tokio::signal;
@@ -31,8 +33,7 @@ struct Cli {
 async fn single_command(shell: &mut Shell, command: String, stop_signal: Rc<Notify>) -> Result<()> {
     // Check if we are running in a terminal
     let colored = atty::is(atty::Stream::Stdout);
-    let (json_stream, done_receiver) =
-        dusk_prompt::stream::json_stream::JsonStream::new_with_receiver(colored);
+    let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(colored);
     shell
         .sh(
             command.as_str(),

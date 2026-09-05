@@ -13,7 +13,6 @@ clap = { version = "4.5.47", features = ["derive"] }
 wild = "2.2.1"
 argfile = "0.2.1"
 tokio-util = { version = "0.7.16", features = ["compat"]}
-dusk_prompt = { path = "../dusk_prompt/" }
 dusk_connection = { path = "../dusk_connection/" }
 dusk_base = { path = "../dusk_base", features = ["client"], public = true }
 capnp-rpc = "0.21.0"
