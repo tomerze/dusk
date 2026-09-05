@@ -1,13 +1,17 @@
-use anyhow::Result;
+use crate::entry::ShEntriesBuilder;
+use crate::sh_capnp::{compiler, sh_portal, sh_stop};
+use crate::{ShArgs, ShCompiler, ShMode, parser::Parser};
 use capnp::capability::{FromClientHook, Promise};
+use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
-use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::{compiler, sh_portal, sh_stop};
-use dusk_program_sh::{ShArgs, ShCompiler, ShMode, parser::Parser};
+use dusk_program::anyhow::Result;
+use std::format;
 use std::rc::Rc;
+use std::string::{String, ToString};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use std::vec::Vec;
 use tokio::sync::{Notify, oneshot};
 use tokio::task::JoinHandle;
 

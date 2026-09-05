@@ -15,7 +15,6 @@ members = [
     "dusk/src/dusk_program_proc",
     "dusk/src/dusk_prompt",
     "dusk/src/dusk_py",
-    "dusk/src/dusk_shell",
     "impls/nix",
     "base/kill",
     "base/init",
