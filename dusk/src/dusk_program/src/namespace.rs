@@ -106,6 +106,9 @@ impl Namespace {
             Some(pid) => pid,
             None => self.rng.lock().await.next_u64(),
         };
+        let created = program_args
+            .created()
+            .map_err(|error| anyhow::anyhow!("failed reading a created callback: {error}"))?;
         let process = launcher_set
             .launch(ProcessContext {
                 pid,
@@ -116,17 +119,25 @@ impl Namespace {
                 )),
             })
             .await?;
-        match self.register(pid, process).await {
+        let client = match self.register(pid, process).await {
             Registration::Created(client) => {
                 info!(pid, "process created");
-                Ok(client)
+                client
             }
             Registration::Existing(client) => {
                 info!(pid, "process already exists at this pid");
                 self.rerun(pid, program_args).await;
-                Ok(client)
+                client
+            }
+        };
+        if let Some(created) = created {
+            let mut request = created.created_request();
+            request.get().set_process(client.clone());
+            if let Err(error) = request.send().promise.await {
+                warn!(pid, error = %error, "the process's created callback failed");
             }
         }
+        Ok(client)
     }
 
     pub async fn entry(&self, pid: u64) -> Option<PsEntry> {
