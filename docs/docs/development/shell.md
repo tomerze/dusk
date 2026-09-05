@@ -148,13 +148,15 @@ simply whether its `Inst` left `Ok` or `Err` in the register.
 **Each command word round-trips to the client.** This is the part worth
 internalising. For a command, the compiler looks at the first word. If it names a
 known function it emits `Call`. Otherwise it calls
-`sh_args_client.build_program_args(text)` — an **RPC back to the client** — which
-resolves the program name against the `SH_ENTRIES` table and returns a fully-built
-`ProgramArgs` capability (itself wrapping client-side capabilities). That becomes
-`Inst::ProgramArgs`. So compilation is *not* a local server operation: every
-external program in a script requires the client that launched the `sh` process
-to be connected and answering. (`ShArgs.Server` is hosted wherever the
-`ProgramArgs` were created — for the interactive shell, that's the CLI process.)
+`compiler.build_program_args(text)` — an **RPC back to the client**, on the
+`Compiler` capability the script arrived with — which resolves the program name
+against the `SH_ENTRIES` table and returns a fully-built `ProgramArgs` capability
+(itself wrapping client-side capabilities). That becomes `Inst::ProgramArgs`. So
+compilation is *not* a local server operation: every external program in a script
+requires the client that sent it to be connected and answering. (A line sent over
+`ShPortal.sh` carries its own `Compiler`; a script that arrived in the process's
+args gets one from `ShArgs.Server.compiler()`, hosted wherever the `ProgramArgs`
+were created.)
 
 **Tail-call optimisation.** If a frame's last instruction is `Call`, it is
 rewritten to `TailCall`, which the interpreter executes by reusing the current
@@ -230,7 +232,7 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 |-----------|-----------------------------------|
 | Parsing text → `Script` | No — runs entirely client-side, before anything is sent |
 | Submitting a line / awaiting its output | Yes — `ShPortal.sh`, then await `done` |
-| **Compiling** each external program | **Yes** — `build_program_args` RPCs *back* to the client per program |
+| **Compiling** each external program | **Yes** — `build_program_args` RPCs *back* to the client, on the line's `Compiler`, per program |
 | Spawning / killing the resulting process | No network — uses the server-local `dusk_core::local_client` |
 | Listing functions (highlighter, `functions` builtin) | Yes — `ShPortal.functions`, once per prompt |
 
