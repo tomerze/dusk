@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use dusk_base::dusk_program_sh::client::shell::Shell;
 use dusk_base::dusk_program_sh::{
     entry::{ShEntriesBuilder, StaticShEntriesBuilder},
     parser::Parser as ShParser,
@@ -10,7 +11,6 @@ use dusk_prompt::{
     prompt::{Prompt, StreamRequest},
     stream::{display_stream, json_stream},
 };
-use dusk_shell::shell::Shell;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use tokio::signal;
