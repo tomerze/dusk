@@ -12,5 +12,8 @@ dusk_core = { path = "../../dusk/src/dusk_core/" }
 anyhow = { version = "1.0", public = true }
 capnp = { version = "0.21", public = false }
 
+blocking = "1.6"
+duct = "1.1"
+
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
