@@ -2,6 +2,7 @@
 #![feature(prelude_import)]
 
 use alloc::rc::Rc;
+use core::cell::Cell;
 
 use dusk_program::{ready::Ready, signal::SignalReceiver};
 
@@ -59,6 +60,7 @@ pub struct Process {
             capnp::Result<std::process::Output>,
         >,
     >,
+    output_taken: Rc<Cell<bool>>,
     #[process_context]
     pub ctx: ProcessContext,
 }
@@ -67,6 +69,7 @@ impl Process {
     pub async fn with_context(ctx: dusk_program::process::ProcessContext) -> anyhow::Result<Self> {
         Ok(Process {
             output: Rc::new(embassy_sync::signal::Signal::new()),
+            output_taken: Rc::new(Cell::new(false)),
             ctx,
         })
     }
@@ -117,3 +120,41 @@ pub struct Portal {
 
 #[dusk_program_proc::impl_portal_rpc_server]
 impl Portal {}
+
+impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
+    fn output(
+        &mut self,
+        params: dusk_program_sh::sh_capnp::output_portal::OutputParams,
+        mut results: dusk_program_sh::sh_capnp::output_portal::OutputResults,
+    ) -> Promise<(), ::capnp::Error> {
+        dusk_capnp::pry!(results.set_pipeline());
+        let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
+        if self.process.output_taken.replace(true) {
+            return Promise::err(capnp::Error::failed("sys output already consumed".into()));
+        }
+        let output = self.process.output.clone();
+        Promise::from_future(async move {
+            results.get().set_daemonize(false);
+            let output = output.wait().await?;
+            for bytes in [output.stdout, output.stderr] {
+                if bytes.is_empty() {
+                    continue;
+                }
+                let value = match String::from_utf8(bytes) {
+                    Ok(text) => Value::String(text),
+                    Err(error) => Value::Bytes(error.into_bytes()),
+                };
+                let mut request = stream.send_request();
+                value.write_to_builder(request.get().init_value())?;
+                request.send().await?;
+            }
+            if !output.status.success() {
+                return Err(capnp::Error::failed(alloc::format!(
+                    "sys: {}",
+                    output.status
+                )));
+            }
+            Ok(())
+        })
+    }
+}
