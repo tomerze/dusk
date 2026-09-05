@@ -57,6 +57,28 @@ ps && kill 1 || kill 2      # left-to-right; same as ((ps && kill 1) || kill 2)
 
 Statement separators (`;`, newline) do not short-circuit — every statement runs regardless of the previous one's outcome.
 
+## Startup script
+
+Every session's shell runs a startup script when it starts — Dusk's answer to a `.bashrc`. It lives in the node's key-value store under the key `shrc`, and you read and change it with `kvs`:
+
+```
+kvs get shrc
+kvs set shrc "date --sync"
+```
+
+A change takes effect on the next connection. A node built from Dusk's default set of programs starts with this one:
+
+```
+date --ntp time.google.com
+logs stream otlp://127.0.0.1:4317
+```
+
+The script runs alongside your session rather than ahead of it, so it may hold a command that never returns — `logs stream <url>` is the reason the default has one. Your first command does not wait for it, and it stops when the session ends.
+
+Each connection runs the script again, so a startup script that starts something long-lived starts one per session. A node whose `shrc` key is empty runs nothing.
+
+The whole script is compiled before any of it runs, so a command that cannot be built — a `date --ntp` naming a server this machine cannot reach, a misspelled program — stops the rest of the script from running too. The node logs which one failed.
+
 ## Detached scripts
 
 `sh -d <command>` runs `<command>` as a fire-and-forget background script. Output is discarded and the resulting `sh` process **daemonizes** — it keeps running after the script finishes and is only torn down when something explicitly kills it. Use this when you want a command sequence to outlive the caller.
