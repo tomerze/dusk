@@ -1042,7 +1042,7 @@ The entry's metadata is read from `SH_ENTRIES` at runtime: `dusk_prompt` holds a
 
 ## Step 8 — Register with the impl and the clients
 
-The base programs are aggregated by the `dusk_base` crate (`dusk/src/dusk_base`). That crate re-exports every base program, holds the canonical `launcher_set()`, and holds `link_anchors()` (the linker-keep-alive for shell entries). The deliverables (`artifacts/dusk_node`, `artifacts/dusk_cli`, `artifacts/dusk_py`) depend on `dusk_base` rather than on individual program crates. Adding a program means editing `dusk_base` — **and**, because of the duplication described below, the live server's launcher vec too.
+The base programs are aggregated by the `dusk_base` crate (`dusk/src/dusk_base`). That crate re-exports every base program, holds the canonical `default_launcher_set()`, and holds `link_anchors()` (the linker-keep-alive for shell entries). The deliverables (`artifacts/dusk_node`, `artifacts/dusk_cli`, `artifacts/dusk_py`) depend on `dusk_base` rather than on individual program crates. Adding a program means editing `dusk_base`; the server consumes that same launcher set.
 
 ### `dusk/src/dusk_base/Cargo.toml`
 
@@ -1069,11 +1069,11 @@ Three edits:
 ```rust
 pub use dusk_program_<name>;                                  // re-export
 
-pub fn launcher_set() -> LauncherSet {
-    LauncherSet::from_launchers(vec![
+pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
+    Ok(LauncherSet::from_launchers(vec![
         // …existing…
         Box::new(dusk_program_<name>::Launcher::new()),       // launcher
-    ])
+    ]))
 }
 
 #[cfg(feature = "client")]
@@ -1086,15 +1086,15 @@ pub fn link_anchors() {
 
 `link_anchors()` is the linkme keep-alive: `linkme::distributed_slice` emits a static symbol into a custom linker section, and if nothing references it modern linkers drop it as dead code — your `sh_entry()` silently vanishes. `artifacts/dusk_cli/src/main.rs` and `artifacts/dusk_py` call `dusk_base::link_anchors()`, so adding your `black_box(…)` line there is what makes the program appear in the shell. **Skip it and the program compiles and is launchable by program_id, but the shell prints `no sh entry found for '<name>'`.**
 
-### The server launches whatever `launcher_set()` returns
+### The server launches whatever `default_launcher_set()` returns
 
-`artifacts/dusk_node/src/lib.rs` builds its launcher set by calling `dusk_base::launcher_set()`:
+`artifacts/dusk_node/src/lib.rs` builds its launcher set by calling `dusk_base::default_launcher_set()`:
 
 ```rust
-dusk_nix::BasicLauncherSetBuilder::new(dusk_base::launcher_set())
+dusk_nix::BasicLauncherSetBuilder::new(dusk_base::default_launcher_set()?)
 ```
 
-Both the server (`artifacts/dusk_node/src/lib.rs`) and the integration test harness (`tests/common/src/lib.rs`) call `dusk_base::launcher_set()`, so adding your `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` is all that's needed — there is no second vec to keep in sync anywhere.
+Both the server (`artifacts/dusk_node/src/lib.rs`) and the integration test harness (`tests/common/src/lib.rs`) call `dusk_base::default_launcher_set()`, so adding your `Box::new(dusk_program_<name>::Launcher::new())` to `default_launcher_set()` is all that's needed — there is no second vec to keep in sync anywhere.
 
 ### Other deliverables (optional)
 
@@ -1141,7 +1141,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | Spawning a task without an `info_span!` and `.instrument()` | Required for observability. Use the `task_id` then domain-fields pattern. |
 | Adding `basic_launcher!` because CLAUDE.md mentions it | It doesn't exist. Write `impl LauncherMixin` by hand. |
 | Returning from `output()` without setting `daemonize` | An unset `Bool` reads as `false`, so you are saying "I am finished" by accident. Right for almost every program, silently fatal for one that meant to stay running — its process is killed and reaped the moment `output` returns. Set it explicitly on every path. |
-| Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::launcher_set()`, so the impl knows nothing about specific programs. |
+| Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::default_launcher_set()`, so the impl knows nothing about specific programs. |
 | Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` to `dusk_base::link_anchors()` and `"dusk_program_<name>/client"` to `dusk_base`'s `client` feature. |
 | Forgetting to add `"base/<name>"` to the workspace `Cargo.toml` `members` list | The crate won't be picked up by workspace-wide `cargo check`. Add the line. |
 
@@ -1167,7 +1167,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES` and writes the sidecar JSON)
 - [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "dusk_program_sh_proc", "clap"]` feature if shell-invocable, with `dusk_program_sh_proc = { path = "../sh/proc", optional = true }` in `[dependencies]`. `linkme` stays as a dep — the attribute expands to `::linkme::distributed_slice(...)`, so it's load-bearing even though no source mentions it.
 - [ ] `dusk/src/dusk_base/Cargo.toml` lists the new crate as a path dep (`path = "../../../base/<name>"`, `public = true`)
-- [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `launcher_set()` (this is all that's needed — both `artifacts/dusk_node` and `tests/common` call `launcher_set()`)
+- [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `default_launcher_set()` (this is all that's needed — both `artifacts/dusk_node` and `tests/common` call `default_launcher_set()`)
 - [ ] If the program is shell-invocable: `dusk_base`'s `client` feature lists `"dusk_program_<name>/client"`, and `dusk_base::link_anchors()` adds `black_box(dusk_program_<name>::client::sh_entry);` (without the `black_box` reference, linkme silently drops the entry)
 - [ ] Workspace `Cargo.toml` lists `"base/<name>"` under `[workspace] members`
 - [ ] `cargo check -p dusk_program_<name>` passes
