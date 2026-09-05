@@ -18,6 +18,7 @@ dusk_program_programs = { path = "../../../base/programs", public = true }
 dusk_program_ps = { path = "../../../base/ps", public = true }
 dusk_program_sh = { path = "../../../base/sh", public = true }
 dusk_program_sleep = { path = "../../../base/sleep", public = true }
+dusk_program_sys = { path = "../../../base/sys", public = true }
 dusk_program_true = { path = "../../../base/true", public = true }
 
 [features]
@@ -33,5 +34,6 @@ client = [
     "dusk_program_ps/client",
     "dusk_program_sh/client",
     "dusk_program_sleep/client",
+    "dusk_program_sys/client",
     "dusk_program_true/client",
 ]

@@ -26,6 +26,7 @@ members = [
     "base/true",
     "base/sh/proc",
     "base/sleep",
+    "base/sys",
     "base/date",
     "base/logs",
     "base/hostname",

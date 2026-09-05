@@ -11,6 +11,7 @@ pub use dusk_program_programs;
 pub use dusk_program_ps;
 pub use dusk_program_sh;
 pub use dusk_program_sleep;
+pub use dusk_program_sys;
 pub use dusk_program_true;
 
 use dusk_program::launcher_set::LauncherSet;
@@ -32,6 +33,7 @@ pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
         Box::new(dusk_program_ps::Launcher::new()),
         Box::new(dusk_program_sh::Launcher::new()),
         Box::new(dusk_program_sleep::Launcher::new()),
+        Box::new(dusk_program_sys::Launcher::new()),
         Box::new(dusk_program_true::Launcher::new()),
     ]))
 }
@@ -54,5 +56,6 @@ pub fn link_anchors() {
     black_box(dusk_program_programs::client::sh_entry);
     black_box(dusk_program_ps::client::sh_entry);
     black_box(dusk_program_sleep::client::sh_entry);
+    black_box(dusk_program_sys::client::sh_entry);
     black_box(dusk_program_true::client::sh_entry);
 }
