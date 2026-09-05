@@ -13,11 +13,11 @@ use super::{CompiledFunctions, FunctionTable};
 
 pub(super) async fn compile(
     script: script::Reader<'_>,
-    sh_args_client: sh_capnp::sh_args::server::Client,
+    compiler: sh_capnp::compiler::Client,
     mut functions: HashSet<String>,
 ) -> Result<Frame> {
     let mut output_frame = Frame::new();
-    compile_script(script, &sh_args_client, &mut functions, &mut output_frame).await?;
+    compile_script(script, &compiler, &mut functions, &mut output_frame).await?;
     optimize_tail_call(&mut output_frame);
     Ok(output_frame)
 }
@@ -26,7 +26,7 @@ pub(super) async fn compile(
 pub(super) fn compile_function<'a>(
     function_table: &'a FunctionTable,
     compiled_functions: &'a CompiledFunctions,
-    sh_args_client: sh_capnp::sh_args::server::Client,
+    compiler: sh_capnp::compiler::Client,
     symbol: &'a str,
 ) -> Pin<Box<dyn Future<Output = Result<Arc<Frame>>> + 'a>> {
     Box::pin(async move {
@@ -46,7 +46,7 @@ pub(super) fn compile_function<'a>(
 
         let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
         let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
-        let frame = match compile(script, sh_args_client.clone(), symbols).await {
+        let frame = match compile(script, compiler.clone(), symbols).await {
             Ok(f) => f,
             Err(e) => {
                 compiled_functions.borrow_mut().remove(symbol);
@@ -69,13 +69,8 @@ pub(super) fn compile_function<'a>(
             .collect();
         for dep in dep_symbols {
             // Ignore errors / missing bodies — runtime resolve will surface them.
-            let _ = compile_function(
-                function_table,
-                compiled_functions,
-                sh_args_client.clone(),
-                &dep,
-            )
-            .await;
+            let _ =
+                compile_function(function_table, compiled_functions, compiler.clone(), &dep).await;
         }
 
         let frame = Arc::new(frame);
@@ -97,13 +92,13 @@ fn optimize_tail_call(frame: &mut Frame) {
 
 fn compile_script<'a>(
     script: script::Reader<'a>,
-    sh_args_client: &'a sh_capnp::sh_args::server::Client,
+    compiler: &'a sh_capnp::compiler::Client,
     functions: &'a mut HashSet<String>,
     output_frame: &'a mut Frame,
 ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
     Box::pin(async move {
         for statement in script.get_statements()?.iter() {
-            compile_statement(statement, sh_args_client, functions, output_frame).await?;
+            compile_statement(statement, compiler, functions, output_frame).await?;
         }
         Ok(())
     })
@@ -111,13 +106,13 @@ fn compile_script<'a>(
 
 async fn compile_statement<'a>(
     statement: script::statement::Reader<'a>,
-    sh_args_client: &sh_capnp::sh_args::server::Client,
+    compiler: &sh_capnp::compiler::Client,
     functions: &mut HashSet<String>,
     output_frame: &mut Frame,
 ) -> Result<()> {
     use script::statement::Which;
     match statement.which()? {
-        Which::Expr(expr) => compile_expr(expr?, sh_args_client, functions, output_frame).await,
+        Which::Expr(expr) => compile_expr(expr?, compiler, functions, output_frame).await,
         Which::FunctionDefinition(def) => {
             let def = def?;
             let symbol = def.get_symbol()?.to_str()?.to_string();
@@ -135,7 +130,7 @@ async fn compile_statement<'a>(
 
 fn compile_expr<'a>(
     expr: script::statement::expr::Reader<'a>,
-    sh_args_client: &'a sh_capnp::sh_args::server::Client,
+    compiler: &'a sh_capnp::compiler::Client,
     functions: &'a mut HashSet<String>,
     output_frame: &'a mut Frame,
 ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
@@ -151,7 +146,7 @@ fn compile_expr<'a>(
                     }
                     output_frame.push(Inst::Call(first_word.to_string()));
                 } else {
-                    let mut request = sh_args_client.build_program_args_request();
+                    let mut request = compiler.build_program_args_request();
                     request.get().set_command(text);
                     let reply = request.send().promise.await?;
                     let program_args = dusk_program::program_args::ProgramArgs::from_reader(
@@ -164,7 +159,7 @@ fn compile_expr<'a>(
             Which::And(Ok(pair)) => {
                 compile_expr(
                     pair.reborrow().get_first()?,
-                    sh_args_client,
+                    compiler,
                     functions,
                     output_frame,
                 )
@@ -173,7 +168,7 @@ fn compile_expr<'a>(
                 output_frame.push(Inst::JumpIfError(0)); // patched below
                 compile_expr(
                     pair.reborrow().get_second()?,
-                    sh_args_client,
+                    compiler,
                     functions,
                     output_frame,
                 )
@@ -185,7 +180,7 @@ fn compile_expr<'a>(
             Which::Or(Ok(pair)) => {
                 compile_expr(
                     pair.reborrow().get_first()?,
-                    sh_args_client,
+                    compiler,
                     functions,
                     output_frame,
                 )
@@ -194,7 +189,7 @@ fn compile_expr<'a>(
                 output_frame.push(Inst::JumpIfOk(0)); // patched below
                 compile_expr(
                     pair.reborrow().get_second()?,
-                    sh_args_client,
+                    compiler,
                     functions,
                     output_frame,
                 )

@@ -3,8 +3,8 @@ use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::{sh_portal, sh_stop};
-use dusk_program_sh::{ShArgs, ShMode, parser::Parser};
+use dusk_program_sh::sh_capnp::{compiler, sh_portal, sh_stop};
+use dusk_program_sh::{ShArgs, ShCompiler, ShMode, parser::Parser};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -31,11 +31,13 @@ impl sh_stop::Server for Stop {
 
 pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
+const SH_SERVER_PID: u64 = 0xf2efce60e8c425d0;
+
 pub struct Shell {
-    client: dusk::Client,
     parser: Parser,
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
+    compiler: compiler::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
@@ -49,6 +51,7 @@ impl Shell {
         let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
             .map_err(|err| capnp::Error::failed(format!("{err:?}")))?;
         let program_args = sh_args.as_program_args()?;
+        program_args.set_pid(Some(SH_SERVER_PID))?;
 
         // capnp auto_reconnect returns the first call's Disconnected error while
         // refreshing its current capability in the background; the next call uses
@@ -123,6 +126,10 @@ impl Shell {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
+        let compiler = capnp_rpc::new_client(ShCompiler {
+            client: client.clone(),
+            sh_entries_builder: sh_entries_builder.clone(),
+        });
         let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
 
         let pid_reply = sh_process.pid_request().send().promise.await?;
@@ -132,9 +139,9 @@ impl Shell {
         let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());
 
         Ok(Shell {
-            client: client.clone(),
             parser,
             sh_process,
+            compiler,
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -169,6 +176,7 @@ impl Shell {
         self.parser.parse(script, script_builder)?;
         sh_request.get().set_output(stream);
         sh_request.get().set_stop(stop_cap);
+        sh_request.get().set_compiler(self.compiler.clone());
 
         sh_request.send().promise.await?;
         let _ = done_receiver.await;
@@ -193,26 +201,10 @@ impl Shell {
         }
         Ok(out)
     }
+}
 
-    /// Kill the shell process, must be called to clean up resources.
-    /// Isn't in Drop to allow async cleanup.
-    pub async fn kill(self) -> Result<()> {
+impl Drop for Shell {
+    fn drop(&mut self) {
         self.keepalive_task.abort();
-        let client = self.client.clone();
-        let sh_process = self.sh_process.clone();
-        let pid = sh_process
-            .pid_request()
-            .send()
-            .promise
-            .await?
-            .get()?
-            .get_result();
-        let mut kill_request = client.kill_request();
-        kill_request.get().set_pid(pid);
-        kill_request.get().set_signal(15); // SIGTERM
-
-        let _ = kill_request.send().promise.await?;
-
-        Ok(())
     }
 }

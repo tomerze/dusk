@@ -261,7 +261,11 @@ the state of the branch before the last push, so in both cases the commit that
 push carried never reached master — and both times it was the commit that fixed
 the very instruction the pull request existed to fix.
 
-Then give the user the PR URL and ask them to review. Then wait.
+Then give the user the PR URL and the branch to check out, as a line they can
+paste — `git checkout <branch>` — and ask them to review. Removing the worktree
+is what made that line work; the user reads the diff and runs the node from
+their own checkout, and they should not have to open the PR to learn the branch
+name. Then wait.
 
 **End that message with `Ready for review.` on its own line, and write nothing
 after it.** It is the one sentence the user is looking for, and it means every
@@ -337,8 +341,8 @@ Then:
   out of this round, it belongs in the body's decisions section so the reviewer
   sees it in one place.
 
-Finish the same way Step 7 does: hand back the PR URL and wait. `continue` never
-merges on its own either.
+Finish the same way Step 7 does: hand back the PR URL and the branch to check
+out, then wait. `continue` never merges on its own either.
 
 ## Keeping this skill true
 
@@ -366,6 +370,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ Worktree removed, so the branch is free for the user to check out
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
+☐ Branch named in the hand-back, as `git checkout <branch>`
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ **Waited**
 ☐ Merged only after explicit approval; issue confirmed closed

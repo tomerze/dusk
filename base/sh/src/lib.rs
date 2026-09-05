@@ -88,49 +88,67 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
 }
 
 #[cfg(feature = "client")]
+async fn program_args_for_command<S: entry::ShEntriesBuilder>(
+    client: dusk::Client,
+    sh_entries_builder: S,
+    command: &str,
+) -> anyhow::Result<Rc<dusk_program::program_args::ProgramArgs>> {
+    let (remaining, words) = crate::parser::command_words(command)
+        .map_err(|_| anyhow::anyhow!("invalid command `{}`", command))?;
+    if !remaining.trim().is_empty() {
+        anyhow::bail!("invalid command `{command}`");
+    }
+    let program = words
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("empty command"))?;
+    let builder = sh_entries_builder
+        .get_entries()
+        .into_iter()
+        .find(|entry| entry.info.name == *program)
+        .map(|entry| entry.program_args_builder)
+        .ok_or_else(|| anyhow::anyhow!("no sh entry found for `{program}`"))?;
+    let arg_refs: Vec<&str> = words[1..].to_vec();
+    builder
+        .build(client, &arg_refs)
+        .await
+        .context("program args builder failed")
+}
+
+#[cfg(feature = "client")]
 #[dusk_program_proc::impl_args_rpc_server]
 impl<S: entry::ShEntriesBuilder> ShArgs<S> {
+    fn compiler(
+        &mut self,
+        _params: sh_capnp::sh_args::server::CompilerParams,
+        mut results: sh_capnp::sh_args::server::CompilerResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        results.get().set_result(capnp_rpc::new_client(ShCompiler {
+            client: self.client.clone(),
+            sh_entries_builder: self.sh_entries_builder.clone(),
+        }));
+        capnp::capability::Promise::ok(())
+    }
+}
+
+#[cfg(feature = "client")]
+pub struct ShCompiler<S: entry::ShEntriesBuilder> {
+    pub client: dusk::Client,
+    pub sh_entries_builder: S,
+}
+
+#[cfg(feature = "client")]
+impl<S: entry::ShEntriesBuilder + 'static> sh_capnp::compiler::Server for ShCompiler<S> {
     fn build_program_args(
         &mut self,
-        params: sh_capnp::sh_args::server::BuildProgramArgsParams,
-        mut results: sh_capnp::sh_args::server::BuildProgramArgsResults,
+        params: sh_capnp::compiler::BuildProgramArgsParams,
+        mut results: sh_capnp::compiler::BuildProgramArgsResults,
     ) -> capnp::capability::Promise<(), capnp::Error> {
-        let command = pry!(pry!(pry!(params.get()).get_command()).to_str());
-        let (remaining, words) = pry!(
-            crate::parser::command_words(command)
-                .map_err(|_| anyhow::anyhow!("invalid command `{}`", command))
-                .into_capnp()
-        );
-        if !remaining.trim().is_empty() {
-            return capnp::capability::Promise::err(capnp::Error::failed(format!(
-                "invalid command `{command}`"
-            )));
-        }
-        let program = pry!(
-            words
-                .first()
-                .ok_or_else(|| anyhow::anyhow!("empty command"))
-                .into_capnp()
-        );
-        let Some(builder) = self
-            .sh_entries_builder
-            .get_entries()
-            .into_iter()
-            .find(|entry| entry.info.name == *program)
-            .map(|entry| entry.program_args_builder)
-        else {
-            return capnp::capability::Promise::err(capnp::Error::failed(format!(
-                "no sh entry found for `{program}`"
-            )));
-        };
+        let command = pry!(pry!(pry!(params.get()).get_command()).to_str()).to_string();
         let client = self.client.clone();
-        let args: Vec<String> = words[1..].iter().map(|word| word.to_string()).collect();
+        let sh_entries_builder = self.sh_entries_builder.clone();
         capnp::capability::Promise::from_future(async move {
-            let arg_refs: Vec<&str> = args.iter().map(|arg| arg.as_str()).collect();
-            let program_args = builder
-                .build(client, &arg_refs)
+            let program_args = program_args_for_command(client, sh_entries_builder, &command)
                 .await
-                .context("program args builder failed")
                 .into_capnp()?;
             program_args.with_reader(|reader| results.get().set_program_args(reader))?;
             Ok(())
@@ -188,6 +206,7 @@ async fn sh_exec_task(
     completion: Rc<
         dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>,
     >,
+    compiler: sh_capnp::compiler::Client,
 ) {
     use tracing::Instrument;
     let span = tracing::info_span!(
@@ -199,7 +218,7 @@ async fn sh_exec_task(
     async move {
         let result: anyhow::Result<()> = async {
             let reader = script_msg.get_root_as_reader::<sh_capnp::script::Reader>()?;
-            interpreter.exec(reader, output, &stop).await
+            interpreter.exec(reader, output, &stop, compiler).await
         }
         .await;
         state
@@ -219,6 +238,7 @@ fn spawn_sh_exec_task(
     output: dusk_capnp::dusk_capnp::stream::Client,
     state: Rc<RefCell<State>>,
     stop: Rc<Stop>,
+    compiler: sh_capnp::compiler::Client,
 ) -> capnp::Result<
     Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 > {
@@ -242,6 +262,7 @@ fn spawn_sh_exec_task(
         stop,
         state,
         completion.clone(),
+        compiler,
     )
     .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
     task_id.set(token.id());
@@ -309,13 +330,17 @@ impl dusk_program::process::ProcessMixin for Process {
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
 
-        self.state.borrow_mut().interpreter = Some(Interpreter::new(
-            client,
-            sh_args_client,
-            self.function_table.clone(),
-        ));
+        self.state.borrow_mut().interpreter =
+            Some(Interpreter::new(client, self.function_table.clone()));
 
         if is_detached {
+            let compiler = sh_args_client
+                .compiler_request()
+                .send()
+                .promise
+                .await?
+                .get()?
+                .get_result()?;
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
             let noop: dusk_capnp::dusk_capnp::stream::Client =
                 capnp_rpc::new_client(NoopStream::new());
@@ -330,6 +355,7 @@ impl dusk_program::process::ProcessMixin for Process {
                             noop.clone(),
                             self.state.clone(),
                             Rc::new(Stop::new()),
+                            compiler.clone(),
                         )?;
                     }
                     Ok(())
@@ -372,6 +398,7 @@ impl Portal {
         let script = pry!(params.get_script());
         let output = pry!(params.get_output());
         let stop_client = pry!(params.get_stop());
+        let compiler = pry!(params.get_compiler());
 
         let stop = Rc::new(Stop::new());
         let completion = pry!(spawn_sh_exec_task(
@@ -381,6 +408,7 @@ impl Portal {
             output.clone(),
             self.process.state.clone(),
             stop.clone(),
+            compiler,
         ));
         Promise::from_future(async move {
             let listen = async {
@@ -441,6 +469,15 @@ impl sh_capnp::output_portal::Server for Portal {
                     results.get().set_daemonize(false);
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
+                    let compiler = ctx
+                        .program_args
+                        .server_as::<sh_capnp::sh_args::server::Client>()?
+                        .compiler_request()
+                        .send()
+                        .promise
+                        .await?
+                        .get()?
+                        .get_result()?;
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
                     let completion = spawn_sh_exec_task(
                         &ctx,
@@ -449,6 +486,7 @@ impl sh_capnp::output_portal::Server for Portal {
                         stream,
                         state_cell.clone(),
                         Rc::new(Stop::new()),
+                        compiler,
                     )?;
                     completion
                         .wait()
