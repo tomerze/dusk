@@ -34,7 +34,6 @@ pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 const SH_SERVER_PID: u64 = 0xf2efce60e8c425d0;
 
 pub struct Shell {
-    client: dusk::Client,
     parser: Parser,
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
@@ -140,7 +139,6 @@ impl Shell {
         let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());
 
         Ok(Shell {
-            client: client.clone(),
             parser,
             sh_process,
             compiler,
@@ -203,26 +201,10 @@ impl Shell {
         }
         Ok(out)
     }
+}
 
-    /// Kill the shell process, must be called to clean up resources.
-    /// Isn't in Drop to allow async cleanup.
-    pub async fn kill(self) -> Result<()> {
+impl Drop for Shell {
+    fn drop(&mut self) {
         self.keepalive_task.abort();
-        let client = self.client.clone();
-        let sh_process = self.sh_process.clone();
-        let pid = sh_process
-            .pid_request()
-            .send()
-            .promise
-            .await?
-            .get()?
-            .get_result();
-        let mut kill_request = client.kill_request();
-        kill_request.get().set_pid(pid);
-        kill_request.get().set_signal(15); // SIGTERM
-
-        let _ = kill_request.send().promise.await?;
-
-        Ok(())
     }
 }
