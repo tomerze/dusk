@@ -1,5 +1,5 @@
 use crate::entry::ShEntriesBuilder;
-use crate::sh_capnp::{compiler, sh_portal, sh_stop};
+use crate::sh_capnp::{DEFAULT_PID, compiler, sh_portal, sh_stop};
 use crate::{ShArgs, ShCompiler, ShMode, parser::Parser};
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::capnp_rpc;
@@ -35,8 +35,6 @@ impl sh_stop::Server for Stop {
 
 pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
-const SH_SERVER_PID: u64 = 0xf2efce60e8c425d0;
-
 pub struct Shell {
     parser: Parser,
     keepalive_task: JoinHandle<()>,
@@ -55,7 +53,7 @@ impl Shell {
         let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
             .map_err(|err| capnp::Error::failed(format!("{err:?}")))?;
         let program_args = sh_args.as_program_args()?;
-        program_args.set_pid(Some(SH_SERVER_PID))?;
+        program_args.set_pid(Some(DEFAULT_PID))?;
 
         // capnp auto_reconnect returns the first call's Disconnected error while
         // refreshing its current capability in the background; the next call uses
