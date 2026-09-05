@@ -3,8 +3,8 @@ use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::{sh_portal, sh_stop};
-use dusk_program_sh::{ShArgs, ShMode, parser::Parser};
+use dusk_program_sh::sh_capnp::{compiler, sh_portal, sh_stop};
+use dusk_program_sh::{ShArgs, ShCompiler, ShMode, parser::Parser};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -36,6 +36,7 @@ pub struct Shell {
     parser: Parser,
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
+    compiler: compiler::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
@@ -123,6 +124,10 @@ impl Shell {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
+        let compiler = capnp_rpc::new_client(ShCompiler {
+            client: client.clone(),
+            sh_entries_builder: sh_entries_builder.clone(),
+        });
         let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
 
         let pid_reply = sh_process.pid_request().send().promise.await?;
@@ -135,6 +140,7 @@ impl Shell {
             client: client.clone(),
             parser,
             sh_process,
+            compiler,
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -169,6 +175,7 @@ impl Shell {
         self.parser.parse(script, script_builder)?;
         sh_request.get().set_output(stream);
         sh_request.get().set_stop(stop_cap);
+        sh_request.get().set_compiler(self.compiler.clone());
 
         sh_request.send().promise.await?;
         let _ = done_receiver.await;
