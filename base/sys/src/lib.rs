@@ -203,7 +203,7 @@ fn host_shell(command: &str) -> anyhow::Result<duct::Expression> {
     match shell.file_name().and_then(|name| name.to_str()) {
         Some("bash") => arguments.extend(["--noprofile", "--norc"]),
         Some("zsh" | "csh" | "tcsh") => arguments.push("-f"),
-        Some("fish") => arguments.push("--no-config"),
+        Some("fish") => arguments.extend(["--no-config", "--private"]),
         _ => {}
     }
     #[cfg(windows)]
@@ -212,8 +212,11 @@ fn host_shell(command: &str) -> anyhow::Result<duct::Expression> {
     arguments.push("-c");
     arguments.push(command);
     let mut expression = duct::cmd(shell, arguments);
-    for variable in ["BASH_ENV", "ENV"] {
+    for variable in ["BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS"] {
         expression = expression.env_remove(variable);
     }
-    Ok(expression)
+    Ok(expression
+        .env("HISTFILE", "")
+        .env("HISTSIZE", "0")
+        .env("SAVEHIST", "0"))
 }
