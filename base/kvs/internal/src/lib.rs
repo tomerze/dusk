@@ -11,6 +11,7 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use dusk_program::embassy_sync::blocking_mutex::Mutex as BlockingMutex;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -112,6 +113,20 @@ type Registry =
 static REGISTRY: LazyLock<Registry> =
     LazyLock::new(|| BlockingMutex::new(RefCell::new(HashMap::default())));
 
+type Presets = BlockingMutex<CriticalSectionRawMutex, RefCell<Vec<(u64, Value)>>>;
+
+static PRESETS: LazyLock<Presets> = LazyLock::new(|| BlockingMutex::new(RefCell::new(Vec::new())));
+
+/// The entries every store is created holding.
+///
+/// A node calls this while it is being assembled, before it has a namespace to
+/// put a store in, so the first program to read the store already sees them —
+/// there is no moment at which a preset key is missing. Stores that already
+/// exist keep what they hold. A later call replaces the list.
+pub fn set_presets(presets: Vec<(u64, Value)>) {
+    PRESETS.get().lock(|slot| *slot.borrow_mut() = presets);
+}
+
 /// The store belonging to `namespace_id`, created on first use.
 ///
 /// This is how a program other than `kvs` reaches the store: keying by
@@ -122,7 +137,18 @@ pub fn get_kvs(namespace_id: u64) -> Arc<Kvs> {
         registry
             .borrow_mut()
             .entry(namespace_id)
-            .or_insert_with(|| Arc::new(Kvs::new()))
+            .or_insert_with(|| {
+                let entries: Entries = PRESETS.get().lock(|presets| {
+                    presets
+                        .borrow()
+                        .iter()
+                        .map(|(key, value)| (*key, Arc::new(Mutex::new(value.clone()))))
+                        .collect()
+                });
+                Arc::new(Kvs {
+                    entries: RwLock::new(entries),
+                })
+            })
             .clone()
     })
 }

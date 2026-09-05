@@ -83,6 +83,18 @@ impl Launcher {
     pub fn new() -> Self {
         Self
     }
+
+    /// A launcher whose node gives every store `presets` to start from.
+    ///
+    /// The values are fixed when the node is built, and they are in the store
+    /// before any program reads it — `sh` finds its `shrc` there on a node that
+    /// has only just come up. A client that overwrites one wins until the node
+    /// restarts. The presets belong to the node, not to this launcher, so
+    /// building a second one this way replaces them.
+    pub fn with_presets(presets: alloc::vec::Vec<(u64, Value)>) -> Self {
+        kvs::set_presets(presets);
+        Self
+    }
 }
 
 #[async_trait::async_trait(?Send)]
