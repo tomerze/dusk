@@ -1,3 +1,4 @@
+pub mod prompt;
 pub mod shell;
 
 use super::*;

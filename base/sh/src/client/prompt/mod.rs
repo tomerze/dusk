@@ -1,8 +1,18 @@
-use dusk_base::dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo};
+use std::boxed::Box;
+use std::string::{String, ToString};
+use std::vec::Vec;
+mod builtins;
+pub mod display_engine;
+mod highlighter;
+pub mod stream;
+pub mod ui;
+
+use crate::entry::{EntryInfo, GetAvailableProgramsInfo};
 use dusk_program::anyhow::Result;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{format, println};
 use tokio::sync::Notify;
 
 use nu_ansi_term::{Color, Style};
@@ -15,15 +25,14 @@ use crossterm::{event::DisableBracketedPaste, execute};
 use reedline::Signal;
 use std::io::stdout;
 
-use crate::builtins;
-use crate::display_engine::DisplayEngine;
-use crate::ui::spinner::with_spinner;
-use crate::ui::{
+use crate::client::shell::Shell;
+use display_engine::DisplayEngine;
+use dusk_llm::Chat;
+use ui::spinner::with_spinner;
+use ui::{
     CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
     render_keepalive_suffix,
 };
-use dusk_base::dusk_program_sh::client::shell::Shell;
-use dusk_llm::Chat;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
 
@@ -92,7 +101,7 @@ where
     ///
     /// Return true when prompt should exit.
     async fn execute_command(&mut self, line: &str, line_editor: &mut Reedline) -> Result<bool> {
-        let stripped = dusk_base::dusk_program_sh::parser::strip_comments(line);
+        let stripped = crate::parser::strip_comments(line);
         let mut line = stripped.as_str();
         let first_word = match line.split_whitespace().next() {
             Some(word) => word,
@@ -188,9 +197,7 @@ where
 
         // A comment-only (or blank) line executes nothing — keep its
         // indicator dim and its history item free of execution metadata.
-        let runs_command = !dusk_base::dusk_program_sh::parser::strip_comments(buffer)
-            .trim()
-            .is_empty();
+        let runs_command = !crate::parser::strip_comments(buffer).trim().is_empty();
         if runs_command {
             line_editor.update_last_command_context(
                 &|mut history_item: reedline::HistoryItem| {
@@ -299,7 +306,7 @@ where
     }
 
     pub async fn run(mut self) -> Result<()> {
-        let function_names: crate::highlighter::FunctionNames =
+        let function_names: crate::client::prompt::highlighter::FunctionNames =
             std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut line_editor = get_line_editor(
             self.available_entries_info
