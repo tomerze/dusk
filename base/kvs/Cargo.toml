@@ -10,11 +10,11 @@ dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
+dusk_program_kvs_internal = { path = "internal", public = true }
 anyhow = { version = "1.0", public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "0.21", public = false }
 linkme = { version = "0.3", optional = true, public = true }
-nohash-hasher = { version = "0.2", default-features = false, public = false }
 tracing = { version = "0.1.41", default-features = false }
 clap = { version = "4", features = ["derive"], optional = true }
 
