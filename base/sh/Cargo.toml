@@ -18,9 +18,10 @@ capnp = { version = "0.21", public = false }
 nom = { version = "8.0.0", optional = true, public = true }
 clap = { version = "4", features = ["derive"], optional = true }
 dusk_program_sh_proc = { path = "proc", optional = true }
+tokio = { version = "1.47.1", features = ["full", "tracing"], optional = true, public = true }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
-client = ["linkme", "nom", "clap", "dusk_program_sh_proc"]
+client = ["linkme", "nom", "clap", "dusk_program_sh_proc", "tokio"]
