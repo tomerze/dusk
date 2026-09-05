@@ -133,9 +133,9 @@ impl Namespace {
         if let Some(created) = created {
             let mut request = created.created_request();
             request.get().set_process(client.clone());
-            if let Err(error) = request.send().promise.await {
-                warn!(pid, error = %error, "the process's created callback failed");
-            }
+            request.send().promise.await.map_err(|error| {
+                anyhow::anyhow!("the process's created callback failed: {error}")
+            })?;
         }
         Ok(client)
     }
