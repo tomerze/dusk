@@ -133,6 +133,17 @@ impl Namespace {
     }
 
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        if matches!(signal, signal::Signal::Reap) {
+            let entry = self
+                .entry(pid)
+                .await
+                .ok_or_else(|| anyhow::anyhow!("couldn't find process"))?;
+            if let Some(exit) = entry.exit.try_get().flatten() {
+                self.unregister(pid).await;
+                info!(pid, error = exit.err(), "process reaped by reap signal");
+            }
+            return Ok(());
+        }
         if self.exited(pid).await == Some(true) {
             return Err(anyhow::anyhow!("process has exited"));
         }
