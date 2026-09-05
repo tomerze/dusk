@@ -263,6 +263,13 @@ the very instruction the pull request existed to fix.
 
 Then give the user the PR URL and ask them to review. Then wait.
 
+**End that message with `Ready for review.` on its own line, and write nothing
+after it.** It is the one sentence the user is looking for, and it means every
+check above has actually passed — not that the work is nearly there, not that it
+is pushed and something is still running. If anything is outstanding, say what it
+is instead and do not write the line at all. Nothing follows it: no summary, no
+caveat, no offer, no question. The line is the end of the message.
+
 Do not merge, do not tidy the branch, and do not read silence or a question as
 approval. When comments arrive, verify a claim before implementing it and say so
 if you think it is mistaken.
@@ -359,7 +366,8 @@ next agent is a defect exactly like a wrong comment.
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ Worktree removed, so the branch is free for the user to check out
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
-☐ Review requested; **waited**
+☐ Review requested, the message ending `Ready for review.` and nothing after it
+☐ **Waited**
 ☐ Merged only after explicit approval; issue confirmed closed
 
 On `drive-issue continue`, the issue is already read and the branch and PR
