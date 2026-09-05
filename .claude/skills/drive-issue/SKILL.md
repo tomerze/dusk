@@ -196,13 +196,34 @@ The PR body must carry:
   to make to keep moving.
 - Anything **broken but out of scope** that you tripped over.
 
-## Step 7 — Ask for review, then stop
+## Step 7 — Give the branch back, ask for review, then stop
 
-Give the user the PR URL and ask them to review. Then wait.
+**Remove the worktree before you ask.** Git lets one worktree hold a branch at a
+time, so for as long as yours is checked out on it the user cannot check it out
+to review it: `git checkout <branch>` in their own checkout fails, and the first
+they hear of the reason is the error. Everything is pushed by this point, so the
+worktree holds nothing the remote does not:
+
+```
+ExitWorktree(action="remove")
+```
+
+Then give the user the PR URL and ask them to review. Then wait.
 
 Do not merge, do not tidy the branch, and do not read silence or a question as
 approval. When comments arrive, verify a claim before implementing it and say so
 if you think it is mistaken.
+
+Bring the worktree back when the drive resumes — review comments to answer, or
+`drive-issue continue`:
+
+```
+EnterWorktree(name=…)
+git checkout <branch>
+```
+
+A returning worktree is a new one, so Step 2 applies to it again — submodule,
+lockfile — and its first build is cold. Measure from the second.
 
 ## Step 8 — Merge on explicit approval
 
@@ -218,12 +239,15 @@ Afterwards confirm the issue closed and report the merge commit.
 ## `drive-issue continue` — resuming a drive already in flight
 
 `drive-issue continue` means: the PR for this issue is already open, something
-has changed since, carry on. Usually the user has edited the worktree themselves,
-or left review comments, or asked for something the last round missed.
+has changed since, carry on. Usually the user has edited the tree themselves, or
+left review comments, or asked for something the last round missed.
 
 Everything in Steps 1–8 still applies. What is different is that **nothing gets
-created**. There is already a worktree, a branch, and a PR; find them rather than
-opening new ones.
+created except the worktree**. Step 7 removed it to free the branch, so make one
+again and check the branch out into it. The branch and the PR already exist; find
+them rather than opening new ones. The user's own edits may still be sitting
+uncommitted in their checkout rather than on the branch — ask before treating
+what you fetch as the whole story.
 
 ```
 git status                 # what the user changed in the tree
@@ -277,11 +301,13 @@ next agent is a defect exactly like a wrong comment.
 ☐ PR body written in the first person, addressed to no one
 ☐ Pushed; **one** PR opened over the MCP, with `Closes #N`
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
+☐ Worktree removed, so the branch is free for the user to check out
 ☐ Review requested; **waited**
 ☐ Merged only after explicit approval; issue confirmed closed
 
-On `drive-issue continue`, the first two lines are already done, nothing new is
-created, and the work absorbs into the commits that are already there.
+On `drive-issue continue`, the issue is already read and the branch and PR
+already exist; the worktree is the one thing made again. Nothing else is created,
+and the work absorbs into the commits that are already there.
 
 ## I do not write comments
 
