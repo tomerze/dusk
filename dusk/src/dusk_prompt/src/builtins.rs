@@ -7,7 +7,7 @@ use reedline::{Highlighter, Reedline};
 
 use crate::display_engine::DisplayEngine;
 use crate::highlighter::CustomHighlighter;
-use dusk_shell::shell::Shell;
+use dusk_base::dusk_program_sh::client::shell::Shell;
 
 pub(crate) const BUILTINS: [EntryInfo; 4] = [
     EntryInfo {
