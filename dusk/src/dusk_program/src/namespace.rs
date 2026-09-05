@@ -43,6 +43,11 @@ pub struct PsEntry {
 
 pub type PsMap = HashMap<u64, PsEntry, BuildNoHashHasher<u64>>;
 
+pub enum Registration {
+    Created(process::Client),
+    Existing(process::Client),
+}
+
 /// A namespace is a container for processes and potentially other driver resources.
 ///
 /// It is not `Send` or `Sync` and is intended to be used within a single thread or executor context.
@@ -94,19 +99,44 @@ impl Namespace {
         launcher_set: LauncherSet,
         program_args: Rc<ProgramArgs>,
     ) -> anyhow::Result<process::Client> {
-        let pid = self.rng.lock().await.next_u64();
+        let fixed_pid = program_args
+            .pid()
+            .map_err(|error| anyhow::anyhow!("failed reading a fixed pid: {error}"))?;
+        let pid = match fixed_pid {
+            Some(pid) => pid,
+            None => self.rng.lock().await.next_u64(),
+        };
+        let created = program_args
+            .created()
+            .map_err(|error| anyhow::anyhow!("failed reading a created callback: {error}"))?;
         let process = launcher_set
             .launch(ProcessContext {
                 pid,
                 namespace: self.clone(),
-                program_args,
+                program_args: program_args.clone(),
                 name: Rc::new(embassy_sync::blocking_mutex::Mutex::new(
                     core::cell::RefCell::new(None),
                 )),
             })
             .await?;
-        let client = self.register(pid, process).await?;
-        info!(pid, "process created");
+        let client = match self.register(pid, process).await {
+            Registration::Created(client) => {
+                info!(pid, "process created");
+                client
+            }
+            Registration::Existing(client) => {
+                info!(pid, "process already exists at this pid");
+                self.rerun(pid, program_args).await;
+                client
+            }
+        };
+        if let Some(created) = created {
+            let mut request = created.created_request();
+            request.get().set_process(client.clone());
+            if let Err(error) = request.send().promise.await {
+                warn!(pid, error = %error, "the process's created callback failed");
+            }
+        }
         Ok(client)
     }
 
@@ -118,6 +148,20 @@ impl Namespace {
         self.entry(pid)
             .await
             .map(|entry| entry.ready.try_get().unwrap_or(false))
+    }
+
+    async fn rerun(&self, pid: u64, program_args: Rc<ProgramArgs>) {
+        let Some(entry) = self.entry(pid).await else {
+            warn!(pid, "process no longer exists, dropped the rerun signal");
+            return;
+        };
+        if entry
+            .channel
+            .try_send(signal::Signal::Rerun(program_args))
+            .is_err()
+        {
+            warn!(pid, "signal channel is full, dropped the rerun signal");
+        }
     }
 
     pub async fn suspended(&self, pid: u64) -> Option<bool> {
@@ -160,17 +204,10 @@ impl Namespace {
         Ok(())
     }
 
-    async fn register(
-        &self,
-        pid: u64,
-        process: Box<dyn Process>,
-    ) -> anyhow::Result<process::Client> {
+    async fn register(&self, pid: u64, process: Box<dyn Process>) -> Registration {
         let mut ps_map = self.ps_map.lock().await;
-        if ps_map.contains_key(&pid) {
-            return Err(anyhow::anyhow!(
-                "pid {pid} is already in use in namespace {}",
-                self.id
-            ));
+        if let Some(entry) = ps_map.get(&pid) {
+            return Registration::Existing(entry.process.clone());
         }
         let client = self.ps_server_set.lock().await.new_client(process);
         ps_map.insert(
@@ -183,7 +220,7 @@ impl Namespace {
                 suspended: Rc::new(Watch::new_with(true)),
             },
         );
-        Ok(client)
+        Registration::Created(client)
     }
 
     pub async fn exit(&self, pid: u64, exit: Result<(), String>) {
