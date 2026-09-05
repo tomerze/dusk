@@ -58,6 +58,22 @@ The script then runs when the caller drives the process's `OutputPortal.output`
 (or, for a detached script, immediately in `Process::main` against a discard
 stream).
 
+**The startup script.** A `ShMode::Server` process reads the `shrc` key from the
+node's key-value store in `Process::main` and starts it as its own exec task
+before signalling `Ready`. It is not awaited: a startup script's whole job may be
+a command that never returns, such as `logs stream <url>`, so the script runs for
+as long as the session does and the first command need not wait for it. What
+`Process::main` does instead is watch it — its signal loop selects over the
+script's completion signal alongside the signal receiver, so the outcome is
+logged exactly once and a `Terminate` arriving mid-script still stops it.
+
+This is also the one path where the node holds script *text*: the parser is
+client-side only, so `sh` sends the text back over `ShArgs.Server.buildScript`
+and runs the `Script` it gets in reply. `sh` reaches the store through
+`dusk_program_kvs_internal` rather than the `kvs` program, because `kvs` — like
+every program — depends on `dusk_program_sh` to register its shell entry, and
+that leaves `sh` unable to depend on any program.
+
 Either way the server side is identical: a `Script` reader handed to
 `Interpreter::exec`.
 
@@ -229,6 +245,7 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 | Operation | Needs the live client connection? |
 |-----------|-----------------------------------|
 | Parsing text → `Script` | No — runs entirely client-side, before anything is sent |
+| Parsing the `shrc` text → `Script` | **Yes** — `build_script` RPCs *back* to the client, once at `sh` startup |
 | Submitting a line / awaiting its output | Yes — `ShPortal.sh`, then await `done` |
 | **Compiling** each external program | **Yes** — `build_program_args` RPCs *back* to the client per program |
 | Spawning / killing the resulting process | No network — uses the server-local `dusk_core::local_client` |
