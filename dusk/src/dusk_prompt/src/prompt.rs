@@ -22,8 +22,8 @@ use crate::ui::{
     CommandPrompt, PromptModeFlag, TOGGLE_CHAT_HOST_COMMAND, get_line_editor,
     render_keepalive_suffix,
 };
+use dusk_base::dusk_program_sh::client::shell::Shell;
 use dusk_llm::Chat;
-use dusk_shell::shell::Shell;
 
 type DoneReceiver = tokio::sync::oneshot::Receiver<()>;
 

@@ -19,7 +19,7 @@ use reedline::{
 };
 
 use crate::highlighter::CustomHighlighter;
-use dusk_shell::shell::RttHandle;
+use dusk_base::dusk_program_sh::client::shell::RttHandle;
 
 static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
