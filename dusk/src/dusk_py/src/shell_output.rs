@@ -200,9 +200,6 @@ pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result
             .sh(&command, stream_client, done_rx, Rc::new(Notify::new()))
             .await;
 
-        // Kill the shell now that the command has completed
-        let _ = shell.kill().await;
-
         if let Err(e) = result {
             let _ = output_tx.send(Err(e)).await;
         }

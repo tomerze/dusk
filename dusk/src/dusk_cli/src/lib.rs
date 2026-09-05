@@ -112,11 +112,6 @@ async fn run(cli: Cli) {
                                 .await
                         }
                     };
-                    let shell_kill_result = shell.kill().await;
-                    // Print both shell kill errors and command errors
-                    if let Err(err) = shell_kill_result {
-                        error!("error killing shell: {:?}", err);
-                    }
                     if let Err(err) = session_result {
                         error!("{:?}", err);
                     }
