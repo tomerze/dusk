@@ -133,7 +133,7 @@ struct <Name>Args {
   }
   interface Server {
     # Usually empty. Used only when the program needs to call back to the
-    # spawner *after* launch — `sh` uses it for `buildProgramArgs`.
+    # spawner *after* launch — `sh` uses it to hand out a `Compiler`.
   }
 }
 
@@ -370,7 +370,7 @@ impl Portal {
 
 - **`metadata!("<name>", VERSION, <name>_capnp::PROGRAM_ID)`** — declares the `<name>_capnp` module (via `include!`), brings the capnp prelude into scope, exports `PROGRAM_NAME` and `PROGRAM_ID` constants, and registers private helper macros used by the derives below it. **It must come before the derives.**
 - **`#[derive(dusk_program_proc::Args)]` + `#[data]`** — generates `Args::as_program_args(self) -> capnp::Result<Rc<ProgramArgs>>`. The `#[data]` field must be `capnp::message::TypedBuilder<...>::Owned`. The struct may carry additional fields (e.g. a `client: dusk::Client`) — they become part of the `Server` capability the launcher sees, accessible via `program_args.server_as::<…>()`. Missing or duplicated `#[data]` is a compile-time error.
-- **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** — wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. `sh` is the only program with a non-empty body (a `build_program_args` method used to translate shell commands into program args).
+- **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** — wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. `sh` is the only program with a non-empty body (a `compiler` method handing back the `Compiler` that translates shell commands into program args).
 - **`#[derive(dusk_program_proc::Launcher)]`** — implements `Launcher::program_id()` returning `PROGRAM_ID`. You still write `impl LauncherMixin` by hand.
 - **`#[derive(Clone, dusk_program_proc::Process)]` + `#[process_context]`** — implements the `Process` trait's metadata methods (`program_id`, `name`, `version`, `clone_box`, `namespace`, `pid`). The `#[process_context]` field must be `pub ctx: ProcessContext`. You still write `impl ProcessMixin` by hand.
 - **`#[derive(dusk_program_proc::Portal)]`** — implements `Dusk.Portal.programId()` for your portal type.
