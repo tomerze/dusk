@@ -15,5 +15,8 @@ capnp = { version = "0.21", public = false }
 blocking = "1.6"
 duct = "1.1"
 
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30.1", features = ["user"] }
+
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }

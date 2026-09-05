@@ -97,7 +97,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 Ok(alloc::string::String::from(data.get_command()?.to_str()?))
             })?;
         let child = std::sync::Arc::new(
-            duct::cmd("sh", ["-c", command.as_str()])
+            host_shell(&command)?
                 .stdout_capture()
                 .stderr_capture()
                 .unchecked()
@@ -178,4 +178,32 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
             Ok(())
         })
     }
+}
+
+fn host_shell(command: &str) -> anyhow::Result<duct::Expression> {
+    #[cfg(unix)]
+    let shell = match std::env::var_os("SHELL").filter(|shell| !shell.is_empty()) {
+        Some(shell) => std::path::PathBuf::from(shell),
+        None => nix::unistd::User::from_uid(nix::unistd::Uid::effective())?
+            .map(|user| user.shell)
+            .filter(|shell| !shell.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::PathBuf::from("/bin/sh")),
+    };
+    #[cfg(windows)]
+    let shell = std::path::PathBuf::from(
+        std::env::var_os("COMSPEC")
+            .filter(|shell| !shell.is_empty())
+            .unwrap_or_else(|| "cmd.exe".into()),
+    );
+    #[cfg(not(any(unix, windows)))]
+    let shell = std::path::PathBuf::from(
+        std::env::var_os("SHELL").ok_or_else(|| anyhow::anyhow!("SHELL is not set"))?,
+    );
+    let mut arguments = Vec::new();
+    #[cfg(windows)]
+    arguments.push("/C");
+    #[cfg(not(windows))]
+    arguments.push("-c");
+    arguments.push(command);
+    Ok(duct::cmd(shell, arguments))
 }
