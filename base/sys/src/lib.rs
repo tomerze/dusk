@@ -200,10 +200,20 @@ fn host_shell(command: &str) -> anyhow::Result<duct::Expression> {
         std::env::var_os("SHELL").ok_or_else(|| anyhow::anyhow!("SHELL is not set"))?,
     );
     let mut arguments = Vec::new();
+    match shell.file_name().and_then(|name| name.to_str()) {
+        Some("bash") => arguments.extend(["--noprofile", "--norc"]),
+        Some("zsh" | "csh" | "tcsh") => arguments.push("-f"),
+        Some("fish") => arguments.push("--no-config"),
+        _ => {}
+    }
     #[cfg(windows)]
-    arguments.push("/C");
+    arguments.extend(["/D", "/C"]);
     #[cfg(not(windows))]
     arguments.push("-c");
     arguments.push(command);
-    Ok(duct::cmd(shell, arguments))
+    let mut expression = duct::cmd(shell, arguments);
+    for variable in ["BASH_ENV", "ENV"] {
+        expression = expression.env_remove(variable);
+    }
+    Ok(expression)
 }
