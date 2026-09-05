@@ -16,6 +16,38 @@ The shell. Runs commands against the node, supports `&&` / `||`, and lets you
 define functions. It's what you talk to through the `dusk` CLI. See
 [Shell](../../features/shell.md).
 
+## `sys`
+
+Runs a command on the node's host with its default shell, without a PTY.
+This program requires `std`.
+
+```sh
+sys uname -a
+sys 'printf "%s\\n" "hello world"; uname -s'
+```
+
+Quote a complete command to preserve its shell quoting and operators through
+Dusk. Unquoted arguments are joined with spaces. On Unix, `sys` uses the node's
+`SHELL` environment variable, then the effective user's configured login shell,
+then `/bin/sh` if the account has no shell. On Windows it uses `COMSPEC`,
+falling back to `cmd.exe`, with AutoRun commands disabled.
+
+Standard input is inherited from the node process. Output is collected in memory
+and returned after the command finishes, stdout first and stderr second; their
+original interleaving is not preserved. UTF-8 output is returned as strings and
+other output as bytes.
+A nonzero exit status fails the Dusk command, so `&&` and `||` work.
+Terminate stops the shell; descendants started by the command may outlive it.
+
+`sys` creates no temporary files, writes no history on the node, and adds no
+logging of its own. Client history is unchanged. The shell runs without an
+interactive or login session. Bash, zsh, csh/tcsh, and fish startup files are
+suppressed where supported, and history settings are disabled in the child's
+environment. The requested command can still write files or start other
+processes. System shell startup files that cannot be disabled, such as zsh's
+system `zshenv`, can also have effects. Host process monitoring and Dusk's normal
+process lifecycle remain observable.
+
 ## `ps`
 
 Lists the Dusk processes *inside* the node — the programs Dusk is running,
