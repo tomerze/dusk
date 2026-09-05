@@ -287,7 +287,10 @@ The client then chooses the process's lifetime:
 Either way the process is entered through `bootstrap`, which lifts the
 suspension, runs `main`, and marks the exit when it returns. The process stays
 in the namespace, exited, until `Dusk.waitpid` takes it out: `process`
-registers, `waitpid` unregisters, and `bootstrap` only changes state. Running a
+registers, `waitpid` unregisters, and `bootstrap` only changes state. The
+`Reap` signal (wire value 8) also unregisters an exited process, logging its
+exit status instead of returning it; `Dusk.kill` handles it in the namespace
+and never delivers it to a process. Running a
 process that is already running does nothing.
 
 **Portals and kill.** `process.portal()` waits for the process to be un-suspended
