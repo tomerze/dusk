@@ -7,7 +7,7 @@ three first-class ways in.
 
 ## The `dusk` CLI
 
-The interactive prompt, backed by `dusk_prompt`. Point it at a node's address and
+The interactive prompt, the client side of the `sh` program. Point it at a node's address and
 you get a shell connected to that node:
 
 ```bash
