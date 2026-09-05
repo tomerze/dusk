@@ -1,13 +1,16 @@
-use dusk_base::dusk_program_sh::entry::EntryInfo;
+use crate::entry::EntryInfo;
 use dusk_program::anyhow::Result;
 use nu_ansi_term::{Color, Style};
 use nu_color_config::TextStyle;
 use nu_table::{NuRecordsValue, NuTable, TableTheme};
 use reedline::{Highlighter, Reedline};
+use std::string::{String, ToString};
+use std::vec::Vec;
+use std::{format, println, vec};
 
-use crate::display_engine::DisplayEngine;
-use crate::highlighter::CustomHighlighter;
-use dusk_base::dusk_program_sh::client::shell::Shell;
+use crate::client::prompt::display_engine::DisplayEngine;
+use crate::client::prompt::highlighter::CustomHighlighter;
+use crate::client::shell::Shell;
 
 pub(crate) const BUILTINS: [EntryInfo; 4] = [
     EntryInfo {

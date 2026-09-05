@@ -1,4 +1,7 @@
 use std::io::{Write as _, stdout};
+use std::panic;
+use std::string::String;
+use std::write;
 
 use nu_ansi_term::{Color, Style};
 

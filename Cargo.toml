@@ -13,7 +13,6 @@ members = [
     "dusk/src/dusk_llm",
     "dusk/src/dusk_program",
     "dusk/src/dusk_program_proc",
-    "dusk/src/dusk_prompt",
     "dusk/src/dusk_py",
     "impls/nix",
     "base/kill",
