@@ -1,9 +1,13 @@
+use alloc::rc::Rc;
 use embassy_sync::channel::DynamicReceiver;
+
+use crate::program_args::ProgramArgs;
 
 #[non_exhaustive]
 pub enum Signal {
     Reap,
     Terminate,
+    Rerun(Rc<ProgramArgs>),
     Unknown(u64),
 }
 

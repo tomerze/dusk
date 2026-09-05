@@ -110,7 +110,7 @@ impl Namespace {
             .launch(ProcessContext {
                 pid,
                 namespace: self.clone(),
-                program_args,
+                program_args: program_args.clone(),
                 name: Rc::new(embassy_sync::blocking_mutex::Mutex::new(
                     core::cell::RefCell::new(None),
                 )),
@@ -123,6 +123,7 @@ impl Namespace {
             }
             Registration::Existing(client) => {
                 info!(pid, "process already exists at this pid");
+                self.rerun(pid, program_args).await;
                 Ok(client)
             }
         }
@@ -136,6 +137,20 @@ impl Namespace {
         self.entry(pid)
             .await
             .map(|entry| entry.ready.try_get().unwrap_or(false))
+    }
+
+    async fn rerun(&self, pid: u64, program_args: Rc<ProgramArgs>) {
+        let Some(entry) = self.entry(pid).await else {
+            warn!(pid, "process no longer exists, dropped the rerun signal");
+            return;
+        };
+        if entry
+            .channel
+            .try_send(signal::Signal::Rerun(program_args))
+            .is_err()
+        {
+            warn!(pid, "signal channel is full, dropped the rerun signal");
+        }
     }
 
     pub async fn suspended(&self, pid: u64) -> Option<bool> {
