@@ -244,6 +244,23 @@ git -C ~/git/dusk worktree remove --force .claude/worktrees/<name>
 That takes the directory and its `target` and leaves the branch, which is the
 half the user needs.
 
+**Check the pull request is still open, and that it has what you pushed**, before
+handing it over:
+
+```
+mcp__github__pull_request_read(method="get", owner="tomerze", repo="dusk", pullNumber=N)
+```
+
+`merged: true` means the review is over. Anything pushed to that branch after the
+merge is on no branch anyone will merge, so it needs a **new** pull request, not
+another push and a link to a closed one. `head.sha` must also equal the tip you
+pushed; if it does not, the push did not land.
+
+This has gone wrong twice, both times silently. #44 and #46 were each merged from
+the state of the branch before the last push, so in both cases the commit that
+push carried never reached master — and both times it was the commit that fixed
+the very instruction the pull request existed to fix.
+
 Then give the user the PR URL and ask them to review. Then wait.
 
 Do not merge, do not tidy the branch, and do not read silence or a question as
@@ -341,6 +358,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ Pushed; **one** PR opened over the MCP, with `Closes #N`
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ Worktree removed, so the branch is free for the user to check out
+☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Review requested; **waited**
 ☐ Merged only after explicit approval; issue confirmed closed
 
