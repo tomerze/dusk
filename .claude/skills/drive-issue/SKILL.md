@@ -208,6 +208,23 @@ worktree holds nothing the remote does not:
 ExitWorktree(action="remove")
 ```
 
+Two things get in the way of that, both checked on git 2.53.0:
+
+- `ExitWorktree` only removes a worktree that `EnterWorktree` made **in the same
+  session**. A session launched straight into one gets a no-op.
+- Step 2 initialised `vendor/capnproto`, and `git worktree remove` refuses on a
+  worktree holding a submodule — *working trees containing submodules cannot be
+  moved or removed*. `--force` is what gets past it.
+
+So when the tool declines, remove it with git, from outside the worktree:
+
+```
+git -C ~/git/dusk worktree remove --force .claude/worktrees/<name>
+```
+
+That takes the directory and its `target` and leaves the branch, which is the
+half the user needs.
+
 Then give the user the PR URL and ask them to review. Then wait.
 
 Do not merge, do not tidy the branch, and do not read silence or a question as
