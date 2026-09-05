@@ -14,6 +14,18 @@ pub use dusk_program_sleep;
 pub use dusk_program_true;
 
 use dusk_program::launcher_set::LauncherSet;
+use dusk_program::value::Value;
+
+/// The `shrc` a node built from [`default_launcher_set`] starts with: `sh` runs
+/// it once per client session, and `kvs set shrc <script>` replaces it.
+///
+/// Both lines reach the network from the *client*, which is where `date` reads
+/// an NTP server and where `logs` holds the OTLP connection. A node whose
+/// clients cannot reach either should be built with its own `shrc`.
+pub const DEFAULT_SHRC: &str = "\
+date --ntp time.google.com
+logs stream otlp://127.0.0.1:4317
+";
 
 /// LauncherSet with launchers for all programs in base
 pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
@@ -27,7 +39,10 @@ pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
         Box::new(dusk_program_hostname::Launcher::new()),
         Box::new(dusk_program_init::Launcher::new()),
         Box::new(dusk_program_kill::Launcher::new()),
-        Box::new(dusk_program_kvs::Launcher::new()),
+        Box::new(dusk_program_kvs::Launcher::with_presets(vec![(
+            dusk_program_kvs::kvs::key_id("shrc"),
+            Value::String(String::from(DEFAULT_SHRC)),
+        )])),
         Box::new(dusk_program_programs::Launcher::new()),
         Box::new(dusk_program_ps::Launcher::new()),
         Box::new(dusk_program_sh::Launcher::new()),
