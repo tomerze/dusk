@@ -12,6 +12,7 @@ Dusk maps the wire signal number to a small enum:
 pub enum Signal {
     Reap,                    // signal number 8
     Terminate,               // signal number 15
+    Rerun(Rc<ProgramArgs>),  // this pid was asked for a second time
     Unknown(u64),            // any other number, carried through unchanged
 }
 ```
@@ -24,6 +25,10 @@ then add a signal without breaking programs that were written before it existed.
   does nothing to a non-zombie process.
 - **`Terminate`** (15) is the request to exit; a well-behaved process returns from
   `main` when it sees it. It's the default sent by [`kill`](base.md#kill).
+- **`Rerun(args)`** arrives when someone builds a process at a pid this process
+  already holds. The running process is the answer, so `args` is the second set
+  of arguments, for the rare program that wants to look at them. Ignoring it is
+  the right default.
 - **`Unknown(n)`** carries any other number through as-is, so a program can give
   additional signal numbers its own meaning.
 
