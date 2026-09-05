@@ -40,6 +40,7 @@ struct ShArgs {
   interface Server {
     buildProgramArgs @0 (command :Text)
       -> (programArgs :Dusk.ProgramArgs(AnyPointer, AnyPointer));
+    buildScript @1 (source :Text) -> (script :Script);
   }
 }
 

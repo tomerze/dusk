@@ -42,6 +42,11 @@ shell. Dusk shell commands run Dusk programs built into the Dusk Node.
 
 * Use `sh <command>` (or `sh "<command>"`) to run a command.
 * Use `sh -d <command>` to run it detached from the current session.
+
+The shell serving a session runs the script stored under the `shrc` key when the
+session starts, alongside your commands rather than ahead of them, and stops it
+when the session ends. Read it with `kvs get shrc` and change it with
+`kvs set shrc <script>`; the change applies to the next connection.
 "#,
             version: VERSION,
         },

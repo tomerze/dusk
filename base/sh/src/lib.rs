@@ -45,6 +45,9 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
+/// The key holding the script a server-mode `sh` runs before it is ready.
+const SHRC_KEY: u64 = dusk_program_kvs_internal::key_id("shrc");
+
 #[cfg(feature = "client")]
 pub enum ShMode {
     Server,
@@ -135,6 +138,21 @@ impl<S: entry::ShEntriesBuilder> ShArgs<S> {
             program_args.with_reader(|reader| results.get().set_program_args(reader))?;
             Ok(())
         })
+    }
+
+    fn build_script(
+        &mut self,
+        params: sh_capnp::sh_args::server::BuildScriptParams,
+        mut results: sh_capnp::sh_args::server::BuildScriptResults,
+    ) -> capnp::capability::Promise<(), capnp::Error> {
+        let source = pry!(pry!(pry!(params.get()).get_source()).to_str());
+        let mut parser = crate::parser::Parser::new();
+        pry!(
+            parser
+                .parse(source, results.get().init_script())
+                .into_capnp()
+        );
+        capnp::capability::Promise::ok(())
     }
 }
 
@@ -295,25 +313,60 @@ impl dusk_program::process::ProcessMixin for Process {
             .server_as::<sh_capnp::sh_args::server::Client>()?;
         let client = dusk_core::local_client(self.namespace().clone()).await;
 
-        let (name_suffix, is_detached) = self
+        let (name_suffix, is_detached, is_server) = self
             .ctx
             .program_args
-            .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
+            .with_data::<sh_capnp::sh_args::data::Owned, _, _>(
+            |data| {
                 Ok(match data.which()? {
-                    sh_capnp::sh_args::data::Which::Server(_) => ("server", false),
-                    sh_capnp::sh_args::data::Which::Script(_) => ("script", false),
-                    sh_capnp::sh_args::data::Which::DetachedScript(_) => ("detached", true),
+                    sh_capnp::sh_args::data::Which::Server(_) => ("server", false, true),
+                    sh_capnp::sh_args::data::Which::Script(_) => ("script", false, false),
+                    sh_capnp::sh_args::data::Which::DetachedScript(_) => ("detached", true, false),
                 })
-            })?;
+            },
+        )?;
         self.ctx
             .name
             .lock(|n| *n.borrow_mut() = Some(format!("sh[{name_suffix}]")));
 
         self.state.borrow_mut().interpreter = Some(Interpreter::new(
             client,
-            sh_args_client,
+            sh_args_client.clone(),
             self.function_table.clone(),
         ));
+
+        let mut shrc_completion = None;
+        if is_server {
+            let kvs = dusk_program_kvs_internal::get_kvs(self.ctx.namespace.id);
+            let shrc = match kvs.get(SHRC_KEY).await {
+                Some(Value::String(source)) => source,
+                Some(value) => {
+                    tracing::warn!(?value, "shrc is not a string, skipping it");
+                    alloc::string::String::new()
+                }
+                None => {
+                    kvs.set(SHRC_KEY, Value::String(alloc::string::String::new()))
+                        .await;
+                    alloc::string::String::new()
+                }
+            };
+            if !shrc.trim().is_empty() {
+                let mut build_script_request = sh_args_client.build_script_request();
+                build_script_request.get().set_source(shrc.as_str());
+                let script_reply = build_script_request.send().promise.await?;
+                let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
+                let noop: dusk_capnp::dusk_capnp::stream::Client =
+                    capnp_rpc::new_client(NoopStream::new());
+                shrc_completion = Some(spawn_sh_exec_task(
+                    &self.ctx,
+                    interpreter,
+                    script_reply.get()?.get_script()?,
+                    noop,
+                    self.state.clone(),
+                    Rc::new(Stop::new()),
+                )?);
+            }
+        }
 
         if is_detached {
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
@@ -338,7 +391,22 @@ impl dusk_program::process::ProcessMixin for Process {
         ready.sender().send(true);
 
         loop {
-            if let Signal::Terminate = signal_receiver.receive().await {
+            let signal = match shrc_completion.clone() {
+                Some(completion) => {
+                    match select(signal_receiver.receive(), completion.wait()).await {
+                        Either::First(signal) => signal,
+                        Either::Second(result) => {
+                            if let Err(error) = result {
+                                tracing::warn!(error = %error, "shrc failed");
+                            }
+                            shrc_completion = None;
+                            continue;
+                        }
+                    }
+                }
+                None => signal_receiver.receive().await,
+            };
+            if let Signal::Terminate = signal {
                 for stop in self.state.borrow().active_stops.iter() {
                     stop.signal(());
                 }
