@@ -10,6 +10,9 @@ use dusk_program::{ready::Ready, signal::SignalReceiver};
 extern crate alloc;
 extern crate capnp;
 
+#[cfg(feature = "client")]
+pub mod client;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sys", VERSION, sys_capnp::PROGRAM_ID);

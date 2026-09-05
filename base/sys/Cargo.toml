@@ -8,9 +8,12 @@ dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true }
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_program_sh = { path = "../sh", public = true }
+dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 anyhow = { version = "1.0", public = true }
 capnp = { version = "0.21", public = false }
+linkme = { version = "*", optional = true, public = false }
+clap = { version = "4", features = ["derive"], optional = true }
 
 blocking = "1.6"
 duct = "1.1"
@@ -20,3 +23,6 @@ nix = { version = "0.30.1", features = ["user"] }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
+
+[features]
+client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
