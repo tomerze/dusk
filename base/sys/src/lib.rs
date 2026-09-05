@@ -4,6 +4,7 @@
 use alloc::rc::Rc;
 use core::cell::Cell;
 
+use dusk_program::embassy_futures::select::{Either, select};
 use dusk_program::{ready::Ready, signal::SignalReceiver};
 
 extern crate alloc;
@@ -95,15 +96,35 @@ impl dusk_program::process::ProcessMixin for Process {
             .with_data::<sys_capnp::sys_args::data::Owned, _, _>(|data| {
                 Ok(alloc::string::String::from(data.get_command()?.to_str()?))
             })?;
-        let child = duct::cmd("sh", ["-c", command.as_str()])
-            .stdout_capture()
-            .stderr_capture()
-            .unchecked()
-            .start()?;
+        let child = std::sync::Arc::new(
+            duct::cmd("sh", ["-c", command.as_str()])
+                .stdout_capture()
+                .stderr_capture()
+                .unchecked()
+                .start()?,
+        );
         ready.sender().send(true);
-        let output = blocking::unblock(move || child.into_output()).await;
-        self.output
-            .signal(output.map_err(|error| capnp::Error::failed(error.to_string())));
+        let waiting_child = child.clone();
+        let mut output = core::pin::pin!(blocking::unblock(move || waiting_child.wait().cloned()));
+        loop {
+            match select(output.as_mut(), signal_receiver.receive()).await {
+                Either::First(result) => {
+                    self.output
+                        .signal(result.map_err(|error| capnp::Error::failed(error.to_string())));
+                    break;
+                }
+                Either::Second(signal) => {
+                    if let Signal::Terminate = signal {
+                        let result = child.kill();
+                        self.output
+                            .signal(Err(capnp::Error::failed("sys terminated".into())));
+                        result?;
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        drop(child);
         loop {
             let signal = signal_receiver.receive().await;
             if let Signal::Terminate = signal {
