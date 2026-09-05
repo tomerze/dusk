@@ -47,6 +47,7 @@ By default, it sends the `Terminate` (15) signal, which requests that the proces
 You can specify a different signal using the `--signal <signal>` option.
 * Use `kill <pid>` to send the `Terminate` (15) signal to the process with the specified `<pid>`.
 * Use `kill --signal <signal> <pid>` to send the signal corresponding to `<signal>` to the process.
+* Use `kill --signal 8 <pid>` to send the `Reap` (8) signal, which reaps a zombie process logging it's exit result. Does nothing to non-zombie processes
 "#,
             version: VERSION,
         },
