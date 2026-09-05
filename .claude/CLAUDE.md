@@ -277,7 +277,8 @@ then, **suspended** — it has a pid, it appears in `ps` and it answers to `kill
 before anything has run it. Args that fix a pid (`ProgramArgs.pid`) get the
 process already registered under that pid instead of a second one, and it
 receives the second set of args as `Signal::Rerun`. If the args carry the
-process's created callback, the namespace calls it with the new process.
+process's created callback, the namespace calls it with the process the args
+produced, whether that process was built now or was already there.
 
 The client then chooses the process's lifetime:
 
