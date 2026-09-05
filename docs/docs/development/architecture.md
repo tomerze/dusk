@@ -22,7 +22,9 @@ Cargo feature:
   the CLI. `std` is fine here.
 
 The same rule extends outward: `dusk_core` and `dusk_program` are `no_std`; impls
-(`dusk_nix`) and the CLI crates (`dusk_prompt`, `dusk_shell`) are `std`.
+(`dusk_nix`) and the client crates (`dusk_cli`, `dusk_py`) are `std`, as is the
+`client` half of every program crate — the prompt under `base/sh/src/client/`
+included.
 
 ## A client session
 
