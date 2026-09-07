@@ -3,6 +3,7 @@
 using Dusk = import "/capnp/dusk.capnp";
 
 const programId :UInt64 = 0x8d0e0504ec994ea4;
+const defaultPid :UInt64 = 0xf2efce60e8c425d0;
 
 struct Script {
   struct Statement {

@@ -133,6 +133,16 @@ by different people, reviewed differently, and reverted independently.
 Split prose further when it addresses different readers — the published docs site
 and the repository's own working agreements are two commits, not one.
 
+**And the branch is ordered by what a reviewer must think about.** Imports,
+moves, real changes, tests, text — in that order. A commit that only changes
+`use` paths, or only moves code without changing it, goes at the start, where
+it can be waved through; the real changes follow; the tests come after the code
+they test; and every commit that changes only what a person reads — comments,
+docs, `CLAUDE.md`, the skills — sits at the end, after the last commit that
+changes what a machine runs. A reviewer reads the code before the words about
+it, and a text commit in the middle of the code is a page of prose between two
+hunks it does not describe yet.
+
 ### 7. Write the message, and put the explanation in it
 
 Everything I wanted to say in a comment goes here instead: why this exists, what
@@ -146,6 +156,13 @@ not written the commit message yet. Write it there.
 
 No conventional-commit prefixes. No `feat:`, `fix:`, `chore:`, `docs:`,
 `refactor:`. One imperative sentence, in the style of `git log --oneline -20`.
+
+**A subject never starts with "Say".** A commit changes a tree; it does not say
+anything. The verb is what was done to the file — update, change, add, remove,
+fix, document — and that holds for prose commits exactly as for code: "Update
+the docs for how a prompt opens now", never "Say how a prompt opens now in the
+docs". A subject built around "say" is naming the sentence the file gained
+instead of the act done to the file.
 
 ### 8. Present the subject lines and wait
 

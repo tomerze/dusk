@@ -133,9 +133,9 @@ impl Namespace {
         if let Some(created) = created {
             let mut request = created.created_request();
             request.get().set_process(client.clone());
-            if let Err(error) = request.send().promise.await {
-                warn!(pid, error = %error, "the process's created callback failed");
-            }
+            request.send().promise.await.map_err(|error| {
+                anyhow::anyhow!("the process's created callback failed: {error}")
+            })?;
         }
         Ok(client)
     }
@@ -207,7 +207,15 @@ impl Namespace {
     async fn register(&self, pid: u64, process: Box<dyn Process>) -> Registration {
         let mut ps_map = self.ps_map.lock().await;
         if let Some(entry) = ps_map.get(&pid) {
-            return Registration::Existing(entry.process.clone());
+            let Some(exit) = entry.exit.try_get().flatten() else {
+                return Registration::Existing(entry.process.clone());
+            };
+            warn!(
+                pid,
+                error = exit.err(),
+                "replacing an exited process nobody reaped, its exit result is lost"
+            );
+            ps_map.remove(&pid);
         }
         let client = self.ps_server_set.lock().await.new_client(process);
         ps_map.insert(

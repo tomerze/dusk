@@ -11,14 +11,15 @@ travel back.
 
 | Crate | Side | Role |
 |-------|------|------|
-| `dusk_prompt` | client (`std`) | reedline UI, builtins, draws output |
-| `dusk_shell` | client (`std`) | `Shell` — drives one long-lived `sh` process; `Connection` — the TCP/RPC link |
-| `base/sh` | both | the `sh` program. `parser/` + `client.rs` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh` | both | the `sh` program. `parser/` and `client/` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
+| `base/sh/src/client/shell/` | client (`std`) | `Shell` — drives the `sh` process a client was handed |
+| `dusk_connection` | client (`std`) | `Connection` — the TCP/RPC link |
 
 ## Representations at a glance
 
 ```
-raw text            "ps && date  # comment"           reedline buffer (dusk_prompt)
+raw text            "ps && date  # comment"           reedline buffer (client/prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
    │ nom (parser/tokenize.rs)
@@ -43,16 +44,48 @@ the `sh` process.
 There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
-**Interactive prompt.** `dusk_prompt` creates exactly *one* long-lived `sh`
-process in `ShMode::Server` at startup (`Shell::create_sh_process`) and then
-drives it for the whole session. Each accepted line goes
-`Prompt::execute_command` → `Shell::sh`, which **parses the text on the client**
-into a `Script` and ships it via `ShPortal.sh(script, output, stop)`. One line =
-one `sh` RPC carrying a freshly-parsed `Script`.
+**Interactive prompt.** The CLI runs `sh` the way it would run any program:
+it builds `ShArgs` in `ShMode::Server`, fixes the pid to `sh.capnp`'s
+`defaultPid` — a node has one shell, and a client that connects finds it rather
+than making another — sets a `created` callback on the args, and calls
+`Dusk.process` then `process.run()`. The node calls the callback with the
+process, whether it was built just now or was already there; the callback
+(`Created`, `base/sh/src/client/mod.rs`) spawns a task that builds a `Shell`
+around it and opens the prompt, and **returns at once**. It has to: the prompt
+waits for the process's portal, the portal waits for the process to be run, and
+the run cannot be sent until `Dusk.process` — which is waiting for this
+callback — has returned. Under `DUSK_NON_INTERACTIVE` the callback opens
+nothing and fails the call instead, because there is no terminal to open on.
+
+The CLI runs the process with **`process.run()`**, not `Dusk.run`, so the shell
+runs inside the CLI's own session and the call returns when the shell's `main`
+does. What ends the CLI, though, is the prompt: the callback signals when it is
+over, and the CLI waits for that signal rather than for the run, because a run
+call dies with its connection and a prompt does not. The prompt terminates the
+shell on `exit`.
+
+The dead shell stays in `ps` until something reaps it, and the next client to
+run `sh` at `defaultPid` gets a fresh process in its place — a `process.run()`
+on a shell that is already running waits for it instead, so two clients at one
+prompt both leave when the shell does. (`Dusk.run`, which the single-command
+path uses, still answers as soon as the process is spawned.)
+Each accepted line goes `Prompt::execute_command` → `Shell::sh`, which **parses
+the text on the client** into a `Script` and ships it via
+`ShPortal.sh(script, output, stop, compiler)`. One line = one `sh` RPC carrying
+a freshly-parsed `Script`. The shell is left running when the client goes: it
+keeps its functions and is there for the next client.
+
+**One command.** `dusk <address> "ps"` and `dusk.sh(...)` from Python run `sh`
+in `ShMode::Script`, with no callback at all, and drive it themselves:
+`Dusk.process`, `Dusk.run` — a process of its own, not the caller's session —
+then the portal, `OutputPortal.output` into the caller's stream, and `kill` plus
+`waitpid` when `output` returns without daemonising. That is what the node's
+interpreter does for every program in a script, done by the client for the one
+program it runs itself.
 
 **`sh` as a program.** When `sh <command>` (or `sh -d <command>`) runs as a
 program — nested in another script, or launched directly — the command string is
-parsed at args-build time (`ShArgs::new`, `base/sh/src/client.rs`) into a
+parsed at args-build time (`ShArgs::new`, `base/sh/src/client/mod.rs`) into a
 `Script` baked into the program's args as `ShMode::Script` / `DetachedScript`.
 The script then runs when the caller drives the process's `OutputPortal.output`
 (or, for a detached script, immediately in `Process::main` against a discard
@@ -236,10 +269,16 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 | Spawning / killing the resulting process | No network — uses the server-local `dusk_core::local_client` |
 | Listing functions (highlighter, `functions` builtin) | Yes — `ShPortal.functions`, once per prompt |
 
-The connection itself is resilient: `Connection` and `Shell::create_sh_process`
-both wrap their capabilities in `capnp_rpc::auto_reconnect`, and a keepalive task
-pings `pid()` on an RTT-adaptive interval to measure latency and keep the
-reconnect warm.
+The connection itself is resilient, and so is the shell on top of it.
+`Connection` wraps its capability in `capnp_rpc::auto_reconnect`, and so does
+`Shell`: the process it was handed is the first incarnation, and when a call
+finds the node gone, `Shell::recreate_sh_process` makes a fresh server-mode `sh`
+at `defaultPid` on the node that answers next — with no `created` callback on
+those args, so no second prompt opens. Meanwhile the keepalive pings `pid()` on
+an RTT-adaptive interval and the status line reads `disconnected` while it
+fails. A prompt therefore outlives the node it was opened against, which is why
+the CLI waits for the prompt rather than for its `process.run()` — that call
+dies with the connection.
 
 ## Error handling
 

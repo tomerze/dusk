@@ -18,9 +18,40 @@ capnp = { version = "0.21", public = false }
 nom = { version = "8.0.0", optional = true, public = true }
 clap = { version = "4", features = ["derive"], optional = true }
 dusk_program_sh_proc = { path = "proc", optional = true }
+tokio = { version = "1.47.1", features = ["full", "tracing"], optional = true, public = true }
+reedline = { version = "0.47", features = ["sqlite", "idle_callback"], optional = true, public = true }
+crossterm = { version = "0.29", optional = true }
+nu-ansi-term = { version = "0.50.1", optional = true }
+nu-table = { version = "0.107.0", optional = true }
+nu-color-config = { version = "0.107.0", optional = true }
+nu-protocol = { version = "0.107.0", optional = true }
+termimad = { version = "0.20", optional = true, public = true }
+colored_json = { version = "5.0.0", optional = true }
+chrono = { version = "0.4.42", optional = true }
+unicode-width = { version = "0.2", optional = true }
+base64 = { version = "0.22.1", optional = true }
+dusk_llm = { path = "../../dusk/src/dusk_llm", optional = true }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
-client = ["linkme", "nom", "clap", "dusk_program_sh_proc"]
+client = [
+    "linkme",
+    "nom",
+    "clap",
+    "dusk_program_sh_proc",
+    "tokio",
+    "reedline",
+    "crossterm",
+    "nu-ansi-term",
+    "nu-table",
+    "nu-color-config",
+    "nu-protocol",
+    "termimad",
+    "colored_json",
+    "chrono",
+    "unicode-width",
+    "base64",
+    "dusk_llm",
+]

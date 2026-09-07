@@ -223,9 +223,11 @@ impl process::Server for dyn Process {
         mut _results: process::RunResults,
     ) -> Promise<(), capnp::Error> {
         let process = self.clone_box();
+        let namespace = self.namespace();
+        let pid = Self::pid(self);
         let span = tracing::Span::current();
 
-        span.record("pid", Self::pid(self));
+        span.record("pid", pid);
         span.record("program_id", Self::program_id(self));
         span.record("program_name", Self::name(self));
         span.record("program_version", Self::version(self));
@@ -235,7 +237,20 @@ impl process::Server for dyn Process {
                 .instrument(tracing::Span::current())
                 .await
                 .context("process bootstrap failed")
-                .into_capnp()
+                .into_capnp()?;
+
+            let Some(entry) = namespace.entry(pid).await else {
+                return Ok(());
+            };
+            let mut exit_receiver = entry.exit.receiver().ok_or_else(|| {
+                capnp::Error::failed("couldn't acquire receiver for process exit watch".into())
+            })?;
+            loop {
+                if let Some(result) = exit_receiver.get().await {
+                    return result.map_err(capnp::Error::failed);
+                }
+                exit_receiver.changed().await;
+            }
         })
     }
 }

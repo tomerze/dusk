@@ -1,13 +1,18 @@
-use anyhow::Result;
+use crate::entry::ShEntriesBuilder;
+use crate::parser::Parser;
+use crate::sh_capnp::{compiler, sh_portal, sh_stop};
+use crate::{ShArgs, ShCompiler, ShMode};
 use capnp::capability::{FromClientHook, Promise};
+use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
-use dusk_program_sh::entry::ShEntriesBuilder;
-use dusk_program_sh::sh_capnp::{compiler, sh_portal, sh_stop};
-use dusk_program_sh::{ShArgs, ShCompiler, ShMode, parser::Parser};
+use dusk_program::anyhow::Result;
+use std::format;
 use std::rc::Rc;
+use std::string::{String, ToString};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use std::vec::Vec;
 use tokio::sync::{Notify, oneshot};
 use tokio::task::JoinHandle;
 
@@ -31,8 +36,6 @@ impl sh_stop::Server for Stop {
 
 pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
-const SH_SERVER_PID: u64 = 0xf2efce60e8c425d0;
-
 pub struct Shell {
     parser: Parser,
     keepalive_task: JoinHandle<()>,
@@ -44,14 +47,15 @@ pub struct Shell {
 }
 
 impl Shell {
-    async fn create_sh_process_reconnect_callback<S: ShEntriesBuilder>(
+    async fn recreate_sh_process<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
+        pid: u64,
     ) -> capnp::Result<process::Client> {
         let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
-            .map_err(|err| capnp::Error::failed(format!("{err:?}")))?;
+            .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
         let program_args = sh_args.as_program_args()?;
-        program_args.set_pid(Some(SH_SERVER_PID))?;
+        program_args.set_pid(Some(pid))?;
 
         // capnp auto_reconnect returns the first call's Disconnected error while
         // refreshing its current capability in the background; the next call uses
@@ -70,29 +74,13 @@ impl Shell {
                     let _run_reply = run_request.send().promise.await?;
                     return Ok(process);
                 }
-                Err(err) if err.kind == capnp::ErrorKind::Disconnected && attempts_left > 1 => {
+                Err(error) if error.kind == capnp::ErrorKind::Disconnected && attempts_left > 1 => {
                     attempts_left -= 1;
                     continue;
                 }
-                Err(err) => return Err(err),
+                Err(error) => return Err(error),
             }
         }
-    }
-
-    async fn create_sh_process<S: ShEntriesBuilder>(
-        client: dusk::Client,
-        sh_entries_builder: S,
-    ) -> Result<process::Client> {
-        let (process, _) = capnp_rpc::auto_reconnect(move || {
-            Ok(capnp_rpc::new_future_client(
-                Self::create_sh_process_reconnect_callback(
-                    client.clone(),
-                    sh_entries_builder.clone(),
-                ),
-            ))
-        })?;
-
-        Ok(process)
     }
 
     fn spawn_keepalive_task(sh_process: process::Client, rtt_handle: RttHandle) -> JoinHandle<()> {
@@ -121,19 +109,36 @@ impl Shell {
     pub async fn new<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
+        served: process::Client,
         parser: Parser,
     ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
+        let sh_pid = served
+            .pid_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_result();
+
         let compiler = capnp_rpc::new_client(ShCompiler {
             client: client.clone(),
             sh_entries_builder: sh_entries_builder.clone(),
         });
-        let sh_process = Self::create_sh_process(client.clone(), sh_entries_builder).await?;
 
-        let pid_reply = sh_process.pid_request().send().promise.await?;
-        let sh_pid = pid_reply.get()?.get_result();
+        let mut served = Some(served);
+        let (sh_process, _) = capnp_rpc::auto_reconnect(move || {
+            if let Some(served) = served.take() {
+                return Ok(served);
+            }
+            Ok(capnp_rpc::new_future_client(Self::recreate_sh_process(
+                client.clone(),
+                sh_entries_builder.clone(),
+                sh_pid,
+            )))
+        })?;
 
         let rtt_handle: RttHandle = Arc::new(Mutex::new(None));
         let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());

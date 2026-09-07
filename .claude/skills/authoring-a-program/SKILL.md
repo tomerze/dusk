@@ -1036,7 +1036,96 @@ Multi-line help text shown by `help <name>` in the shell.
 
 The `#[dusk_program_sh_proc::sh_entry]` attribute registers `sh_entry()` into the `SH_ENTRIES` `#[distributed_slice]`, which is how the shell discovers the entry at link time. There is no central registry to update — adding a new program is purely additive.
 
-The entry's metadata is read from `SH_ENTRIES` at runtime: `dusk_prompt` holds an `EntryInfo` per shell-invocable program and uses it for both `help` and the `{{PROGRAMS}}` block of the LLM system prompt. Earlier that prompt was assembled at compile time, so the macro also wrote each entry to `target/.dusk_sh_entries/<crate>__sh_entry.json` for a build script to glob back up; that side-channel was removed in e06c5c2 and the macro writes nothing to disk today. Stale JSON files left in a `target/` directory from before that commit mean nothing — see `docs/docs/development/ask_dusk.md`.
+The entry's metadata is read from `SH_ENTRIES` at runtime: the prompt (`base/sh/src/client/prompt/`) holds an `EntryInfo` per shell-invocable program and uses it for both `help` and the `{{PROGRAMS}}` block of the LLM system prompt. Earlier that prompt was assembled at compile time, so the macro also wrote each entry to `target/.dusk_sh_entries/<crate>__sh_entry.json` for a build script to glob back up; that side-channel was removed in e06c5c2 and the macro writes nothing to disk today. Stale JSON files left in a `target/` directory from before that commit mean nothing — see `docs/docs/development/ask_dusk.md`.
+
+---
+
+## An interactive view: the created callback, and the deadlock behind it
+
+Some programs have a client side that must take over the terminal while the
+program runs — the shell's prompt, `logs view`'s pager. The program cannot open
+it, because the program is on the node and the terminal is on the client. The
+callback that lets it ask is `ProgramArgs.created`: the namespace calls it with
+the process during `Dusk.process`, whether that process was just built or was
+already registered at the args' fixed pid.
+
+**Start from why `process` and `run` are two calls.** `Dusk.process` builds the
+process and registers it **suspended**; nothing runs. The caller then chooses
+its lifetime, and the two choices are genuinely different:
+
+- **`process.run()`** — the process runs *inside the caller's session*. The
+  reply comes when `main` returns, and the process dies with the connection
+  that ran it.
+- **`Dusk.run(process)`** — the process is spawned as its own task. The reply
+  comes at once and the process outlives the session: a daemon.
+
+That choice is the caller's, and it is the reason the two calls exist. **So a
+created callback never runs the process itself.** A callback that calls
+`Dusk.run` has taken the decision away from the caller and forced the daemon
+lifetime on it.
+
+**Now the trap.** The callback is invoked *inside* `Dusk.process`, before the
+caller has been given the process, and therefore before anything has run it. So
+the callback must not do the work inline:
+
+```
+client                     node
+  Dusk.process(args)  ───►  build, register suspended
+                            call args.created(process)  ──►  client
+                                                              open the view:
+                                                              process.portal()
+                            ◄── portal(): waits for the process to be un-suspended
+  (still awaiting process)
+  …never sends run, because it has no process yet
+```
+
+Three parties waiting on each other: `portal()` waits for the run, the run waits
+for `Dusk.process` to return, and `Dusk.process` waits for the callback. The
+same holds for anything else that needs the process to be running — a portal
+method, `ready`.
+
+**The way out is that the callback returns immediately and the work goes to a
+task of its own.** Not an OS thread: a client's capnp stack is single-threaded
+and its capabilities are `!Send`, so it is `tokio::task::spawn_local` on the
+`LocalSet` the client already runs. The callback returns, `Dusk.process`
+resolves, the caller runs the process, and the spawned task's `portal()`
+resolves as it does:
+
+```rust
+impl<S: ShEntriesBuilder> created::Server for Created<S> {
+    fn created(
+        &mut self,
+        params: created::CreatedParams,
+        _results: created::CreatedResults,
+    ) -> Promise<(), capnp::Error> {
+        let process = pry!(pry!(params.get()).get_process());
+        // …clone what the task needs out of `self`…
+        tokio::task::spawn_local(async move {
+            // portal(), the view, and the rest — after the caller runs it
+        });
+        Promise::ok(())
+    }
+}
+```
+
+Consequences worth knowing before you write one:
+
+- **The callback's error is the caller's error.** `Dusk.process` fails with it,
+  so refusing to open a view — no terminal, `DUSK_NON_INTERACTIVE` — is a
+  `Promise::err` and needs no channel back to the caller.
+- **Nothing else reports back.** Once the callback has returned, the spawned
+  task is on its own: log its failure there, because no caller is awaiting it.
+- **The caller's `run` decides who ends first.** Under `process.run()` the
+  caller's call returns when `main` returns, so a view that owns the process
+  terminates it on exit; under `Dusk.run` the process outlives everyone and
+  something else has to reap it.
+- **`process.run()` returns only when the process is dead**, whether the caller
+  started it or found it already running, and a fixed pid whose process has
+  exited gets a fresh process rather than the corpse. So a second client that
+  runs the same process waits for it, and one that arrives after it died starts
+  it again — both of them reach the view. `Dusk.run` is the other half of that
+  contract and answers immediately: it hands the process its own task, and a
+  daemon's runner has nothing to wait for.
 
 ---
 

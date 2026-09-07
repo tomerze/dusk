@@ -70,7 +70,7 @@ through.
 
 ```
 dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
-               dusk_program, dusk_program_proc, dusk_prompt, dusk_shell,
+               dusk_program, dusk_program_proc, dusk_connection, dusk_llm,
                dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
                true, false, init, logs)
@@ -90,7 +90,8 @@ vendor/        External libs submodules
 | `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
-| `dusk_prompt` / `dusk_shell` | The interactive shell client — the prompt UI and the `Shell`/`Connection` that drive a long-lived `sh` process. |
+| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side — the prompt UI and the `Shell` that drives the `sh` process a client attaches to. |
+| `dusk_connection` | `Connection` — the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
 | `dusk_py` | The Python extension (the `dusk` module, built with maturin). |
 | `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
@@ -278,9 +279,14 @@ a network call — and runs the matching launcher's `launch`, which returns a
 then, **suspended** — it has a pid, it appears in `ps` and it answers to `kill`
 before anything has run it. Args that fix a pid (`ProgramArgs.pid`) get the
 process already registered under that pid instead of a second one, and it
-receives the second set of args as `Signal::Rerun`. If the args carry the
+receives the second set of args as `Signal::Rerun` — unless that process has
+exited, in which case the new one replaces it, so a fixed pid is never held by
+a corpse. Nobody reaped the replaced one, so its exit result goes with it and
+is logged at `warn` on the way out. If the args carry the
 process's created callback, the namespace calls it with the process the args
-produced, whether that process was built now or was already there.
+produced, whether that process was built now or was already there, and
+`Dusk.process` fails with the callback's error if it fails; the process stays
+registered either way.
 
 The client then chooses the process's lifetime:
 
@@ -293,8 +299,15 @@ in the namespace, exited, until `Dusk.waitpid` takes it out: `process`
 registers, `waitpid` unregisters, and `bootstrap` only changes state. The
 `Reap` signal (wire value 8) also unregisters an exited process, logging its
 exit status instead of returning it; `Dusk.kill` handles it in the namespace
-and never delivers it to a process. Running a
-process that is already running does nothing.
+and never delivers it to a process.
+
+**The two runs answer at different moments, and that is what separates them.**
+`Dusk.run` answers as soon as the process has a task of its own, which is what a
+daemon's runner wants. `process.run()` answers when the process has exited, with
+its result — and it does that whether it started the process or found it already
+running, so running a process twice gives the same answer twice. **When
+`process.run()` returns is part of its contract**: a caller that runs a process
+in its session is told when it is over, however it got there.
 
 **Portals and kill.** `process.portal()` waits for the process to be un-suspended
 and then for its `Ready` watch, so a client can ask a process it has just created
@@ -392,8 +405,15 @@ dusk 127.0.0.1:9090            # interactive prompt
 dusk 127.0.0.1:9090 "ps"       # run one command and exit
 ```
 
-It's a thin layer over the Rust client path: it drives a long-lived `sh` process
-behind an interactive prompt.
+It's a thin layer over the Rust client path. For the prompt it runs `sh` in
+server mode at the shell's `defaultPid` (`sh.capnp`) with a `created` callback
+on the args, calling `Dusk.process` then `process.run()` — the shell runs in the
+CLI's own session. The callback is `sh`'s own client side
+(`base/sh/src/client/`): it spawns the prompt on the process the node hands back
+and returns at once, since the prompt cannot run inside the `process` call that
+is waiting for it. For one command it runs `sh` in script mode and drives the
+process itself — `Dusk.run`, the portal, `output` into a JSON stream, then kill
+and reap.
 
 ### `dusk_py` — the Python extension
 
@@ -441,10 +461,10 @@ sides, separated by a `client` Cargo feature:
   `client` feature.
 
 The same rule holds for the non-program crates: `dusk_core` and `dusk_program`
-are `no_std`; impls and the client crates (`dusk_prompt`, `dusk_shell`,
-`dusk_cli`) are `std`. A quick sanity check:
+are `no_std`; impls and the client crates (`dusk_connection`, `dusk_cli`,
+`dusk_py`) are `std`. A quick sanity check:
 `grep -rn "std::\|use std" base/ --include="*.rs"` should only hit `client.rs`
-files or `#[cfg(feature = "client")]` modules.
+files, `client/` directories, or `#[cfg(feature = "client")]` modules.
 
 ## Development
 
