@@ -147,6 +147,13 @@ not written the commit message yet. Write it there.
 No conventional-commit prefixes. No `feat:`, `fix:`, `chore:`, `docs:`,
 `refactor:`. One imperative sentence, in the style of `git log --oneline -20`.
 
+**A subject never starts with "Say".** A commit changes a tree; it does not say
+anything. The verb is what was done to the file — update, change, add, remove,
+fix, document — and that holds for prose commits exactly as for code: "Update
+the docs for how a prompt opens now", never "Say how a prompt opens now in the
+docs". A subject built around "say" is naming the sentence the file gained
+instead of the act done to the file.
+
 ### 8. Present the subject lines and wait
 
 Show the user **the list of subject lines, in order** — not the file groupings,
