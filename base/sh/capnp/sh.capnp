@@ -36,6 +36,7 @@ struct ShArgs {
       server @0: Void;
       script @1: Script;
       detachedScript @2: Script;
+      prompt @3: Text;
     }
   }
   interface Server {

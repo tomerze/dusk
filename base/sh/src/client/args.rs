@@ -14,6 +14,7 @@ pub enum ShMode {
     Server,
     Script(String),
     DetachedScript(String),
+    Prompt(String),
 }
 
 #[derive(dusk_program_proc::Args)]
@@ -39,6 +40,7 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
                     let mut parser = crate::parser::Parser::new();
                     parser.parse(&command, data_builder.init_detached_script())?;
                 }
+                ShMode::Prompt(client_hostname) => data_builder.set_prompt(&client_hostname),
             }
         }
         Ok(Self {
