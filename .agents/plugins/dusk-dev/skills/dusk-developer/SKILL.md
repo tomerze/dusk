@@ -412,15 +412,17 @@ dusk 127.0.0.1:9090            # interactive prompt
 dusk 127.0.0.1:9090 "ps"       # run one command and exit
 ```
 
-It's a thin layer over the Rust client path. For the prompt it runs `sh` in
-server mode at the shell's `defaultPid` (`sh.capnp`) with a `created` callback
-on the args, calling `Dusk.process` then `process.run()` — the shell runs in the
-CLI's own session. The callback is `sh`'s own client side
-(`base/sh/src/client/`): it spawns the prompt on the process the node hands back
-and returns at once, since the prompt cannot run inside the `process` call that
-is waiting for it. For one command it runs `sh` in script mode and drives the
-process itself — `Dusk.run`, the portal, `output` into a JSON stream, then kill
-and reap.
+It's a thin layer over the Rust client path. For the prompt it runs one
+command — `sh --prompt` — with `Dusk.process` then `process.run()`, so the CLI
+returns when that process exits. A prompt-mode `sh` does nothing on the node; it
+is the view's lifetime, and the args' `created` callback is `sh`'s own client
+side (`base/sh/src/client/`): it starts the node's default shell server at
+`defaultPid`
+(`sh.capnp`) if nothing is running it, opens the prompt on it, and returns at
+once, since the prompt cannot run inside the `process` call that is waiting for
+it. It kills the prompt process when the view closes. For one command it runs
+`sh` in script mode and drives the process itself — `Dusk.run`, the portal,
+`output` into a JSON stream, then kill and reap.
 
 ### `dusk_py` — the Python extension
 
