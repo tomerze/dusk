@@ -157,9 +157,7 @@ impl<S: entry::ShEntriesBuilder + 'static> sh_capnp::compiler::Server for ShComp
 }
 
 #[derive(dusk_program_proc::Launcher)]
-pub struct Launcher {
-    function_table: FunctionTable,
-}
+pub struct Launcher;
 
 impl Default for Launcher {
     fn default() -> Self {
@@ -169,9 +167,7 @@ impl Default for Launcher {
 
 impl Launcher {
     pub fn new() -> Self {
-        Self {
-            function_table: Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new())),
-        }
+        Self
     }
 }
 
@@ -181,10 +177,7 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
         &mut self,
         process_context: ProcessContext,
     ) -> anyhow::Result<Box<dyn dusk_program::process::Process>> {
-        Ok(Box::new(
-            Process::with_context_and_function_table(process_context, self.function_table.clone())
-                .await?,
-        ))
+        Ok(Box::new(Process::with_context(process_context).await?))
     }
 }
 
@@ -278,16 +271,13 @@ pub struct Process {
     state: Rc<RefCell<State>>,
 }
 impl Process {
-    async fn with_context_and_function_table(
-        ctx: ProcessContext,
-        function_table: FunctionTable,
-    ) -> anyhow::Result<Self>
+    async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
         Ok(Process {
             ctx,
-            function_table,
+            function_table: Arc::new(Mutex::<CriticalSectionRawMutex, _>::new(HashMap::new())),
             state: Rc::new(RefCell::new(State {
                 interpreter: None,
                 active_stops: alloc::vec::Vec::new(),
