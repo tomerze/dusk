@@ -12,7 +12,6 @@
 //! waits for it to arrive.
 
 use std::net::SocketAddr;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -29,10 +28,9 @@ use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
-use dusk_program_sh::client::shell::Shell;
 use dusk_program_sh::entry::StaticShEntriesBuilder;
-use dusk_program_sh::parser::Parser;
 use dusk_program_sh::sh_capnp;
+use dusk_program_sh::{ShArgs, ShMode};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 
 use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::{
@@ -43,7 +41,6 @@ use opentelemetry_proto::tonic::collector::logs::v1::{
 };
 use opentelemetry_proto::tonic::logs::v1::LogRecord as OtlpLogRecord;
 
-use tokio::sync::{Notify, oneshot};
 use tokio::task::LocalSet;
 
 /// How long to wait for a record to reach the destination before failing.
@@ -91,9 +88,6 @@ async fn drive_logs_stream(
     let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
     let connection = Connection::connect(address).await.unwrap();
     let client = connection.client().await;
-    let mut shell = Shell::new(client, StaticShEntriesBuilder::default(), Parser::new())
-        .await
-        .unwrap();
 
     // Emit the marker on a loop so the live stream is guaranteed to carry it,
     // independent of how much history the replay walks first.
@@ -106,12 +100,36 @@ async fn drive_logs_stream(
 
     // `logs stream` runs until torn down, so its done long-poll never fires and
     // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
-    let (_done_sender, done_receiver) = oneshot::channel::<()>();
     let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
-    let stop_signal = Rc::new(Notify::new());
+    let program_args = ShArgs::new(
+        client.clone(),
+        StaticShEntriesBuilder::default(),
+        ShMode::Script(command.to_string()),
+    )
+    .unwrap()
+    .as_program_args()
+    .unwrap();
+    let drive = async {
+        let mut process_request = client.process_request();
+        program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
+        let process_reply = process_request.send().promise.await?;
+        let process = process_reply.get()?.get_result()?;
+        let mut run_request = client.run_request();
+        run_request.get().set_process(process.clone());
+        run_request.send().promise.await?;
+        let portal_reply = process.portal_request().send().promise.await?;
+        let portal = portal_reply
+            .get()?
+            .get_result()?
+            .cast_to::<sh_capnp::output_portal::Client>();
+        let mut output_request = portal.output_request();
+        output_request.get().set_stream(output);
+        output_request.send().promise.await?;
+        Ok::<(), capnp::Error>(())
+    };
 
     let found = tokio::select! {
-        result = shell.sh(command, output, done_receiver, stop_signal) => {
+        result = drive => {
             // `logs stream` should outlive the wait; if it returned, surface why.
             result.unwrap();
             false
@@ -120,7 +138,6 @@ async fn drive_logs_stream(
     };
 
     marker_task.abort();
-    let _ = shell.kill().await;
     let _ = connection.disconnect().await;
     found
 }
