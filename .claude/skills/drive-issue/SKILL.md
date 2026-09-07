@@ -158,6 +158,48 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
   `Enum value or union discriminant <n> was not present in the schema`, which
   reads like a schema bug in the branch you just wrote.
 
+## Step 4c — Reporting a fix
+
+Every bug I fix is reported in the same three lines — in the reply, and in the
+pull request body. Not a paragraph, not the story of how I found it:
+
+```
+THE PROBLEM WAS:
+I FIXED IT BY:
+MY FIX IS NOT GOOD ENOUGH BECAUSE:
+```
+
+**The first line is the mechanism, not the symptom.** The user saw the symptom;
+they are the one who reported it, and repeating it back tells them nothing. What
+they cannot see is which line of which function did the wrong thing, and why
+that produced what they got. Name it: the arm that answered before the work
+started, the call that returned early, the field never set, the capability that
+died with its connection, the assumption that stopped holding and where. **A
+first line I could have written without reading the code is not a report, it is
+an echo.**
+
+Wrong — the symptom, which they already have:
+
+> `sh` with no command printed "running in server mode" instead of opening a
+> shell.
+
+Right — the mechanism, which they do not:
+
+> `Portal::output`'s server-mode arm wrote one value and answered
+> `daemonize = false` immediately, so the interpreter killed and reaped the
+> process as soon as it had started it. Nothing stayed running for a client to
+> attach a view to, and `output` returning is the only thing the caller waits
+> on.
+
+The second line is the change, in one sentence, in the same terms.
+
+**The third line is the one that matters, and the one I will want to skip.** A
+fix that covers the path in the report and not its siblings, that leaves the
+same class of bug reachable another way, that I could not drive and only read —
+it says so there. `null` is allowed and it is a claim: it means I went looking
+for the case that breaks this fix and did not find one. Writing `null` because
+nothing came to mind is a lie in three characters.
+
 ## Step 5 — One commit while you work, split it just before review
 
 **Everything goes into a single commit until the work is finished.** Amend it as
