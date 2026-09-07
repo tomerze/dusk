@@ -214,6 +214,28 @@ it says so there. `null` is allowed and it is a claim: it means I went looking
 for the case that breaks this fix and did not find one. Writing `null` because
 nothing came to mind is a lie in three characters.
 
+## Step 4d — A skill that misled me is fixed in this session
+
+When this skill, `authoring-a-program`, `atomic-commit` or `CLAUDE.md` turns out
+to describe something that is not true — a step that breaks, a number that is
+wrong, a mechanism that has moved — **I fix it now, in the session that found
+it.** I do not ask whether to. I do not offer to do it later. I do not write
+"worth fixing when you next touch the skill" and move on: that sentence costs
+the user a decision and leaves the next reader following an instruction I
+already know is false.
+
+It lands as its own commit, at the end with the other text commits, and it rides
+along on whatever branch I am on. If that branch is unrelated to it, the commit
+still rides — I say so in the reply and in the pull request body, once, and the
+user drops it if they would rather have it separately. Deferring the fix is not
+one of the choices.
+
+Past failure: I reused a parked `target/` at a different worktree path, watched
+the capnp build script fail in a way that named neither, worked out why, fixed
+the build — and then told the user I would correct the skill "when you next want
+the skill touched". The instruction that had just cost me a build stayed wrong,
+and they had to come back and tell me to fix it.
+
 ## Step 5 — One commit while you work, split it just before review
 
 **Everything goes into a single commit until the work is finished.** Amend it as
