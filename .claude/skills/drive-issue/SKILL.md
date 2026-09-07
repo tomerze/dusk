@@ -32,6 +32,7 @@ Use the `EnterWorktree` tool. A fresh dusk worktree does not build until:
 ```
 git submodule update --init vendor/capnproto        # else dusk_capnp's build.rs fails
 cp /home/<user>/git/dusk/Cargo.lock .               # Cargo.lock is gitignored
+mv ~/.cache/dusk-target/<branch> target             # this branch's parked build directory — never `cp` one
 ```
 
 Why each matters:
@@ -44,6 +45,40 @@ Why each matters:
 - **`Cargo.lock` is gitignored.** A fresh resolve can pick dependency versions
   newer than the manifests were written against, and you will lose an hour to a
   compile error that is not yours. Copy the user's lockfile.
+- **Never copy a `target/` directory.** Not the user's — it is 9.6G, and on
+  ext4 there is no reflink, so `cp -a --reflink=auto` copies every byte for
+  real. Not with hardlinks either: `cp -al` shares inodes, and cargo rewrites
+  fingerprint files in place, so your build's state lands in the tree the user
+  builds in. **If you are about to type `cp` and `target` in the same command,
+  stop.**
+
+  A worktree's build directory is **parked** instead, and moved back — a
+  rename, which costs nothing:
+
+  ```
+  mkdir -p ~/.cache/dusk-target
+  mv target ~/.cache/dusk-target/<branch>            # before ExitWorktree
+  mv ~/.cache/dusk-target/<branch> target            # after EnterWorktree
+  ```
+
+  Measured on this machine: **0.06s to move 340M**, against **1m35s** to
+  compile one crate's dependency tree from cold and **0.08s** once it is warm.
+  An empty `target/` costs that on every `check`, `clippy` and `build`, and a
+  drive rebuilds its branch many times, so it is most of the waiting in a whole
+  session. **The first drive of a branch has nothing parked: build it cold
+  once, and park it on the way out.** That is the price, and it is paid once.
+
+  **Name the worktree after the branch, every time.** Cargo keys artifacts by
+  absolute path, so a parked directory is only warm coming back to the path it
+  was built at — `sh-flip`, `sh-flip-2`, `sh-flip-3` are three cold trees, and
+  one parked from any of them is dead weight for the others.
+
+  **One shared `CARGO_TARGET_DIR` for every worktree is not the answer either.**
+  Measured: the same crate from a second path recompiled in the same 1m35s as
+  cold, because that sharing is per-path too; all it adds is cargo's lock
+  between concurrent builds. And **`~/.cache/pre-commit` is not the expensive
+  part** — 332M, in `$HOME`, already shared by every worktree; the clippy hook
+  is slow because it compiles into the worktree's own `target/`.
 - **Do not symlink build inputs in from another checkout.** A symlink whose
   target is deleted while you work turns into a failure nowhere near its cause —
   `fs::create_dir_all` on a dangling symlink fails with `File exists`, not with
@@ -221,9 +256,11 @@ The PR body must carry:
 time, so for as long as yours is checked out on it the user cannot check it out
 to review it: `git checkout <branch>` in their own checkout fails, and the first
 they hear of the reason is the error. Everything is pushed by this point, so the
-worktree holds nothing the remote does not:
+worktree holds nothing the remote does not — except its build directory, which
+is parked first so the next session starts warm:
 
 ```
+mv target ~/.cache/dusk-target/<branch>
 ExitWorktree(action="remove")
 ```
 
