@@ -70,8 +70,22 @@ Why each matters:
 
   **Name the worktree after the branch, every time.** Cargo keys artifacts by
   absolute path, so a parked directory is only warm coming back to the path it
-  was built at — `sh-flip`, `sh-flip-2`, `sh-flip-3` are three cold trees, and
-  one parked from any of them is dead weight for the others.
+  was built at — `sh-flip`, `sh-flip-2`, `sh-flip-3` are three cold trees.
+
+  **A parked directory moved to a different path is worse than useless: it
+  breaks the build.** `dusk_capnp`'s build script installs the vendored Cap'n
+  Proto compiler into `target/` and records its absolute path, so at a new path
+  the compiler is there but its includes are not, and the build fails with
+  `Import failed: /capnp/c++.capnp` and `capnp compile: Premature end of file` —
+  which reads like a broken submodule, not like a stale cache. Measured. If you
+  have already done it:
+
+  ```
+  rm -rf target/debug/build/dusk_capnp-*
+  ```
+
+  That rebuilds the compiler for this path and keeps the rest of the directory
+  warm.
 
   **One shared `CARGO_TARGET_DIR` for every worktree is not the answer either.**
   Measured: the same crate from a second path recompiled in the same 1m35s as
