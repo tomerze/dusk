@@ -32,6 +32,8 @@ greet
 
 Functions persist for the lifetime of the `sh` process: once you define a function, you can call it from any subsequent command in the same shell session. Definitions accumulate; redefining a name replaces the previous definition.
 
+They belong to that one shell, not to the node. A function you define at a prompt is there for anyone who attaches to the same shell server afterwards, and is not there for a `sh <command>` or `sh -d <command>` run elsewhere — each of those is a shell of its own.
+
 To remove a function, redefine it with an empty body:
 
 ```sh
