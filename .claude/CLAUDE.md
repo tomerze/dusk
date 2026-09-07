@@ -281,7 +281,9 @@ before anything has run it. Args that fix a pid (`ProgramArgs.pid`) get the
 process already registered under that pid instead of a second one, and it
 receives the second set of args as `Signal::Rerun`. If the args carry the
 process's created callback, the namespace calls it with the process the args
-produced, whether that process was built now or was already there.
+produced, whether that process was built now or was already there, and
+`Dusk.process` fails with the callback's error if it fails; the process stays
+registered either way.
 
 The client then chooses the process's lifetime:
 
