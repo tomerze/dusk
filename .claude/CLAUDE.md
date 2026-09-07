@@ -90,7 +90,7 @@ vendor/        External libs submodules
 | `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
-| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side — the prompt UI and the `Shell` that drives a long-lived `sh` process. |
+| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side — the prompt UI and the `Shell` that drives the `sh` process a client attaches to. |
 | `dusk_connection` | `Connection` — the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
 | `dusk_py` | The Python extension (the `dusk` module, built with maturin). |
@@ -393,8 +393,15 @@ dusk 127.0.0.1:9090            # interactive prompt
 dusk 127.0.0.1:9090 "ps"       # run one command and exit
 ```
 
-It's a thin layer over the Rust client path: it drives a long-lived `sh` process
-behind an interactive prompt.
+It's a thin layer over the Rust client path. For the prompt it runs `sh` in
+server mode at the shell's `defaultPid` (`sh.capnp`) with a `created` callback
+on the args, calling `Dusk.process` then `process.run()` — the shell runs in the
+CLI's own session. The callback is `sh`'s own client side
+(`base/sh/src/client/`): it spawns the prompt on the process the node hands back
+and returns at once, since the prompt cannot run inside the `process` call that
+is waiting for it. For one command it runs `sh` in script mode and drives the
+process itself — `Dusk.run`, the portal, `output` into a JSON stream, then kill
+and reap.
 
 ### `dusk_py` — the Python extension
 
