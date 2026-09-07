@@ -279,7 +279,10 @@ a network call — and runs the matching launcher's `launch`, which returns a
 then, **suspended** — it has a pid, it appears in `ps` and it answers to `kill`
 before anything has run it. Args that fix a pid (`ProgramArgs.pid`) get the
 process already registered under that pid instead of a second one, and it
-receives the second set of args as `Signal::Rerun`. If the args carry the
+receives the second set of args as `Signal::Rerun` — unless that process has
+exited, in which case the new one replaces it, so a fixed pid is never held by
+a corpse. Nobody reaped the replaced one, so its exit result goes with it and
+is logged at `warn` on the way out. If the args carry the
 process's created callback, the namespace calls it with the process the args
 produced, whether that process was built now or was already there, and
 `Dusk.process` fails with the callback's error if it fails; the process stays
@@ -296,8 +299,15 @@ in the namespace, exited, until `Dusk.waitpid` takes it out: `process`
 registers, `waitpid` unregisters, and `bootstrap` only changes state. The
 `Reap` signal (wire value 8) also unregisters an exited process, logging its
 exit status instead of returning it; `Dusk.kill` handles it in the namespace
-and never delivers it to a process. Running a
-process that is already running does nothing.
+and never delivers it to a process.
+
+**The two runs answer at different moments, and that is what separates them.**
+`Dusk.run` answers as soon as the process has a task of its own, which is what a
+daemon's runner wants. `process.run()` answers when the process has exited, with
+its result — and it does that whether it started the process or found it already
+running, so running a process twice gives the same answer twice. **When
+`process.run()` returns is part of its contract**: a caller that runs a process
+in its session is told when it is over, however it got there.
 
 **Portals and kill.** `process.portal()` waits for the process to be un-suspended
 and then for its `Ready` watch, so a client can ask a process it has just created
