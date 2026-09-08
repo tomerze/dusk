@@ -205,6 +205,12 @@ impl Namespace {
     }
 
     async fn register(&self, pid: u64, process: Box<dyn Process>) -> Registration {
+        if let Some(entry) = self.ps_map.lock().await.get(&pid)
+            && entry.exit.try_get().flatten().is_none()
+        {
+            return Registration::Existing(entry.process.clone());
+        }
+        let client = self.ps_server_set.lock().await.new_client(process);
         let mut ps_map = self.ps_map.lock().await;
         if let Some(entry) = ps_map.get(&pid) {
             let Some(exit) = entry.exit.try_get().flatten() else {
@@ -217,7 +223,6 @@ impl Namespace {
             );
             ps_map.remove(&pid);
         }
-        let client = self.ps_server_set.lock().await.new_client(process);
         ps_map.insert(
             pid,
             PsEntry {
