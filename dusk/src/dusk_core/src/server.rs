@@ -35,10 +35,15 @@ impl DuskServer {
         process_client: process::Client,
         namespace: Rc<Namespace>,
     ) -> Result<(), capnp::Error> {
-        let ps_server_set = namespace.ps_server_set.lock().await;
+        let process = {
+            let ps_server_set = namespace.ps_server_set.lock().await;
+            ps_server_set
+                .get_local_server(&process_client)
+                .await
+                .map(|process_server| process_server.borrow().server.clone_box())
+        };
 
-        if let Some(process_server) = ps_server_set.get_local_server(&process_client).await {
-            let process = process_server.borrow().server.clone_box();
+        if let Some(process) = process {
             let task_id = Rc::new(Cell::new(0));
             let registered = Rc::new(Signal::<CriticalSectionRawMutex, ()>::new());
             let spawn_token = process_task(task_id.clone(), process, registered.clone())
