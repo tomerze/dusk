@@ -177,6 +177,18 @@ impl Namespace {
     }
 
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        if matches!(signal, signal::Signal::Sweep) {
+            let entry = self
+                .entry(pid)
+                .await
+                .ok_or_else(|| anyhow::anyhow!("couldn't find process"))?;
+            if entry.suspended.try_get().unwrap_or(false) {
+                self.exit(pid, Ok(())).await;
+                self.unregister(pid).await;
+                info!(pid, "process swept by sweep signal");
+            }
+            return Ok(());
+        }
         if matches!(signal, signal::Signal::Reap) {
             let entry = self
                 .entry(pid)
