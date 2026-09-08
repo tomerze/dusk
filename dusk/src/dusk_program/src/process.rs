@@ -159,12 +159,12 @@ impl process::Server for dyn Process {
         let process = self.clone_box();
         Promise::from_future(async move {
             let Some(entry) = namespace.entry(pid).await else {
-                return Err(capnp::Error::failed(
+                return Err(capnp::Error::disconnected(
                     "process no longer exists, cannot get portal".to_string(),
                 ));
             };
             if entry.exit.try_get().flatten().is_some() {
-                return Err(capnp::Error::failed(
+                return Err(capnp::Error::disconnected(
                     "process has exited, cannot get portal".to_string(),
                 ));
             }
