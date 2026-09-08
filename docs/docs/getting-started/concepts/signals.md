@@ -10,6 +10,7 @@ Dusk maps the wire signal number to a small enum:
 ```rust
 #[non_exhaustive]
 pub enum Signal {
+    Sweep,                   // signal number 7
     Reap,                    // signal number 8
     Terminate,               // signal number 15
     Rerun(Rc<ProgramArgs>),  // this pid was asked for a second time
@@ -20,6 +21,9 @@ pub enum Signal {
 `Signal` is `#[non_exhaustive]`, so a `match` on it needs a wildcard arm. Dusk can
 then add a signal without breaking programs that were written before it existed.
 
+- **`Sweep`** (7) is handled by the node and never reaches a process. It takes a
+  suspended process — one that was created and never run — out of the namespace,
+  and does nothing to a process that has run.
 - **`Reap`** (8) is handled by the node and never reaches a process. It reaps a
   zombie process, logging its exit result and taking it out of the namespace, and
   does nothing to a non-zombie process.
