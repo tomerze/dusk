@@ -72,8 +72,8 @@ path uses, still answers as soon as the process is spawned.)
 Each accepted line goes `Prompt::execute_command` → `Shell::sh`, which **parses
 the text on the client** into a `Script` and ships it via
 `ShPortal.sh(script, output, stop, compiler)`. One line = one `sh` RPC carrying
-a freshly-parsed `Script`. The shell is left running when the client goes: it
-keeps its functions and is there for the next client.
+a freshly-parsed `Script`. The shell server is left running when the client
+goes: it keeps its functions and is there for the next client.
 
 **One command.** `dusk <address> "ps"` and `dusk.sh(...)` from Python run `sh`
 in `ShMode::Script`, with no callback at all, and drive it themselves:
