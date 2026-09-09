@@ -22,6 +22,7 @@ use tokio::sync::Notify;
 const TERMINATE: u64 = 15;
 const SWEEP: u64 = 7;
 const RECONNECT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+const REFUSAL_REPORT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
 thread_local! {
     static PROMPT_OPEN: Cell<bool> = const { Cell::new(false) };
@@ -156,6 +157,8 @@ pub async fn open_prompt<S: ShEntriesBuilder>(
 ) -> anyhow::Result<()> {
     let connecting_stop = StopSignal::new();
     let mut view_opened = false;
+    let mut refusals = 0u64;
+    let mut last_report = tokio::time::Instant::now();
     loop {
         let program_args = if view_opened {
             let mut sh_args = ShArgs::new(
@@ -210,6 +213,13 @@ pub async fn open_prompt<S: ShEntriesBuilder>(
                 return Ok(());
             }
             Err(error) if error.kind == capnp::ErrorKind::Disconnected => {
+                refusals += 1;
+                if !PROMPT_OPEN.get() && last_report.elapsed() >= REFUSAL_REPORT_INTERVAL {
+                    tracing::info!(
+                        "still attempting to connect... attempted and refused {refusals} times"
+                    );
+                    last_report = tokio::time::Instant::now();
+                }
                 let stop = connecting_stop.signal();
                 match dusk_program::futures::future::select(
                     core::pin::pin!(tokio::time::sleep(RECONNECT_INTERVAL)),

@@ -167,7 +167,7 @@ pub async fn main() -> Result<()> {
             .init();
     }
 
-    info!("connecting to {}", cli.address);
+    info!("attempting to connect to {}", cli.address);
     run(cli).await;
 
     std::process::exit(0);
