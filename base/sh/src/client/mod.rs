@@ -32,7 +32,8 @@ shell. Dusk shell commands run Dusk programs built into the Dusk Node.
   node's default shell server or to the one at `<pid>`. `exit` closes it, and
   the shell server it was attached to keeps running.
 
-`sh` on its own is not a command.
+`sh` on its own is not a command. A terminal has one prompt, so `sh --prompt`
+is refused at a prompt.
 "#,
             version: VERSION,
         },

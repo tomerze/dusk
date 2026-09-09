@@ -13,12 +13,14 @@ use dusk_capnp::pry;
 use dusk_program::anyhow;
 use std::cell::Cell;
 use std::format;
+use std::io::IsTerminal as _;
 use std::rc::Rc;
 use std::string::String;
 use std::thread_local;
 use tokio::sync::Notify;
 
 const TERMINATE: u64 = 15;
+const SWEEP: u64 = 7;
 const RECONNECT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 thread_local! {
@@ -45,6 +47,23 @@ pub fn client_hostname() -> String {
     }
 }
 
+fn refuse_a_prompt() -> Option<String> {
+    if std::env::var_os("DUSK_NON_INTERACTIVE").is_some() {
+        return Some(
+            "there is no terminal to open a prompt on: DUSK_NON_INTERACTIVE is set".to_string(),
+        );
+    }
+    if !std::io::stdout().is_terminal() {
+        return Some(
+            "there is no terminal to open a prompt on: output is not a terminal".to_string(),
+        );
+    }
+    if PROMPT_OPEN.get() {
+        return Some("there is already an open prompt in this terminal".to_string());
+    }
+    None
+}
+
 impl<S: ShEntriesBuilder> created::Server for Created<S> {
     fn created(
         &mut self,
@@ -52,12 +71,15 @@ impl<S: ShEntriesBuilder> created::Server for Created<S> {
         _results: created::CreatedResults,
     ) -> Promise<(), capnp::Error> {
         let view = pry!(pry!(params.get()).get_process());
-        if std::env::var_os("DUSK_NON_INTERACTIVE").is_some() {
-            return Promise::err(capnp::Error::failed(
-                "there is no terminal to open a prompt on: DUSK_NON_INTERACTIVE is set".to_string(),
-            ));
-        }
         let client = self.client.clone();
+        if let Some(refusal) = refuse_a_prompt() {
+            tokio::task::spawn_local(async move {
+                if let Err(error) = kill(&client, &view, SWEEP).await {
+                    tracing::error!(error = %error, "couldn't clear the refused prompt's process");
+                }
+            });
+            return Promise::err(capnp::Error::failed(refusal));
+        }
         let sh_entries_builder = self.sh_entries_builder.clone();
         let server_pid = self.server_pid;
         PROMPT_OPEN.set(true);
