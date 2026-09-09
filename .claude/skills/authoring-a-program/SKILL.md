@@ -699,24 +699,24 @@ This is the **async** `embassy_sync::mutex::Mutex`, not `std::sync::Mutex`. You 
 
 ### Field ownership
 
-If state belongs to one process instance, put it on the `Process` struct. If it's shared across multiple process instances of the same program (e.g. functions defined in `sh` persist across script invocations from different shell sessions), put it on the `Launcher` and pass a clone into each `Process` at launch:
+If state belongs to one process instance, put it on the `Process` struct, made in `with_context` — `sh`'s function table is there, so the functions defined in one shell are that shell's. If it's shared by every process of the program on a node (e.g. the log buffer every `logs` process reads, which is filled by a subscriber installed once), put it on the `Launcher` and pass a clone into each `Process` at launch:
 
 ```rust
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher {
-    function_table: FunctionTable,
+    pub buffer: SignalBuffer,
 }
 
 impl dusk_program::launcher::LauncherMixin for Launcher {
     async fn launch(&mut self, ctx: ProcessContext) -> … {
         Ok(Box::new(
-            Process::with_context_and_function_table(ctx, self.function_table.clone()).await?,
+            Process::with_context_and_buffer(ctx, self.buffer.clone()).await?,
         ))
     }
 }
 ```
 
-See `base/sh/src/lib.rs:132-156` for the live example.
+See `base/logs/src/lib.rs` for the live example.
 
 ---
 

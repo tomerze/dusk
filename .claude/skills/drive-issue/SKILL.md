@@ -70,8 +70,22 @@ Why each matters:
 
   **Name the worktree after the branch, every time.** Cargo keys artifacts by
   absolute path, so a parked directory is only warm coming back to the path it
-  was built at — `sh-flip`, `sh-flip-2`, `sh-flip-3` are three cold trees, and
-  one parked from any of them is dead weight for the others.
+  was built at — `sh-flip`, `sh-flip-2`, `sh-flip-3` are three cold trees.
+
+  **A parked directory moved to a different path is worse than useless: it
+  breaks the build.** `dusk_capnp`'s build script installs the vendored Cap'n
+  Proto compiler into `target/` and records its absolute path, so at a new path
+  the compiler is there but its includes are not, and the build fails with
+  `Import failed: /capnp/c++.capnp` and `capnp compile: Premature end of file` —
+  which reads like a broken submodule, not like a stale cache. Measured. If you
+  have already done it:
+
+  ```
+  rm -rf target/debug/build/dusk_capnp-*
+  ```
+
+  That rebuilds the compiler for this path and keeps the rest of the directory
+  warm.
 
   **One shared `CARGO_TARGET_DIR` for every worktree is not the answer either.**
   Measured: the same crate from a second path recompiled in the same 1m35s as
@@ -157,6 +171,70 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
   error names neither the port nor the process: a changed capnp union surfaces as
   `Enum value or union discriminant <n> was not present in the schema`, which
   reads like a schema bug in the branch you just wrote.
+
+## Step 4c — Reporting a fix
+
+Every bug I fix is reported in the same three lines — in the reply, and in the
+pull request body. Not a paragraph, not the story of how I found it:
+
+```
+THE PROBLEM WAS:
+I FIXED IT BY:
+MY FIX IS NOT GOOD ENOUGH BECAUSE:
+```
+
+**The first line is the mechanism, not the symptom.** The user saw the symptom;
+they are the one who reported it, and repeating it back tells them nothing. What
+they cannot see is which line of which function did the wrong thing, and why
+that produced what they got. Name it: the arm that answered before the work
+started, the call that returned early, the field never set, the capability that
+died with its connection, the assumption that stopped holding and where. **A
+first line I could have written without reading the code is not a report, it is
+an echo.**
+
+Wrong — the symptom, which they already have:
+
+> `sh` with no command printed "running in server mode" instead of opening a
+> shell.
+
+Right — the mechanism, which they do not:
+
+> `Portal::output`'s server-mode arm wrote one value and answered
+> `daemonize = false` immediately, so the interpreter killed and reaped the
+> process as soon as it had started it. Nothing stayed running for a client to
+> attach a view to, and `output` returning is the only thing the caller waits
+> on.
+
+The second line is the change, in one sentence, in the same terms.
+
+**The third line is the one that matters, and the one I will want to skip.** A
+fix that covers the path in the report and not its siblings, that leaves the
+same class of bug reachable another way, that I could not drive and only read —
+it says so there. `null` is allowed and it is a claim: it means I went looking
+for the case that breaks this fix and did not find one. Writing `null` because
+nothing came to mind is a lie in three characters.
+
+## Step 4d — A skill that misled me is fixed in this session
+
+When this skill, `authoring-a-program`, `atomic-commit` or `CLAUDE.md` turns out
+to describe something that is not true — a step that breaks, a number that is
+wrong, a mechanism that has moved — **I fix it now, in the session that found
+it.** I do not ask whether to. I do not offer to do it later. I do not write
+"worth fixing when you next touch the skill" and move on: that sentence costs
+the user a decision and leaves the next reader following an instruction I
+already know is false.
+
+It lands as its own commit, at the end with the other text commits, and it rides
+along on whatever branch I am on. If that branch is unrelated to it, the commit
+still rides — I say so in the reply and in the pull request body, once, and the
+user drops it if they would rather have it separately. Deferring the fix is not
+one of the choices.
+
+Past failure: I reused a parked `target/` at a different worktree path, watched
+the capnp build script fail in a way that named neither, worked out why, fixed
+the build — and then told the user I would correct the skill "when you next want
+the skill touched". The instruction that had just cost me a build stayed wrong,
+and they had to come back and tell me to fix it.
 
 ## Step 5 — One commit while you work, split it just before review
 

@@ -127,17 +127,35 @@ impl dusk_program::process::ProcessMixin for Process {
         loop {
             futures::select! {
                 accept_result = listener.accept().fuse() => {
-                    let (stream, _) = accept_result?;
-                    stream.set_nodelay(true)?;
+                    let (stream, _) = match accept_result {
+                        Ok(accepted) => accepted,
+                        Err(error) => {
+                            tracing::error!(error = %error, "couldn't accept a connection");
+                            continue;
+                        }
+                    };
+                    if let Err(error) = stream.set_nodelay(true) {
+                        tracing::error!(error = %error, "couldn't set nodelay on a connection");
+                        continue;
+                    }
                     let (reader, writer) = stream.split();
 
                     let task_id = Rc::new(Cell::new(0));
-                    let session_task = dusk_core::session(
+                    let session_task = match dusk_core::session(
                         task_id.clone(),
                         self.namespace().clone(),
                         Box::pin(reader),
                         Box::pin(writer),
-                    )?;
+                    ) {
+                        Ok(session_task) => session_task,
+                        Err(error) => {
+                            tracing::error!(
+                                error = %error,
+                                "couldn't take a connection: every session slot is in use"
+                            );
+                            continue;
+                        }
+                    };
                     task_id.set(session_task.id());
                     self.ctx.namespace.spawner.spawn(session_task);
                 }

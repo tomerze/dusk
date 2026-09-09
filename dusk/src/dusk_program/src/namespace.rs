@@ -177,6 +177,18 @@ impl Namespace {
     }
 
     pub async fn kill(&self, pid: u64, signal: signal::Signal) -> anyhow::Result<()> {
+        if matches!(signal, signal::Signal::Sweep) {
+            let entry = self
+                .entry(pid)
+                .await
+                .ok_or_else(|| anyhow::anyhow!("couldn't find process"))?;
+            if entry.suspended.try_get().unwrap_or(false) {
+                self.exit(pid, Ok(())).await;
+                self.unregister(pid).await;
+                info!(pid, "process swept by sweep signal");
+            }
+            return Ok(());
+        }
         if matches!(signal, signal::Signal::Reap) {
             let entry = self
                 .entry(pid)
@@ -205,6 +217,12 @@ impl Namespace {
     }
 
     async fn register(&self, pid: u64, process: Box<dyn Process>) -> Registration {
+        if let Some(entry) = self.ps_map.lock().await.get(&pid)
+            && entry.exit.try_get().flatten().is_none()
+        {
+            return Registration::Existing(entry.process.clone());
+        }
+        let client = self.ps_server_set.lock().await.new_client(process);
         let mut ps_map = self.ps_map.lock().await;
         if let Some(entry) = ps_map.get(&pid) {
             let Some(exit) = entry.exit.try_get().flatten() else {
@@ -217,7 +235,6 @@ impl Namespace {
             );
             ps_map.remove(&pid);
         }
-        let client = self.ps_server_set.lock().await.new_client(process);
         ps_map.insert(
             pid,
             PsEntry {

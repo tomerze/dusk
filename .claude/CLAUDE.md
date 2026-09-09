@@ -298,8 +298,10 @@ suspension, runs `main`, and marks the exit when it returns. The process stays
 in the namespace, exited, until `Dusk.waitpid` takes it out: `process`
 registers, `waitpid` unregisters, and `bootstrap` only changes state. The
 `Reap` signal (wire value 8) also unregisters an exited process, logging its
-exit status instead of returning it; `Dusk.kill` handles it in the namespace
-and never delivers it to a process.
+exit status instead of returning it, and the `Sweep` signal (wire value 7)
+unregisters a process that is still suspended, which is how a process nobody
+ever ran — one whose created callback failed, say — is taken out. `Dusk.kill`
+handles both in the namespace and never delivers them to a process.
 
 **The two runs answer at different moments, and that is what separates them.**
 `Dusk.run` answers as soon as the process has a task of its own, which is what a
