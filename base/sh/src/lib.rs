@@ -456,7 +456,7 @@ impl sh_capnp::output_portal::Server for Portal {
                     Value::Text("running in server mode".to_string())
                         .write_to_builder(value_builder)?;
                     request.send().await?;
-                    results.get().set_daemonize(false);
+                    results.get().set_daemonize(true);
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
                     let compiler = ctx
