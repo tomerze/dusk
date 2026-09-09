@@ -6,6 +6,7 @@ use clap::Parser as _;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow;
 use dusk_program::program_args::ProgramArgs;
+use std::format;
 use std::rc::Rc;
 use std::string::String;
 
@@ -14,11 +15,19 @@ use std::string::String;
 struct ShCli {
     #[arg(short = 'd', long = "detach")]
     detach: bool,
-    #[arg(long = "server", value_name = "PID", num_args = 0..=1, conflicts_with_all = ["prompt", "detach"])]
+    #[arg(long = "server", value_name = "PID", num_args = 0..=1, value_parser = parse_pid, conflicts_with_all = ["prompt", "detach"])]
     server: Option<Option<u64>>,
-    #[arg(long = "prompt", value_name = "PID", num_args = 0..=1, conflicts_with = "detach")]
+    #[arg(long = "prompt", value_name = "PID", num_args = 0..=1, value_parser = parse_pid, conflicts_with = "detach")]
     prompt: Option<Option<u64>>,
     command: Option<String>,
+}
+
+fn parse_pid(pid: &str) -> Result<u64, String> {
+    let parsed = match pid.strip_prefix("0x").or_else(|| pid.strip_prefix("0X")) {
+        Some(digits) => u64::from_str_radix(digits, 16),
+        None => pid.parse(),
+    };
+    parsed.map_err(|error| format!("`{pid}` is not a pid: {error}"))
 }
 
 pub struct ShProgramArgsBuilder {}

@@ -27,7 +27,8 @@ shell. Dusk shell commands run Dusk programs built into the Dusk Node.
 * `sh <command>` — run a command, quoting it if it has spaces: `sh "ps; date"`.
 * `sh -d <command>` — run it detached from the current session.
 * `sh --server [<pid>]` — start the node's default shell server, or a shell
-  server at `<pid>`, and leave it running for clients to attach to.
+  server at `<pid>`, and leave it running for clients to attach to. A pid is
+  written the way `ps` prints it, `0x2bc`, or in decimal.
 * `sh --prompt [<pid>]` — open a prompt on this terminal, attached to the
   node's default shell server or to the one at `<pid>`. `exit` closes it, and
   the shell server it was attached to keeps running.
