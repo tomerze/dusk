@@ -64,15 +64,17 @@ that that one merges first.
 A branch whose commits are one feature end to end usually only splices by
 stacking — the cut is a point along the branch, not a subset of it.
 
-## Step 3 — Show the division and wait
+## Step 3 — Write the division down, then build
 
-Print the commit subject lines, grouped, in order, with each group's base. That
-list is what the user is approving — the same rule as
-[atomic-commit's step 8](../atomic-commit/SKILL.md#8-present-the-subject-lines-and-wait).
-Do not create a branch before the nod.
+Put the commit subject lines, grouped, in order, with each group's base, in the
+reply — the same rule as
+[atomic-commit's step 8](../atomic-commit/SKILL.md#8-write-the-subject-lines-down-then-build)
+— and build the branches in the same turn. Where a PR is cut is not a
+structural decision; the user approves or sends back the PRs themselves.
 
-Ask about anything that spans two groups — a docs commit touching one page per
-group, a commit whose message covers both. Those are decisions, not mechanics.
+Decide anything that spans two groups — a docs commit touching one page per
+group, a commit whose message covers both — and say in the reply which way it
+went and why.
 
 ## Step 4 — Rebase on current master first
 
@@ -149,7 +151,7 @@ message you rewrote in step 6, quoted. Branch names and PR titles are
 - ☐ Cherry-pick every candidate onto a scratch worktree; record OK or FAIL
 - ☐ Choose beside-master or stacked from that result, not from reading
 - ☐ Keep each group's tests and docs with the code they belong to
-- ☐ Show the grouped subject lines with their bases, and wait
+- ☐ Put the grouped subject lines with their bases in the reply, and build without waiting
 - ☐ `git tag -f splice-snapshot HEAD` before touching anything
 - ☐ Rebuild each branch by cherry-pick
 - ☐ `git diff splice-snapshot <tip>` is empty

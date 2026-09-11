@@ -164,11 +164,16 @@ the docs for how a prompt opens now", never "Say how a prompt opens now in the
 docs". A subject built around "say" is naming the sentence the file gained
 instead of the act done to the file.
 
-### 8. Present the subject lines and wait
+### 8. Write the subject lines down, then build
 
-Show the user **the list of subject lines, in order** — not the file groupings,
-not a script. The subject lines are what they are approving, because the subject
-lines are the statements. Wait for the nod before staging anything.
+Put **the list of subject lines, in order** in the reply — not the file
+groupings, not a script — and build the commits in the same turn. The subject
+lines are the statements, and the commits are what the user approves or sends
+back; they review them as commits, not as a plan. How a diff is divided is not
+a structural decision, so it does not wait for a nod: a split they dislike is
+redone, and that is cheaper than a stall. The user, verbatim: **"just do what
+you see fit. if i dont like it i will not approve it. this is what we always do
+with non structural decisions."**
 
 ## What a commit does *not* have to do
 
@@ -290,7 +295,7 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
       order it next to the commit instead of inside it
 - ☐ Run the consequence test on every hunk; fold consequences into their decision
 - ☐ Pull prose out into its own commits, split by reader
-- ☐ Show the user the subject lines in order, and wait
+- ☐ Put the subject lines in the reply, in order, and build without waiting
 - ☐ Snapshot and tag, `git reset HEAD^`, then commit forward, staging named paths only
 - ☐ Every commit in the split is `--no-verify`; the hooks run once at the end
 - ☐ `git diff harness-snapshot HEAD` is empty
