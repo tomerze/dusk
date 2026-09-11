@@ -2,6 +2,7 @@ use crate::client::prompt::display_engine::DefaultDisplayEngine;
 use crate::client::prompt::stream::{display_stream, json_stream};
 use crate::client::prompt::{Prompt, StreamRequest};
 use crate::client::shell::Shell;
+use crate::client::stop::StopSignal;
 use crate::entry::ShEntriesBuilder;
 use capnp::capability::Promise;
 use dusk_capnp::capnp_rpc;
@@ -9,13 +10,11 @@ use dusk_capnp::dusk_capnp::{created, dusk, process};
 use dusk_capnp::pry;
 use dusk_program::anyhow;
 use std::format;
-use std::rc::Rc;
-use tokio::sync::{Notify, oneshot};
+use tokio::sync::oneshot;
 
 pub struct Created<S: ShEntriesBuilder> {
     pub client: dusk::Client,
     pub sh_entries_builder: S,
-    pub stop_signal: Rc<Notify>,
     pub finished: Option<oneshot::Sender<()>>,
 }
 
@@ -33,10 +32,9 @@ impl<S: ShEntriesBuilder> created::Server for Created<S> {
         }
         let client = self.client.clone();
         let sh_entries_builder = self.sh_entries_builder.clone();
-        let stop_signal = self.stop_signal.clone();
         let finished = self.finished.take();
         tokio::task::spawn_local(async move {
-            if let Err(error) = prompt(client, sh_entries_builder, process, stop_signal).await {
+            if let Err(error) = prompt(client, sh_entries_builder, process).await {
                 tracing::error!(error = %format!("{error:#}"), "the shell prompt failed");
             }
             if let Some(finished) = finished {
@@ -51,8 +49,8 @@ async fn prompt<S: ShEntriesBuilder>(
     client: dusk::Client,
     sh_entries_builder: S,
     process: process::Client,
-    stop_signal: Rc<Notify>,
 ) -> anyhow::Result<()> {
+    let stop_signal = StopSignal::new();
     let mut shell = Shell::new(
         client.clone(),
         sh_entries_builder.clone(),
@@ -76,7 +74,7 @@ async fn prompt<S: ShEntriesBuilder>(
         sh_entries_builder,
         DefaultDisplayEngine::default(),
         stream_factory,
-        stop_signal,
+        stop_signal.signal(),
     )
     .await?;
     let result = prompt.run().await;

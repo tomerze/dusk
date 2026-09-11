@@ -3,6 +3,7 @@ pub mod cli;
 pub mod prompt;
 pub mod run_prompt;
 pub mod shell;
+pub mod stop;
 
 use crate::VERSION;
 use crate::entry::{EntryInfo, ShEntry};
