@@ -116,11 +116,25 @@ def lint_branch(cwd, base="origin/master"):
 
 
 READY_SIGNOFFS = (("split_sha", "the atomic-commit split"),)
+REVIEW_SIGNOFFS = (
+    ("reviewed_sha", "self-review"),
+    ("race_sha", "the race screen"),
+    ("terminology_sha", "terminology-review"),
+    ("strings_sha", "string-review"),
+    ("ranked_sha", "decision-ranker"),
+)
+
+
 def missing_signoffs(cwd, signoffs=READY_SIGNOFFS):
     branch = current_branch(cwd)
     tip = head(cwd)
     _, drive = drive_state(branch)
     return [name for key, name in signoffs if drive.get(key) != tip]
+
+
+def field(message, name):
+    matches = re.findall(rf"^[*_ \t]*{name}:[ \t]*(.*?)[*_ \t]*$", message or "", re.M)
+    return matches[-1].strip() if matches else None
 
 
 def haiku(prompt, timeout=60):

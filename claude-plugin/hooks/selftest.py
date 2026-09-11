@@ -64,6 +64,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("cargo test asks", run("pre_bash.py", bash("cargo nextest run")), 0, '"ask"'),
         expect("push to master is denied", run("pre_bash.py", bash("git push origin master")), 2, "master"),
         expect("push without sign-offs asks", run("pre_bash.py", bash("git push -u origin topic")), 0, '"ask"'),
+        expect("a read-only agent may not commit", run("pre_bash.py", {**bash('git commit -m "Add x"', timeout=600000), "agent_type": "dusk-dev:self-review"}), 2, "reads"),
         expect("a comment line in Rust is denied", run("pre_edit.py", edit(str(REPO / "src/lib.rs"), "let a = 1;", "// the answer\nlet a = 1;")), 2, "do not write comments"),
         expect("an existing comment line passes", run("pre_edit.py", edit(str(REPO / "src/lib.rs"), "// kept\nlet a = 1;", "// kept\nlet a = 2;")), 0),
         expect("a program edit needs the authoring skill", run("pre_edit.py", edit(str(REPO / "base/sleep/src/lib.rs"), "a", "b")), 2, "authoring-a-program"),

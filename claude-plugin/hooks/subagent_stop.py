@@ -3,6 +3,7 @@ from harness import (
     block,
     current_branch,
     drive_state,
+    field,
     git,
     head,
     lint_branch,

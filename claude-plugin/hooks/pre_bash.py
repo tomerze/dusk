@@ -1,6 +1,7 @@
 import re
 
 from harness import (
+    agent_type,
     ask,
     deny,
     lint_branch,
@@ -8,6 +9,13 @@ from harness import (
     missing_signoffs,
     read_input,
 )
+
+READ_ONLY_AGENTS = {"self-review", "race-screen", "race-inspector", "dilemma-triage", "decision-ranker"}
+MUTATING = re.compile(
+    r"\bgit\s+(commit|push|reset|rebase|checkout|switch|stash|add|rm|mv|tag|cherry-pick|merge|am|apply)\b"
+    r"|\b(rm|mv|cp|tee)\b|\bsed\s+-i\b|>>?\s*\S"
+)
+
 
 def commit_messages(command):
     messages = []
@@ -24,10 +32,13 @@ def main():
     tool_input = hook_input.get("tool_input", {})
     command = tool_input.get("command", "")
     cwd = hook_input.get("cwd", ".")
+    agent = agent_type(hook_input)
 
     def has(pattern):
         return re.search(pattern, command) is not None
 
+    if agent in READ_ONLY_AGENTS and MUTATING.search(command):
+        deny(f"The {agent} agent reads; it does not change the tree or the history.")
     if has(r"\b(until|while)\b[^\n]*\bsleep\b") or has(r"\bsleep\s+\d+[^\n]*\b(grep|tail|cat|test|ls)\b"):
         deny("Never poll for a command you started: the harness re-invokes you when a background command exits (CLAUDE.md, Never poll for a command I started).")
     if has(r"\bcp\b[^\n;&|]*\btarget\b"):
