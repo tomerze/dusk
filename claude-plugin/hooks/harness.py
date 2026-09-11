@@ -82,6 +82,14 @@ def agent_type(hook_input):
     return (hook_input.get("agent_type") or "").split(":")[-1]
 
 
+def review_dir(cwd, branch):
+    return Path(cwd) / "review" / safe_name(branch_name(branch))
+
+
+def decisions_path(cwd, branch):
+    return review_dir(cwd, branch) / "decisions.md"
+
+
 def lint_message(message):
     lines = message.strip().splitlines()
     if not lines:

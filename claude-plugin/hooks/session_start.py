@@ -1,11 +1,11 @@
 PREAMBLE = """dusk-dev: the dusk harness is active.
 - Issue work goes through /dusk-dev:drive-issue. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.
 - Hooks enforce, as the action happens: no comment lines written by me; commit subjects with no feat:-style prefix, no Say, no (#N), no watermark trailer; git commit in the foreground with timeout 600000; no polling loops; no cp of a target directory; no bare git stash; cargo test only after asking.
-- A push waits for the atomic-commit agent to have split the tip: a human reads what is pushed, and nobody can read a WIP blob.
-- The self-review and race-screen agents read the branch after the hand-off, alongside the human, and gate nothing."""
+- A push and a pull request wait for three sign-offs on HEAD: the atomic-commit agent's split, the self-review agent, the race-screen agent. Merging always asks.
+- Every decision goes through the dilemma-triage agent as it is made; it lands in review/<branch>/decisions.md. Before the PR, the decision-ranker agent ranks them, and the PR body carries the ranking."""
 
 
-from harness import context, current_branch, drive_state, read_input
+from harness import context, current_branch, decisions_path, drive_state, read_input
 
 def main():
     hook_input = read_input()
@@ -21,6 +21,9 @@ def main():
             if drive.get("pr"):
                 parts.append(f"PR #{drive['pr']}")
             lines.append("; ".join(parts) + ".")
+        path = decisions_path(cwd, branch)
+        if path.exists():
+            lines.append(f"Decisions so far: {path.relative_to(cwd)}")
     context("\n".join(lines))
 
 
