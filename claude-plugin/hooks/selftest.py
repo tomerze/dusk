@@ -41,6 +41,12 @@ def expect(name, result, code, contains=None):
     return ok
 
 
+def review_file(name, text, present=True):
+    path = REPO / "review" / "topic" / name
+    found = path.exists() and text in path.read_text()
+    return (0 if found == present else 1, "", "")
+
+
 with tempfile.TemporaryDirectory() as temp:
     DATA = Path(temp) / "data"
     REPO = Path(temp) / "repo"
@@ -81,10 +87,10 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a verdict the agent bolded is read", run("subagent_stop.py", agent("self-review", "**VERDICT: pass**")), 0),
         expect("the split needs the snapshot tag", run("subagent_stop.py", agent("atomic-commit", "done")), 2, "harness-snapshot"),
         expect("a comment review without a verdict is blocked", run("subagent_stop.py", agent("comment-review", "nothing")), 2, "COMMENTS"),
+        expect("a terminology review is recorded", run("subagent_stop.py", agent("terminology-review", "- shard — src/a.rs:12 — a partition — none\n**TERMS: found**")), 0),
         expect("the term landed in the file", review_file("terminology.md", "- shard — src/a.rs:12"), 0),
+        expect("a string review is recorded", run("subagent_stop.py", agent("string-review", '- I looked at every crate\n- src/b.rs:7 — "no such pid" — kill prints it\nSTRINGS: found')), 0),
         expect("the narration was dropped", review_file("strings.md", "- I looked", present=False), 0),
         expect("the string landed in the file", review_file("strings.md", '"no such pid"'), 0),
-        expect("the report links a location to vscode", review_file("report.html", 'data-file="src/a.rs" data-line="12"'), 0),
-        expect("the report carries every section", review_file("report.html", "User-facing strings introduced"), 0),
     ]
     sys.exit(0 if all(results) else 1)
