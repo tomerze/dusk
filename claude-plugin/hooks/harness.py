@@ -115,6 +115,14 @@ def lint_branch(cwd, base="origin/master"):
     return problems
 
 
+READY_SIGNOFFS = (("split_sha", "the atomic-commit split"),)
+def missing_signoffs(cwd, signoffs=READY_SIGNOFFS):
+    branch = current_branch(cwd)
+    tip = head(cwd)
+    _, drive = drive_state(branch)
+    return [name for key, name in signoffs if drive.get(key) != tip]
+
+
 def haiku(prompt, timeout=60):
     try:
         completed = subprocess.run(

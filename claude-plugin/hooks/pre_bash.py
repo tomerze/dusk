@@ -5,6 +5,7 @@ from harness import (
     deny,
     lint_branch,
     lint_message,
+    missing_signoffs,
     read_input,
 )
 
@@ -51,6 +52,9 @@ def main():
         problems = lint_branch(cwd)
         if problems:
             deny("Fix these commits before pushing: " + "; ".join(problems))
+        missing = missing_signoffs(cwd)
+        if missing:
+            ask("Push before " + ", ".join(missing) + " signed off HEAD? A human reads what is pushed, so the branch is split into its commits first. The review agents run alongside them and do not hold this up.")
 
 
 if __name__ == "__main__":
