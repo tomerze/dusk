@@ -302,8 +302,9 @@ git push -u origin <branch>
 mcp__github__create_pull_request(owner="tomerze", repo="dusk", head=…, base="master", title=…, body=…)
 ```
 
-`gh` is not installed on this machine; use the MCP. If it returns
-`403 Resource not accessible by personal access token`, the token lacks
+`gh` 2.46.0 is installed on this machine and the MCP works too; either opens
+the PR, and the harness checks the body the same way through both. If the MCP
+returns `403 Resource not accessible by personal access token`, the token lacks
 Pull requests: write — say so and ask the user to grant it rather than
 improvising another route.
 
