@@ -1,13 +1,13 @@
+from harness import context, current_branch, decisions_path, drive_state, read_input
+
 PREAMBLE = """dusk-dev: the dusk harness is active.
 - Issue work goes through /dusk-dev:drive-issue. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.
 - Hooks enforce, as the action happens: no comment lines written by me; commit subjects with no feat:-style prefix, no Say, no (#N), no watermark trailer; git commit in the foreground with timeout 600000; no polling loops; no cp of a target directory; no bare git stash; cargo test only after asking.
 - Every commit is read by the comment-review agent; a comment it finds that belongs in the commit message comes back to be moved there.
-- A push and a pull request wait for three sign-offs on HEAD: the atomic-commit agent's split, the self-review agent, the race-screen agent. Merging always asks.
-- Every decision goes through the dilemma-triage agent as it is made. The branch's review folder collects what a reviewer needs: decisions.md, comments.md, terminology.md (terminology-review) and strings.md (string-review).
-- A hand-off ends with `Ready for review.` on its own line and nothing after it, or asks the blocking question. The line is verified: PR open at the pushed tip, worktree gone, the review folder on the branch."""
+- Work goes through three phases. Writing: the rules above, and the dilemma-triage agent on every decision. Getting ready to review: the atomic-commit agent splits the branch, which is what gates the push, because a human reads what is pushed. Ready for review: the hand-off goes out and the review agents run alongside the human, never ahead of them.
+- The review agents are self-review, race-screen, terminology-review, string-review and decision-ranker. They gate nothing; what they find goes on the pull request as it lands, and the branch's review folder collects it: decisions.md, comments.md, terminology.md, strings.md and report.html, whose locations open in VS Code.
+- A hand-off ends with `Ready for review.` on its own line and nothing after it, or asks the blocking question. The line is verified: PR open at the pushed tip, worktree gone, decisions on the branch. Merging always asks."""
 
-
-from harness import context, current_branch, decisions_path, drive_state, read_input
 
 def main():
     hook_input = read_input()
