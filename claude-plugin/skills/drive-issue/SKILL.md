@@ -1,6 +1,6 @@
 ---
 name: drive-issue
-description: Take a GitHub issue in this repository from "here is the issue number" to a merged PR — read it over the GitHub MCP, work in a git worktree, branch from current master, get the tree buildable, commit through the atomic-commit skill, push, open the single PR that links the issue, ask for code review, and merge only once the user approves. Use this skill whenever the user hands over a dusk issue number or issue URL and asks to drive, complete, or finish it. Also use it for "drive-issue continue", which resumes a drive whose PR is already open — absorbing the user's own edits and review comments into the existing commits rather than opening anything new.
+description: Take a GitHub issue in this repository from "here is the issue number" to a merged PR — read it over the GitHub MCP, work in a git worktree, branch from current master, get the tree buildable, record every decision through the dilemma-triage agent, split the work through the atomic-commit agent, have the self-review and race-screen agents sign it off, push, open the single PR that links the issue with the decisions ranked, ask for code review, and merge only once the user approves. Use this skill whenever the user hands over a dusk issue number or issue URL and asks to drive, complete, or finish it. Also use it for "drive-issue continue", which resumes a drive whose PR is already open — absorbing the user's own edits and review comments into the existing commits rather than opening anything new.
 ---
 
 # Drive a Dusk Issue to a Merged PR
@@ -236,6 +236,20 @@ the build — and then told the user I would correct the skill "when you next wa
 the skill touched". The instruction that had just cost me a build stayed wrong,
 and they had to come back and tell me to fix it.
 
+## Step 4e — Every decision goes through triage, as it is made
+
+A decision is anything the user could have decided differently: a shape, a
+name that is more than a placeholder, a dependency, an omission, a mechanism
+chosen over another. Each one is put to the `dusk-dev:dilemma-triage`
+agent the moment it is made, with what is being decided, the alternatives and
+what reversing it would cost. Its answer says `decide-alone` or `ask-human`, and
+the hook that reads it appends the decision to `review/<branch>/decisions.md`.
+
+`ask-human` means stop and ask, with the question mark, before building on the
+decision; the answer is recorded under the decision as `- answer: …`. The
+harness does not let a turn end while an `ask-human` decision has neither been
+asked nor answered.
+
 ## Step 5 — One commit while you work, split it just before review
 
 **Everything goes into a single commit until the work is finished.** Amend it as
@@ -245,8 +259,11 @@ those rewrites history that the next change rewrites again, and that churn costs
 far more than the whole split costs once.
 
 The split happens **once**, at the end, when the tree is final and just before
-Step 6: run the `atomic-commit` skill over that one commit and cut it into the
-commits the work actually is.
+Step 6: dispatch the `atomic-commit` agent (`Agent`, `subagent_type`
+`dusk-dev:atomic-commit`) over that one commit. It tags the tree, cuts it
+into the commits the work actually is, and the harness lets it finish only when
+`git diff harness-snapshot HEAD` is empty and every subject passes; the push is
+gated on that sign-off.
 
 Review works the same way. A round of comments that changes anything substantial
 is not a handful of fixups aimed at five different commits — squash the affected
@@ -278,6 +295,20 @@ read as pull-request merge numbers, which they are not.
   commit again.
 - Stage explicit paths, never `git add .` — measurement harnesses, `Cargo.lock`
   and anything else you created during setup must stay out of the commit.
+
+## Step 5b — Getting ready to review
+
+**One thing stands between the work and the human: the split.** A person cannot
+read a branch that is one WIP blob, so the `dusk-dev:atomic-commit` agent cuts it
+into the commits the work is, and the harness asks before a push whose tip it has
+not signed off. Nothing else holds the push up.
+
+`review/<branch>/decisions.md` is committed here too — it was written while the
+work happened, one entry per decision, by the hook that reads `dilemma-triage`.
+
+**`dusk-dev:comment-review` has already run**, once per commit, dispatched by the
+harness the moment the commit landed, and anything it found was moved into the
+commit message then, not now.
 
 ## Step 6 — Push and open the PR over the MCP
 
@@ -328,6 +359,10 @@ The PR body must carry:
   decisions are the user's; the PR body is where you hand back the ones you had
   to make to keep moving.
 - Anything **broken but out of scope** that you tripped over.
+- **The decisions**, under `## Decisions`. The hook adds them from
+  `review/<branch>/decisions.md` when the body lacks them, and refuses a body
+  while that file is missing. `decision-ranker` runs after the PR is open and
+  the ranking replaces the list then.
 
 ## Step 7 — Give the branch back, ask for review, then stop
 
@@ -390,6 +425,14 @@ is pushed and something is still running. If anything is outstanding, say what i
 is instead and do not write the line at all. Nothing follows it: no summary, no
 caveat, no offer, no question. The line is the end of the message.
 
+The harness checks the line: it must be last, the worktree gone, the pull
+request open at the pushed tip with the decisions in its body, and
+`review/<branch>/decisions.md` on the branch. A message that claims it while any of
+that is false is sent back with the check that failed.
+
+**The hand-off is not the end of the session. It is the point where two reviews
+start at once** — see Step 7b.
+
 Do not merge, do not tidy the branch, and do not read silence or a question as
 approval. When comments arrive, verify a claim before implementing it and say so
 if you think it is mistaken.
@@ -404,6 +447,44 @@ git checkout <branch>
 
 A returning worktree is a new one, so Step 2 applies to it again — submodule,
 lockfile — and its first build is cold. Measure from the second.
+
+## Step 7b — The agents review while the human does
+
+The hand-off went out at the end of Step 7, and the human is reading the pull
+request now. **The review agents run from here, alongside them.** They gate
+nothing and they never come first: a branch whose agents have not run is still a
+branch a person can read, and holding the hand-off back to finish a machine's
+opinion of it wastes the only reviewer whose approval is the gate.
+
+Dispatch them together and let them land as they finish:
+
+- **`dusk-dev:self-review`** reads every commit against the working agreements
+  and the issue's definition of done, ending `VERDICT: pass` or
+  `VERDICT: findings`.
+- **`dusk-dev:race-screen`** reads the diff for anything that can interleave on
+  the cooperative executor and dispatches `dusk-dev:race-inspector` when it finds
+  some.
+- **`dusk-dev:terminology-review`** writes `review/<branch>/terminology.md`.
+- **`dusk-dev:string-review`** writes `review/<branch>/strings.md`.
+- **`dusk-dev:decision-ranker`** heads `review/<branch>/decisions.md` with the
+  ranking; update the PR body's `## Decisions` to the ranked list.
+
+Each sign-off names the commit it was given, so anything that changes the branch
+means running that agent again. As each lands, commit what it wrote and say on
+the pull request what it found — the human is reading in parallel, so a finding
+is worth more the sooner it is there. A real finding — a race, a verdict of
+`findings` — is fixed the usual way: squash, fix, re-split, force-push, and say
+so on the PR.
+
+The review folder — `decisions.md`, `comments.md`, `terminology.md`,
+`strings.md` and the `report.html` the hooks render from them — is committed as
+`Record the review of <branch>`. Give the user the path to `report.html`: it
+opens in a browser, and every `file:line` in it is a link that opens that line in
+VS Code.
+
+The harness will not let the session end while a review agent has not signed off
+the pushed tip. That is a nag aimed at me, never at the human: it fires after the
+hand-off has already gone out.
 
 ## Step 8 — Merge on explicit approval
 
@@ -478,7 +559,12 @@ next agent is a defect exactly like a wrong comment.
 ☐ Baseline built and measured first, if the issue asks for a comparison
 ☐ `origin/master` re-checked before pushing; rebased, then the build re-run
 ☐ `cargo build --release --bin dusk` green; no tests run unless asked
-☐ Worked in one commit; split once with `atomic-commit` just before pushing
+☐ Every decision put to `dilemma-triage` as it was made; `ask-human` ones asked and answered
+☐ Worked in one commit; split once by the `atomic-commit` agent just before pushing
+☐ `review/<branch>/decisions.md` committed; the PR body carries `## Decisions`
+☐ Hand-off sent **before** the review agents ran, not after
+☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes
+☐ `review/<branch>/` committed; the user has the `report.html` path
 ☐ Committed in the foreground with a long timeout
 ☐ No issue number in any commit subject
 ☐ PR body written in the first person, addressed to no one
