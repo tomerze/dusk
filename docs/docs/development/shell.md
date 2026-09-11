@@ -72,8 +72,8 @@ path uses, still answers as soon as the process is spawned.)
 Each accepted line goes `Prompt::execute_command` → `Shell::sh`, which **parses
 the text on the client** into a `Script` and ships it via
 `ShPortal.sh(script, output, stop, compiler)`. One line = one `sh` RPC carrying
-a freshly-parsed `Script`. The shell is left running when the client goes: it
-keeps its functions and is there for the next client.
+a freshly-parsed `Script`. The shell server is left running when the client
+goes: it keeps its functions and is there for the next client.
 
 **One command.** `dusk <address> "ps"` and `dusk.sh(...)` from Python run `sh`
 in `ShMode::Script`, with no callback at all, and drive it themselves:
@@ -227,15 +227,13 @@ finished, error or not (a failure to close is logged at `warn`).
 
 ## Functions
 
-Functions are the one piece of shell state that outlives a single line — and they
-are shared more widely than you might expect.
+Functions are the one piece of shell state that outlives a single line.
 
 **Storage.** The `function_table` (`Arc<Mutex<HashMap<String, ScriptWrapper>>>`)
-lives on the `sh` `Launcher`, not on a `Process`. Because the impl's
-`LauncherSet` is `Arc`-backed and cloned per launch rather than rebuilt, every
-`sh` process in a namespace shares the *same* table. A function defined at the
-interactive prompt is therefore visible to a later `sh -d` daemon or a nested
-`sh <cmd>` in the same namespace.
+belongs to the `sh` `Process`, made when the process is. Each `sh` has its own:
+a function defined at a prompt lives in the shell server that prompt is attached
+to, where the next client attaching to it finds it, and a `sh <command>` or
+`sh -d` elsewhere on the node — its own process — does not have it.
 
 **Definition.** `name() { … }` compiles to `DefineFunction`, which at runtime
 inserts the body (an owned capnp message) into the table, drops any stale
