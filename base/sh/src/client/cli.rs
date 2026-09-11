@@ -1,4 +1,6 @@
+use crate::client::run_prompt::client_hostname;
 use crate::entry::{ProgramArgsBuilder, StaticShEntriesBuilder};
+use crate::sh_capnp::DEFAULT_PID;
 use crate::{ShArgs, ShMode};
 use clap::Parser as _;
 use dusk_capnp::dusk_capnp::dusk;
@@ -12,6 +14,10 @@ use std::string::String;
 struct ShCli {
     #[arg(short = 'd', long = "detach")]
     detach: bool,
+    #[arg(long = "server", value_name = "PID", num_args = 0..=1, conflicts_with_all = ["prompt", "detach"])]
+    server: Option<Option<u64>>,
+    #[arg(long = "prompt", value_name = "PID", num_args = 0..=1, conflicts_with = "detach")]
+    prompt: Option<Option<u64>>,
     command: Option<String>,
 }
 
@@ -21,8 +27,26 @@ pub struct ShProgramArgsBuilder {}
 impl ProgramArgsBuilder for ShProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
+        if let Some(server_pid) = cli.server {
+            let program_args =
+                ShArgs::new(client, StaticShEntriesBuilder::default(), ShMode::Server)?
+                    .as_program_args()?;
+            program_args.set_pid(Some(server_pid.unwrap_or(DEFAULT_PID)))?;
+            return Ok(program_args);
+        }
+        if let Some(server_pid) = cli.prompt {
+            return Ok(ShArgs::new(
+                client,
+                StaticShEntriesBuilder::default(),
+                ShMode::Prompt {
+                    client_hostname: client_hostname(),
+                    server_pid: server_pid.unwrap_or(DEFAULT_PID),
+                },
+            )?
+            .as_program_args()?);
+        }
         let mode = match cli.command {
-            None => ShMode::Server,
+            None => anyhow::bail!("sh takes a command, --server or --prompt"),
             Some(command) if cli.detach => ShMode::DetachedScript(command),
             Some(command) => ShMode::Script(command),
         };
