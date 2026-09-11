@@ -93,6 +93,17 @@ def decisions_path(cwd, branch):
     return review_dir(cwd, branch) / "decisions.md"
 
 
+LOCATION = re.compile(r"(?<![\w/])((?:[\w.-]+/)*[\w.-]+\.[A-Za-z]\w*):(\d+)")
+
+
+def findings(message):
+    return [
+        line.rstrip()
+        for line in (message or "").splitlines()
+        if line.startswith("- ") and LOCATION.search(line)
+    ]
+
+
 def lint_message(message):
     lines = message.strip().splitlines()
     if not lines:
@@ -152,6 +163,25 @@ def haiku(prompt, timeout=60):
     try:
         completed = subprocess.run(
             ["claude", "-p", "--model", HAIKU, "--output-format", "text", prompt],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def headless_agent(agent, prompt, cwd, timeout=180):
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or str(Path(__file__).resolve().parent.parent)
+    try:
+        completed = subprocess.run(
+            [
+                "claude", "-p", "--plugin-dir", plugin_root, "--agent", f"{PLUGIN}:{agent}",
+                "--output-format", "text", "--permission-mode", "bypassPermissions", prompt,
+            ],
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,

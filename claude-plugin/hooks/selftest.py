@@ -80,6 +80,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a review without a verdict is blocked", run("subagent_stop.py", agent("self-review", "looks fine")), 2, "VERDICT"),
         expect("a verdict the agent bolded is read", run("subagent_stop.py", agent("self-review", "**VERDICT: pass**")), 0),
         expect("the split needs the snapshot tag", run("subagent_stop.py", agent("atomic-commit", "done")), 2, "harness-snapshot"),
+        expect("a comment review without a verdict is blocked", run("subagent_stop.py", agent("comment-review", "nothing")), 2, "COMMENTS"),
         expect("the term landed in the file", review_file("terminology.md", "- shard — src/a.rs:12"), 0),
         expect("the narration was dropped", review_file("strings.md", "- I looked", present=False), 0),
         expect("the string landed in the file", review_file("strings.md", '"no such pid"'), 0),
