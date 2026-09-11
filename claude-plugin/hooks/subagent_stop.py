@@ -1,5 +1,6 @@
 import re
 
+import report
 from harness import (
     agent_type,
     block,
@@ -108,6 +109,7 @@ def dilemma_triage(cwd, message):
         drive.setdefault("pending_questions", []).append(values["DECISION"])
     drive.pop("ranked_sha", None)
     save_json(drive_path, drive)
+    report.render(cwd, branch)
 
 
 def decision_ranker(cwd, message):
@@ -122,6 +124,7 @@ def decision_ranker(cwd, message):
     heading_end = text.find("\n") + 1
     ranked = "\n## Ranked\n\n" + match.group(1).strip() + "\n"
     path.write_text(text[:heading_end] + ranked + text[heading_end:])
+    report.render(cwd, branch)
     record(cwd, "ranked_sha")
 
 
@@ -132,6 +135,7 @@ def write_review(cwd, name, title, message):
     lines = findings(message)
     body = "\n".join(lines) if lines else "- none"
     (directory / name).write_text(f"# {title} {branch_name(branch)}\n\n{body}\n")
+    report.render(cwd, branch)
 
 
 def terminology_review(cwd, message):

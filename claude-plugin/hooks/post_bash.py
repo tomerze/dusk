@@ -1,6 +1,7 @@
 import json
 import re
 
+import report
 from harness import (
     branch_name,
     current_branch,
@@ -40,6 +41,7 @@ def review_commit(cwd, branch, sha, subject):
         comments.write_text(f"# Comments that belong in commit messages on {branch_name(branch)}\n")
     with comments.open("a") as file:
         file.write(f"\n## {sha[:8]} {subject}\n" + ("\n".join(found) if found else "- none") + "\n")
+    report.render(cwd, branch)
     if found:
         print(
             json.dumps(
