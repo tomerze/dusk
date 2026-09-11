@@ -6,7 +6,7 @@ use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
     client::{
         prompt::stream::json_stream::JsonStream,
-        run_prompt::client_hostname,
+        run_prompt::open_prompt,
         stop::{StopSignal, stop_innermost},
     },
     entry::StaticShEntriesBuilder,
@@ -35,33 +35,6 @@ async fn kill(client: &dusk::Client, pid: u64) {
     if let Err(error) = kill_request.send().promise.await {
         debug!(pid, error = %error, "kill after output returned");
     }
-}
-
-async fn prompt(client: dusk::Client) -> Result<()> {
-    let program_args = ShArgs::new(
-        client.clone(),
-        StaticShEntriesBuilder::default(),
-        ShMode::Prompt {
-            client_hostname: client_hostname(),
-            server_pid: DEFAULT_PID,
-        },
-    )?
-    .as_program_args()?;
-    let mut process_request = client.process_request();
-    program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
-    let process = process_request.send().promise.await?.get()?.get_result()?;
-    let pid = process
-        .pid_request()
-        .send()
-        .promise
-        .await?
-        .get()?
-        .get_result();
-    process.run_request().send().promise.await?;
-    let mut waitpid_request = client.waitpid_request();
-    waitpid_request.get().set_pid(pid);
-    waitpid_request.send().promise.await?;
-    Ok(())
 }
 
 async fn script(client: dusk::Client, command: String) -> Result<()> {
@@ -130,7 +103,7 @@ async fn run_sh(connection: &Connection, command: Option<String>) -> Result<()> 
     let client = connection.client().await;
     match command {
         Some(command) => script(client, command).await,
-        None => prompt(client).await,
+        None => open_prompt(client, StaticShEntriesBuilder::default(), DEFAULT_PID).await,
     }
 }
 

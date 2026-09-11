@@ -69,7 +69,7 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
     }
 }
 
-async fn program_args_for_command<S: ShEntriesBuilder>(
+pub async fn program_args_for_command<S: ShEntriesBuilder>(
     client: dusk::Client,
     sh_entries_builder: S,
     command: &str,

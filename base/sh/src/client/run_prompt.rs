@@ -1,3 +1,4 @@
+use crate::client::args::program_args_for_command;
 use crate::client::prompt::display_engine::DefaultDisplayEngine;
 use crate::client::prompt::stream::{display_stream, json_stream};
 use crate::client::prompt::{Prompt, StreamRequest};
@@ -110,4 +111,26 @@ async fn prompt<S: ShEntriesBuilder>(
     )
     .await?;
     prompt.run().await
+}
+
+pub async fn open_prompt<S: ShEntriesBuilder>(
+    client: dusk::Client,
+    sh_entries_builder: S,
+    server_pid: u64,
+) -> anyhow::Result<()> {
+    let program_args = program_args_for_command(
+        client.clone(),
+        sh_entries_builder,
+        &format!("sh --prompt {server_pid}"),
+    )
+    .await?;
+    let mut process_request = client.process_request();
+    program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
+    let view = process_request.send().promise.await?.get()?.get_result()?;
+    let pid = view.pid_request().send().promise.await?.get()?.get_result();
+    view.run_request().send().promise.await?;
+    let mut waitpid_request = client.waitpid_request();
+    waitpid_request.get().set_pid(pid);
+    waitpid_request.send().promise.await?;
+    Ok(())
 }
