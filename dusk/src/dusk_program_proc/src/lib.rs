@@ -15,7 +15,7 @@ pub fn metadata(item: TokenStream) -> TokenStream {
     TokenStream::from(format_header(&parsed))
 }
 
-#[proc_macro_derive(Args, attributes(data))]
+#[proc_macro_derive(Args, attributes(data, created))]
 pub fn derive_args(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let struct_name = &input.ident;
@@ -62,10 +62,42 @@ pub fn derive_args(item: TokenStream) -> TokenStream {
 
     let data_field_ident = data_fields[0].ident.as_ref().unwrap();
 
+    let created_fields: Vec<_> = fields
+        .iter()
+        .filter(|f| f.attrs.iter().any(|a| a.path().is_ident("created")))
+        .collect();
+
+    if created_fields.len() > 1 {
+        return syn::Error::new_spanned(
+            &input.ident,
+            "Args derive accepts at most one field annotated with #[created]",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let created_field_ident: Vec<_> = match created_fields.first() {
+        Some(created_field) => {
+            let ty = &created_field.ty;
+            let type_string = quote::quote!(#ty).to_string();
+            if !type_string.starts_with("Option <") {
+                return syn::Error::new_spanned(
+                    ty,
+                    "field annotated with #[created] must be of type Option<created::Client>",
+                )
+                .to_compile_error()
+                .into();
+            }
+            vec![created_field.ident.as_ref().unwrap()]
+        }
+        None => Vec::new(),
+    };
+
     let expanded = quote::quote! {
         __derive_args!(
             #(#cfg_attrs)*
             [#impl_generics] [#struct_name #ty_generics] [#where_clause] [#data_field_ident]
+            [#(#created_field_ident)*]
         );
     };
 

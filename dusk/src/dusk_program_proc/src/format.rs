@@ -88,6 +88,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                 $(#[$meta:meta])*
                 [$($impl_generics:tt)*] [$($self_ty:tt)*] [$($where_clause:tt)*]
                 [$data_field:ident]
+                [$($created_field:ident)?]
             ) => {
                 $(#[$meta])*
                 const _: () = {
@@ -118,6 +119,11 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                             let data_reader = self.$data_field.get_root_as_reader()?;
                             data_dest.set_as::<#data_owned>(data_reader)
                         })?;
+                        $(
+                            if let Some(created) = self.$created_field.clone() {
+                                owned.set_created(created)?;
+                            }
+                        )?
                         // Phase 2: consume `self` into a server cap and stash
                         // it in args.server. Use `get_args()` (not
                         // `init_args()`) — `init_args()` clears both pointer
