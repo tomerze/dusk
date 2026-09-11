@@ -10,12 +10,27 @@ use dusk_capnp::dusk_capnp::{created, dusk, process};
 use dusk_capnp::pry;
 use dusk_program::anyhow;
 use std::format;
-use tokio::sync::oneshot;
+use std::string::String;
+
+const TERMINATE: u64 = 15;
 
 pub struct Created<S: ShEntriesBuilder> {
     pub client: dusk::Client,
     pub sh_entries_builder: S,
-    pub finished: Option<oneshot::Sender<()>>,
+    pub server_pid: u64,
+}
+
+pub fn client_hostname() -> String {
+    if let Some(overridden) = std::env::var_os("DUSK_CLIENT_HOSTNAME") {
+        return overridden.to_string_lossy().into_owned();
+    }
+    match nix::unistd::gethostname() {
+        Ok(hostname) => hostname.to_string_lossy().into_owned(),
+        Err(error) => {
+            tracing::warn!(error = %error, "couldn't read this machine's hostname");
+            String::from("unknown")
+        }
+    }
 }
 
 impl<S: ShEntriesBuilder> created::Server for Created<S> {
@@ -24,37 +39,54 @@ impl<S: ShEntriesBuilder> created::Server for Created<S> {
         params: created::CreatedParams,
         _results: created::CreatedResults,
     ) -> Promise<(), capnp::Error> {
-        let process = pry!(pry!(params.get()).get_process());
+        let view = pry!(pry!(params.get()).get_process());
         if std::env::var_os("DUSK_NON_INTERACTIVE").is_some() {
             return Promise::err(capnp::Error::failed(
-                "there is no terminal to open a shell on: DUSK_NON_INTERACTIVE is set".to_string(),
+                "there is no terminal to open a prompt on: DUSK_NON_INTERACTIVE is set".to_string(),
             ));
         }
         let client = self.client.clone();
         let sh_entries_builder = self.sh_entries_builder.clone();
-        let finished = self.finished.take();
+        let server_pid = self.server_pid;
         tokio::task::spawn_local(async move {
-            if let Err(error) = prompt(client, sh_entries_builder, process).await {
-                tracing::error!(error = %format!("{error:#}"), "the shell prompt failed");
+            if let Err(error) = prompt(client.clone(), sh_entries_builder, server_pid).await {
+                tracing::error!(error = %format!("{error:#}"), "the prompt failed");
             }
-            if let Some(finished) = finished {
-                let _ = finished.send(());
+            if let Err(error) = kill(&client, &view, TERMINATE).await {
+                tracing::debug!(error = %error, "the prompt's process was already gone");
             }
         });
         Promise::ok(())
     }
 }
 
+async fn kill(client: &dusk::Client, process: &process::Client, signal: u64) -> capnp::Result<()> {
+    let pid = process
+        .pid_request()
+        .send()
+        .promise
+        .await?
+        .get()?
+        .get_result();
+    let mut kill_request = client.kill_request();
+    kill_request.get().set_pid(pid);
+    kill_request.get().set_signal(signal);
+    kill_request.send().promise.await?;
+    Ok(())
+}
+
 async fn prompt<S: ShEntriesBuilder>(
     client: dusk::Client,
     sh_entries_builder: S,
-    process: process::Client,
+    server_pid: u64,
 ) -> anyhow::Result<()> {
     let stop_signal = StopSignal::new();
+    let server =
+        Shell::recreate_sh_process(client.clone(), sh_entries_builder.clone(), server_pid).await?;
     let mut shell = Shell::new(
         client.clone(),
         sh_entries_builder.clone(),
-        process.clone(),
+        server,
         crate::parser::Parser::new(),
     )
     .await?;
@@ -77,11 +109,5 @@ async fn prompt<S: ShEntriesBuilder>(
         stop_signal.signal(),
     )
     .await?;
-    let result = prompt.run().await;
-
-    let mut kill_request = client.kill_request();
-    kill_request.get().set_pid(shell.sh_pid);
-    kill_request.get().set_signal(15);
-    kill_request.send().promise.await?;
-    result
+    prompt.run().await
 }

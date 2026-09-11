@@ -6,7 +6,7 @@ use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
     client::{
         prompt::stream::json_stream::JsonStream,
-        run_prompt::Created,
+        run_prompt::client_hostname,
         stop::{StopSignal, stop_innermost},
     },
     entry::StaticShEntriesBuilder,
@@ -15,7 +15,6 @@ use dusk_base::dusk_program_sh::{
 use dusk_connection::Connection;
 use std::net::SocketAddr;
 use tokio::signal;
-use tokio::sync::oneshot;
 use tracing::{debug, error, info};
 
 #[derive(Parser)]
@@ -39,30 +38,29 @@ async fn kill(client: &dusk::Client, pid: u64) {
 }
 
 async fn prompt(client: dusk::Client) -> Result<()> {
-    let sh_entries_builder = StaticShEntriesBuilder::default();
-    let (finished_sender, finished) = oneshot::channel();
-    let program_args = ShArgs::new(client.clone(), sh_entries_builder.clone(), ShMode::Server)?
-        .as_program_args()?;
-    program_args.set_pid(Some(DEFAULT_PID))?;
-    program_args.set_created(capnp_rpc::new_client(Created {
-        client: client.clone(),
-        sh_entries_builder,
-        finished: Some(finished_sender),
-    }))?;
+    let program_args = ShArgs::new(
+        client.clone(),
+        StaticShEntriesBuilder::default(),
+        ShMode::Prompt {
+            client_hostname: client_hostname(),
+            server_pid: DEFAULT_PID,
+        },
+    )?
+    .as_program_args()?;
     let mut process_request = client.process_request();
     program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
     let process = process_request.send().promise.await?.get()?.get_result()?;
-
-    let mut finished = std::pin::pin!(finished);
-    tokio::select! {
-        result = process.run_request().send().promise => {
-            if let Err(error) = result {
-                debug!(error = %error, "the shell this client ran ended");
-            }
-        }
-        _ = finished.as_mut() => return Ok(()),
-    }
-    let _ = finished.await;
+    let pid = process
+        .pid_request()
+        .send()
+        .promise
+        .await?
+        .get()?
+        .get_result();
+    process.run_request().send().promise.await?;
+    let mut waitpid_request = client.waitpid_request();
+    waitpid_request.get().set_pid(pid);
+    waitpid_request.send().promise.await?;
     Ok(())
 }
 
