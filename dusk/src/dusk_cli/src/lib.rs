@@ -4,7 +4,7 @@ use dusk_base::dusk_program::dusk_capnp::capnp::capability::FromClientHook as _;
 use dusk_base::dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
-    client::{Created, prompt::stream::json_stream::JsonStream},
+    client::{prompt::stream::json_stream::JsonStream, view::Created},
     entry::StaticShEntriesBuilder,
     sh_capnp::{DEFAULT_PID, output_portal},
 };
