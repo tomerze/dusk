@@ -619,7 +619,7 @@ the user had to tell me to collapse it.
 
 ## Stale project instructions get fixed, in their own commit
 
-`CLAUDE.md` and the skills under `.claude/skills/` are part of the product, held
+`CLAUDE.md` and the skills under `claude-plugin/skills/` are part of the product, held
 to the same standard as the runtime. They describe a tree that keeps moving, so
 they go stale — and a stale instruction is worse than a missing one, because the
 next reader has no reason to doubt it and acts on it.

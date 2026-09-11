@@ -2,5 +2,16 @@
     "spinnerVerbs": {
         "mode": "replace",
         "verbs": ["Twilighting", "Nightfalling", "Dusking"]
+    },
+    "extraKnownMarketplaces": {
+        "dusk": {
+            "source": {
+                "source": "directory",
+                "path": "./claude-plugin"
+            }
+        }
+    },
+    "enabledPlugins": {
+        "dusk-dev@dusk": true
     }
 }
