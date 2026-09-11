@@ -63,6 +63,51 @@ Statement separators (`;`, newline) do not short-circuit — every statement run
 
 `sh -d <command>` runs `<command>` as a fire-and-forget background script. Output is discarded and the resulting `sh` process **daemonizes** — it keeps running after the script finishes and is only torn down when something explicitly kills it. Use this when you want a command sequence to outlive the caller.
 
+## An interactive shell
+
+`sh --prompt` opens a prompt on the terminal you ran it from, the way `logs view`
+opens its pager there. `dusk <address>` with no command is that command: it runs
+`sh --prompt`, which starts the node's default shell server if nothing is
+running it yet and opens a prompt on it. The command waits while you use the prompt; `exit` (or
+ctrl+d) closes it and returns whoever ran it, and ctrl+c stops the command
+running in it.
+
+```console
+$ dusk 127.0.0.1:9090
+> echo inside
+"inside"
+> exit
+$
+```
+
+A prompt is a process on the node, named after the machine it is on:
+`ps` shows it as `sh[prompt ⟷ pc1]`, where `pc1` is the hostname of the
+*client*, not of the node — so two people at prompts on one node can tell their
+own from each other's. Set `DUSK_CLIENT_HOSTNAME` to send a different name.
+
+The prompt attaches to the node's default shell server — the one every client
+on that node attaches to, with the functions defined in it — and closing the
+prompt leaves that shell server running for everyone else. `sh --prompt <pid>`
+attaches to the shell server at `<pid>` instead, and `sh --server` starts a
+shell server without opening a prompt on it — `sh --server <pid>` one at a pid
+you pick, for a shell server of your own to attach to.
+
+`sh --prompt` is refused, with the reason, rather than opening a prompt nobody
+can use:
+
+* `there is already an open prompt in this terminal` — a terminal has one
+  prompt, so typing `sh --prompt` at one is an error; leave it first.
+* `there is no terminal to open a prompt on: output is not a terminal` — the
+  output is a pipe or a file.
+* `there is no terminal to open a prompt on: DUSK_NON_INTERACTIVE is set` — the
+  [API gateway](gateway.md#no-interactive-views), or any client that sets it.
+
+`sh <command>` still runs in every one of those cases.
+
+`dusk <address>` with no command opens one of these prompts: it starts the
+node's default shell server if nothing is running it yet, and opens a prompt on
+it.
+
 ## Daemonization
 
 Daemonization is a shell concept, not a core process behaviour. When the shell runs a program, it drives that program's `output(stream)` portal method. Returning from `output` says the program is finished; what it answers says whether it means to keep running anyway:
