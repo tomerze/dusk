@@ -126,7 +126,7 @@ it is a consequence, it belongs with the decision. Yes → it is its own sheep.
 
 ### 6. Prose is always its own commit
 
-Documentation, `CLAUDE.md`, and the skills under `.claude/skills/` get their own
+Documentation, `CLAUDE.md`, and the skills under `claude-plugin/skills/` get their own
 commits, even when the words changed *because* of a code decision. They are read
 by different people, reviewed differently, and reverted independently.
 

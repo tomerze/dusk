@@ -1,0 +1,9 @@
+{
+    "name": "dusk-dev",
+    "version": "0.1.0",
+    "description": "The dusk development harness: the working agreements as hooks, the workflow as skills, the review as agents.",
+    "author": {
+        "name": "Tomer Zeitune"
+    },
+    "hooks": "./hooks/hooks.json"
+}

@@ -1,0 +1,1 @@
+@claude-plugin/CLAUDE.md
