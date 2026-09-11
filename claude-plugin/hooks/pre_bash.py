@@ -1,13 +1,19 @@
 import re
+from pathlib import Path
 
 from harness import (
+    WATERMARKS,
     agent_type,
     ask,
+    current_branch,
+    decisions_path,
     deny,
+    drive_state,
     lint_branch,
     lint_message,
     missing_signoffs,
     read_input,
+    session_state,
 )
 
 READ_ONLY_AGENTS = {"self-review", "race-screen", "race-inspector", "dilemma-triage", "decision-ranker"}
@@ -25,6 +31,40 @@ def commit_messages(command):
     if heredoc:
         messages.append(heredoc.group(2))
     return ["\n\n".join(messages)] if messages else []
+
+
+def gh_body(command, cwd):
+    file_match = re.search(r"--body-file[= ]+(\S+)|-F\s+body=@(\S+)", command)
+    if file_match:
+        name = (file_match.group(1) or file_match.group(2)).strip("'\"")
+        try:
+            return Path(name).read_text() if name.startswith("/") else (Path(cwd) / name).read_text()
+        except OSError:
+            return ""
+    body_match = re.search(r"""(?:--body|-b)[= ]+("((?:[^"\\]|\\.)*)"|'([^']*)')""", command, re.S)
+    if body_match:
+        return body_match.group(2) or body_match.group(3) or ""
+    return ""
+
+
+def pull_request_problems(cwd, body, creating, hook_input):
+    problems = []
+    if any(mark in body for mark in WATERMARKS):
+        problems.append("the PR body carries a watermark; never")
+    branch = current_branch(cwd)
+    _, drive = drive_state(branch)
+    _, session = session_state(hook_input.get("session_id", ""))
+    issue = drive.get("issue") or (session.get("drive") or {}).get("issue")
+    if issue and not re.search(rf"Closes #{issue}\b", body):
+        problems.append(f"the PR body must carry `Closes #{issue}`")
+    if creating and drive.get("pr"):
+        problems.append(f"one pull request per drive: update #{drive['pr']} instead of opening another")
+    path = decisions_path(cwd, branch)
+    if not path.exists():
+        problems.append(f"{path.relative_to(cwd)} does not exist: every decision goes through the dilemma-triage agent as it is made")
+    elif "## Decisions" not in body:
+        problems.append(f"the PR body must carry the decisions from {path.relative_to(cwd)} under `## Decisions`")
+    return problems
 
 
 def main():
@@ -66,6 +106,12 @@ def main():
         missing = missing_signoffs(cwd)
         if missing:
             ask("Push before " + ", ".join(missing) + " signed off HEAD? A human reads what is pushed, so the branch is split into its commits first. The review agents run alongside them and do not hold this up.")
+    if has(r"\bgh\s+pr\s+create\b"):
+        problems = pull_request_problems(cwd, gh_body(command, cwd), True, hook_input)
+        if problems:
+            deny("Pull request: " + "; ".join(problems))
+    if has(r"\bgh\s+pr\s+merge\b") or (has(r"\bgh\s+api\b") and has(r"/merge\b")):
+        ask("Merging is the one gate that may not be skipped: did the user approve this merge, explicitly, for this pull request?")
 
 
 if __name__ == "__main__":

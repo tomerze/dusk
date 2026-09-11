@@ -44,6 +44,26 @@
                         "timeout": 90
                     }
                 ]
+            },
+            {
+                "matcher": "mcp__github__create_pull_request|mcp__github__update_pull_request",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_pull_request.py\"",
+                        "timeout": 30
+                    }
+                ]
+            },
+            {
+                "matcher": "mcp__github__merge_pull_request",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_merge.py\"",
+                        "timeout": 10
+                    }
+                ]
             }
         ],
         "PostToolUse": [
@@ -63,6 +83,16 @@
                     {
                         "type": "command",
                         "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_bash.py\"",
+                        "timeout": 10
+                    }
+                ]
+            },
+            {
+                "matcher": "mcp__github__create_pull_request",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_pull_request.py\"",
                         "timeout": 10
                     }
                 ]
