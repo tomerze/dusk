@@ -12,6 +12,9 @@ CONVENTIONAL_PREFIX = re.compile(
     r"^(feat|fix|chore|docs|refactor|test|style|perf|build|ci|revert)(\([^)]*\))?!?:", re.I
 )
 ISSUE_IN_SUBJECT = re.compile(r"\(#\d+\)")
+READY_LINE = "Ready for review."
+
+
 def read_input():
     raw = sys.stdin.read()
     return json.loads(raw) if raw.strip() else {}
@@ -157,6 +160,26 @@ def haiku(prompt, timeout=60):
     except (OSError, subprocess.TimeoutExpired):
         return None
     return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def pull_request_view(cwd, branch):
+    try:
+        completed = subprocess.run(
+            ["gh", "pr", "view", branch, "--json", "number,state,headRefOid,body,url"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    try:
+        return json.loads(completed.stdout)
+    except ValueError:
+        return None
 
 
 def deny(reason):
