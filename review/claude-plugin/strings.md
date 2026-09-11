@@ -1,0 +1,118 @@
+# User-facing strings introduced on claude-plugin
+
+- claude-plugin/.claude-plugin/marketplace.json:3 — "The dusk repository's own Claude Code plugins." — Claude Code's plugin marketplace listing
+- claude-plugin/.claude-plugin/marketplace.json:11 — "The dusk development harness: the working agreements as hooks, the workflow as skills, the review as agents." — plugin description in the marketplace listing
+- claude-plugin/.claude-plugin/plugin.json:4 — "The dusk development harness: the working agreements as hooks, the workflow as skills, the review as agents." — plugin description shown when the plugin is installed/inspected
+- claude-plugin/hooks/harness.py:15 — "Ready for review." — the exact line a hand-off message must end with, read by the person receiving the hand-off
+- claude-plugin/hooks/harness.py:53 — "the PR body carries a watermark; never" — reason given when a commit/PR is denied for carrying a watermark trailer
+- claude-plugin/hooks/harness.py:114 — "`{subject}` has a conventional-commit prefix; a subject is one imperative sentence" — commit-message lint reason
+- claude-plugin/hooks/harness.py:116 — "`{subject}` starts with Say; name what was done to the file" — commit-message lint reason
+- claude-plugin/hooks/harness.py:118 — "`{subject}` carries an issue number; that goes in the PR body as Closes #N" — commit-message lint reason
+- claude-plugin/hooks/harness.py:121 — "watermark trailer `{line.strip()}`; never" — commit-message lint reason
+- claude-plugin/hooks/harness.py:135 — "{short} is still a WIP commit; split it with atomic-commit first" — branch lint reason shown before a push is denied
+- claude-plugin/hooks/pre_bash.py:53 — "the PR body carries a watermark; never" — reason in the deny message when `gh pr create` is blocked
+- claude-plugin/hooks/pre_bash.py:59 — "the PR body must carry `Closes #{issue}`" — reason in the deny message when `gh pr create` is blocked
+- claude-plugin/hooks/pre_bash.py:61 — "one pull request per drive: update #{drive['pr']} instead of opening another" — reason in the deny message when `gh pr create` is blocked
+- claude-plugin/hooks/pre_bash.py:64 — "{path.relative_to(cwd)} does not exist: every decision goes through the dilemma-triage agent as it is made" — reason in the deny message when `gh pr create` is blocked
+- claude-plugin/hooks/pre_bash.py:66 — "the decision-ranker agent has not ranked the decisions on this branch" — reason in the deny message when `gh pr create` is blocked
+- claude-plugin/hooks/pre_bash.py:68 — "the PR body must carry the ranked decisions under `## Decisions`" — reason in the deny message when `gh pr create` is blocked
+- claude-plugin/hooks/pre_bash.py:83 — "The {agent} agent reads; it does not change the tree or the history." — reason a Bash command is denied for a read-only agent
+- claude-plugin/hooks/pre_bash.py:85 — "Never poll for a command you started: the harness re-invokes you when a background command exits (CLAUDE.md, Never poll for a command I started)." — reason a polling command is denied
+- claude-plugin/hooks/pre_bash.py:87 — "Never copy a target directory; park it with mv and move it back (drive-issue, Step 2)." — reason `cp` of a target directory is denied
+- claude-plugin/hooks/pre_bash.py:89 — "No bare git stash and no stash pop: the stash stack is shared with every worktree. Use git stash push -u -m <tag>, restore with git stash apply <sha>, then drop it by tag." — reason a bare `git stash` is denied
+- claude-plugin/hooks/pre_bash.py:91 — "Tests run only when the user asked for them (CLAUDE.md, Don't write or run tests unless told). Did they ask?" — question asked before `cargo test`/`nextest` runs
+- claude-plugin/hooks/pre_bash.py:93 — "Stage named paths, never git add -A or git add . — only the atomic-commit snapshot is taken that way." — reason a broad `git add` is denied
+- claude-plugin/hooks/pre_bash.py:97 — "Run git commit in the foreground with timeout 600000: pre-commit stashes unstaged work, and a commit killed mid-hook strands it (CLAUDE.md, Never poll for a command I started)." — reason a backgrounded/short-timeout commit is denied
+- claude-plugin/hooks/pre_bash.py:101 — "Commit message: " — prefix on the deny message listing commit-message lint problems
+- claude-plugin/hooks/pre_bash.py:104 — "Never push to master; open a pull request." — reason a push to master is denied
+- claude-plugin/hooks/pre_bash.py:107 — "Fix these commits before pushing: " — prefix on the deny message listing branch lint problems
+- claude-plugin/hooks/pre_bash.py:110 — "Push before " + …missing signoffs… + " signed off HEAD? The harness gates a push on the atomic-commit split, self-review and the race screen." — question asked before a push lacking sign-offs
+- claude-plugin/hooks/pre_bash.py:114 — "Pull request: " — prefix on the deny message listing PR problems
+- claude-plugin/hooks/pre_bash.py:116 — "Merging is the one gate that may not be skipped: did the user approve this merge, explicitly, for this pull request?" — question asked before `gh pr merge`
+- claude-plugin/hooks/pre_merge.py:6 — "Merging is the one gate that may not be skipped: did the user approve this merge, explicitly, for this pull request?" — question asked before a merge tool call
+- claude-plugin/hooks/pre_edit.py:48 — "I do not write comments (CLAUDE.md). Say it in the reply and let the user decide whether it becomes one: {added[0].strip()!r}" — reason a code edit adding a comment line is denied
+- claude-plugin/hooks/pre_edit.py:57 — "This is a Dusk program. Invoke /dusk-dev:authoring-a-program first — it covers a program's schema, args, launcher, process, portal and shell entry — then make the edit." — reason an edit under base/ is denied before the authoring skill is loaded
+- claude-plugin/hooks/pre_edit.py:70 — "This changes the Driver trait. Invoke /dusk-dev:adding-a-driver-method first — a Driver method is added in four layers, modelled on hostname — then make the edit." — reason a Driver-trait edit is denied before the driver-method skill is loaded
+- claude-plugin/hooks/pre_edit.py:21 — "You are checking one edit to the Dusk codebase. Dusk has a `Driver` trait in dusk_core that each platform impl implements (hostname, exit, launchers). Does this edit add, remove, rename or change the signature of a method of that Driver trait, or of the extern shim that carries it? Answer with the single word yes or no.…" — prompt sent to the Haiku model to classify a Driver-trait edit
+- claude-plugin/hooks/pre_pull_request.py:28 — "Pull request: " — prefix on the deny message when creating/updating a PR is blocked
+- claude-plugin/hooks/post_bash.py:21 — "Review commit {sha} on the current branch: run `git show {sha}` and judge every comment line it adds or changes." — prompt sent to the comment-review agent after each commit
+- claude-plugin/hooks/post_bash.py:52 — "comment-review: these comment lines in {sha[:8]} belong in the commit message, not in the code. Move them into the message and amend:\n" — additional context given back after a commit is found to carry stray comments
+- claude-plugin/hooks/stop.py:44 — "`Ready for review.` is the last line of the message and nothing follows it" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:46 — "the worktree is still in place; the branch is not free for the user to check out" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:50 — "{ahead} commit(s) not pushed" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:53 — "no pull request found for {remote}" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:56 — "PR #{pull_request['number']} is {pull_request.get('state')}, not open" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:58 — "PR #{pull_request['number']} does not carry the local tip" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:60 — "the PR body does not carry the ranked decisions under `## Decisions`" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:66 — "{relative} is not on the branch" — reason a hand-off claim is rejected
+- claude-plugin/hooks/stop.py:83 — "dilemma-triage said these need the user: " + …titles… + ". Ask, with a question mark, and record the answer as `- answer:` under the decision." — reason a Stop is blocked when a triage question is unanswered
+- claude-plugin/hooks/stop.py:89 — "A hand-off ends with `{READY_LINE}` on its own line, or asks the user the blocking question." — reason a Stop is blocked
+- claude-plugin/hooks/stop.py:101 — "Not yet: " — prefix on the message a blocked Stop prints
+- claude-plugin/hooks/subagent_stop.py:39 — "Tag the final tree before splitting: git tag -f harness-snapshot HEAD. The tag is the proof the split lost nothing." — reason the atomic-commit agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:42 — "The tree is not clean after the split:\n" — reason the atomic-commit agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:45 — "The split changed the tree; git diff harness-snapshot HEAD must be empty:\n" — reason the atomic-commit agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:48 — "Commits that do not pass: " — reason the atomic-commit agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:56 — "End the review with `VERDICT: pass` or `VERDICT: findings`, after the findings in the three-line form." — reason the self-review agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:66 — "End with `RACE: none` or `RACE: possible`; when possible, dispatch the race-inspector agent and relay its `RACES:` line." — reason the race-screen agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:69 — "A possible race needs the race-inspector agent's verdict: relay its `RACES: none` or `RACES: found` line." — reason the race-screen agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:78 — "End with `RACES: none` or `RACES: found`, each race written as interleaving, state, consequence, fix." — reason the race-inspector agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:83 — "End with `COMMENTS: none` or `COMMENTS: found`; each finding as `- <file>:<line> — <the comment> — <why it belongs in the commit message>`." — reason the comment-review agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:91 — "Answer in the six lines DECISION, DECIDED, ALTERNATIVES, REVERSAL, VERDICT, WHY; missing: " — reason the dilemma-triage agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:93 — "VERDICT is `decide-alone` or `ask-human`." — reason the dilemma-triage agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:118 — "End with `RANKED:` followed by one numbered line per decision: `1. <title> — attention: high|medium|low — <why>`." — reason the decision-ranker agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:122 — "{path} does not exist; nothing to rank." — reason the decision-ranker agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:143 — "End with `TERMS: none` or `TERMS: found`; each term as `- <term> — <file>:<line> — <what it names> — <the word the codebase already has for it, or none>`." — reason the terminology-review agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:150 — "End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> — \"<string>\" — <where a person sees it>`." — reason the string-review agent's turn is blocked
+- claude-plugin/hooks/subagent_stop.py:41 — "# Comments that belong in commit messages on {branch_name(branch)}" (via post_bash.py:41) — heading of the committed `comments.md` review file a reviewer opens
+- claude-plugin/hooks/subagent_stop.py:98 — "# Decisions on {branch_name(branch)}" — heading of the committed `decisions.md` review file a reviewer opens
+- claude-plugin/hooks/subagent_stop.py:137 — "# {title} {branch_name(branch)}" — heading of the committed `terminology.md`/`strings.md` review files a reviewer opens
+- claude-plugin/hooks/session_start.py:3 — "dusk-dev: the dusk harness is active.\n- Issue work goes through /dusk-dev:drive-issue. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.\n- Hooks enforce, as the action happens: …\n- Every commit is read by the comment-review agent; …\n- A push and a pull request wait for three sign-offs on HEAD: …\n- Every decision goes through the dilemma-triage agent as it is made. …\n- A hand-off ends with `Ready for review.` on its own line and nothing after it, or asks the blocking question. …" — the SessionStart context banner shown at the top of every session
+- claude-plugin/hooks/session_start.py:20 — "Drive in flight on `{branch}`: phase {drive.get('phase', 'working')}" — SessionStart context banner
+- claude-plugin/hooks/session_start.py:28 — "Decisions so far: {path.relative_to(cwd)}" — SessionStart context banner
+- claude-plugin/hooks/user_prompt_submit.py:25 — "An issue is named. Issue work in this repository goes through the drive-issue skill: invoke /dusk-dev:drive-issue before doing anything else." — context injected after a prompt that names an issue
+- claude-plugin/hooks/report.py:14 — "Review of {branch}" — title of the report.html page
+- claude-plugin/hooks/report.py:26 — "Review of {branch}" — heading of the report.html page
+- claude-plugin/hooks/report.py:27 — "Checkout path, for the links that open a line in VS Code" — label text on the report.html page
+- claude-plugin/hooks/report.py:8 — "Decisions" — section heading on the report.html page
+- claude-plugin/hooks/report.py:9 — "Comments that belong in commit messages" — section heading on the report.html page
+- claude-plugin/hooks/report.py:10 — "Terminology introduced" — section heading on the report.html page
+- claude-plugin/hooks/report.py:11 — "User-facing strings introduced" — section heading on the report.html page
+- claude-plugin/hooks/selftest.py:40 — "ok   " / "FAIL " — the pass/fail prefix `selftest.py` prints for each check, in CLI output
+- claude-plugin/hooks/selftest.py:59 — "commit with a prefix is denied" — test-case description printed as CLI output by `selftest.py`
+- claude-plugin/hooks/selftest.py:60 — "commit starting with Say is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:61 — "commit with a watermark is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:62 — "commit with a short timeout is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:63 — "plain commit is allowed" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:64 — "git add -A is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:65 — "the snapshot may use git add -A" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:66 — "polling is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:67 — "copying target is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:68 — "bare stash is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:69 — "stash push is allowed" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:70 — "cargo test asks" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:71 — "push to master is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:72 — "push without sign-offs asks" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:73 — "a read-only agent may not commit" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:74 — "a comment line in Rust is denied" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:75 — "an existing comment line passes" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:76 — "a program edit needs the authoring skill" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:77 — "a markdown edit is free" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:78 — "a stop with nothing pending passes" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:79 — "a Ready line that is not last is blocked" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:80 — "a quoted Ready line is not a claim" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:81 — "a malformed triage answer is blocked" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:82 — "a triage answer is recorded" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:83 — "the decision landed in the file" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:84 — "a ranking is recorded" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:85 — "the ranking heads the file" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:86 — "a review without a verdict is blocked" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:87 — "a verdict the agent bolded is read" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:88 — "the split needs the snapshot tag" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:89 — "a comment review without a verdict is blocked" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:90 — "a terminology review is recorded" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:91 — "the term landed in the file" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:92 — "a string review is recorded" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:93 — "the narration was dropped" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:94 — "the string landed in the file" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:95 — "the report links a location to vscode" — CLI output of `selftest.py`
+- claude-plugin/hooks/selftest.py:96 — "the report carries every section" — CLI output of `selftest.py`
