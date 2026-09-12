@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -43,6 +44,8 @@ def excerpt(message):
 
 
 def stalling(cwd, message):
+    if os.environ.get("DUSK_NO_DILEMMA_SCREEN"):
+        return None
     answer = headless_agent("dilemma-screen", SCREEN_PROMPT.format(message=excerpt(message)), cwd)
     if answer is None or field(answer, "VERDICT") != "not-a-blocker":
         return None
