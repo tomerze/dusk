@@ -17,6 +17,23 @@ It takes no arguments and creates nothing: no worktree, no branch, no issue.
 **The user's approval is the only gate you may not skip.** Merging without it is
 the one unrecoverable step.
 
+## Every turn is marked
+
+The user reviews what I hand them, and the agents review it beside them; the
+merge waits for both. That only works if every turn says which of the two states
+the work is in, so from the first commit onward a turn ends one of exactly two
+ways:
+
+- **`Ready for review.`** on its own line, with nothing after it. It means the
+  work is pushed, the pull request carries the tip, and there is something to
+  read.
+- **A `DILEMMA:` line**, naming what is being decided, followed by the one
+  question that blocks the work and a question mark.
+
+Nothing else ends a turn. A status report that is neither leaves the user with
+nothing to do and no idea whether it is their move. The harness checks this on
+every turn once the session has committed or pushed.
+
 ## What is in force
 
 The hooks check the working agreements as each action is taken:
@@ -325,9 +342,14 @@ PR to learn the branch name. Then wait.
 **End that message with `Ready for review.` on its own line, and write nothing
 after it.** It is the one sentence the user is looking for, and it means every
 check above has actually passed — not that the work is nearly there, not that it
-is pushed and something is still running. If anything is outstanding, say what it
-is instead and do not write the line at all. Nothing follows it: no summary, no
+is pushed and something is still running. Nothing follows it: no summary, no
 caveat, no offer, no question. The line is the end of the message.
+
+**If something is outstanding, that is not a third way to end a turn — it is
+work I have not finished.** Either it is mine to finish, and I keep going, or it
+is the user's to answer, and the turn is a `DILEMMA:` question. A message that
+reports the state of play and stops is the thing this skill exists to prevent:
+it reads as a hand-off, it is not one, and the user has no way to tell which.
 
 The harness checks the line: it must be last, the worktree gone, the pull
 request open at the pushed tip with the decisions in its body. A message that
@@ -418,6 +440,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
+☐ Every turn since the first commit ended with `Ready for review.` or a `DILEMMA:` question
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ Hand-off sent **before** the review agents ran, not after
 ☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes

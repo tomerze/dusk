@@ -60,9 +60,14 @@ def main():
     branch = current_branch(cwd)
     if not branch or branch in ("master", "main", "HEAD"):
         return
-    _, session = session_state(hook_input.get("session_id", ""))
+    session_path, session = session_state(hook_input.get("session_id", ""))
     path, drive = drive_state(branch)
     changed = False
+    if re.search(r"\bgit\s+(commit|push)\b", command) and not session.get("committed"):
+        _, last = git(cwd, "reflog", "-1", "--format=%gs")
+        if last.startswith("commit") or re.search(r"\bgit\s+push\b", command):
+            session["committed"] = True
+            save_json(session_path, session)
     if re.search(r"\bgit\s+commit\b", command):
         if session.get("drive") and not drive.get("issue"):
             drive["issue"] = session["drive"].get("issue")

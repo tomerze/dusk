@@ -41,6 +41,13 @@ def expect(name, result, code, contains=None):
     return ok
 
 
+def committed_session():
+    path = DATA / "sessions" / "committed.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "loaded_skills": ["activate"]}))
+    return "committed"
+
+
 def review_file(name, text, present=True):
     path = REPO / "review" / "topic" / name
     found = path.exists() and text in path.read_text()
@@ -89,6 +96,9 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a markdown edit is free", run("pre_edit.py", edit(str(REPO / "docs/x.md"), "a", "# b")), 0),
         expect("a stop with nothing pending passes", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Done."}), 0),
         expect("a Ready line that is not last is blocked", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Ready for review.\n\nAlso this."}), 2, "last line"),
+        expect("a turn after a commit must hand over or ask", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "Here is where things stand."}), 2, "DILEMMA"),
+        expect("an unmarked question after a commit is blocked", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "Which of the two should it be?"}), 2, "DILEMMA"),
+        expect("a marked dilemma after a commit passes", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "DILEMMA: the name\n\nWhich of the two should it be?"}), 0),
         expect("a quoted Ready line is not a claim", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": '- a.py:1 — "Ready for review." — the hand-off prints it'}), 0),
         expect("a malformed triage answer is blocked", run("subagent_stop.py", agent("dilemma-triage", "DECISION: x\nVERDICT: maybe")), 2, "six lines"),
         expect("a triage answer is recorded", run("subagent_stop.py", agent("dilemma-triage", triage)), 0),

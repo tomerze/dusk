@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 from harness import (
+    DILEMMA_LINE,
     READY_LINE,
     REVIEW_SIGNOFFS,
     block,
@@ -29,6 +30,12 @@ def answered(path, title):
 
 
 READY_ALONE = re.compile(rf"^[ \t]*{re.escape(READY_LINE)}[ \t]*$", re.M)
+DILEMMA_MARK = re.compile(rf"^[ \t]*\**{re.escape(DILEMMA_LINE)}", re.M)
+
+
+def marks_dilemma(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    return bool(lines) and bool(DILEMMA_MARK.match(lines[0])) and "?" in message
 
 
 def claims_ready(message):
@@ -72,8 +79,8 @@ def main():
     problems = []
 
     pending = [title for title in drive.get("pending_questions", []) if not answered(decisions_path(cwd, branch), title)]
-    if pending and "?" not in message:
-        problems.append("dilemma-triage said these need the user: " + "; ".join(pending) + ". Ask, with a question mark, and record the answer as `- answer:` under the decision.")
+    if pending and not marks_dilemma(message):
+        problems.append("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision.")
 
     claimed, last = claims_ready(message)
     if claimed:
@@ -86,8 +93,13 @@ def main():
                     "review alongside them — " + ", ".join(pending) + " — and put what they find "
                     "on the pull request as it lands."
                 )
-    elif drive.get("phase") in ("pushed", "opened") and "?" not in message:
-        problems.append(f"A hand-off ends with `{READY_LINE}` on its own line, or asks the user the blocking question.")
+    elif (session.get("committed") or drive.get("phase") in ("pushed", "opened")) and not marks_dilemma(message):
+        problems.append(
+            f"This session has changed the history, so the turn is marked. It ends with "
+            f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
+            f"`{DILEMMA_LINE}` line and asks the one question that blocks the work. A report that "
+            "is neither leaves the user with nothing to do."
+        )
 
     if not problems:
         session["stop_blocks"] = {}

@@ -6,7 +6,7 @@ PREAMBLE = """dusk-dev: the dusk harness is active.
 - Every commit is read by the comment-review agent; a comment it finds that belongs in the commit message comes back to be moved there.
 - Work goes through three phases. Writing: the rules above, and the dilemma-triage agent on every decision. Getting ready to review: the atomic-commit agent splits the branch, which is what gates the push, because a human reads what is pushed. Ready for review: the hand-off goes out and the review agents run alongside the human, never ahead of them.
 - The review agents are self-review, race-screen, terminology-review, string-review and decision-ranker. They gate nothing; what they find goes on the pull request as it lands, and the branch's review folder collects it: decisions.md, comments.md, terminology.md, strings.md and report.html, whose locations open in VS Code.
-- A hand-off ends with `Ready for review.` on its own line and nothing after it, or asks the blocking question. The line is verified: PR open at the pushed tip, worktree gone. Merging always asks."""
+- Once this session has committed or pushed, every turn is marked: it ends with `Ready for review.` on its own line and nothing after it, or it opens with a `DILEMMA:` line and asks the one question that blocks the work. Nothing else ends a turn. `Ready for review.` is verified: PR open at the pushed tip, worktree gone. Merging always asks."""
 
 
 def main():
