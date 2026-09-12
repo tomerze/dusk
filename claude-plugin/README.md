@@ -22,7 +22,7 @@ To run a checkout's copy while changing it, start Claude Code with
 | part | where |
 |---|---|
 | project instructions | the repository's root `AGENTS.md`, read by Claude Code and by Codex alike |
-| skills | `skills/` — `drive-issue` is the workflow; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
+| skills | `skills/` — `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
 | agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `decision-ranker` |
 | hooks | `hooks/` — one script per event; `python3 hooks/selftest.py` runs them against canned input |
 

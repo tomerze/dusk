@@ -57,7 +57,7 @@ def branch_name(branch):
 
 def session_state(session_id):
     path = data_dir() / "sessions" / f"{safe_name(session_id)}.json"
-    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}}
+    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False}
     state = load_json(path, default)
     for key, value in default.items():
         state.setdefault(key, value)

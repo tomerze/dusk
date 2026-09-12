@@ -5,12 +5,18 @@ description: Take a GitHub issue in this repository from "here is the issue numb
 
 # Drive a Dusk Issue to a Merged PR
 
-The mechanics of shipping an issue in this repository. Nothing here is about how
-to write the code — `AGENTS.md` and the working agreements own that. This is the
-git, build, and GitHub sequence around it.
+The mechanics of shipping an **issue**: reading it, the worktree it is built in,
+the branch cut for it, and the pull request that closes it. Everything about how
+the work itself is done — decisions, commits, the split, the hand-off, the review
+agents, the merge — is the `activate` skill, and this one runs on top of it.
 
-**The user's approval is the only gate you may not skip.** Merging without it is
-the one unrecoverable step.
+This skill takes an issue. Without one there is nothing here to run: work on a
+branch the user is already on goes to `activate` instead.
+
+## Step 0 — Activate the rules
+
+Invoke the `dusk-dev:activate` skill before anything else. Every step below
+assumes its rules are in force, and none of them is repeated here.
 
 ---
 
@@ -108,11 +114,10 @@ git log origin/master --oneline -3
 
 Branch from `origin/master`, not from whatever the worktree started on.
 
-**Re-check `origin/master` before you push, and re-run the build after you
-rebase.** Dusk work takes hours and the user merges their own PRs in the
-meantime. Master does not only change code — it can delete the build
-infrastructure you set your worktree up around, so treat a rebase as
-invalidating your whole environment, not just your numbers.
+`activate` says to re-check `origin/master` before the push and to re-run the
+build after the rebase. In a worktree that can invalidate the setup Step 2 made,
+not only the numbers: master can delete the build infrastructure the worktree
+was built around.
 
 Past failure: while driving #6, master moved twice. The second move (#11)
 deleted `dusk_llm/build.rs`, `dusk_llm/model.json`, the `vendor/ik_llama.cpp`
@@ -121,257 +126,27 @@ prescribed an hour earlier no longer applied, and a step from it — a symlink
 into the main checkout — went dangling mid-run and failed a commit's clippy hook
 with an error that named neither the symlink nor the branch that removed it.
 
-## Step 4 — Building and measuring
+## Step 4 — What a pull request carries for an issue
 
-- `cargo check` is cheap and always allowed. **Do not run `cargo test` or
-  `cargo nextest` unless the user asked** — tests are a separate workstream.
-  An issue that asks for tests is asking; running them is then part of
-  delivering, and shipping a test you never executed is not.
-- `cargo build --release --bin dusk` is the real build. It is a plain Rust
-  release build; the only unusual cost is compiling the vendored Cap'n Proto
-  compiler the first time.
-- If the issue wants a before/after comparison, **build and measure the
-  unmodified tree first and keep the numbers** — once the target directory is
-  overwritten, recovering the baseline costs another full build. A second
-  worktree at `origin/master` is the cheapest way to get it back.
-- Run benchmarks **sequentially on an idle machine**. A benchmark sharing the
-  machine with a compile reports numbers that are off by 8×. **Check whether the
-  machine is actually idle first** — other worktrees under `.claude/worktrees/`
-  may have their own sessions compiling right now (`ps aux | grep rustc` shows
-  whose target directory each one is writing to).
-- **Never state a number you did not measure**, and never explain a slow build
-  before timing it. Measure, then decide.
-- **A full disk reports itself as a compiler bug.** When the volume fills, rustc
-  and the linker fail with `No space left on device` mixed in among
-  `rustc-LLVM ERROR` and `ld terminated with signal 7 [Bus error]`, which read
-  like a broken toolchain. Run `df -h` before believing any of it. Every
-  worktree carries its own `target`, so measure them with `du -sh` rather than
-  assuming a size — they differ by more than an order of magnitude. Reclaiming
-  space means deleting the user's build caches, so **ask first**, and name the
-  measured sizes and which branches are already merged so the choice is theirs.
+Open the pull request as `activate` says. For an issue the body also carries:
 
-## Step 4b — Driving the node by hand
-
-Running the thing beats reasoning about it, and it is not the test suite, so it
-is available even when tests are not. Build with
-`cargo build --bin dusk_node --bin dusk`, start the node, and drive it with
-one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
-
-- **The `dusk_node` binary always binds 9090**, because
-  `artifacts/dusk_node/src/lib.rs` hardcodes it — that is a property of the
-  prebuilt deliverable, not of the runtime. `dusk_nix::run` takes whatever
-  address and port you hand its `InitArgs`, which is how
-  `tests/common/src/lib.rs` runs many nodes at once. So check
-  `pgrep -af dusk_node` before starting one: another session's node may already
-  hold 9090, in which case yours exits and your CLI silently talks to *theirs*.
-  Do not kill a node you did not start. Point your own elsewhere — and if you do
-  that by editing the hardcoded port, `git diff` that file before committing,
-  since pre-commit stashes unstaged work and the hooks will never see it.
-- A node built from a different revision answers with the wrong schema, and the
-  error names neither the port nor the process: a changed capnp union surfaces as
-  `Enum value or union discriminant <n> was not present in the schema`, which
-  reads like a schema bug in the branch you just wrote.
-
-## Step 4c — Reporting a fix
-
-Every bug I fix is reported in the same three lines — in the reply, and in the
-pull request body. Not a paragraph, not the story of how I found it:
-
-```
-THE PROBLEM WAS:
-I FIXED IT BY:
-MY FIX IS NOT GOOD ENOUGH BECAUSE:
-```
-
-**The first line is the mechanism, not the symptom.** The user saw the symptom;
-they are the one who reported it, and repeating it back tells them nothing. What
-they cannot see is which line of which function did the wrong thing, and why
-that produced what they got. Name it: the arm that answered before the work
-started, the call that returned early, the field never set, the capability that
-died with its connection, the assumption that stopped holding and where. **A
-first line I could have written without reading the code is not a report, it is
-an echo.**
-
-Wrong — the symptom, which they already have:
-
-> `sh` with no command printed "running in server mode" instead of opening a
-> shell.
-
-Right — the mechanism, which they do not:
-
-> `Portal::output`'s server-mode arm wrote one value and answered
-> `daemonize = false` immediately, so the interpreter killed and reaped the
-> process as soon as it had started it. Nothing stayed running for a client to
-> attach a view to, and `output` returning is the only thing the caller waits
-> on.
-
-The second line is the change, in one sentence, in the same terms.
-
-**The third line is the one that matters, and the one I will want to skip.** A
-fix that covers the path in the report and not its siblings, that leaves the
-same class of bug reachable another way, that I could not drive and only read —
-it says so there. `null` is allowed and it is a claim: it means I went looking
-for the case that breaks this fix and did not find one. Writing `null` because
-nothing came to mind is a lie in three characters.
-
-## Step 4d — A skill that misled me is fixed in this session
-
-When this skill, `authoring-a-program`, `atomic-commit` or `AGENTS.md` turns out
-to describe something that is not true — a step that breaks, a number that is
-wrong, a mechanism that has moved — **I fix it now, in the session that found
-it.** I do not ask whether to. I do not offer to do it later. I do not write
-"worth fixing when you next touch the skill" and move on: that sentence costs
-the user a decision and leaves the next reader following an instruction I
-already know is false.
-
-It lands as its own commit, at the end with the other text commits, and it rides
-along on whatever branch I am on. If that branch is unrelated to it, the commit
-still rides — I say so in the reply and in the pull request body, once, and the
-user drops it if they would rather have it separately. Deferring the fix is not
-one of the choices.
-
-Past failure: I reused a parked `target/` at a different worktree path, watched
-the capnp build script fail in a way that named neither, worked out why, fixed
-the build — and then told the user I would correct the skill "when you next want
-the skill touched". The instruction that had just cost me a build stayed wrong,
-and they had to come back and tell me to fix it.
-
-## Step 4e — Every decision goes through triage, as it is made
-
-A decision is anything the user could have decided differently: a shape, a
-name that is more than a placeholder, a dependency, an omission, a mechanism
-chosen over another. Each one is put to the `dusk-dev:dilemma-triage`
-agent the moment it is made, with what is being decided, the alternatives and
-what reversing it would cost. Its answer says `decide-alone` or `ask-human`, and
-the hook that reads it appends the decision to `review/<branch>/decisions.md`.
-
-`ask-human` means stop and ask, with the question mark, before building on the
-decision; the answer is recorded under the decision as `- answer: …`. The
-harness does not let a turn end while an `ask-human` decision has neither been
-asked nor answered.
-
-## Step 5 — One commit while you work, split it just before review
-
-**Everything goes into a single commit until the work is finished.** Amend it as
-you go. Do not split it, do not absorb anything into it, do not reach for
-`--fixup` and an autosquash rebase while there is still work coming: each of
-those rewrites history that the next change rewrites again, and that churn costs
-far more than the whole split costs once.
-
-The split happens **once**, at the end, when the tree is final and just before
-Step 6: dispatch the `atomic-commit` agent (`Agent`, `subagent_type`
-`dusk-dev:atomic-commit`) over that one commit. It tags the tree, cuts it
-into the commits the work actually is, and the harness lets it finish only when
-`git diff harness-snapshot HEAD` is empty and every subject passes; the push is
-gated on that sign-off.
-
-Review works the same way. A round of comments that changes anything substantial
-is not a handful of fixups aimed at five different commits — squash the affected
-commits, or the whole branch, back into one, make the changes there, and split
-again. Threading a change into commits you are about to rewrite anyway is the
-work done twice.
-
-**Do not put the issue number in the commit subject.** A subject is one
-imperative sentence about what the commit does; `(#N)` is metadata about why the
-work was scheduled, not part of that sentence, and it is already carried by the
-`Closes #N` in the PR body. Trailing issue numbers in `git log --oneline` also
-read as pull-request merge numbers, which they are not.
-
-- **Run `git commit` in the foreground with an explicit long timeout**
-  (`timeout: 600000`). Do not background it, and do not poll for it — the
-  harness re-invokes you when a background command exits, so a `sleep` loop
-  watching your own output file is pure waste. The reason to give it a long
-  timeout rather than the default is that pre-commit stashes unstaged work
-  before the hooks run: a commit killed mid-hook can strand that stash.
-- If a commit is killed anyway, the stash is recoverable from the patch named in
-  the hook's `[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
-  **`~/.cache/pre-commit/` is shared by every worktree on the machine.** A patch
-  in there may belong to another session — check that its diff is yours before
-  applying it, and never apply one you did not create.
-- The hook set is fmt, clippy, clang-format, clang-tidy, ruff (lint and format)
-  and pyright, with `fail_fast: true`. Only fmt and clippy run for a Rust-only
-  change; the rest match on C or Python paths and skip. Expect a second attempt
-  when `fmt` rewrites a file and fails the run — re-stage what it touched and
-  commit again.
-- Stage explicit paths, never `git add .` — measurement harnesses, `Cargo.lock`
-  and anything else you created during setup must stay out of the commit.
-
-## Step 5b — Getting ready to review
-
-**One thing stands between the work and the human: the split.** A person cannot
-read a branch that is one WIP blob, so the `dusk-dev:atomic-commit` agent cuts it
-into the commits the work is, and the harness asks before a push whose tip it has
-not signed off. Nothing else holds the push up.
-
-`review/<branch>/decisions.md` is committed here too — it was written while the
-work happened, one entry per decision, by the hook that reads `dilemma-triage`.
-
-**`dusk-dev:comment-review` has already run**, once per commit, dispatched by the
-harness the moment the commit landed, and anything it found was moved into the
-commit message then, not now.
-
-## Step 6 — Push and open the PR over the MCP
-
-**Say what you are about to open before you open it.** A pull request appears in
-the user's repository under their name; they should read that it is coming in
-your message, not discover it as a link in the same breath that announces it is
-already there.
-
-**A drive-issue session produces exactly one pull request.** Whatever else the
-work turns up — a stale skill, a broken config, a fix to something adjacent —
-becomes another commit on the same branch, never a second PR. Asking to drive an
-issue is asking for one thing to review and one thing to merge; two PRs make the
-user do the bookkeeping the skill exists to do for them.
-
-So `create_pull_request` is called at most once per session. After the PR is
-open, more work means: commit onto the same branch, push, and
-`update_pull_request` the body to cover it. If a second PR has already been
-opened, fold its commits onto the one branch and close it as superseded.
-
-```
-git push -u origin <branch>
-mcp__github__create_pull_request(owner="tomerze", repo="dusk", head=…, base="master", title=…, body=…)
-```
-
-`gh` 2.46.0 is installed on this machine and the MCP works too; either opens
-the PR, and the harness checks the body the same way through both. If the MCP
-returns `403 Resource not accessible by personal access token`, the token lacks
-Pull requests: write — say so and ask the user to grant it rather than
-improvising another route.
-
-**Write the PR body in the first person, as the author of the change.** It is a
-public record of what the commit does, not a message to the user — the same way
-rustc's output is not addressed to anyone in particular. So: no "as we
-discussed", no "let me know if you want", no "say the word and I'll switch", no
-second person at all. A decision that needs the reviewer's attention is stated as
-what was chosen, what was rejected, and what reversing it would cost — then the
-reviewer decides in review, in their own words.
-
-The PR body must carry:
-
-- **`Closes #N`**, so the merge closes the issue.
+- **`Closes #N`**, so the merge closes the issue. The harness refuses a body
+  without it.
 - **One section per acceptance criterion in the issue**, in the issue's own
-  terms. Measured numbers in a table, naming the host, the method, and the run
-  count.
-- **Every incompatibility, workaround and deliberate omission.**
-- **Every decision the reviewer might have made differently** — with the
-  alternative and what switching would cost. Dusk's working agreements say design
-  decisions are the user's; the PR body is where you hand back the ones you had
-  to make to keep moving.
-- Anything **broken but out of scope** that you tripped over.
-- **The decisions**, under `## Decisions`. The hook adds them from
-  `review/<branch>/decisions.md` when the body lacks them, and refuses a body
-  while that file is missing. `decision-ranker` runs after the PR is open and
-  the ranking replaces the list then.
+  terms — the definition of done from Step 1, answered.
 
-## Step 7 — Give the branch back, ask for review, then stop
+**Do not put the issue number in the commit subject.** It is metadata about why
+the work was scheduled, already carried by `Closes #N`, and a trailing number in
+`git log --oneline` reads as a pull-request merge number, which it is not.
 
-**Remove the worktree before you ask.** Git lets one worktree hold a branch at a
-time, so for as long as yours is checked out on it the user cannot check it out
-to review it: `git checkout <branch>` in their own checkout fails, and the first
-they hear of the reason is the error. Everything is pushed by this point, so the
-worktree holds nothing the remote does not — except its build directory, which
-is parked first so the next session starts warm:
+## Step 5 — Remove the worktree before the hand-off
+
+**Remove the worktree before you ask for review.** Git lets one worktree hold a
+branch at a time, so for as long as yours is checked out on it the user cannot
+check it out to review it: `git checkout <branch>` in their own checkout fails,
+and the first they hear of the reason is the error. Everything is pushed by this
+point, so the worktree holds nothing the remote does not — except its build
+directory, which is parked first so the next session starts warm:
 
 ```
 mv target ~/.cache/dusk-target/<branch>
@@ -393,49 +168,8 @@ git -C ~/git/dusk worktree remove --force .claude/worktrees/<name>
 ```
 
 That takes the directory and its `target` and leaves the branch, which is the
-half the user needs.
-
-**Check the pull request is still open, and that it has what you pushed**, before
-handing it over:
-
-```
-mcp__github__pull_request_read(method="get", owner="tomerze", repo="dusk", pullNumber=N)
-```
-
-`merged: true` means the review is over. Anything pushed to that branch after the
-merge is on no branch anyone will merge, so it needs a **new** pull request, not
-another push and a link to a closed one. `head.sha` must also equal the tip you
-pushed; if it does not, the push did not land.
-
-This has gone wrong twice, both times silently. #44 and #46 were each merged from
-the state of the branch before the last push, so in both cases the commit that
-push carried never reached master — and both times it was the commit that fixed
-the very instruction the pull request existed to fix.
-
-Then give the user the PR URL and the branch to check out, as a line they can
-paste — `git checkout <branch>` — and ask them to review. Removing the worktree
-is what made that line work; the user reads the diff and runs the node from
-their own checkout, and they should not have to open the PR to learn the branch
-name. Then wait.
-
-**End that message with `Ready for review.` on its own line, and write nothing
-after it.** It is the one sentence the user is looking for, and it means every
-check above has actually passed — not that the work is nearly there, not that it
-is pushed and something is still running. If anything is outstanding, say what it
-is instead and do not write the line at all. Nothing follows it: no summary, no
-caveat, no offer, no question. The line is the end of the message.
-
-The harness checks the line: it must be last, the worktree gone, the pull
-request open at the pushed tip with the decisions in its body, and
-`review/<branch>/decisions.md` on the branch. A message that claims it while any of
-that is false is sent back with the check that failed.
-
-**The hand-off is not the end of the session. It is the point where two reviews
-start at once** — see Step 7b.
-
-Do not merge, do not tidy the branch, and do not read silence or a question as
-approval. When comments arrive, verify a claim before implementing it and say so
-if you think it is mistaken.
+half the user needs. The harness checks the worktree is gone before it accepts
+`Ready for review.`
 
 Bring the worktree back when the drive resumes — review comments to answer, or
 `drive-issue continue`:
@@ -448,54 +182,10 @@ git checkout <branch>
 A returning worktree is a new one, so Step 2 applies to it again — submodule,
 lockfile — and its first build is cold. Measure from the second.
 
-## Step 7b — The agents review while the human does
+## Step 6 — After the merge
 
-The hand-off went out at the end of Step 7, and the human is reading the pull
-request now. **The review agents run from here, alongside them.** They gate
-nothing and they never come first: a branch whose agents have not run is still a
-branch a person can read, and holding the hand-off back to finish a machine's
-opinion of it wastes the only reviewer whose approval is the gate.
-
-Dispatch them together and let them land as they finish:
-
-- **`dusk-dev:self-review`** reads every commit against the working agreements
-  and the issue's definition of done, ending `VERDICT: pass` or
-  `VERDICT: findings`.
-- **`dusk-dev:race-screen`** reads the diff for anything that can interleave on
-  the cooperative executor and dispatches `dusk-dev:race-inspector` when it finds
-  some.
-- **`dusk-dev:terminology-review`** writes `review/<branch>/terminology.md`.
-- **`dusk-dev:string-review`** writes `review/<branch>/strings.md`.
-- **`dusk-dev:decision-ranker`** heads `review/<branch>/decisions.md` with the
-  ranking; update the PR body's `## Decisions` to the ranked list.
-
-Each sign-off names the commit it was given, so anything that changes the branch
-means running that agent again. As each lands, commit what it wrote and say on
-the pull request what it found — the human is reading in parallel, so a finding
-is worth more the sooner it is there. A real finding — a race, a verdict of
-`findings` — is fixed the usual way: squash, fix, re-split, force-push, and say
-so on the PR.
-
-The review folder — `decisions.md`, `comments.md`, `terminology.md`,
-`strings.md` and the `report.html` the hooks render from them — is committed as
-`Record the review of <branch>`. Give the user the path to `report.html`: it
-opens in a browser, and every `file:line` in it is a link that opens that line in
-VS Code.
-
-The harness will not let the session end while a review agent has not signed off
-the pushed tip. That is a nag aimed at me, never at the human: it fires after the
-hand-off has already gone out.
-
-## Step 8 — Merge on explicit approval
-
-```
-mcp__github__merge_pull_request(owner="tomerze", repo="dusk", pullNumber=…, merge_method=…)
-```
-
-Ask which merge method if it is not obvious from the repository's history.
-Afterwards confirm the issue closed and report the merge commit.
-
----
+The merge happens as `activate` says, on explicit approval only. Afterwards
+confirm the issue closed, and report the merge commit.
 
 ## `drive-issue continue` — resuming a drive already in flight
 
@@ -503,8 +193,8 @@ Afterwards confirm the issue closed and report the merge commit.
 has changed since, carry on. Usually the user has edited the tree themselves, or
 left review comments, or asked for something the last round missed.
 
-Everything in Steps 1–8 still applies. What is different is that **nothing gets
-created except the worktree**. Step 7 removed it to free the branch, so make one
+Everything in Steps 0–6, and everything in `activate`, still applies. What is different is that **nothing gets
+created except the worktree**. Step 5 removed it to free the branch, so make one
 again and check the branch out into it. The branch and the PR already exist; find
 them rather than opening new ones. The user's own edits may still be sitting
 uncommitted in their checkout rather than on the branch — ask before treating
@@ -538,7 +228,7 @@ Then:
   out of this round, it belongs in the body's decisions section so the reviewer
   sees it in one place.
 
-Finish the same way Step 7 does: hand back the PR URL and the branch to check
+Finish the same way `activate` does: hand back the PR URL and the branch to check
 out, then wait. `continue` never merges on its own either.
 
 ## Keeping this skill true
@@ -546,36 +236,24 @@ out, then wait. `continue` never merges on its own either.
 This file describes an environment that changes under it. When a step here turns
 out to be wrong — a submodule that no longer exists, a build cost that no longer
 applies, a gotcha that was fixed — **say so and fix the skill**, in its own
-commit, separate from the issue you were driving. A skill that misdirects the
+commit, separate from the issue being driven. A skill that misdirects the
 next agent is a defect exactly like a wrong comment.
 
 ---
 
 ## Checklist
 
+`activate` carries the checklist for the work itself. On top of it:
+
+☐ `activate` invoked first
 ☐ Issue and comments read over MCP; definition of done written out
 ☐ Worktree entered; `vendor/capnproto` initialised, lockfile copied
 ☐ `origin/master` fetched; branch cut from it
 ☐ Baseline built and measured first, if the issue asks for a comparison
-☐ `origin/master` re-checked before pushing; rebased, then the build re-run
-☐ `cargo build --release --bin dusk` green; no tests run unless asked
-☐ Every decision put to `dilemma-triage` as it was made; `ask-human` ones asked and answered
-☐ Worked in one commit; split once by the `atomic-commit` agent just before pushing
+☐ PR body carries `Closes #N` and one section per acceptance criterion
 ☐ `review/<branch>/decisions.md` committed; the PR body carries `## Decisions`
-☐ Hand-off sent **before** the review agents ran, not after
-☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes
-☐ `review/<branch>/` committed; the user has the `report.html` path
-☐ Committed in the foreground with a long timeout
-☐ No issue number in any commit subject
-☐ PR body written in the first person, addressed to no one
-☐ Pushed; **one** PR opened over the MCP, with `Closes #N`
-☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ Worktree removed, so the branch is free for the user to check out
-☐ PR confirmed still open and carrying the pushed tip, not already merged
-☐ Branch named in the hand-back, as `git checkout <branch>`
-☐ Review requested, the message ending `Ready for review.` and nothing after it
-☐ **Waited**
-☐ Merged only after explicit approval; issue confirmed closed
+☐ Issue confirmed closed after the merge
 
 On `drive-issue continue`, the issue is already read and the branch and PR
 already exist; the worktree is the one thing made again. Nothing else is created,
@@ -587,3 +265,4 @@ Not one — not `//`, not `///`, not `#` in a schema. The user writes every comm
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
 See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).
+

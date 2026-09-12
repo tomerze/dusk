@@ -1,7 +1,7 @@
 from harness import context, current_branch, decisions_path, drive_state, read_input
 
 PREAMBLE = """dusk-dev: the dusk harness is active.
-- Issue work goes through /dusk-dev:drive-issue. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.
+- Work in this repository goes through /dusk-dev:activate, which puts the rules below in force on the branch that is checked out. Issue work goes through /dusk-dev:drive-issue, which is activate plus the issue. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.
 - Hooks enforce, as the action happens: no comment lines written by me; commit subjects with no feat:-style prefix, no Say, no (#N), no watermark trailer; git commit in the foreground with timeout 600000; no polling loops; no cp of a target directory; no bare git stash; cargo test only after asking.
 - Every commit is read by the comment-review agent; a comment it finds that belongs in the commit message comes back to be moved there.
 - Work goes through three phases. Writing: the rules above, and the dilemma-triage agent on every decision. Getting ready to review: the atomic-commit agent splits the branch, which is what gates the push, because a human reads what is pushed. Ready for review: the hand-off goes out and the review agents run alongside the human, never ahead of them.

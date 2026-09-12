@@ -20,10 +20,19 @@ def main():
             session["drive"] = {"issue": int(number.group()) if number else None}
         save_json(session_path, session)
         return
-    if ISSUE.search(prompt) and "drive-issue" not in session["loaded_skills"]:
+    loaded = session["loaded_skills"]
+    if ISSUE.search(prompt) and "drive-issue" not in loaded:
         context(
             "An issue is named. Issue work in this repository goes through the drive-issue skill: "
             "invoke /dusk-dev:drive-issue before doing anything else."
+        )
+    elif not ({"activate", "drive-issue"} & set(loaded)) and not session.get("activate_nudged"):
+        session["activate_nudged"] = True
+        save_json(session_path, session)
+        context(
+            "The dusk working rules are not in force in this session. Invoke /dusk-dev:activate "
+            "before changing anything: it carries how decisions are recorded, how the branch is "
+            "committed and split, how it is handed over, and when it may be merged."
         )
 
 
