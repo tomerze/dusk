@@ -126,7 +126,7 @@ it is a consequence, it belongs with the decision. Yes → it is its own sheep.
 
 ### 6. Prose is always its own commit
 
-Documentation, `CLAUDE.md`, and the skills under `.claude/skills/` get their own
+Documentation, `AGENTS.md`, and the skills under `claude-plugin/skills/` get their own
 commits, even when the words changed *because* of a code decision. They are read
 by different people, reviewed differently, and reverted independently.
 
@@ -138,7 +138,7 @@ moves, real changes, tests, text — in that order. A commit that only changes
 `use` paths, or only moves code without changing it, goes at the start, where
 it can be waved through; the real changes follow; the tests come after the code
 they test; and every commit that changes only what a person reads — comments,
-docs, `CLAUDE.md`, the skills — sits at the end, after the last commit that
+docs, `AGENTS.md`, the skills — sits at the end, after the last commit that
 changes what a machine runs. A reviewer reads the code before the words about
 it, and a text commit in the middle of the code is a page of prose between two
 hunks it does not describe yet.
@@ -147,7 +147,7 @@ hunks it does not describe yet.
 
 Everything I wanted to say in a comment goes here instead: why this exists, what
 it replaced, what was rejected, what it is a step toward. See the
-[no-comments rule](../../CLAUDE.md#i-do-not-write-comments) — a comment
+[no-comments rule](../../../AGENTS.md#i-do-not-write-comments) — a comment
 explaining the change is a commit message that leaked into the source and will
 outlive the reader it was written for.
 
@@ -164,11 +164,16 @@ the docs for how a prompt opens now", never "Say how a prompt opens now in the
 docs". A subject built around "say" is naming the sentence the file gained
 instead of the act done to the file.
 
-### 8. Present the subject lines and wait
+### 8. Write the subject lines down, then build
 
-Show the user **the list of subject lines, in order** — not the file groupings,
-not a script. The subject lines are what they are approving, because the subject
-lines are the statements. Wait for the nod before staging anything.
+Put **the list of subject lines, in order** in the reply — not the file
+groupings, not a script — and build the commits in the same turn. The subject
+lines are the statements, and the commits are what the user approves or sends
+back; they review them as commits, not as a plan. How a diff is divided is not
+a structural decision, so it does not wait for a nod: a split they dislike is
+redone, and that is cheaper than a stall. The user, verbatim: **"just do what
+you see fit. if i dont like it i will not approve it. this is what we always do
+with non structural decisions."**
 
 ## What a commit does *not* have to do
 
@@ -191,7 +196,7 @@ The same goes for tests passing at every commit. Ideal. Not a requirement.
 
 **Failure — one glob.** PR #32 shipped as a single commit: 32 files, a schema
 split, twelve program conversions, a helper deleted, a rename, the shell's
-close relocated, two tests, five doc pages, `CLAUDE.md` and a skill. Every
+close relocated, two tests, five doc pages, `AGENTS.md` and a skill. Every
 sentence of it was true and none of it could be reviewed. The user could not say
 yes to the rename without also saying yes to the schema. That is not a review,
 it is a hostage situation.
@@ -218,34 +223,65 @@ nor what-breaks-if-I-split will find it. Only the statement will.
 ## Mechanics
 
 **Before rewriting any history, snapshot the final tree.** `git add -A && git
-commit --no-verify -m "WIP snapshot"` and write down the SHA. Everything after
-that is recoverable, and `git diff <snapshot> HEAD` at the end must come back
-empty — that is the proof the rewrite lost nothing.
+commit --no-verify -m "WIP snapshot"`, then `git tag -f harness-snapshot HEAD`.
+Everything after that is recoverable, and `git diff harness-snapshot HEAD` at the
+end must come back empty — that is the proof the rewrite lost nothing.
 
-**Splitting an existing commit.** Reset to the base, then rebuild forward: for
-each statement, bring in the files it wholly owns with `git checkout <snapshot>
--- <paths>`, and hand-construct the intermediate content for any file that spans
-more than one statement. A file appearing in three commits is normal and is not a
-sign the split is wrong.
+**Unpick the commit, then commit forward out of the working tree.** Do not
+reconstruct each statement's content from the snapshot; let git hand you the
+whole change as unstaged edits and take it apart from there.
+
+```
+git reset <base>                      # the whole change is now unstaged
+git add <the paths this statement owns>
+git commit --no-verify -m "<subject>" -m "<body>"
+…                                     # once per statement
+git diff harness-snapshot HEAD        # empty, or the split lost something
+```
+
+Reset against the base the split rebuilds from, not `HEAD^`. When the tree was
+dirty the tip is the snapshot commit, and `HEAD^` unpicks that instead, leaving
+the WIP commit in the history under everything you then build.
+
+For a commit in the middle of the branch, `git rebase -i <base>` marking it
+`edit` puts you in the same place: `git reset HEAD^`, commit forward, then
+`git rebase --continue`. A rebase in progress is a normal working state.
+
+For a file that spans two statements, stage the hunks rather than the file:
+`git add -p <path>`, or write the intermediate content and stage it.
+
+**Every commit in a split is `--no-verify`, and this is the whole of the speed.**
+Pre-commit stashes the unstaged changes before it runs and restores them after,
+on every commit — and during a split the working tree is full of the statements
+not committed yet, so it stashes and restores the entire remaining change each
+time. The checks are also being asked about trees that will never ship: an
+intermediate state can have a moved file and not its caller, and fail a lint for
+a reason the final tree does not have.
+
+The final tree is the one that matters and it is byte-identical to the snapshot,
+which was already verified. So verify once, at the end, not once per commit:
+
+```
+uv run pre-commit run --from-ref <base> --to-ref HEAD
+```
 
 **Never `git add .` or `git add -A`** when building a real commit — only the
 snapshot may be taken that way. Stage the paths the statement owns.
 
-**Never put a timeout on a commit.** Pre-commit hooks stash the unstaged changes
-before they run; killing the commit mid-hook leaves that stash unrestored and the
-user's uncommitted work gone. Give it the maximum timeout, or run it in the
-background. If one does get killed, the work is in the patch file named in the
-hook's `[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
+**A commit that does run the hooks gets the maximum timeout.** Pre-commit stashes
+the unstaged changes before it runs; killing it mid-hook leaves that stash
+unrestored and the user's uncommitted work gone. If one does get killed, the work
+is in the patch file named in the hook's
+`[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
 
-**A rebase in progress is a normal working state, not a blocker.** `git rebase -i`
-with `edit` is exactly how a commit gets split; the working tree handed to me is
-usually the leftover of the commit being split. Do not raise it, do not warn, do
-not ask. Commit onto the detached HEAD as usual; `git rebase --continue` is the
-user's move.
+**A rebase in progress is a normal working state, not a blocker.** The working
+tree handed to me is usually the leftover of the commit being split. Do not raise
+it, do not warn, do not ask. Commit onto the detached HEAD as usual, then
+`git rebase --continue`.
 
 **A fixup belongs in the commit it fixes.** Discovery order must never show up in
 the history — see
-[the working agreement](../../CLAUDE.md#a-fixup-belongs-in-the-commit-it-fixes--always).
+[the working agreement](../../../AGENTS.md#a-fixup-belongs-in-the-commit-it-fixes--always).
 Force-push the rewritten branch; a pushed branch is not a reason to append.
 
 ## Checklist
@@ -259,13 +295,14 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
       order it next to the commit instead of inside it
 - ☐ Run the consequence test on every hunk; fold consequences into their decision
 - ☐ Pull prose out into its own commits, split by reader
-- ☐ Show the user the subject lines in order, and wait
-- ☐ Snapshot, then rebuild forward, staging named paths only
-- ☐ `git diff <snapshot> HEAD` is empty
+- ☐ Put the subject lines in the reply, in order, and build without waiting
+- ☐ Snapshot and tag, `git reset HEAD^`, then commit forward, staging named paths only
+- ☐ Every commit in the split is `--no-verify`; the hooks run once at the end
+- ☐ `git diff harness-snapshot HEAD` is empty
 
 ## I do not write comments
 
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).
+See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).

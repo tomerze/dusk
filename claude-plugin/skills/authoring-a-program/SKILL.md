@@ -376,8 +376,6 @@ impl Portal {
 - **`#[derive(dusk_program_proc::Portal)]`** — implements `Dusk.Portal.programId()` for your portal type.
 - **`#[dusk_program_proc::impl_portal_rpc_server] impl Portal { … }`** — wires the rest of the portal's methods. The body holds whatever methods your `<Name>Portal` schema declares.
 
-**Note on a stale doc:** the project `CLAUDE.md` mentions `basic_launcher!(...)`. That macro doesn't exist in `dusk_program_proc` — programs always write `impl LauncherMixin` by hand. Don't try to call `basic_launcher!`; the CLAUDE.md line is out of date.
-
 ---
 
 ## Step 5 — `Process::main`
@@ -835,7 +833,7 @@ loop {
 ```
 
 - `NoopStream::new()` from `dusk_program::stream` is the canonical discard stream. Use it when the spawned work produces output that the caller will not consume.
-- The completion `Rc<Signal>` is discarded — errors inside the task surface through whatever logging the task itself emits. **Do not** double-log here: the rule from the project's CLAUDE.md "code must be diagnosable after the fact" says to log where the result would otherwise be lost; if the task already logs its own errors (as `sh_exec_task` does via the interpreter's `tracing::error!`), the spawn site stays quiet.
+- The completion `Rc<Signal>` is discarded — errors inside the task surface through whatever logging the task itself emits. **Do not** double-log here: the rule from the project's AGENTS.md "code must be diagnosable after the fact" says to log where the result would otherwise be lost; if the task already logs its own errors (as `sh_exec_task` does via the interpreter's `tracing::error!`), the spawn site stays quiet.
 - On `Signal::Terminate`, fan out to every `active_stops` entry. The tasks observe their stop and unwind cleanly.
 
 ### 6. Awaited variant
@@ -939,7 +937,7 @@ Value::Record(record).write_to_builder(value_builder)?;
 
 ## Tracing and logging conventions
 
-These conventions are enforced by the project's CLAUDE.md "code must be diagnosable" rule. Follow them in every new program.
+These conventions are enforced by the project's AGENTS.md "code must be diagnosable" rule. Follow them in every new program.
 
 ### Spans
 
@@ -1228,7 +1226,6 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | `let _ = some_future.await` on a `Result` | Always log the error or surface it. Silent drops are forensic dead zones. |
 | Forgetting `results.set_pipeline()` in an `output`-shaped portal method | Add it as the first statement after the signature. Without it, pipelining from the caller breaks. |
 | Spawning a task without an `info_span!` and `.instrument()` | Required for observability. Use the `task_id` then domain-fields pattern. |
-| Adding `basic_launcher!` because CLAUDE.md mentions it | It doesn't exist. Write `impl LauncherMixin` by hand. |
 | Returning from `output()` without setting `daemonize` | An unset `Bool` reads as `false`, so you are saying "I am finished" by accident. Right for almost every program, silently fatal for one that meant to stay running — its process is killed and reaped the moment `output` returns. Set it explicitly on every path. |
 | Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::launcher_set()`, so the impl knows nothing about specific programs. |
 | Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` to `dusk_base::link_anchors()` and `"dusk_program_<name>/client"` to `dusk_base`'s `client` feature. |
@@ -1267,4 +1264,4 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).
+See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).

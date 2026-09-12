@@ -1,0 +1,14 @@
+{
+    "name": "dusk",
+    "owner": {
+        "name": "dusk"
+    },
+    "description": "The dusk repository's own Claude Code plugins.",
+    "plugins": [
+        {
+            "name": "dusk-dev",
+            "source": "./",
+            "description": "The dusk development harness: the working agreements as hooks, the workflow as skills, the review as agents."
+        }
+    ]
+}

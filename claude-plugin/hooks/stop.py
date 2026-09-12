@@ -1,0 +1,168 @@
+import re
+from pathlib import Path
+
+from harness import (
+    DILEMMA_LINE,
+    READY_LINE,
+    STANDING_LINE,
+    WAITING_LINE,
+    READY_SIGNOFFS,
+    REVIEW_SIGNOFFS,
+    block,
+    branch_name,
+    current_branch,
+    decisions_path,
+    drive_state,
+    git,
+    tip,
+    missing_signoffs,
+    pull_request_view,
+    read_input,
+    save_json,
+    session_state,
+)
+
+MAX_BLOCKS = 3
+
+
+def answered(path, title):
+    if not path.exists():
+        return False
+    section = re.search(rf"^## {re.escape(title)}\n(.*?)(?=^## |\Z)", path.read_text(), re.S | re.M)
+    return bool(section and re.search(r"^- answer:", section.group(1), re.M))
+
+
+READY_ALONE = re.compile(rf"^[ \t]*{re.escape(READY_LINE)}[ \t]*$", re.M)
+DILEMMA_MARK = re.compile(rf"^[ \t]*\**{re.escape(DILEMMA_LINE)}", re.M)
+WAITING_MARK = re.compile(rf"^[ \t]*\**{re.escape(WAITING_LINE)}", re.M)
+
+
+def waits_on_agents(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    return bool(lines) and bool(WAITING_MARK.match(lines[0]))
+
+
+def restates_standing(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    last = lines[-1].strip() if lines else ""
+    for state, line in STANDING_LINE.items():
+        if last == line:
+            return state
+    return None
+
+
+def marks_dilemma(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    return bool(lines) and bool(DILEMMA_MARK.match(lines[0])) and "?" in message
+
+
+def claims_ready(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    last = bool(lines) and lines[-1].strip() == READY_LINE
+    return last or bool(READY_ALONE.search(message)), last
+
+
+def ready_problems(cwd, branch, last):
+    problems = []
+    if not last:
+        problems.append(f"`{READY_LINE}` is the last line of the message and nothing follows it")
+    if "/.claude/worktrees/" in str(Path(cwd).resolve()):
+        problems.append("the worktree is still in place; the branch is not free for the user to check out")
+    remote = branch_name(branch)
+    _, ahead = git(cwd, "rev-list", "--count", f"origin/{remote}..{branch}")
+    if ahead and ahead != "0":
+        problems.append(f"{ahead} commit(s) not pushed")
+    pull_request = pull_request_view(cwd, remote)
+    if not pull_request:
+        problems.append(f"no pull request found for {remote}")
+    else:
+        if pull_request.get("state") != "OPEN":
+            problems.append(f"PR #{pull_request['number']} is {pull_request.get('state')}, not open")
+        if pull_request.get("headRefOid") != tip(cwd, branch):
+            problems.append(f"PR #{pull_request['number']} does not carry the local tip")
+        if "## Decisions" not in (pull_request.get("body") or ""):
+            problems.append("the PR body does not carry the ranked decisions under `## Decisions`")
+    unsplit = missing_signoffs(cwd, READY_SIGNOFFS, branch)
+    if unsplit:
+        problems.append(
+            ", ".join(unsplit) + " has not signed off this tip. A person cannot read a branch that "
+            "is one blob, so it is cut into the commits the work is before they are asked to."
+        )
+    return problems
+
+
+def main():
+    hook_input = read_input()
+    cwd = hook_input.get("cwd", ".")
+    message = hook_input.get("last_assistant_message") or ""
+    branch = current_branch(cwd)
+    if not branch:
+        return
+    session_path, session = session_state(hook_input.get("session_id", ""))
+    branch = session.get("handed") or branch
+    drive_path, drive = drive_state(branch, cwd)
+    problems = []
+
+    pending = [title for title in drive.get("pending_questions", []) if not answered(decisions_path(cwd, branch), title)]
+    if pending and not marks_dilemma(message):
+        problems.append("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision.")
+
+    claimed, last = claims_ready(message)
+    standing = session.get("standing")
+    if claimed:
+        problems.extend(ready_problems(cwd, branch, last))
+        if not problems:
+            waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
+            if waiting:
+                problems.append(
+                    "the hand-off stands and the human is reading it. Now run the agents that "
+                    "review alongside them — " + ", ".join(waiting) + " — and put what they find "
+                    "on the pull request as it lands."
+                )
+        if not problems:
+            session["standing"] = "ready"
+    elif marks_dilemma(message):
+        session["standing"] = "dilemma"
+    elif waits_on_agents(message):
+        if not session.get("agents"):
+            problems.append(
+                f"`{WAITING_LINE}` says an agent this session dispatched is still running. None is. "
+                "Carry on with the work, or end the turn the way its state actually is."
+            )
+    elif session.get("committed") or drive.get("phase") in ("pushed", "opened"):
+        restated = restates_standing(message)
+        if restated is None:
+            problems.append(
+                f"This session has changed the history, so the turn is marked. It ends with "
+                f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
+                f"`{DILEMMA_LINE}` line and asks the one question that blocks the work, or with "
+                f"`{WAITING_LINE}` naming the agents it is waiting on, or it answers what the user "
+                f"asked and ends with the line that says nothing else moved: "
+                f"`{STANDING_LINE['ready']}` or `{STANDING_LINE['dilemma']}`."
+            )
+        elif standing is None:
+            problems.append(
+                f"`{STANDING_LINE[restated]}` says an earlier turn handed something over or asked "
+                f"something. None did. End with `{READY_LINE}` or a `{DILEMMA_LINE}` question."
+            )
+        elif restated != standing:
+            problems.append(
+                f"what stands is the {standing}, so the line is `{STANDING_LINE[standing]}`, not "
+                f"`{STANDING_LINE[restated]}`."
+            )
+
+    if not problems:
+        session["stop_blocks"] = {}
+        save_json(session_path, session)
+        return
+    key = "|".join(problems)
+    count = session["stop_blocks"].get(key, 0) + 1
+    session["stop_blocks"] = {key: count}
+    save_json(session_path, session)
+    if count > MAX_BLOCKS:
+        return
+    block("Not yet: " + " ".join(problems))
+
+
+if __name__ == "__main__":
+    main()

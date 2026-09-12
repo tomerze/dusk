@@ -18,3 +18,4 @@
 /.claude/settings.local.json
 /.claude/worktrees/**
 .superpowers/
+/review/
