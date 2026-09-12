@@ -36,7 +36,7 @@ To run a checkout's copy while changing it, start Claude Code with
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
 - `git push` never targets master, requires every commit on the branch to pass the subject checks, and asks unless the atomic-commit agent has split the tip.
 - A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
-- A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip, and the decisions are on the branch.
+- A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.
 
 ## Three phases
 
@@ -57,7 +57,8 @@ the human was never waiting on them.
 ## The review folder
 
 A branch collects what its reviewer needs under `review/<branch>/`, written by
-the hooks from what each agent answers:
+the hooks from what each agent answers. The folder is ignored by git and never
+committed — it is copied into the pull request body, one heading per file:
 
 | file | written from |
 |---|---|

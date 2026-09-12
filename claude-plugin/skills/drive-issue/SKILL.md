@@ -251,7 +251,6 @@ next agent is a defect exactly like a wrong comment.
 ☐ `origin/master` fetched; branch cut from it
 ☐ Baseline built and measured first, if the issue asks for a comparison
 ☐ PR body carries `Closes #N` and one section per acceptance criterion
-☐ `review/<branch>/decisions.md` committed; the PR body carries `## Decisions`
 ☐ Worktree removed, so the branch is free for the user to check out
 ☐ Issue confirmed closed after the merge
 

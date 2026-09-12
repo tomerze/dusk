@@ -287,6 +287,13 @@ The PR body must carry:
   while that file is missing. `decision-ranker` runs after the PR is open and
   the ranking replaces the list then.
 
+**The review folder goes in the body, not on the branch.** It is ignored by git
+and never committed, so the pull request is the only place a reviewer can read
+it. Each file lands under its own heading — `## Decisions`, `## Terminology`,
+`## Strings`, `## Comments` — added by `update_pull_request` as each agent
+finishes. A heading whose agent found nothing says so in one line; it is not
+left out, because a missing heading reads as an agent that never ran.
+
 ## Give the branch back, ask for review, then stop
 
 **If the work happened in a worktree, remove it before you ask** — `drive-issue`
@@ -349,23 +356,28 @@ Dispatch them together and let them land as they finish:
 - **`dusk-dev:race-screen`** reads the diff for anything that can interleave on
   the cooperative executor and dispatches `dusk-dev:race-inspector` when it finds
   some.
-- **`dusk-dev:terminology-review`** writes `review/<branch>/terminology.md`.
-- **`dusk-dev:string-review`** writes `review/<branch>/strings.md`.
+- **`dusk-dev:terminology-review`** writes `review/<branch>/terminology.md`;
+  copy it into the body under `## Terminology`.
+- **`dusk-dev:string-review`** writes `review/<branch>/strings.md`; copy it into
+  the body under `## Strings`.
 - **`dusk-dev:decision-ranker`** heads `review/<branch>/decisions.md` with the
-  ranking; update the PR body's `## Decisions` to the ranked list.
+  ranking; update the body's `## Decisions` to the ranked list.
 
 Each sign-off names the commit it was given, so anything that changes the branch
-means running that agent again. As each lands, commit what it wrote and say on
-the pull request what it found — the human is reading in parallel, so a finding
-is worth more the sooner it is there. A real finding — a race, a verdict of
+means running that agent again. As each lands, say on the pull request what it
+found — the human is reading in parallel, so a finding is worth more the sooner
+it is there. A real finding — a race, a verdict of
 `findings` — is fixed the usual way: squash, fix, re-split, force-push, and say
 so on the PR.
 
 The review folder — `decisions.md`, `comments.md`, `terminology.md`,
-`strings.md` and the `report.html` the hooks render from them — is committed as
-`Record the review of <branch>`. Give the user the path to `report.html`: it
-opens in a browser, and every `file:line` in it is a link that opens that line in
-VS Code.
+`strings.md` and the `report.html` the hooks render from them — is local and
+ignored by git. **It is never committed; it goes in the pull request body**, one
+heading per file, updated as each agent lands. A reviewer reads the pull
+request, not my working directory, and a folder on the branch is four files they
+have to go and find. Give the user the path to `report.html` as well: it opens in
+a browser, and every `file:line` in it is a link that opens that line in VS
+Code.
 
 The harness will not let the session end while a review agent has not signed off
 the pushed tip. That is a nag aimed at me, never at the human: it fires after the
@@ -402,13 +414,14 @@ next agent is a defect exactly like a wrong comment.
 ☐ `origin/master` re-checked before pushing; rebased, then the build re-run
 ☐ Pushed; **one** PR opened over the MCP
 ☐ PR body written in the first person, addressed to no one, carrying `## Decisions`
+☐ The review folder copied into the PR body under `## Decisions`, `## Terminology`, `## Strings`, `## Comments` — never committed
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ Hand-off sent **before** the review agents ran, not after
 ☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes
-☐ `review/<branch>/` committed; the user has the `report.html` path
+☐ The user has the `report.html` path
 ☐ **Waited**
 ☐ Merged only after explicit approval
 

@@ -57,10 +57,6 @@ def ready_problems(cwd, branch, last):
             problems.append(f"PR #{pull_request['number']} does not carry the local tip")
         if "## Decisions" not in (pull_request.get("body") or ""):
             problems.append("the PR body does not carry the ranked decisions under `## Decisions`")
-    relative = decisions_path(cwd, branch).relative_to(cwd)
-    _, tracked = git(cwd, "ls-files", str(relative))
-    if not tracked:
-        problems.append(f"{relative} is not on the branch")
     return problems
 
 

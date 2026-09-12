@@ -23,12 +23,6 @@ COMMENT_PROMPT = (
 )
 
 
-def only_review_files(cwd):
-    _, names = git(cwd, "show", "--name-only", "--format=", "HEAD")
-    paths = [name for name in names.splitlines() if name.strip()]
-    return bool(paths) and all(name.startswith("review/") for name in paths)
-
-
 def review_commit(cwd, branch, sha, subject):
     answer = headless_agent("comment-review", COMMENT_PROMPT.format(sha=sha), cwd)
     if answer is None or field(answer, "COMMENTS") not in ("none", "found"):
@@ -76,7 +70,7 @@ def main():
             changed = True
         sha = head(cwd)
         _, subject = git(cwd, "log", "-1", "--format=%s")
-        if sha and not re.match(r"^WIP\b", subject, re.I) and not only_review_files(cwd):
+        if sha and not re.match(r"^WIP\b", subject, re.I):
             review_commit(cwd, branch, sha, subject)
     if re.search(r"\bgit\s+push\b", command):
         drive["phase"] = "pushed"
