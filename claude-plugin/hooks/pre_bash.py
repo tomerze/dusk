@@ -1,4 +1,5 @@
 import re
+import shlex
 from pathlib import Path
 
 from harness import (
@@ -17,9 +18,10 @@ from harness import (
 )
 
 READ_ONLY_AGENTS = {"self-review", "race-screen", "race-inspector", "dilemma-triage", "decision-ranker"}
+REDIRECT = re.compile(r"\d*>>?(.*)")
 MUTATING = re.compile(
     r"\bgit\s+(commit|push|reset|rebase|checkout|switch|stash|add|rm|mv|tag|cherry-pick|merge|am|apply)\b"
-    r"|\b(rm|mv|cp|tee)\b|\bsed\s+-i\b|>>?\s*\S"
+    r"|\b(rm|mv|cp|tee)\b|\bsed\s+-i\b"
 )
 
 
@@ -40,6 +42,25 @@ def fed_to_interpreter(line):
             if words and interpreter(words[0]):
                 return True
         return False
+    return False
+
+
+def writes_into(command, cwd):
+    try:
+        tokens = shlex.split(command, comments=False)
+    except ValueError:
+        return True
+    root = Path(cwd).resolve()
+    for index, token in enumerate(tokens):
+        redirect = REDIRECT.fullmatch(token)
+        if not redirect:
+            continue
+        name = redirect.group(1) or (tokens[index + 1] if index + 1 < len(tokens) else "")
+        if not name or name.startswith("&"):
+            continue
+        target = (root / name).resolve()
+        if target == root or root in target.parents:
+            return True
     return False
 
 
@@ -109,8 +130,11 @@ def main():
     def has(pattern):
         return re.search(pattern, code) is not None
 
-    if agent in READ_ONLY_AGENTS and MUTATING.search(code):
-        deny(f"The {agent} agent reads; it does not change the tree or the history.")
+    if agent in READ_ONLY_AGENTS and (MUTATING.search(code) or writes_into(code, cwd)):
+        deny(
+            f"The {agent} agent reads; it does not change the tree or the history. Write what you "
+            "need to keep into a path outside the working directory."
+        )
     if has(r"\b(until|while)\b[^\n]*\bsleep\b") or has(r"\bsleep\s+\d+[^\n]*\b(grep|tail|cat|test|ls)\b"):
         deny("Never poll for a command you started: the harness re-invokes you when a background command exits (AGENTS.md, Never poll for a command I started).")
     if has(r"\bcp\b[^\n;&|]*\btarget\b"):
