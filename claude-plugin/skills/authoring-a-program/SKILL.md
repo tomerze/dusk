@@ -376,8 +376,6 @@ impl Portal {
 - **`#[derive(dusk_program_proc::Portal)]`** — implements `Dusk.Portal.programId()` for your portal type.
 - **`#[dusk_program_proc::impl_portal_rpc_server] impl Portal { … }`** — wires the rest of the portal's methods. The body holds whatever methods your `<Name>Portal` schema declares.
 
-**Note on a stale doc:** the project `AGENTS.md` mentions `basic_launcher!(...)`. That macro doesn't exist in `dusk_program_proc` — programs always write `impl LauncherMixin` by hand. Don't try to call `basic_launcher!`; the AGENTS.md line is out of date.
-
 ---
 
 ## Step 5 — `Process::main`
@@ -1228,7 +1226,6 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | `let _ = some_future.await` on a `Result` | Always log the error or surface it. Silent drops are forensic dead zones. |
 | Forgetting `results.set_pipeline()` in an `output`-shaped portal method | Add it as the first statement after the signature. Without it, pipelining from the caller breaks. |
 | Spawning a task without an `info_span!` and `.instrument()` | Required for observability. Use the `task_id` then domain-fields pattern. |
-| Adding `basic_launcher!` because AGENTS.md mentions it | It doesn't exist. Write `impl LauncherMixin` by hand. |
 | Returning from `output()` without setting `daemonize` | An unset `Bool` reads as `false`, so you are saying "I am finished" by accident. Right for almost every program, silently fatal for one that meant to stay running — its process is killed and reaped the moment `output` returns. Set it explicitly on every path. |
 | Editing `impls/nix/src/lib.rs` or `dusk_core` to register a new program | Registration is in `dusk/src/dusk_base/{Cargo.toml,src/lib.rs}`. `artifacts/dusk_node` calls `dusk_base::launcher_set()`, so the impl knows nothing about specific programs. |
 | Program compiles, server registers the launcher, but typing the name at the shell prints `no sh entry found for '<name>'` | The client-side `sh_entry` got linker-dropped. Add `black_box(dusk_program_<name>::client::sh_entry);` to `dusk_base::link_anchors()` and `"dusk_program_<name>/client"` to `dusk_base`'s `client` feature. |
