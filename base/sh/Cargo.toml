@@ -7,7 +7,7 @@ edition = "2024"
 tracing = { version = "0.1.41", default-features = false }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
-embassy-executor = "0.10.0"
+embassy-executor = { version = "0.10.0", features = ["nightly"] }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core = { path = "../../dusk/src/dusk_core/", public = true }
 slab = { version = "0.4.11", public = true }
