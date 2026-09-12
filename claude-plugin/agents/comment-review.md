@@ -9,7 +9,7 @@ tools: Read, Grep, Glob, Bash
 
 You are given a commit. Run `git show <sha>` and look at every comment line the commit adds or changes: `//`, `///`, `//!`, `/* */`, and `#` in `.capnp`, `.py` and `.toml` files.
 
-In this codebase the user writes the comments. A comment that explains the change — what was done, why, what it replaced, what it fixes, what was rejected — is a commit message in the wrong file; it was addressed to whoever reviews the diff and will outlive them. A comment that describes the code as it stands, or a rule the next implementer must follow, is the user's to write and mine to raise in the reply instead (CLAUDE.md, I do not write comments).
+In this codebase the user writes the comments. A comment that explains the change — what was done, why, what it replaced, what it fixes, what was rejected — is a commit message in the wrong file; it was addressed to whoever reviews the diff and will outlive them. A comment that describes the code as it stands, or a rule the next implementer must follow, is the user's to write and mine to raise in the reply instead (AGENTS.md, I do not write comments).
 
 List every added or changed comment line that is commit-message material, one per line, and write nothing else — not the files you looked at, not the comments that are fine, not what the commit does:
 

@@ -126,7 +126,7 @@ it is a consequence, it belongs with the decision. Yes → it is its own sheep.
 
 ### 6. Prose is always its own commit
 
-Documentation, `CLAUDE.md`, and the skills under `claude-plugin/skills/` get their own
+Documentation, `AGENTS.md`, and the skills under `claude-plugin/skills/` get their own
 commits, even when the words changed *because* of a code decision. They are read
 by different people, reviewed differently, and reverted independently.
 
@@ -138,7 +138,7 @@ moves, real changes, tests, text — in that order. A commit that only changes
 `use` paths, or only moves code without changing it, goes at the start, where
 it can be waved through; the real changes follow; the tests come after the code
 they test; and every commit that changes only what a person reads — comments,
-docs, `CLAUDE.md`, the skills — sits at the end, after the last commit that
+docs, `AGENTS.md`, the skills — sits at the end, after the last commit that
 changes what a machine runs. A reviewer reads the code before the words about
 it, and a text commit in the middle of the code is a page of prose between two
 hunks it does not describe yet.
@@ -147,7 +147,7 @@ hunks it does not describe yet.
 
 Everything I wanted to say in a comment goes here instead: why this exists, what
 it replaced, what was rejected, what it is a step toward. See the
-[no-comments rule](../../CLAUDE.md#i-do-not-write-comments) — a comment
+[no-comments rule](../../../AGENTS.md#i-do-not-write-comments) — a comment
 explaining the change is a commit message that leaked into the source and will
 outlive the reader it was written for.
 
@@ -191,7 +191,7 @@ The same goes for tests passing at every commit. Ideal. Not a requirement.
 
 **Failure — one glob.** PR #32 shipped as a single commit: 32 files, a schema
 split, twelve program conversions, a helper deleted, a rename, the shell's
-close relocated, two tests, five doc pages, `CLAUDE.md` and a skill. Every
+close relocated, two tests, five doc pages, `AGENTS.md` and a skill. Every
 sentence of it was true and none of it could be reviewed. The user could not say
 yes to the rename without also saying yes to the schema. That is not a review,
 it is a hostage situation.
@@ -245,7 +245,7 @@ user's move.
 
 **A fixup belongs in the commit it fixes.** Discovery order must never show up in
 the history — see
-[the working agreement](../../CLAUDE.md#a-fixup-belongs-in-the-commit-it-fixes--always).
+[the working agreement](../../../AGENTS.md#a-fixup-belongs-in-the-commit-it-fixes--always).
 Force-push the rewritten branch; a pushed branch is not a reason to append.
 
 ## Checklist
@@ -268,4 +268,4 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).
+See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).

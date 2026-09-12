@@ -110,7 +110,7 @@ at, and that tree is different now.
 When a commit's prose is rewritten later on the branch and both halves end up in
 the same PR, fold the later one in — the intermediate wording never existed in
 this stack, and shipping it so a commit two later can fix it is
-[a fixup in the wrong place](../../CLAUDE.md#a-fixup-belongs-in-the-commit-it-fixes--always).
+[a fixup in the wrong place](../../../AGENTS.md#a-fixup-belongs-in-the-commit-it-fixes--always).
 
 ## Step 7 — Check every tip builds
 
@@ -140,7 +140,7 @@ gh api -X PATCH repos/tomerze/dusk/pulls/<N> \
 
 Give the user the PR numbers in merge order, the commit count in each, and every
 message you rewrote in step 6, quoted. Branch names and PR titles are
-[names you invented](../../CLAUDE.md#naming-routine--your-names-are-placeholders)
+[names you invented](../../../AGENTS.md#naming-routine--your-names-are-placeholders)
 — list them and ask.
 
 ## Checklist
@@ -163,4 +163,4 @@ message you rewrote in step 6, quoted. Branch names and PR titles are
 
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. My explanations go in the commit message.
-See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).
+See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).

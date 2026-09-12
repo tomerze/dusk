@@ -9,7 +9,7 @@ tools: Read, Grep, Glob, Bash
 
 Read `review/<branch>/decisions.md` for the current branch (`git rev-parse --abbrev-ref HEAD`) and the branch's diff (`git diff origin/master...HEAD`) where a decision's consequences need seeing.
 
-Rank every decision by the attention it needs from the reviewer, most first. Weigh, for each: how likely it is to hide a bug, how significant its consequences are (reversal cost, how many callers or downstream authors it touches), how controversial it is against CLAUDE.md and the project's past decisions, and how clearly it benefits the project on its own. A decision with a clear benefit and a one-line reversal ranks last; a decision that could be wrong in a way nobody would notice ranks first.
+Rank every decision by the attention it needs from the reviewer, most first. Weigh, for each: how likely it is to hide a bug, how significant its consequences are (reversal cost, how many callers or downstream authors it touches), how controversial it is against AGENTS.md and the project's past decisions, and how clearly it benefits the project on its own. A decision with a clear benefit and a one-line reversal ranks last; a decision that could be wrong in a way nobody would notice ranks first.
 
 You read; you change nothing.
 

@@ -80,19 +80,19 @@ def main():
     if agent in READ_ONLY_AGENTS and MUTATING.search(command):
         deny(f"The {agent} agent reads; it does not change the tree or the history.")
     if has(r"\b(until|while)\b[^\n]*\bsleep\b") or has(r"\bsleep\s+\d+[^\n]*\b(grep|tail|cat|test|ls)\b"):
-        deny("Never poll for a command you started: the harness re-invokes you when a background command exits (CLAUDE.md, Never poll for a command I started).")
+        deny("Never poll for a command you started: the harness re-invokes you when a background command exits (AGENTS.md, Never poll for a command I started).")
     if has(r"\bcp\b[^\n;&|]*\btarget\b"):
         deny("Never copy a target directory; park it with mv and move it back (drive-issue, Step 2).")
     if has(r"\bgit\s+stash\b(?!\s+(push|list|show|apply|drop|branch)\b)"):
         deny("No bare git stash and no stash pop: the stash stack is shared with every worktree. Use git stash push -u -m <tag>, restore with git stash apply <sha>, then drop it by tag.")
     if has(r"\bcargo\s+(test|nextest)\b"):
-        ask("Tests run only when the user asked for them (CLAUDE.md, Don't write or run tests unless told). Did they ask?")
+        ask("Tests run only when the user asked for them (AGENTS.md, Don't write or run tests unless told). Did they ask?")
     if has(r"\bgit\s+add\b[^\n;&|]*(\s-A\b|\s--all\b|\s\.(?=\s|$))") and "snapshot" not in command:
         deny("Stage named paths, never git add -A or git add . — only the atomic-commit snapshot is taken that way.")
     if has(r"\bgit\s+commit\b"):
         timeout = tool_input.get("timeout") or 120000
         if tool_input.get("run_in_background") or timeout < 600000:
-            deny("Run git commit in the foreground with timeout 600000: pre-commit stashes unstaged work, and a commit killed mid-hook strands it (CLAUDE.md, Never poll for a command I started).")
+            deny("Run git commit in the foreground with timeout 600000: pre-commit stashes unstaged work, and a commit killed mid-hook strands it (AGENTS.md, Never poll for a command I started).")
         for message in commit_messages(command):
             problems = lint_message(message)
             if problems:

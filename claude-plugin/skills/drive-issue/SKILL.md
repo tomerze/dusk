@@ -6,7 +6,7 @@ description: Take a GitHub issue in this repository from "here is the issue numb
 # Drive a Dusk Issue to a Merged PR
 
 The mechanics of shipping an issue in this repository. Nothing here is about how
-to write the code — `CLAUDE.md` and the working agreements own that. This is the
+to write the code — `AGENTS.md` and the working agreements own that. This is the
 git, build, and GitHub sequence around it.
 
 **The user's approval is the only gate you may not skip.** Merging without it is
@@ -216,7 +216,7 @@ nothing came to mind is a lie in three characters.
 
 ## Step 4d — A skill that misled me is fixed in this session
 
-When this skill, `authoring-a-program`, `atomic-commit` or `CLAUDE.md` turns out
+When this skill, `authoring-a-program`, `atomic-commit` or `AGENTS.md` turns out
 to describe something that is not true — a step that breaks, a number that is
 wrong, a mechanism that has moved — **I fix it now, in the session that found
 it.** I do not ask whether to. I do not offer to do it later. I do not write
@@ -586,4 +586,4 @@ and the work absorbs into the commits that are already there.
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [CLAUDE.md](../../CLAUDE.md#i-do-not-write-comments).
+See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).

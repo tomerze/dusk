@@ -1,8 +1,9 @@
 # dusk-dev
 
-The dusk development harness as a Claude Code plugin: the working agreements
-in `CLAUDE.md`, the workflow skills, the review agents, and the hooks that
-check the agreements at the moment they apply.
+The dusk development harness as a Claude Code plugin: the workflow skills, the
+review agents, and the hooks that check the working agreements at the moment
+they apply. The agreements themselves are the repository's root `AGENTS.md`,
+which Claude Code and Codex both read.
 
 ## Enable it
 
@@ -20,7 +21,7 @@ To run a checkout's copy while changing it, start Claude Code with
 
 | part | where |
 |---|---|
-| project instructions | `CLAUDE.md`; the repository's root `CLAUDE.md` imports it |
+| project instructions | the repository's root `AGENTS.md`, read by Claude Code and by Codex alike |
 | skills | `skills/` — `drive-issue` is the workflow; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
 | agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `decision-ranker` |
 | hooks | `hooks/` — one script per event; `python3 hooks/selftest.py` runs them against canned input |
