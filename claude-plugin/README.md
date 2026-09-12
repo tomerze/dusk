@@ -35,7 +35,7 @@ To run a checkout's copy while changing it, start Claude Code with
 - No polling loop over a command's output; no `cp` of a `target` directory; no bare `git stash`.
 - `cargo test` and `cargo nextest` ask first.
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
-- `git push` never targets master, requires every commit on the branch to pass the subject checks, and asks unless the atomic-commit agent has split the tip.
+- `git push` never targets master and requires every commit on the branch to pass the subject checks. It never waits for the split; the hand-off does.
 - A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
 - Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
 - A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.

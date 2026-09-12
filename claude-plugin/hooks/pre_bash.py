@@ -12,7 +12,6 @@ from harness import (
     drive_state,
     lint_branch,
     lint_message,
-    missing_signoffs,
     read_input,
     session_state,
 )
@@ -160,9 +159,6 @@ def main():
         problems = lint_branch(cwd)
         if problems:
             deny("Fix these commits before pushing: " + "; ".join(problems))
-        missing = missing_signoffs(cwd)
-        if missing:
-            ask("Push before " + ", ".join(missing) + " signed off HEAD? A human reads what is pushed, so the branch is split into its commits first. The review agents run alongside them and do not hold this up.")
     if has(r"\bgh\s+pr\s+create\b"):
         problems = pull_request_problems(cwd, gh_body(command, cwd), True, hook_input)
         if problems:

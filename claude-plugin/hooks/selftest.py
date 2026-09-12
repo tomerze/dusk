@@ -142,7 +142,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("stash push is allowed", run("pre_bash.py", bash("git stash push -u -m tag")), 0),
         expect("cargo test asks", run("pre_bash.py", bash("cargo nextest run")), 0, '"ask"'),
         expect("push to master is denied", run("pre_bash.py", bash("git push origin master")), 2, "master"),
-        expect("push without sign-offs asks", run("pre_bash.py", bash("git push -u origin topic")), 0, '"ask"'),
+        expect("push does not wait for the split", run("pre_bash.py", bash("git push -u origin topic")), 0),
         expect("a read-only agent may not commit", run("pre_bash.py", {**bash('git commit -m "Add x"', timeout=600000), "agent_type": "dusk-dev:self-review"}), 2, "reads"),
         expect("a name in an edit is denied", run("pre_edit.py", edit(str(REPO / "src/lib.rs"), "let a = 1;", "let author = \"" + identity() + "\";")), 2, "Nothing personal"),
         expect("a home directory in an edit is denied", run("pre_edit.py", edit(str(REPO / "docs/x.md"), "a", "see " + str(Path.home()) + "/notes")), 2, "Nothing personal"),

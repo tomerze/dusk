@@ -77,14 +77,17 @@ The hooks check the working agreements as each action is taken:
   bare `git stash`; `cargo test` and `cargo nextest` only after asking.
 - A program under `base/` is edited only with `authoring-a-program` loaded; the
   `Driver` trait only with `adding-a-driver-method` loaded.
-- `git push` never targets master, and asks unless the `atomic-commit` agent has
-  split the tip.
+- `git push` never targets master, and every commit on the branch passes the
+  subject checks. Pushing does not wait for the split.
+- `Ready for review.` waits for the split: the `atomic-commit` agent has to have
+  signed off the tip being handed over.
 - One pull request per branch, carrying the decisions under `## Decisions`;
   merging always asks.
 
 Work goes through three phases. **Writing:** the rules above, and
 `dilemma-triage` on every decision. **Getting ready to review:** the
-`atomic-commit` agent splits the branch, which is what gates the push. **Ready
+`atomic-commit` agent splits the branch, which is what gates the hand-off —
+pushing is free, and pushing often is how the work stays recoverable. **Ready
 for review:** the hand-off goes out and the review agents run alongside the
 human, never ahead of them.
 
@@ -268,8 +271,9 @@ read as pull-request merge numbers, which they are not.
 
 **One thing stands between the work and the human: the split.** A person cannot
 read a branch that is one WIP blob, so the `dusk-dev:atomic-commit` agent cuts it
-into the commits the work is, and the harness asks before a push whose tip it has
-not signed off. Nothing else holds the push up.
+into the commits the work is, and the harness refuses the hand-off until it has
+signed off the tip. Pushing is not held up by it: push whenever, as often as you
+like, and split before you ask anyone to read it.
 
 **`dusk-dev:comment-review` has already run**, once per commit, dispatched by the
 harness the moment the commit landed, and anything it found was moved into the

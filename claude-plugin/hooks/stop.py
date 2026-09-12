@@ -5,6 +5,7 @@ from harness import (
     DILEMMA_LINE,
     READY_LINE,
     STANDING_LINE,
+    READY_SIGNOFFS,
     REVIEW_SIGNOFFS,
     block,
     branch_name,
@@ -74,6 +75,12 @@ def ready_problems(cwd, branch, last):
             problems.append(f"PR #{pull_request['number']} does not carry the local tip")
         if "## Decisions" not in (pull_request.get("body") or ""):
             problems.append("the PR body does not carry the ranked decisions under `## Decisions`")
+    unsplit = missing_signoffs(cwd, READY_SIGNOFFS)
+    if unsplit:
+        problems.append(
+            ", ".join(unsplit) + " has not signed off this tip. A person cannot read a branch that "
+            "is one blob, so it is cut into the commits the work is before they are asked to."
+        )
     return problems
 
 
