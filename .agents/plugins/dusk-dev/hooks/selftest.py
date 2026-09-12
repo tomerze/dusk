@@ -122,6 +122,17 @@ def statusline():
     return run("statusline.py", {"session_id": waiting_session()})
 
 
+def handed_over_session(url):
+    path = DATA / "sessions" / "handed-over.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "standing": "ready", "pull_request": url}))
+    return "handed-over"
+
+
+def review_statusline(url):
+    return run("statusline.py", {"session_id": handed_over_session(url)})
+
+
 def handed_session(branch):
     path = DATA / "sessions" / "handed.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,6 +212,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("dispatching an agent records it", run("pre_agent.py", {"session_id": "dispatch", "cwd": str(REPO), "tool_input": {"subagent_type": "dusk-dev:self-review"}}), 0),
         expect("the agent landed in the session", session_field("dispatch", "agents", ["self-review"]), 0),
         expect("the status line names the state", statusline(), 0, "waiting on self-review"),
+        expect("a handed-over status line leads with the pull request", review_statusline("https://github.com/o/r/pull/7"), 0, "ready to review https://github.com/o/r/pull/7\ndusk:"),
         expect("an answer with nothing standing is blocked", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 2, "None did"),
         expect("an answer restating the standing hand-off passes", run("stop.py", {"session_id": standing_session("ready"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 0),
         expect("the wrong standing line is blocked", run("stop.py", {"session_id": standing_session("dilemma"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 2, "what stands is the dilemma"),
