@@ -86,6 +86,13 @@ def concurrent_write():
     return (0 if after.get("committed") and after.get("driver_checks") else 1, str(after), "")
 
 
+def standing_session(state):
+    path = DATA / "sessions" / f"standing-{state}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "standing": state, "loaded_skills": ["activate"]}))
+    return f"standing-{state}"
+
+
 def committed_session():
     path = DATA / "sessions" / "committed.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,6 +150,10 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a Ready line that is not last is blocked", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Ready for review.\n\nAlso this."}), 2, "last line"),
         expect("a turn after a commit must hand over or ask", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "Here is where things stand."}), 2, "DILEMMA"),
         expect("an unmarked question after a commit is blocked", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "Which of the two should it be?"}), 2, "DILEMMA"),
+        expect("an answer with nothing standing is blocked", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 2, "None did"),
+        expect("an answer restating the standing hand-off passes", run("stop.py", {"session_id": standing_session("ready"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 0),
+        expect("the wrong standing line is blocked", run("stop.py", {"session_id": standing_session("dilemma"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 2, "what stands is the dilemma"),
+        expect("an answer restating the standing dilemma passes", run("stop.py", {"session_id": standing_session("dilemma"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill waiting for dilemma verdict."}), 0),
         expect("a marked dilemma after a commit passes", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "DILEMMA: the name\n\nWhich of the two should it be?"}), 0),
         expect("a quoted Ready line is not a claim", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": '- a.py:1 — "Ready for review." — the hand-off prints it'}), 0),
         expect("a malformed triage answer is blocked", run("subagent_stop.py", agent("dilemma-triage", "DECISION: x\nVERDICT: maybe")), 2, "six lines"),

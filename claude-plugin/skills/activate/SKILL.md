@@ -20,19 +20,29 @@ the one unrecoverable step.
 ## Every turn is marked
 
 The user reviews what I hand them, and the agents review it beside them; the
-merge waits for both. That only works if every turn says which of the two states
-the work is in, so from the first commit onward a turn ends one of exactly two
-ways:
+merge waits for both. That only works if every turn says which state the work is
+in, so from the first commit onward a turn ends one of exactly three ways:
 
-- **`Ready for review.`** on its own line, with nothing after it. It means the
-  work is pushed, the pull request carries the tip, and there is something to
-  read.
-- **A `DILEMMA:` line**, naming what is being decided, followed by the one
-  question that blocks the work and a question mark.
+- **A hand-off** ends with **`Ready for review.`** on its own line, with nothing
+  after it. It means the work is pushed, the pull request carries the tip, and
+  there is something to read.
+- **A dilemma** opens with a **`DILEMMA:`** line, naming what is being decided,
+  and asks the one question that blocks the work, with a question mark.
+- **An answer** replies to something the user asked, and ends with the line that
+  says nothing else moved: **`Still ready for review.`** if a hand-off is
+  standing, **`Still waiting for dilemma verdict.`** if a question is. The
+  answer comes first and the line is last, so the user reads what they asked for
+  and then where that leaves things.
 
-Nothing else ends a turn. A status report that is neither leaves the user with
-nothing to do and no idea whether it is their move. The harness checks this on
-every turn once the session has committed or pushed.
+Nothing else ends a turn, and the harness checks it on every turn once the
+session has committed or pushed. A status report that is none of the three
+leaves the user with nothing to do and no idea whether it is their move.
+
+**An answer does not change what is standing**, which is why it restates it
+rather than claiming it again. A hand-off stays standing until the work moves
+past it; a question stays standing until the user answers it. Getting the line
+wrong is worse than leaving it out: it tells the user the ball is in the other
+court.
 
 ## What is in force
 
@@ -440,7 +450,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
-☐ Every turn since the first commit ended with `Ready for review.` or a `DILEMMA:` question
+☐ Every turn since the first commit ended as a hand-off, a `DILEMMA:` question, or an answer restating what still stands
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ Hand-off sent **before** the review agents ran, not after
 ☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes

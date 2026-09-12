@@ -4,6 +4,7 @@ from pathlib import Path
 from harness import (
     DILEMMA_LINE,
     READY_LINE,
+    STANDING_LINE,
     REVIEW_SIGNOFFS,
     block,
     branch_name,
@@ -31,6 +32,15 @@ def answered(path, title):
 
 READY_ALONE = re.compile(rf"^[ \t]*{re.escape(READY_LINE)}[ \t]*$", re.M)
 DILEMMA_MARK = re.compile(rf"^[ \t]*\**{re.escape(DILEMMA_LINE)}", re.M)
+
+
+def restates_standing(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    last = lines[-1].strip() if lines else ""
+    for state, line in STANDING_LINE.items():
+        if last == line:
+            return state
+    return None
 
 
 def marks_dilemma(message):
@@ -83,23 +93,41 @@ def main():
         problems.append("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision.")
 
     claimed, last = claims_ready(message)
+    standing = session.get("standing")
     if claimed:
         problems.extend(ready_problems(cwd, branch, last))
         if not problems:
-            pending = missing_signoffs(cwd, REVIEW_SIGNOFFS)
-            if pending:
+            waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS)
+            if waiting:
                 problems.append(
                     "the hand-off stands and the human is reading it. Now run the agents that "
-                    "review alongside them — " + ", ".join(pending) + " — and put what they find "
+                    "review alongside them — " + ", ".join(waiting) + " — and put what they find "
                     "on the pull request as it lands."
                 )
-    elif (session.get("committed") or drive.get("phase") in ("pushed", "opened")) and not marks_dilemma(message):
-        problems.append(
-            f"This session has changed the history, so the turn is marked. It ends with "
-            f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
-            f"`{DILEMMA_LINE}` line and asks the one question that blocks the work. A report that "
-            "is neither leaves the user with nothing to do."
-        )
+        if not problems:
+            session["standing"] = "ready"
+    elif marks_dilemma(message):
+        session["standing"] = "dilemma"
+    elif session.get("committed") or drive.get("phase") in ("pushed", "opened"):
+        restated = restates_standing(message)
+        if restated is None:
+            problems.append(
+                f"This session has changed the history, so the turn is marked. It ends with "
+                f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
+                f"`{DILEMMA_LINE}` line and asks the one question that blocks the work, or it "
+                f"answers what the user asked and ends with the line that says nothing else moved: "
+                f"`{STANDING_LINE['ready']}` or `{STANDING_LINE['dilemma']}`."
+            )
+        elif standing is None:
+            problems.append(
+                f"`{STANDING_LINE[restated]}` says an earlier turn handed something over or asked "
+                f"something. None did. End with `{READY_LINE}` or a `{DILEMMA_LINE}` question."
+            )
+        elif restated != standing:
+            problems.append(
+                f"what stands is the {standing}, so the line is `{STANDING_LINE[standing]}`, not "
+                f"`{STANDING_LINE[restated]}`."
+            )
 
     if not problems:
         session["stop_blocks"] = {}
