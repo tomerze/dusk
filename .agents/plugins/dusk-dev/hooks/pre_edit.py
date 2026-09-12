@@ -1,0 +1,109 @@
+import os
+import re
+from pathlib import Path
+
+from harness import deny, haiku, personal, read_input, repository, save_json, session_state
+
+COMMENT_LINE = {
+    ".rs": r"^\s*//",
+    ".c": r"^\s*//",
+    ".h": r"^\s*//",
+    ".capnp": r"^\s*#",
+    ".py": r"^\s*#(?!!)",
+    ".toml": r"^\s*#",
+}
+PROGRAM_SUFFIXES = {".rs", ".capnp", ".toml"}
+DRIVER_QUESTION = (
+    "You are checking one edit to the Dusk codebase. Dusk has a `Driver` trait in "
+    "dusk_core that each platform impl implements (hostname, exit, launchers). "
+    "Does this edit add, remove, rename or change the signature of a method of "
+    "that Driver trait, or of the extern shim that carries it? Answer with the "
+    "single word yes or no.\n\nFILE: {path}\n\nBEFORE:\n{old}\n\nAFTER:\n{new}\n"
+)
+
+
+def relative(path, cwd):
+    if not path:
+        return ""
+    return os.path.relpath(path, cwd) if os.path.isabs(path) else path
+
+
+def same_repository(path, cwd):
+    here = repository(cwd)
+    there = repository(os.path.dirname(path) or cwd)
+    return bool(here) and here == there
+
+
+def comment_lines(pattern, suffix, old, new):
+    old_lines = set(old.splitlines())
+    added, quoted = [], False
+    for line in new.splitlines():
+        if suffix == ".py":
+            was_quoted = quoted
+            quoted ^= bool((line.count('"""') + line.count("'''")) % 2)
+            if was_quoted:
+                continue
+        if re.match(pattern, line) and line not in old_lines:
+            added.append(line)
+    return added
+
+
+def main():
+    hook_input = read_input()
+    tool_input = hook_input.get("tool_input", {})
+    cwd = hook_input.get("cwd", ".")
+    path = tool_input.get("file_path", "")
+    suffix = Path(path).suffix
+    if hook_input.get("tool_name") == "Edit":
+        old, new = tool_input.get("old_string", ""), tool_input.get("new_string", "")
+    else:
+        old, new = "", tool_input.get("content", "")
+
+    rel = relative(path, cwd)
+    if rel.startswith("..") and not same_repository(path, cwd):
+        return
+
+    written = new if not old else "\n".join(
+        line for line in new.splitlines() if line not in set(old.splitlines())
+    )
+    named = sorted(value for value in personal(cwd) if value in written)
+    if named:
+        deny(
+            "Nothing personal goes in this repository: no name, no email address, no home "
+            f"directory, no account handle. This edit writes {named[0]!r}. Say it in the reply if "
+            "the user needs to read it, and write the file without it."
+        )
+
+    pattern = COMMENT_LINE.get(suffix)
+    if pattern:
+        added = comment_lines(pattern, suffix, old, new)
+        if added:
+            deny(
+                "I do not write comments (dusk-developer). Say it in the reply and let the user decide "
+                f"whether it becomes one: {added[0].strip()!r}"
+            )
+
+    session_path, session = session_state(hook_input.get("session_id", ""))
+    loaded = set(session["loaded_skills"])
+    if rel.startswith("base/") and suffix in PROGRAM_SUFFIXES and "authoring-a-program" not in loaded:
+        deny(
+            "This is a Dusk program. Invoke /dusk-dev:authoring-a-program first — it covers a "
+            "program's schema, args, launcher, process, portal and shell entry — then make the edit."
+        )
+    driver_paths = rel.startswith("impls/") or rel.startswith("dusk/src/dusk_core/src/driver")
+    if driver_paths and suffix == ".rs" and "adding-a-driver-method" not in loaded:
+        verdict = session["driver_checks"].get(rel)
+        if verdict is None:
+            answer = haiku(DRIVER_QUESTION.format(path=rel, old=old[:3000], new=new[:3000]))
+            verdict = bool(answer) and answer.strip().lower().startswith("yes")
+            session["driver_checks"][rel] = verdict
+            save_json(session_path, session)
+        if verdict:
+            deny(
+                "This changes the Driver trait. Invoke /dusk-dev:adding-a-driver-method first — "
+                "a Driver method is added in four layers, modelled on hostname — then make the edit."
+            )
+
+
+if __name__ == "__main__":
+    main()

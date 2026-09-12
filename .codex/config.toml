@@ -1,0 +1,6 @@
+[marketplaces.dusk]
+source_type = "local"
+source = "."
+
+[plugins."dusk-dev@dusk"]
+enabled = true
