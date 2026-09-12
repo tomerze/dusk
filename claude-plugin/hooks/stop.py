@@ -27,6 +27,7 @@ from harness import (
 
 MAX_BLOCKS = 3
 DILEMMA_EXCERPT = 4000
+SCREENED = "screened"
 SCREEN_PROMPT = (
     "The main agent is about to end its turn with the message below, which stops the "
     "session until a person answers it. Judge whether that question genuinely blocks "
@@ -47,6 +48,10 @@ def stalling(cwd, message):
         return None
     why = field(answer, "WHY") or "it is the kind of call the agent makes and records"
     return why if why.endswith((".", "!", "?")) else why + "."
+
+
+def problem(text, key=None):
+    return (key or text, text)
 
 
 def answered(path, title):
@@ -136,73 +141,74 @@ def main():
 
     pending = [title for title in drive.get("pending_questions", []) if not answered(decisions_path(cwd, branch), title)]
     if pending and not marks_dilemma(message):
-        problems.append("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision.")
+        problems.append(problem("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision."))
 
     claimed, last = claims_ready(message)
     standing = session.get("standing")
     if claimed:
-        problems.extend(ready_problems(cwd, branch, last))
+        problems.extend(problem(text) for text in ready_problems(cwd, branch, last))
         if not problems:
             waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
             if waiting:
-                problems.append(
+                problems.append(problem(
                     "the hand-off stands and the human is reading it. Now run the agents that "
                     "review alongside them — " + ", ".join(waiting) + " — and put what they find "
                     "on the pull request as it lands."
-                )
+                ))
         if not problems:
             session["standing"] = "ready"
     elif marks_dilemma(message):
         why = None if pending else stalling(cwd, message)
         if why:
-            problems.append(
+            problems.append(problem(
                 f"the question does not block the work: {why} Decide it, record it in the reply, "
                 "and carry on — the user reads it in review, in one pass, instead of being "
-                "interrupted for it now."
-            )
+                "interrupted for it now.",
+                SCREENED,
+            ))
         else:
             session["standing"] = "dilemma"
     elif reports_state(message):
         pass
     elif waits_on_agents(message):
         if not session.get("agents"):
-            problems.append(
+            problems.append(problem(
                 f"`{WAITING_LINE}` says an agent this session dispatched is still running. None is. "
                 "Carry on with the work, or end the turn the way its state actually is."
-            )
+            ))
     elif session.get("committed") or drive.get("phase") in ("pushed", "opened"):
         restated = restates_standing(message)
         if restated is None:
-            problems.append(
+            problems.append(problem(
                 f"This session has changed the history, so the turn is marked. It ends with "
                 f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
                 f"`{DILEMMA_LINE}` line and asks the one question that blocks the work, or with "
                 f"`{WAITING_LINE}` naming the agents it is waiting on, or it answers what the user "
                 f"asked and ends with the line that says nothing else moved: "
                 f"`{STANDING_LINE['ready']}` or `{STANDING_LINE['dilemma']}`."
-            )
+            ))
         elif standing is None:
-            problems.append(
+            problems.append(problem(
                 f"`{STANDING_LINE[restated]}` says an earlier turn handed something over or asked "
                 f"something. None did. End with `{READY_LINE}` or a `{DILEMMA_LINE}` question."
-            )
+            ))
         elif restated != standing:
-            problems.append(
+            problems.append(problem(
                 f"what stands is the {standing}, so the line is `{STANDING_LINE[standing]}`, not "
                 f"`{STANDING_LINE[restated]}`."
-            )
+            ))
 
     if not problems:
         session["stop_blocks"] = {}
         save_json(session_path, session)
         return
-    key = "|".join(problems)
+    key = "|".join(name for name, _ in problems)
     count = session["stop_blocks"].get(key, 0) + 1
     session["stop_blocks"] = {key: count}
     save_json(session_path, session)
     if count > MAX_BLOCKS:
         return
-    block("Not yet: " + " ".join(problems))
+    block("Not yet: " + " ".join(text for _, text in problems))
 
 
 if __name__ == "__main__":
