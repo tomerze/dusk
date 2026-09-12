@@ -50,7 +50,9 @@ the user with nothing to do and no idea whether it is their move.
 
 The status line carries the same state, so it is visible without reading back:
 *working*, *waiting on <agents>*, *handed over, awaiting review*, or *awaiting a
-verdict*.
+verdict*. Once a hand-off is accepted it leads with the pull request —
+`ready to review <url>` on its own first line — so the link to review is in
+front of the user without scrolling back for it.
 
 **An answer does not change what is standing**, which is why it restates it
 rather than claiming it again. A hand-off stays standing until the work moves
