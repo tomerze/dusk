@@ -39,6 +39,7 @@ To run a checkout's copy while changing it, start Claude Code with
 - `git push` never targets master and requires every commit on the branch to pass the subject checks. It never waits for the split; the hand-off does.
 - A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
 - Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, opens with `WAITING ON SUBAGENTS:` while an agent it dispatched is still running, is a `/what` report, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
+- A marked dilemma is put to `dilemma-screen` before the turn is allowed to end, and comes back refused if the screen says the question does not block the work. A decision `dilemma-triage` already marked `ask-human` is not screened.
 - The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict.
 - A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.
 
