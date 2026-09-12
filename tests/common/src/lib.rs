@@ -7,6 +7,7 @@ use dusk_program_logs::log_record_capnp::{SeverityNumber, log_record};
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
 use rand::Rng;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -81,6 +82,7 @@ fn body_text(entry: log_record::Reader) -> String {
 }
 pub struct DuskNixImpl {
     errors: Arc<Mutex<Vec<String>>>,
+    errors_expected: AtomicBool,
 }
 
 impl DuskNixImpl {
@@ -164,13 +166,19 @@ impl DuskNixImpl {
             });
         });
 
-        Self { errors }
+        Self {
+            errors,
+            errors_expected: AtomicBool::new(false),
+        }
     }
 
     /// Fail if any ERROR-severity signal reached the monitor. Gives the
     /// asynchronous stream a moment to drain first, so an error logged just
     /// before this call is not missed.
     pub fn assert_no_errors(&self) {
+        if self.errors_expected.load(Ordering::SeqCst) {
+            return;
+        }
         std::thread::sleep(Duration::from_millis(300));
         let errors = self.errors.lock().unwrap();
         if !errors.is_empty() {
@@ -180,6 +188,10 @@ impl DuskNixImpl {
             }
             panic!("{message}");
         }
+    }
+
+    pub fn expect_errors(&self) {
+        self.errors_expected.store(true, Ordering::SeqCst);
     }
 }
 
