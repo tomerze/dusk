@@ -167,6 +167,24 @@ def handed_review(name, message, branch):
     return {"session_id": "handed-review", "cwd": str(REPO), "agent_type": f"dusk-dev:{name}", "last_assistant_message": message}
 
 
+def pull_request_from_another_branch(body):
+    path = DATA / "sessions" / "handed-pull-request.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "handed": "topic"}))
+    subprocess.run(["git", "checkout", "-q", "master"], cwd=REPO, check=True)
+    result = run(
+        "pre_pull_request.py",
+        {
+            "session_id": "handed-pull-request",
+            "cwd": str(REPO),
+            "tool_name": "mcp__github__update_pull_request",
+            "tool_input": {"body": body},
+        },
+    )
+    subprocess.run(["git", "checkout", "-q", "topic"], cwd=REPO, check=True)
+    return result
+
+
 def branch_review_file(branch, name, text):
     path = REPO / "review" / branch / name
     return (0 if path.exists() and text in path.read_text() else 1, str(path), "")
@@ -247,6 +265,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("the string landed in the file", review_file("strings.md", '"no such pid"'), 0),
         expect("a review follows the pushed branch, not the checkout's", run("subagent_stop.py", handed_review("string-review", '- src/a.rs:1 — "gone" — a prompt\n**STRINGS: found**', "pushed-branch")), 0),
         expect("the review landed under the pushed branch", branch_review_file("pushed-branch", "strings.md", '"gone"'), 0),
+        expect("a pull request reads the pushed branch's decisions, not the checkout's", pull_request_from_another_branch("What it does\n\n## Decisions\n\n- Keep x"), 0),
         expect("the report links a location to vscode", review_file("report.html", 'data-file="src/a.rs" data-line="12"'), 0),
         expect("a slow writer does not lose a fast one's field", concurrent_write(), 0),
         expect("a first write keeps the keys it did not touch", first_write(), 0),

@@ -165,6 +165,11 @@ def current_branch(cwd):
     return branch if code == 0 else None
 
 
+def reviewed(cwd, hook_input):
+    _, session = session_state(hook_input.get("session_id", ""))
+    return session.get("handed") or current_branch(cwd)
+
+
 def agent_type(hook_input):
     return (hook_input.get("agent_type") or "").split(":")[-1]
 

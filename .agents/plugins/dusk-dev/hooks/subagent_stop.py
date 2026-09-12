@@ -16,6 +16,7 @@ from harness import (
     field,
     findings,
     git,
+    reviewed,
     tip,
     lint_branch,
     read_input,
@@ -40,11 +41,6 @@ def stopped(session, name):
 def finished(hook_input):
     session_path, _ = session_state(hook_input.get("session_id", ""))
     amend(session_path, lambda session: stopped(session, agent_type(hook_input)))
-
-
-def reviewed(cwd, hook_input):
-    _, session = session_state(hook_input.get("session_id", ""))
-    return session.get("handed") or current_branch(cwd)
 
 
 def record(cwd, key, branch=None):
