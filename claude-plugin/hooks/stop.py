@@ -13,7 +13,9 @@ from harness import (
     current_branch,
     decisions_path,
     drive_state,
+    field,
     git,
+    headless_agent,
     tip,
     missing_signoffs,
     pull_request_view,
@@ -23,6 +25,19 @@ from harness import (
 )
 
 MAX_BLOCKS = 3
+DILEMMA_EXCERPT = 4000
+SCREEN_PROMPT = (
+    "The main agent is about to end its turn with the message below, which stops the "
+    "session until a person answers it. Judge whether that question genuinely blocks "
+    "the work.\n\n<message>\n{message}\n</message>"
+)
+
+
+def stalling(cwd, message):
+    answer = headless_agent("dilemma-screen", SCREEN_PROMPT.format(message=message[:DILEMMA_EXCERPT]), cwd)
+    if answer is None or field(answer, "VERDICT") != "not-a-blocker":
+        return None
+    return field(answer, "WHY") or "it is the kind of call the agent makes and records."
 
 
 def answered(path, title):
@@ -122,7 +137,15 @@ def main():
         if not problems:
             session["standing"] = "ready"
     elif marks_dilemma(message):
-        session["standing"] = "dilemma"
+        why = None if pending else stalling(cwd, message)
+        if why:
+            problems.append(
+                f"the question does not block the work: {why} Decide it, record it in the reply, "
+                "and carry on — the user reads it in review, in one pass, instead of being "
+                "interrupted for it now."
+            )
+        else:
+            session["standing"] = "dilemma"
     elif waits_on_agents(message):
         if not session.get("agents"):
             problems.append(
