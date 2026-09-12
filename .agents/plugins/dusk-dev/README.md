@@ -1,27 +1,64 @@
 # dusk-dev
 
-The dusk development harness as a Claude Code plugin: the workflow skills, the
-review agents, and the hooks that check the working agreements at the moment
-they apply. The agreements themselves are the repository's root `AGENTS.md`,
-which Claude Code and Codex both read.
+The dusk development harness as a plugin: the workflow skills, the review
+agents, and the hooks that check the working agreements at the moment they
+apply. Claude Code runs all three; Codex reads the skills. The agreements
+themselves are the `dusk-developer` skill, which the repository's root
+`AGENTS.md` points at and holds nothing besides.
 
 ## Enable it
 
-The repository registers the plugin for anyone who trusts the folder
-(`.claude/settings.json`). Install it once:
+**The repository is the marketplace.** Nothing is cloned or copied into it, and
+nothing of the harness sits outside `.agents/plugins/`, `.claude/` and `.codex/`:
+the manifests name this plugin where it already sits, at
+`.agents/plugins/dusk-dev/`.
+
+| manifest | read by |
+|---|---|
+| `.agents/plugins/marketplace.json` | Codex — the marketplace, with this plugin at `./.agents/plugins/dusk-dev` |
+| `.agents/plugins/dusk-dev/.claude-plugin/marketplace.json` | Claude Code — the same marketplace, this directory being both |
+| `.agents/plugins/dusk-dev/.claude-plugin/plugin.json` | Claude Code |
+| `.agents/plugins/dusk-dev/.codex-plugin/plugin.json` | Codex |
+
+In a checkout, both tools register the marketplace from the repository's own
+settings for anyone who trusts the folder: `.claude/settings.json` enables the
+plugin for Claude Code outright, and `.codex/config.toml` declares the
+marketplace and marks it enabled for Codex, so Codex's install is one line.
+
+```
+codex plugin add dusk-dev@dusk
+```
+
+From outside a checkout it is two, with `<owner>/<repo>` as
+`git remote get-url origin` gives it.
+
+```
+codex plugin marketplace add <owner>/<repo>
+codex plugin add dusk-dev@dusk
+```
+
+Claude Code installs the same way once the marketplace is known.
 
 ```
 claude plugin install dusk-dev@dusk
 ```
 
-To run a checkout's copy while changing it, start Claude Code with
-`claude --plugin-dir ./claude-plugin` and run `/reload-plugins` after an edit.
+Codex copies the plugin into its own home at install time, so re-run
+`codex plugin add dusk-dev@dusk` to pick up a change to it. Claude Code loads a
+directory marketplace in place, and `claude --plugin-dir ./.agents/plugins/dusk-dev`
+plus `/reload-plugins` runs an edit without reinstalling anything.
+
+A Codex session gets the skills two ways, and it needs the install for only one
+of them: `AGENTS.md` is read automatically and points at
+`skills/dusk-developer/SKILL.md` on disk, while installing the plugin is what
+puts every skill in scope by name as `dusk-dev:<skill>`. The hooks and the
+agents are Claude Code's; Codex reads the skills.
 
 ## What is in it
 
 | part | where |
 |---|---|
-| project instructions | the repository's root `AGENTS.md`, read by Claude Code and by Codex alike |
+| project instructions | `skills/dusk-developer` — the orientation map for the codebase and the working agreements every change is held to. The repository's root `AGENTS.md` carries none of it: it points here, which is how Codex and anything else without a skill loader find it |
 | skills | `skills/` — `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
 | agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `dilemma-screen`, `decision-ranker` |
 | hooks | `hooks/` — one script per event; `python3 hooks/selftest.py` runs them against canned input |
