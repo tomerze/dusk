@@ -37,7 +37,16 @@ if it asks for documented incompatibilities you owe a list.
 
 ## Step 2 — Enter a worktree and make it buildable
 
-Use the `EnterWorktree` tool. A fresh dusk worktree does not build until:
+Use the `EnterWorktree` tool, and rename the branch it cuts. `EnterWorktree(name=…)`
+puts the worktree at `.claude/worktrees/<name>` but names the branch
+`worktree-<name>`, so the two disagree from the start and the `<branch>` in every
+path below names nothing on disk:
+
+```
+git branch -m <name>
+```
+
+A fresh dusk worktree then does not build until:
 
 ```
 git submodule update --init vendor/capnproto        # else dusk_capnp's build.rs fails
@@ -149,15 +158,37 @@ the work was scheduled, already carried by `Closes #N`, and a trailing number in
 branch at a time, so for as long as yours is checked out on it the user cannot
 check it out to review it: `git checkout <branch>` in their own checkout fails,
 and the first they hear of the reason is the error. Everything is pushed by this
-point, so the worktree holds nothing the remote does not — except its build
-directory, which is parked first so the next session starts warm:
+point, so the worktree holds nothing the remote does not — except its review
+folder and its build directory, which come out first so the decisions survive
+and the next session starts warm:
 
 ```
+mkdir -p ../../../review/<branch>
+cp -r review/<branch>/. ../../../review/<branch>/
 mv target ~/.cache/dusk-target/<branch>
 ExitWorktree(action="remove")
 ```
 
-Two things get in the way of that, both checked on git 2.53.0:
+**Carry the review folder out first.** The hooks write it to
+`<cwd>/review/<branch>/`, so a drive run in a worktree keeps it inside the
+worktree and `ExitWorktree` takes it along with everything else. The reviewer
+loses nothing directly — the decisions are already in the pull request body —
+but the review agents run *after* the hand-off, by which point the session is
+back in the main checkout, and `decision-ranker` re-reads `decisions.md` to rank
+it. Without the copy it finds nothing to rank, and `report.html` renders there
+without the decisions.
+
+Two things about that copy, both measured. The folder is named after the branch
+with any `worktree-` prefix stripped — `branch_name` in
+`claude-plugin/hooks/harness.py` — so it matches `<branch>` only once Step 2's
+rename has run; a session launched straight into a worktree, which Step 2 never
+touched, has its folder under the stripped name. And the destination has to
+exist first: `/review/` is in `.gitignore`, so a checkout that has never been
+reviewed has no `review/` at all, and `cp -r <folder> <missing>/` then exits 0
+having copied the *contents* rather than the folder — the decisions land at
+`review/decisions.md` and `decision-ranker` still finds nothing.
+
+Two things get in the way of the removal itself, both checked on git 2.53.0:
 
 - `ExitWorktree` only removes a worktree that `EnterWorktree` made **in the same
   session**. A session launched straight into one gets a no-op.
