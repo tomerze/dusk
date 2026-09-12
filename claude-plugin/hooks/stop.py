@@ -138,6 +138,7 @@ def main():
     branch = session.get("handed") or branch
     drive_path, drive = drive_state(branch, cwd)
     problems = []
+    allowed_standing = None
 
     pending = [title for title in drive.get("pending_questions", []) if not answered(decisions_path(cwd, branch), title)]
     if pending and not marks_dilemma(message):
@@ -166,6 +167,7 @@ def main():
                 "interrupted for it now.",
                 SCREENED,
             ))
+            allowed_standing = "dilemma"
         else:
             session["standing"] = "dilemma"
     elif reports_state(message):
@@ -205,9 +207,12 @@ def main():
     key = "|".join(name for name, _ in problems)
     count = session["stop_blocks"].get(key, 0) + 1
     session["stop_blocks"] = {key: count}
-    save_json(session_path, session)
     if count > MAX_BLOCKS:
+        if allowed_standing:
+            session["standing"] = allowed_standing
+        save_json(session_path, session)
         return
+    save_json(session_path, session)
     block("Not yet: " + " ".join(text for _, text in problems))
 
 
