@@ -24,6 +24,38 @@ COMMENT_PROMPT = (
 )
 
 
+HASH_SUFFIXES = (".py", ".capnp", ".toml", ".yaml", ".yml", ".sh", ".cfg", ".ini", ".conf")
+SLASH_SUFFIXES = (".rs", ".c", ".h", ".cc", ".cpp", ".hpp", ".js", ".ts", ".go", ".java")
+MARKUP_SUFFIXES = (".md", ".markdown", ".html", ".xml")
+HASH_COMMENT = re.compile(r"^\s*#|\S\s+#\s")
+SLASH_COMMENT = re.compile(r"^\s*(//|/\*|\*(?!/))|\S\s+//\s")
+MARKUP_COMMENT = re.compile(r"<!--")
+ANY_COMMENT = re.compile(r"^\s*(//|#|/\*)|\S\s+(//|#)\s|<!--")
+
+
+def comment_pattern(path):
+    if path.endswith(HASH_SUFFIXES):
+        return HASH_COMMENT
+    if path.endswith(SLASH_SUFFIXES):
+        return SLASH_COMMENT
+    if path.endswith(MARKUP_SUFFIXES):
+        return MARKUP_COMMENT
+    return ANY_COMMENT
+
+
+def adds_comments(cwd, sha):
+    code, diff = git(cwd, "show", "-U0", "--format=", sha)
+    if code != 0:
+        return True
+    pattern = ANY_COMMENT
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            pattern = comment_pattern(line[4:])
+        elif line.startswith("+") and pattern.search(line[1:]):
+            return True
+    return False
+
+
 def pushed_branch(command):
     match = re.search(r"\bgit\s+push\b([^\n;&|]*)", command)
     if not match:
@@ -35,10 +67,13 @@ def pushed_branch(command):
 
 
 def review_commit(cwd, branch, sha, subject):
-    answer = headless_agent("comment-review", COMMENT_PROMPT.format(sha=sha), cwd)
-    if answer is None or field(answer, "COMMENTS") not in ("none", "found"):
-        return
-    found = findings(answer)
+    if adds_comments(cwd, sha):
+        answer = headless_agent("comment-review", COMMENT_PROMPT.format(sha=sha), cwd)
+        if answer is None or field(answer, "COMMENTS") not in ("none", "found"):
+            return
+        found = findings(answer)
+    else:
+        found = []
     directory = review_dir(cwd, branch)
     directory.mkdir(parents=True, exist_ok=True)
     comments = directory / "comments.md"
