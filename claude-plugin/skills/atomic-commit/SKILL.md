@@ -218,30 +218,61 @@ nor what-breaks-if-I-split will find it. Only the statement will.
 ## Mechanics
 
 **Before rewriting any history, snapshot the final tree.** `git add -A && git
-commit --no-verify -m "WIP snapshot"` and write down the SHA. Everything after
-that is recoverable, and `git diff <snapshot> HEAD` at the end must come back
-empty — that is the proof the rewrite lost nothing.
+commit --no-verify -m "WIP snapshot"`, then `git tag -f harness-snapshot HEAD`.
+Everything after that is recoverable, and `git diff harness-snapshot HEAD` at the
+end must come back empty — that is the proof the rewrite lost nothing.
 
-**Splitting an existing commit.** Reset to the base, then rebuild forward: for
-each statement, bring in the files it wholly owns with `git checkout <snapshot>
--- <paths>`, and hand-construct the intermediate content for any file that spans
-more than one statement. A file appearing in three commits is normal and is not a
-sign the split is wrong.
+**Unpick the commit, then commit forward out of the working tree.** Do not
+reconstruct each statement's content from the snapshot; let git hand you the
+whole change as unstaged edits and take it apart from there.
+
+```
+git reset <base>                      # the whole change is now unstaged
+git add <the paths this statement owns>
+git commit --no-verify -m "<subject>" -m "<body>"
+…                                     # once per statement
+git diff harness-snapshot HEAD        # empty, or the split lost something
+```
+
+Reset against the base the split rebuilds from, not `HEAD^`. When the tree was
+dirty the tip is the snapshot commit, and `HEAD^` unpicks that instead, leaving
+the WIP commit in the history under everything you then build.
+
+For a commit in the middle of the branch, `git rebase -i <base>` marking it
+`edit` puts you in the same place: `git reset HEAD^`, commit forward, then
+`git rebase --continue`. A rebase in progress is a normal working state.
+
+For a file that spans two statements, stage the hunks rather than the file:
+`git add -p <path>`, or write the intermediate content and stage it.
+
+**Every commit in a split is `--no-verify`, and this is the whole of the speed.**
+Pre-commit stashes the unstaged changes before it runs and restores them after,
+on every commit — and during a split the working tree is full of the statements
+not committed yet, so it stashes and restores the entire remaining change each
+time. The checks are also being asked about trees that will never ship: an
+intermediate state can have a moved file and not its caller, and fail a lint for
+a reason the final tree does not have.
+
+The final tree is the one that matters and it is byte-identical to the snapshot,
+which was already verified. So verify once, at the end, not once per commit:
+
+```
+uv run pre-commit run --from-ref <base> --to-ref HEAD
+```
 
 **Never `git add .` or `git add -A`** when building a real commit — only the
 snapshot may be taken that way. Stage the paths the statement owns.
 
-**Never put a timeout on a commit.** Pre-commit hooks stash the unstaged changes
-before they run; killing the commit mid-hook leaves that stash unrestored and the
-user's uncommitted work gone. Give it the maximum timeout, or run it in the
-background. If one does get killed, the work is in the patch file named in the
-hook's `[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
+**A commit that does run the hooks gets the maximum timeout.** Pre-commit stashes
+the unstaged changes before it runs; killing it mid-hook leaves that stash
+unrestored and the user's uncommitted work gone. If one does get killed, the work
+is in the patch file named in the hook's
+`[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
 
-**A rebase in progress is a normal working state, not a blocker.** `git rebase -i`
-with `edit` is exactly how a commit gets split; the working tree handed to me is
-usually the leftover of the commit being split. Do not raise it, do not warn, do
-not ask. Commit onto the detached HEAD as usual; `git rebase --continue` is the
-user's move.
+**A rebase in progress is a normal working state, not a blocker.** The working
+tree handed to me is usually the leftover of the commit being split. Do not raise
+it, do not warn, do not ask. Commit onto the detached HEAD as usual, then
+`git rebase --continue`.
 
 **A fixup belongs in the commit it fixes.** Discovery order must never show up in
 the history — see
@@ -260,8 +291,9 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
 - ☐ Run the consequence test on every hunk; fold consequences into their decision
 - ☐ Pull prose out into its own commits, split by reader
 - ☐ Show the user the subject lines in order, and wait
-- ☐ Snapshot, then rebuild forward, staging named paths only
-- ☐ `git diff <snapshot> HEAD` is empty
+- ☐ Snapshot and tag, `git reset HEAD^`, then commit forward, staging named paths only
+- ☐ Every commit in the split is `--no-verify`; the hooks run once at the end
+- ☐ `git diff harness-snapshot HEAD` is empty
 
 ## I do not write comments
 

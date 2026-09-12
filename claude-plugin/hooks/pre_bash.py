@@ -147,8 +147,9 @@ def main():
         deny("Stage named paths, never git add -A or git add . — only the atomic-commit snapshot is taken that way.")
     if has(r"\bgit\s+commit\b"):
         timeout = tool_input.get("timeout") or 120000
-        if tool_input.get("run_in_background") or timeout < 600000:
-            deny("Run git commit in the foreground with timeout 600000: pre-commit stashes unstaged work, and a commit killed mid-hook strands it (AGENTS.md, Never poll for a command I started).")
+        verifies = not has(r"--no-verify\b")
+        if tool_input.get("run_in_background") or (verifies and timeout < 600000):
+            deny("Run git commit in the foreground, and with timeout 600000 when it runs the hooks: pre-commit stashes unstaged work, and a commit killed mid-hook strands it (AGENTS.md, Never poll for a command I started).")
         for message in commit_messages(command):
             problems = lint_message(message)
             if problems:
