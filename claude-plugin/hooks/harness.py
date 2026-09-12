@@ -19,6 +19,11 @@ ISSUE_IN_SUBJECT = re.compile(r"\(#\d+\)")
 READY_LINE = "Ready for review."
 DILEMMA_LINE = "DILEMMA:"
 WAITING_LINE = "WAITING ON SUBAGENTS:"
+REPORT_HEADINGS = (
+    "WHAT IS OVERALL STATE:",
+    "WHAT I DID NOW:",
+    "WHAT DO I NEED FROM YOU:",
+)
 STANDING_LINE = {
     "ready": "Still ready for review.",
     "dilemma": "Still waiting for dilemma verdict.",

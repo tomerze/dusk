@@ -4,6 +4,7 @@ from pathlib import Path
 from harness import (
     DILEMMA_LINE,
     READY_LINE,
+    REPORT_HEADINGS,
     STANDING_LINE,
     WAITING_LINE,
     READY_SIGNOFFS,
@@ -55,6 +56,13 @@ WAITING_MARK = re.compile(rf"^[ \t]*\**{re.escape(WAITING_LINE)}", re.M)
 def waits_on_agents(message):
     lines = [line for line in message.strip().splitlines() if line.strip()]
     return bool(lines) and bool(WAITING_MARK.match(lines[0]))
+
+
+def reports_state(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    return bool(lines) and lines[0].strip() == REPORT_HEADINGS[0] and all(
+        heading in message for heading in REPORT_HEADINGS[1:]
+    )
 
 
 def restates_standing(message):
@@ -146,6 +154,8 @@ def main():
             )
         else:
             session["standing"] = "dilemma"
+    elif reports_state(message):
+        pass
     elif waits_on_agents(message):
         if not session.get("agents"):
             problems.append(
