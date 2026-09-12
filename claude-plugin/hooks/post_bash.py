@@ -70,7 +70,8 @@ def pushed_branch(command):
 
 
 def review_commit(cwd, branch, sha, subject):
-    if needs_review(cwd, sha):
+    reviewed = needs_review(cwd, sha)
+    if reviewed:
         answer = headless_agent("comment-review", COMMENT_PROMPT.format(sha=sha), cwd)
         if answer is None or field(answer, "COMMENTS") not in ("none", "found"):
             return
@@ -82,8 +83,14 @@ def review_commit(cwd, branch, sha, subject):
     comments = directory / "comments.md"
     if not comments.exists():
         comments.write_text(f"# Comments that belong in commit messages on {branch_name(branch)}\n")
+    if found:
+        entry = "\n".join(found)
+    elif reviewed:
+        entry = "- none"
+    else:
+        entry = "- not reviewed: no added line matched a comment pattern"
     with holding(comments), comments.open("a") as file:
-        file.write(f"\n## {sha[:8]} {subject}\n" + ("\n".join(found) if found else "- none") + "\n")
+        file.write(f"\n## {sha[:8]} {subject}\n" + entry + "\n")
     report.render(cwd, branch)
     if found:
         print(
