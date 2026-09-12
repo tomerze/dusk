@@ -146,7 +146,14 @@ def main():
 
     claimed, last = claims_ready(message)
     standing = session.get("standing")
-    if claimed:
+    if claimed and session.get("handed_off") == branch:
+        problems.append(problem(
+            f"`{READY_LINE}` goes out once per branch, and it already has. The human is reading "
+            f"the pull request now. A fix after that is committed, pushed, and said on the pull "
+            f"request; the turn ends `{STANDING_LINE['ready']}`. Handing the same branch over "
+            "again restarts a review that never stopped."
+        ))
+    elif claimed:
         problems.extend(problem(text) for text in ready_problems(cwd, branch, last))
         if not problems:
             waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
@@ -158,6 +165,7 @@ def main():
                 ))
         if not problems:
             session["standing"] = "ready"
+            session["handed_off"] = branch
     elif marks_dilemma(message):
         why = None if pending else stalling(cwd, message)
         if why:
