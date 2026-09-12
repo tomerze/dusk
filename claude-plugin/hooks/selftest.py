@@ -80,6 +80,8 @@ with tempfile.TemporaryDirectory() as temp:
         expect("an existing comment line passes", run("pre_edit.py", edit(str(REPO / "src/lib.rs"), "// kept\nlet a = 1;", "// kept\nlet a = 2;")), 0),
         expect("a program edit needs the authoring skill", run("pre_edit.py", edit(str(REPO / "base/sleep/src/lib.rs"), "a", "b")), 2, "authoring-a-program"),
         expect("a hash inside a python string is not a comment", run("pre_edit.py", edit(str(REPO / "hooks/x.py"), "a = 1", 'PROMPT = \"\"\"\n# Heading\n\"\"\"')), 0),
+        expect("a file outside the repository is free", run("pre_edit.py", edit("/tmp/x.py", "a", "# note")), 0),
+        expect("a file in another worktree of the repository is not", run("pre_edit.py", edit(str(REPO / "src/lib.rs"), "let a = 1;", "// note\nlet a = 1;")), 2, "do not write comments"),
         expect("a markdown edit is free", run("pre_edit.py", edit(str(REPO / "docs/x.md"), "a", "# b")), 0),
         expect("a stop with nothing pending passes", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Done."}), 0),
         expect("a Ready line that is not last is blocked", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Ready for review.\n\nAlso this."}), 2, "last line"),

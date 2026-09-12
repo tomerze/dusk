@@ -46,6 +46,11 @@ def safe_name(name):
     return re.sub(r"[^A-Za-z0-9._-]", "_", name or "detached")
 
 
+def repository(cwd):
+    code, common = git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return common if code == 0 else ""
+
+
 def branch_name(branch):
     return (branch or "detached").removeprefix("worktree-")
 

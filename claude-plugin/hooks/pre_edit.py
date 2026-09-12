@@ -2,7 +2,7 @@ import os
 import re
 from pathlib import Path
 
-from harness import deny, haiku, read_input, save_json, session_state
+from harness import deny, haiku, read_input, repository, save_json, session_state
 
 COMMENT_LINE = {
     ".rs": r"^\s*//",
@@ -26,6 +26,12 @@ def relative(path, cwd):
     if not path:
         return ""
     return os.path.relpath(path, cwd) if os.path.isabs(path) else path
+
+
+def same_repository(path, cwd):
+    here = repository(cwd)
+    there = repository(os.path.dirname(path) or cwd)
+    return bool(here) and here == there
 
 
 def comment_lines(pattern, suffix, old, new):
@@ -54,6 +60,8 @@ def main():
         old, new = "", tool_input.get("content", "")
 
     rel = relative(path, cwd)
+    if rel.startswith("..") and not same_repository(path, cwd):
+        return
 
     pattern = COMMENT_LINE.get(suffix)
     if pattern:
