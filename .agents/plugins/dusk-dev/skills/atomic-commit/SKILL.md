@@ -126,8 +126,8 @@ it is a consequence, it belongs with the decision. Yes → it is its own sheep.
 
 ### 6. Prose is always its own commit
 
-Documentation, `AGENTS.md`, and the skills under `claude-plugin/skills/` get their own
-commits, even when the words changed *because* of a code decision. They are read
+Documentation, `AGENTS.md` and the skills under
+`.agents/plugins/dusk-dev/skills/` get their own commits, even when the words changed *because* of a code decision. They are read
 by different people, reviewed differently, and reverted independently.
 
 Split prose further when it addresses different readers — the published docs site
@@ -138,7 +138,7 @@ moves, real changes, tests, text — in that order. A commit that only changes
 `use` paths, or only moves code without changing it, goes at the start, where
 it can be waved through; the real changes follow; the tests come after the code
 they test; and every commit that changes only what a person reads — comments,
-docs, `AGENTS.md`, the skills — sits at the end, after the last commit that
+docs, the skills — sits at the end, after the last commit that
 changes what a machine runs. A reviewer reads the code before the words about
 it, and a text commit in the middle of the code is a page of prose between two
 hunks it does not describe yet.
@@ -147,7 +147,7 @@ hunks it does not describe yet.
 
 Everything I wanted to say in a comment goes here instead: why this exists, what
 it replaced, what was rejected, what it is a step toward. See the
-[no-comments rule](../../../AGENTS.md#i-do-not-write-comments) — a comment
+[no-comments rule](../dusk-developer/SKILL.md#i-do-not-write-comments) — a comment
 explaining the change is a commit message that leaked into the source and will
 outlive the reader it was written for.
 
@@ -281,7 +281,7 @@ it, do not warn, do not ask. Commit onto the detached HEAD as usual, then
 
 **A fixup belongs in the commit it fixes.** Discovery order must never show up in
 the history — see
-[the working agreement](../../../AGENTS.md#a-fixup-belongs-in-the-commit-it-fixes--always).
+[the working agreement](../dusk-developer/SKILL.md#a-fixup-belongs-in-the-commit-it-fixes--always).
 Force-push the rewritten branch; a pushed branch is not a reason to append.
 
 ## Checklist
@@ -305,4 +305,4 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).
+See [dusk-developer](../dusk-developer/SKILL.md#i-do-not-write-comments).

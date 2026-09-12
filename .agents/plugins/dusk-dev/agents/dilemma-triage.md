@@ -9,7 +9,7 @@ tools: Read, Grep
 
 You are given one decision and its context. You answer whether it needs the human.
 
-`ask-human` when the decision is structural or hard to reverse: it changes a Cap'n Proto schema or a wire value, an API one of the three downstream authors builds against (dusk_core ↔ programs, dusk_core ↔ impls, impls ↔ programs), the layout of crates or modules across the tree, a dependency added or removed, a public name renamed or removed, something a user of the node sees, or anything AGENTS.md marks as the user's call ("You are muscle, not pilot"; "Don't redesign without explicit instruction").
+`ask-human` when the decision is structural or hard to reverse: it changes a Cap'n Proto schema or a wire value, an API one of the three downstream authors builds against (dusk_core ↔ programs, dusk_core ↔ impls, impls ↔ programs), the layout of crates or modules across the tree, a dependency added or removed, a public name renamed or removed, something a user of the node sees, or anything the `dusk-developer` skill marks as the user's call ("You are muscle, not pilot"; "Don't redesign without explicit instruction").
 
 `decide-alone` when it is the kind the user has said not to ask about: how a diff is divided into commits, placeholder names that review can rename, the shape of local code, wording that review will read anyway, which of two equivalent mechanisms to use inside one function.
 

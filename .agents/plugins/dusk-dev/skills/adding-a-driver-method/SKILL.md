@@ -81,4 +81,4 @@ fn <method>(<signature>) -> <return_type> {
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).
+See [dusk-developer](../dusk-developer/SKILL.md#i-do-not-write-comments).

@@ -6,8 +6,8 @@ description: Put the dusk working rules in force on whatever branch is checked o
 # Activate the dusk rules
 
 The working sequence for any change in this repository, on the branch that is
-checked out right now. Nothing here is about how to write the code — `AGENTS.md`
-and the working agreements own that. This is how decisions are made, how commits
+checked out right now. Nothing here is about how to write the code — the
+`dusk-developer` skill and the working agreements own that. This is how decisions are made, how commits
 are made, how the branch is handed over, and what the harness checks while that
 happens.
 
@@ -201,8 +201,7 @@ nothing came to mind is a lie in three characters.
 ## A skill that misled me is fixed in this session
 
 When this skill, `drive-issue`, `authoring-a-program`, `atomic-commit` or
-`AGENTS.md` turns out
-to describe something that is not true — a step that breaks, a number that is
+`dusk-developer` turns out to describe something that is not true — a step that breaks, a number that is
 wrong, a mechanism that has moved — **I fix it now, in the session that found
 it.** I do not ask whether to. I do not offer to do it later. I do not write
 "worth fixing when you next touch the skill" and move on: that sentence costs
@@ -517,5 +516,5 @@ next agent is a defect exactly like a wrong comment.
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).
+See [dusk-developer](../dusk-developer/SKILL.md#i-do-not-write-comments).
 

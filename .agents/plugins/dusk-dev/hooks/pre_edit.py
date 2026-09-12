@@ -79,7 +79,7 @@ def main():
         added = comment_lines(pattern, suffix, old, new)
         if added:
             deny(
-                "I do not write comments (AGENTS.md). Say it in the reply and let the user decide "
+                "I do not write comments (dusk-developer). Say it in the reply and let the user decide "
                 f"whether it becomes one: {added[0].strip()!r}"
             )
 

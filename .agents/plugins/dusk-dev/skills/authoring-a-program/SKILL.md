@@ -833,7 +833,7 @@ loop {
 ```
 
 - `NoopStream::new()` from `dusk_program::stream` is the canonical discard stream. Use it when the spawned work produces output that the caller will not consume.
-- The completion `Rc<Signal>` is discarded — errors inside the task surface through whatever logging the task itself emits. **Do not** double-log here: the rule from the project's AGENTS.md "code must be diagnosable after the fact" says to log where the result would otherwise be lost; if the task already logs its own errors (as `sh_exec_task` does via the interpreter's `tracing::error!`), the spawn site stays quiet.
+- The completion `Rc<Signal>` is discarded — errors inside the task surface through whatever logging the task itself emits. **Do not** double-log here: the rule from the `dusk-developer` skill, "code must be diagnosable after the fact", says to log where the result would otherwise be lost; if the task already logs its own errors (as `sh_exec_task` does via the interpreter's `tracing::error!`), the spawn site stays quiet.
 - On `Signal::Terminate`, fan out to every `active_stops` entry. The tasks observe their stop and unwind cleanly.
 
 ### 6. Awaited variant
@@ -937,7 +937,7 @@ Value::Record(record).write_to_builder(value_builder)?;
 
 ## Tracing and logging conventions
 
-These conventions are enforced by the project's AGENTS.md "code must be diagnosable" rule. Follow them in every new program.
+These conventions are enforced by the `dusk-developer` skill's "code must be diagnosable" rule. Follow them in every new program.
 
 ### Spans
 
@@ -1264,4 +1264,4 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
-See [AGENTS.md](../../../AGENTS.md#i-do-not-write-comments).
+See [dusk-developer](../dusk-developer/SKILL.md#i-do-not-write-comments).
