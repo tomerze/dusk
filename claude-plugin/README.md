@@ -42,6 +42,7 @@ To run a checkout's copy while changing it, start Claude Code with
 - A marked dilemma is put to `dilemma-screen` before the turn is allowed to end, and comes back refused if the screen says the question does not block the work. A decision `dilemma-triage` already marked `ask-human` is not screened.
 - The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict.
 - A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.
+- `Ready for review.` goes out once per branch. After it, a fix is committed, pushed and said on the pull request, and the turn ends `Still ready for review.` — the branch is never handed over a second time, because the human is already reading it.
 
 ## Three phases
 

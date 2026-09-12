@@ -405,6 +405,19 @@ The harness checks the line: it must be last, the worktree gone, the pull
 request open at the pushed tip with the decisions in its body. A message that
 claims it while any of that is false is sent back with the check that failed.
 
+**The hand-off goes out once per branch.** From the moment it does, the human is
+reading; nothing I do afterwards sends the branch to review again. A review
+finding, my own or an agent's, is fixed, committed, pushed and said on the pull
+request — and that turn ends `Still ready for review.`, because the hand-off it
+restates is the one that is already standing. There is no second
+`Ready for review.`, no second split to wait on, no second round of review
+agents. The harness refuses the line on a branch that has had it.
+
+This is the loop it exists to stop: the agents report, I fix, the fix changes
+the tip, every sign-off is stale again, the agents run again — and the human,
+who was ready to read an hour ago, is still waiting for a branch that will not
+sit still.
+
 **The hand-off is not the end of the session. It is the point where two reviews
 start at once** — see the next section.
 
