@@ -103,6 +103,7 @@ def claims_ready(message):
 
 def ready_problems(cwd, branch, last):
     problems = []
+    url = None
     if not last:
         problems.append(f"`{READY_LINE}` is the last line of the message and nothing follows it")
     if "/.claude/worktrees/" in str(Path(cwd).resolve()):
@@ -115,6 +116,7 @@ def ready_problems(cwd, branch, last):
     if not pull_request:
         problems.append(f"no pull request found for {remote}")
     else:
+        url = pull_request.get("url")
         if pull_request.get("state") != "OPEN":
             problems.append(f"PR #{pull_request['number']} is {pull_request.get('state')}, not open")
         if pull_request.get("headRefOid") != tip(cwd, branch):
@@ -127,7 +129,7 @@ def ready_problems(cwd, branch, last):
             ", ".join(unsplit) + " has not signed off this tip. A person cannot read a branch that "
             "is one blob, so it is cut into the commits the work is before they are asked to."
         )
-    return problems
+    return problems, url
 
 
 def main():
@@ -157,7 +159,8 @@ def main():
             "again restarts a review that never stopped."
         ))
     elif claimed:
-        problems.extend(problem(text) for text in ready_problems(cwd, branch, last))
+        ready, pull_request_url = ready_problems(cwd, branch, last)
+        problems.extend(problem(text) for text in ready)
         if not problems:
             waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
             if waiting:
@@ -169,6 +172,7 @@ def main():
         if not problems:
             session["standing"] = "ready"
             session["handed_off"] = branch
+            session["pull_request"] = pull_request_url
     elif marks_dilemma(message):
         why = None if pending else stalling(cwd, message)
         if why:

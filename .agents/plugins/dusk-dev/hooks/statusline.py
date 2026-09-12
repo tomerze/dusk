@@ -22,7 +22,11 @@ def state(session):
 def main():
     hook_input = read_input()
     _, session = session_state(hook_input.get("session_id", ""))
-    sys.stdout.write("dusk: " + state(session))
+    lines = []
+    if session.get("standing") == "ready" and session.get("pull_request"):
+        lines.append("ready to review " + session["pull_request"])
+    lines.append("dusk: " + state(session))
+    sys.stdout.write("\n".join(lines))
 
 
 if __name__ == "__main__":
