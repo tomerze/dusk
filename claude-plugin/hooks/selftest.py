@@ -41,6 +41,51 @@ def expect(name, result, code, contains=None):
     return ok
 
 
+def concurrent_list():
+    sys.path.insert(0, str(HOOKS))
+    os.environ["DUSK_HARNESS_DATA"] = str(DATA)
+    import harness
+
+    path = DATA / "sessions" / "listed.json"
+    harness.save_json(path, {"agents": ["a", "b"]})
+    harness.amend(path, lambda state: state["agents"].append("c"))
+    harness.amend(path, lambda state: state["agents"].remove("a"))
+    after = harness.read_json(path, {})
+    return (0 if after.get("agents") == ["b", "c"] else 1, str(after), "")
+
+
+def first_write():
+    sys.path.insert(0, str(HOOKS))
+    os.environ["CLAUDE_PLUGIN_DATA"] = str(DATA)
+    import harness
+
+    path = DATA / "sessions" / "fresh.json"
+    if path.exists():
+        path.unlink()
+    _, mine = harness.session_state("fresh")
+    mine["activate_nudged"] = True
+    harness.save_json(path, mine)
+    after = harness.read_json(path, {})
+    return (0 if after.get("activate_nudged") and "committed" in after and "standing" in after else 1, str(after), "")
+
+
+def concurrent_write():
+    sys.path.insert(0, str(HOOKS))
+    os.environ["CLAUDE_PLUGIN_DATA"] = str(DATA)
+    import harness
+
+    path = DATA / "sessions" / "concurrent.json"
+    harness.save_json(path, {"loaded_skills": ["activate"], "committed": False})
+    _, mine = harness.session_state("concurrent")
+    harness.AS_LOADED.pop(str(path), None)
+    harness.save_json(path, {"loaded_skills": ["activate"], "committed": True})
+    harness.AS_LOADED[str(path)] = {"loaded_skills": ["activate"], "committed": False}
+    mine["driver_checks"] = {"a.rs": True}
+    harness.save_json(path, mine)
+    after = harness.read_json(path, {})
+    return (0 if after.get("committed") and after.get("driver_checks") else 1, str(after), "")
+
+
 def committed_session():
     path = DATA / "sessions" / "committed.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,6 +160,9 @@ with tempfile.TemporaryDirectory() as temp:
         expect("the narration was dropped", review_file("strings.md", "- I looked", present=False), 0),
         expect("the string landed in the file", review_file("strings.md", '"no such pid"'), 0),
         expect("the report links a location to vscode", review_file("report.html", 'data-file="src/a.rs" data-line="12"'), 0),
+        expect("a slow writer does not lose a fast one's field", concurrent_write(), 0),
+        expect("a first write keeps the keys it did not touch", first_write(), 0),
+        expect("two writers of one list keep both changes", concurrent_list(), 0),
         expect("the report carries every section", review_file("report.html", "User-facing strings introduced"), 0),
     ]
     sys.exit(0 if all(results) else 1)

@@ -3,6 +3,7 @@ import re
 
 import report
 from harness import (
+    holding,
     branch_name,
     current_branch,
     drive_state,
@@ -33,7 +34,7 @@ def review_commit(cwd, branch, sha, subject):
     comments = directory / "comments.md"
     if not comments.exists():
         comments.write_text(f"# Comments that belong in commit messages on {branch_name(branch)}\n")
-    with comments.open("a") as file:
+    with holding(comments), comments.open("a") as file:
         file.write(f"\n## {sha[:8]} {subject}\n" + ("\n".join(found) if found else "- none") + "\n")
     report.render(cwd, branch)
     if found:

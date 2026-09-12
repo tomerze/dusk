@@ -1,8 +1,11 @@
+import contextlib
+import fcntl
 import json
 import os
 import re
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 PLUGIN = "dusk-dev"
@@ -30,17 +33,68 @@ def data_dir():
     return path
 
 
-def load_json(path, default):
+AS_LOADED = {}
+
+
+@contextlib.contextmanager
+def holding(path):
+    lock = Path(str(path) + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def replace_text(path, text):
+    temporary = Path(str(path) + ".new")
+    temporary.write_text(text)
+    os.replace(temporary, path)
+
+
+def read_json(path, default):
     try:
         return json.loads(Path(path).read_text())
     except (OSError, ValueError):
         return default
 
 
+def load_json(path, default):
+    value = read_json(path, default)
+    AS_LOADED[str(path)] = deepcopy(value)
+    return value
+
+
 def save_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    with holding(path):
+        current = read_json(path, {})
+        before = AS_LOADED.get(str(path), {})
+        if isinstance(current, dict) and isinstance(value, dict):
+            for key, now in value.items():
+                if key not in current or key not in before or before[key] != now:
+                    current[key] = now
+            for key in before:
+                if key not in value and current.get(key) == before[key]:
+                    current.pop(key, None)
+        else:
+            current = value
+        replace_text(path, json.dumps(current, indent=2, sort_keys=True) + "\n")
+        AS_LOADED[str(path)] = deepcopy(value)
+
+
+def amend(path, change):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with holding(path):
+        current = read_json(path, {})
+        change(current)
+        replace_text(path, json.dumps(current, indent=2, sort_keys=True) + "\n")
+        AS_LOADED[str(path)] = deepcopy(current)
+        return current
 
 
 def safe_name(name):
@@ -62,6 +116,7 @@ def session_state(session_id):
     state = load_json(path, default)
     for key, value in default.items():
         state.setdefault(key, value)
+    AS_LOADED[str(path)] = deepcopy(state)
     return path, state
 
 
@@ -71,9 +126,12 @@ def drive_state(branch):
 
 
 def git(cwd, *args):
-    completed = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
-    )
+    try:
+        completed = subprocess.run(
+            ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return 1, ""
     return completed.returncode, completed.stdout.strip()
 
 

@@ -1,7 +1,7 @@
 import html
 import os
 
-from harness import LOCATION, branch_name, current_branch, review_dir
+from harness import LOCATION, branch_name, current_branch, holding, replace_text, review_dir
 
 SECTIONS = (
     ("decisions.md", "Decisions"),
@@ -75,7 +75,9 @@ def render(cwd, branch):
         if path.exists():
             sections.append(section(title, path.read_text()))
     page = PAGE.format(branch=html.escape(branch_name(branch)), sections="\n".join(sections))
-    (directory / "report.html").write_text(page)
+    page_path = directory / "report.html"
+    with holding(page_path):
+        replace_text(page_path, page)
     return directory / "report.html"
 
 

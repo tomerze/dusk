@@ -2,6 +2,9 @@ import re
 
 import report
 from harness import (
+    amend,
+    holding,
+    replace_text,
     agent_type,
     block,
     branch_name,
@@ -17,6 +20,12 @@ from harness import (
     review_dir,
     save_json,
 )
+
+
+def raised(drive, values):
+    if values["VERDICT"] == "ask-human":
+        drive.setdefault("pending_questions", []).append(values["DECISION"])
+    drive.pop("ranked_sha", None)
 
 
 def record(cwd, key):
@@ -94,21 +103,19 @@ def dilemma_triage(cwd, message):
     branch = current_branch(cwd)
     path = decisions_path(cwd, branch)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text(f"# Decisions on {branch_name(branch)}\n")
-    with path.open("a") as decisions:
-        decisions.write(
-            f"\n## {values['DECISION']}\n"
-            f"- decided: {values['DECIDED']}\n"
-            f"- alternatives: {values['ALTERNATIVES']}\n"
-            f"- reversal: {values['REVERSAL']}\n"
-            f"- triage: {values['VERDICT']} — {values['WHY']}\n"
-        )
-    drive_path, drive = drive_state(branch)
-    if values["VERDICT"] == "ask-human":
-        drive.setdefault("pending_questions", []).append(values["DECISION"])
-    drive.pop("ranked_sha", None)
-    save_json(drive_path, drive)
+    with holding(path):
+        if not path.exists():
+            path.write_text(f"# Decisions on {branch_name(branch)}\n")
+        with path.open("a") as decisions:
+            decisions.write(
+                f"\n## {values['DECISION']}\n"
+                f"- decided: {values['DECIDED']}\n"
+                f"- alternatives: {values['ALTERNATIVES']}\n"
+                f"- reversal: {values['REVERSAL']}\n"
+                f"- triage: {values['VERDICT']} — {values['WHY']}\n"
+            )
+    drive_path, _ = drive_state(branch)
+    amend(drive_path, lambda drive: raised(drive, values))
     report.render(cwd, branch)
 
 
@@ -120,10 +127,11 @@ def decision_ranker(cwd, message):
     path = decisions_path(cwd, branch)
     if not path.exists():
         block(f"{path} does not exist; nothing to rank.")
-    text = re.sub(r"^## Ranked\n.*?(?=^## |\Z)", "", path.read_text(), flags=re.S | re.M)
-    heading_end = text.find("\n") + 1
-    ranked = "\n## Ranked\n\n" + match.group(1).strip() + "\n"
-    path.write_text(text[:heading_end] + ranked + text[heading_end:])
+    with holding(path):
+        text = re.sub(r"^## Ranked\n.*?(?=^## |\Z)", "", path.read_text(), flags=re.S | re.M)
+        heading_end = text.find("\n") + 1
+        ranked = "\n## Ranked\n\n" + match.group(1).strip() + "\n"
+        replace_text(path, text[:heading_end] + ranked + text[heading_end:])
     report.render(cwd, branch)
     record(cwd, "ranked_sha")
 
