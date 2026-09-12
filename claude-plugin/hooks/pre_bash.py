@@ -103,7 +103,7 @@ def pull_request_problems(cwd, body, creating, hook_input):
     if any(mark in body for mark in WATERMARKS):
         problems.append("the PR body carries a watermark; never")
     branch = current_branch(cwd)
-    _, drive = drive_state(branch)
+    _, drive = drive_state(branch, cwd)
     _, session = session_state(hook_input.get("session_id", ""))
     issue = drive.get("issue") or (session.get("drive") or {}).get("issue")
     if issue and not re.search(rf"Closes #{issue}\b", body):

@@ -49,14 +49,14 @@ def reviewed(cwd, hook_input):
 
 def record(cwd, key, branch=None):
     branch = branch or current_branch(cwd)
-    path, drive = drive_state(branch)
+    path, drive = drive_state(branch, cwd)
     drive[key] = tip(cwd, branch)
     save_json(path, drive)
 
 
 def clear(cwd, key):
     branch = current_branch(cwd)
-    path, drive = drive_state(branch)
+    path, drive = drive_state(branch, cwd)
     drive.pop(key, None)
     save_json(path, drive)
 
@@ -133,7 +133,7 @@ def dilemma_triage(cwd, message, hook_input):
                 f"- reversal: {values['REVERSAL']}\n"
                 f"- triage: {values['VERDICT']} — {values['WHY']}\n"
             )
-    drive_path, _ = drive_state(branch)
+    drive_path, _ = drive_state(branch, cwd)
     amend(drive_path, lambda drive: raised(drive, values))
     report.render(cwd, branch)
 

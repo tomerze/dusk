@@ -1,5 +1,6 @@
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -30,7 +31,7 @@ def read_input():
 
 
 def data_dir():
-    root = os.environ.get("CLAUDE_PLUGIN_DATA") or str(
+    root = os.environ.get("DUSK_HARNESS_DATA") or str(
         Path.home() / ".claude" / "plugins" / "data" / PLUGIN
     )
     path = Path(root)
@@ -135,8 +136,12 @@ def session_state(session_id):
     return path, state
 
 
-def drive_state(branch):
-    path = data_dir() / "drives" / f"{safe_name(branch_name(branch))}.json"
+def drive_state(branch, cwd="."):
+    where = repository(cwd)
+    key = safe_name(branch_name(branch))
+    if where:
+        key = hashlib.sha256(where.encode()).hexdigest()[:12] + "-" + key
+    path = data_dir() / "drives" / f"{key}.json"
     return path, load_json(path, {})
 
 
@@ -229,7 +234,7 @@ def tip(cwd, branch=None):
 def missing_signoffs(cwd, signoffs=READY_SIGNOFFS, branch=None):
     branch = branch or current_branch(cwd)
     at = tip(cwd, branch)
-    _, drive = drive_state(branch)
+    _, drive = drive_state(branch, cwd)
     return [name for key, name in signoffs if drive.get(key) != at]
 
 

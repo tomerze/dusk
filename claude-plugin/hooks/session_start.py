@@ -15,7 +15,7 @@ def main():
     branch = current_branch(cwd)
     lines = [PREAMBLE]
     if branch and branch not in ("master", "main"):
-        _, drive = drive_state(branch)
+        _, drive = drive_state(branch, cwd)
         if drive:
             parts = [f"Drive in flight on `{branch}`: phase {drive.get('phase', 'working')}"]
             if drive.get("issue"):

@@ -100,7 +100,7 @@ def main():
         return
     session_path, session = session_state(hook_input.get("session_id", ""))
     branch = session.get("handed") or branch
-    drive_path, drive = drive_state(branch)
+    drive_path, drive = drive_state(branch, cwd)
     problems = []
 
     pending = [title for title in drive.get("pending_questions", []) if not answered(decisions_path(cwd, branch), title)]

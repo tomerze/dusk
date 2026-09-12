@@ -9,7 +9,7 @@ HOOKS = Path(__file__).resolve().parent
 
 
 def run(script, hook_input):
-    env = dict(os.environ, CLAUDE_PLUGIN_DATA=str(DATA), PYTHONPATH=str(HOOKS))
+    env = dict(os.environ, DUSK_HARNESS_DATA=str(DATA), PYTHONPATH=str(HOOKS))
     completed = subprocess.run(
         [sys.executable, str(HOOKS / script)],
         input=json.dumps(hook_input),
@@ -70,7 +70,7 @@ def pushed_branches():
 
 def first_write():
     sys.path.insert(0, str(HOOKS))
-    os.environ["CLAUDE_PLUGIN_DATA"] = str(DATA)
+    os.environ["DUSK_HARNESS_DATA"] = str(DATA)
     import harness
 
     path = DATA / "sessions" / "fresh.json"
@@ -85,7 +85,7 @@ def first_write():
 
 def concurrent_write():
     sys.path.insert(0, str(HOOKS))
-    os.environ["CLAUDE_PLUGIN_DATA"] = str(DATA)
+    os.environ["DUSK_HARNESS_DATA"] = str(DATA)
     import harness
 
     path = DATA / "sessions" / "concurrent.json"

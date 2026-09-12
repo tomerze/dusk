@@ -72,7 +72,7 @@ def main():
     if not branch or branch in ("master", "main", "HEAD"):
         return
     session_path, session = session_state(hook_input.get("session_id", ""))
-    path, drive = drive_state(branch)
+    path, drive = drive_state(branch, cwd)
     changed = False
     if re.search(r"\bgit\s+(commit|push)\b", command) and not session.get("committed"):
         _, last = git(cwd, "reflog", "-1", "--format=%gs")

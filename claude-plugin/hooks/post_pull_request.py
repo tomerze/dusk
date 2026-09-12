@@ -12,8 +12,9 @@ def main():
     match = re.search(r'"number":\s*(\d+)', output)
     if not match:
         return
-    branch = current_branch(hook_input.get("cwd", "."))
-    path, drive = drive_state(branch)
+    cwd = hook_input.get("cwd", ".")
+    branch = current_branch(cwd)
+    path, drive = drive_state(branch, cwd)
     drive["pr"] = int(match.group(1))
     drive["phase"] = "opened"
     save_json(path, drive)

@@ -16,9 +16,10 @@ def main():
         args = tool_input.get("args") or ""
         number = re.search(r"\d+", args)
         session["drive"] = {"issue": int(number.group()) if number else None}
-        branch = current_branch(hook_input.get("cwd", "."))
+        cwd = hook_input.get("cwd", ".")
+        branch = current_branch(cwd)
         if branch and branch not in ("master", "main", "HEAD") and number:
-            path, drive = drive_state(branch)
+            path, drive = drive_state(branch, cwd)
             drive["issue"] = int(number.group())
             drive.setdefault("phase", "working")
             save_json(path, drive)
