@@ -37,7 +37,16 @@ if it asks for documented incompatibilities you owe a list.
 
 ## Step 2 — Enter a worktree and make it buildable
 
-Use the `EnterWorktree` tool. A fresh dusk worktree does not build until:
+Use the `EnterWorktree` tool, and rename the branch it cuts. `EnterWorktree(name=…)`
+puts the worktree at `.claude/worktrees/<name>` but names the branch
+`worktree-<name>`, so the two disagree from the start and the `<branch>` in every
+path below names nothing on disk:
+
+```
+git branch -m <name>
+```
+
+A fresh dusk worktree then does not build until:
 
 ```
 git submodule update --init vendor/capnproto        # else dusk_capnp's build.rs fails
