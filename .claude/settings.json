@@ -11,7 +11,7 @@
         "dusk": {
             "source": {
                 "source": "directory",
-                "path": "./claude-plugin"
+                "path": "./.agents/plugins/dusk-dev"
             }
         }
     },
@@ -20,6 +20,6 @@
     },
     "statusLine": {
         "type": "command",
-        "command": "python3 \"$CLAUDE_PROJECT_DIR/claude-plugin/hooks/statusline.py\""
+        "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/plugins/dusk-dev/hooks/statusline.py\""
     }
 }

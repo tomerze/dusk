@@ -180,8 +180,8 @@ without the decisions.
 
 Two things about that copy, both measured. The folder is named after the branch
 with any `worktree-` prefix stripped — `branch_name` in
-`claude-plugin/hooks/harness.py` — so it matches `<branch>` only once Step 2's
-rename has run; a session launched straight into a worktree, which Step 2 never
+`.agents/plugins/dusk-dev/hooks/harness.py` — so it matches `<branch>` only once
+Step 2's rename has run; a session launched straight into a worktree, which Step 2 never
 touched, has its folder under the stripped name. And the destination has to
 exist first: `/review/` is in `.gitignore`, so a checkout that has never been
 reviewed has no `review/` at all, and `cp -r <folder> <missing>/` then exits 0
