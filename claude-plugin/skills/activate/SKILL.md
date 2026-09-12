@@ -27,7 +27,13 @@ in, so from the first commit onward a turn ends one of exactly three ways:
   after it. It means the work is pushed, the pull request carries the tip, and
   there is something to read.
 - **A dilemma** opens with a **`DILEMMA:`** line, naming what is being decided,
-  and asks the one question that blocks the work, with a question mark.
+  and asks the one question that blocks the work, with a question mark. The
+  `dilemma-screen` agent reads it before the turn is allowed to end: a question
+  I could have decided and recorded comes straight back, because stopping the
+  session costs the user hours and the answer costs them one line in review.
+  What survives the screen is a question where proceeding on a guess would be
+  unsafe or would throw the work away. A decision `dilemma-triage` already
+  marked `ask-human` is never screened.
 - **An answer** replies to something the user asked, and ends with the line that
   says nothing else moved: **`Still ready for review.`** if a hand-off is
   standing, **`Still waiting for dilemma verdict.`** if a question is. The
