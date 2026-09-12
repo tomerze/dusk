@@ -45,8 +45,8 @@ To run a checkout's copy while changing it, start Claude Code with
 ## Three phases
 
 **Writing.** The rules above are checked as each action is taken, `dilemma-triage`
-judges each decision as it is made, and `comment-review` reads each commit as it
-lands.
+judges each decision as it is made, and `comment-review` reads each commit that
+adds a comment line as it lands.
 
 **Getting ready to review.** The `atomic-commit` agent splits the branch into the
 commits the work is. That is the one thing that gates the push, because a human
@@ -67,7 +67,7 @@ committed — it is copied into the pull request body, one heading per file:
 | file | written from |
 |---|---|
 | `decisions.md` | every decision, put to `dilemma-triage` as it is made, with its verdict on whether the human must be asked; `decision-ranker` heads the file with the ranking before the pull request, and the pull-request hook copies that into the body |
-| `comments.md` | `comment-review`, run on every commit as it lands; a comment that belongs in the commit message comes straight back to the session |
+| `comments.md` | `comment-review`, run as a commit lands if its diff adds a comment line; a comment that belongs in the commit message comes straight back to the session, and a commit that added none is recorded as not reviewed |
 | `terminology.md` | `terminology-review`, the words the branch introduces and the word the codebase already had |
 | `strings.md` | `string-review`, every user-facing string the branch adds or changes and where a person sees it |
 | `report.html` | rendered from the four, whenever one of them changes |

@@ -283,9 +283,11 @@ into the commits the work is, and the harness refuses the hand-off until it has
 signed off the tip. Pushing is not held up by it: push whenever, as often as you
 like, and split before you ask anyone to read it.
 
-**`dusk-dev:comment-review` has already run**, once per commit, dispatched by the
-harness the moment the commit landed, and anything it found was moved into the
-commit message then, not now.
+**`dusk-dev:comment-review` has already run** on every commit whose diff added a
+comment line, dispatched by the harness the moment the commit landed, and
+anything it found was moved into the commit message then, not now. A commit
+that added none was never sent to it, and `comments.md` says so rather than
+saying the reviewer found nothing.
 
 ## Push and open the PR over the MCP
 
