@@ -45,7 +45,8 @@ def stalling(cwd, message):
     answer = headless_agent("dilemma-screen", SCREEN_PROMPT.format(message=excerpt(message)), cwd)
     if answer is None or field(answer, "VERDICT") != "not-a-blocker":
         return None
-    return field(answer, "WHY") or "it is the kind of call the agent makes and records."
+    why = field(answer, "WHY") or "it is the kind of call the agent makes and records"
+    return why if why.endswith((".", "!", "?")) else why + "."
 
 
 def answered(path, title):
