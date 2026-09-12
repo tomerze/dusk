@@ -188,23 +188,37 @@ reviewed has no `review/` at all, and `cp -r <folder> <missing>/` then exits 0
 having copied the *contents* rather than the folder — the decisions land at
 `review/decisions.md` and `decision-ranker` still finds nothing.
 
-Two things get in the way of the removal itself, both checked on git 2.53.0:
+Three things get in the way of the removal itself, all checked on git 2.53.0:
 
 - `ExitWorktree` only removes a worktree that `EnterWorktree` made **in the same
   session**. A session launched straight into one gets a no-op.
+- **`ExitWorktree(action="remove")` refuses while the branch carries commits the
+  original branch does not**, which after a drive is every commit of the work:
+  *Worktree has N commits on worktree-<name>. Removing will discard this work
+  permanently.* It counts them against the branch `EnterWorktree` created, under
+  the name it created, even after Step 2's rename. `discard_changes: true` is
+  what gets past it, and it is safe **only once `origin/<branch>` carries the
+  tip** — check that first, and the local ref is then the only thing at stake:
+
+  ```
+  git rev-parse HEAD origin/<branch>        # the two must match
+  ExitWorktree(action="remove", discard_changes=true)
+  ```
+
+  A deleted local ref costs the user nothing either, because
+  `git checkout <branch>` recreates it from the remote when the name is
+  unambiguous.
 - Step 2 initialised `vendor/capnproto`, and `git worktree remove` refuses on a
   worktree holding a submodule — *working trees containing submodules cannot be
-  moved or removed*. `--force` is what gets past it.
+  moved or removed*. `--force` is what gets past that, if the removal is ever
+  done by hand from outside the worktree.
 
-So when the tool declines, remove it with git, from outside the worktree:
+**Do not reach for `git -C <the main checkout> worktree remove`.** A
+worktree-isolated session cannot run it: the harness refuses a git command that
+redirects to the shared checkout with `-C`, and says so rather than doing it.
+`ExitWorktree` is the only route from inside.
 
-```
-git -C ~/git/dusk worktree remove --force .claude/worktrees/<name>
-```
-
-That takes the directory and its `target` and leaves the branch, which is the
-half the user needs. The harness checks the worktree is gone before it accepts
-`Ready for review.`
+The harness checks the worktree is gone before it accepts `Ready for review.`
 
 Bring the worktree back when the drive resumes — review comments to answer, or
 `drive-issue continue`:
