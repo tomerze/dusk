@@ -28,6 +28,20 @@ def relative(path, cwd):
     return os.path.relpath(path, cwd) if os.path.isabs(path) else path
 
 
+def comment_lines(pattern, suffix, old, new):
+    old_lines = set(old.splitlines())
+    added, quoted = [], False
+    for line in new.splitlines():
+        if suffix == ".py":
+            was_quoted = quoted
+            quoted ^= bool((line.count('"""') + line.count("'''")) % 2)
+            if was_quoted:
+                continue
+        if re.match(pattern, line) and line not in old_lines:
+            added.append(line)
+    return added
+
+
 def main():
     hook_input = read_input()
     tool_input = hook_input.get("tool_input", {})
@@ -39,17 +53,17 @@ def main():
     else:
         old, new = "", tool_input.get("content", "")
 
+    rel = relative(path, cwd)
+
     pattern = COMMENT_LINE.get(suffix)
     if pattern:
-        old_lines = set(old.splitlines())
-        added = [line for line in new.splitlines() if re.match(pattern, line) and line not in old_lines]
+        added = comment_lines(pattern, suffix, old, new)
         if added:
             deny(
                 "I do not write comments (AGENTS.md). Say it in the reply and let the user decide "
                 f"whether it becomes one: {added[0].strip()!r}"
             )
 
-    rel = relative(path, cwd)
     session_path, session = session_state(hook_input.get("session_id", ""))
     loaded = set(session["loaded_skills"])
     if rel.startswith("base/") and suffix in PROGRAM_SUFFIXES and "authoring-a-program" not in loaded:
