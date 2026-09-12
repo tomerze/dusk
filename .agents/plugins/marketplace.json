@@ -1,0 +1,20 @@
+{
+    "name": "dusk",
+    "interface": {
+        "displayName": "Dusk"
+    },
+    "plugins": [
+        {
+            "name": "dusk-dev",
+            "source": {
+                "source": "local",
+                "path": "./.agents/plugins/dusk-dev"
+            },
+            "policy": {
+                "installation": "AVAILABLE",
+                "authentication": "ON_INSTALL"
+            },
+            "category": "Developer Tools"
+        }
+    ]
+}

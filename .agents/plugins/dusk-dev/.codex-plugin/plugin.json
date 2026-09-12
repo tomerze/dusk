@@ -1,0 +1,19 @@
+{
+    "name": "dusk-dev",
+    "version": "0.1.0",
+    "description": "The dusk development harness: the working agreements as hooks, the workflow as skills, the review as agents.",
+    "author": {
+        "name": "dusk"
+    },
+    "skills": "./skills/",
+    "interface": {
+        "displayName": "Dusk Dev",
+        "shortDescription": "The dusk repository's working agreements and the workflow that ships a change in it.",
+        "longDescription": "Load dusk-developer for the orientation map and the working agreements every change in the dusk repository is held to, activate for the sequence a change goes through on the branch that is checked out, and drive-issue for that sequence plus a GitHub issue. atomic-commit, splice, what, honest-to-god, authoring-a-program and adding-a-driver-method cover the rest of the work.",
+        "developerName": "dusk",
+        "category": "Developer Tools",
+        "defaultPrompt": [
+            "Read the dusk-developer skill and tell me what the working agreements say about comments."
+        ]
+    }
+}
