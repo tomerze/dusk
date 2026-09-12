@@ -23,7 +23,7 @@ To run a checkout's copy while changing it, start Claude Code with
 |---|---|
 | project instructions | the repository's root `AGENTS.md`, read by Claude Code and by Codex alike |
 | skills | `skills/` — `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
-| agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `decision-ranker` |
+| agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `dilemma-screen`, `decision-ranker` |
 | hooks | `hooks/` — one script per event; `python3 hooks/selftest.py` runs them against canned input |
 | status line | `hooks/statusline.py` — the session's state, wired from `.claude/settings.json` |
 
@@ -38,15 +38,17 @@ To run a checkout's copy while changing it, start Claude Code with
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
 - `git push` never targets master and requires every commit on the branch to pass the subject checks. It never waits for the split; the hand-off does.
 - A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
-- Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, opens with `WAITING ON SUBAGENTS:` while an agent it dispatched is still running, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
+- Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, opens with `WAITING ON SUBAGENTS:` while an agent it dispatched is still running, is a `/what` report, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
+- A marked dilemma is put to `dilemma-screen` before the turn is allowed to end, and comes back refused if the screen says the question does not block the work. A decision `dilemma-triage` already marked `ask-human` is not screened.
 - The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict.
 - A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.
+- `Ready for review.` goes out once per branch. After it, a fix is committed, pushed and said on the pull request, and the turn ends `Still ready for review.` — the branch is never handed over a second time, because the human is already reading it.
 
 ## Three phases
 
 **Writing.** The rules above are checked as each action is taken, `dilemma-triage`
-judges each decision as it is made, and `comment-review` reads each commit as it
-lands.
+judges each decision as it is made, and `comment-review` reads each commit that
+adds a comment line as it lands.
 
 **Getting ready to review.** The `atomic-commit` agent splits the branch into the
 commits the work is. That is the one thing that gates the push, because a human
@@ -67,7 +69,7 @@ committed — it is copied into the pull request body, one heading per file:
 | file | written from |
 |---|---|
 | `decisions.md` | every decision, put to `dilemma-triage` as it is made, with its verdict on whether the human must be asked; `decision-ranker` heads the file with the ranking before the pull request, and the pull-request hook copies that into the body |
-| `comments.md` | `comment-review`, run on every commit as it lands; a comment that belongs in the commit message comes straight back to the session |
+| `comments.md` | `comment-review`, run as a commit lands if its diff adds a comment line; a comment that belongs in the commit message comes straight back to the session, and a commit that added none is recorded as not reviewed |
 | `terminology.md` | `terminology-review`, the words the branch introduces and the word the codebase already had |
 | `strings.md` | `string-review`, every user-facing string the branch adds or changes and where a person sees it |
 | `report.html` | rendered from the four, whenever one of them changes |

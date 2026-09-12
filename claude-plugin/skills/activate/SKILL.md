@@ -27,7 +27,13 @@ in, so from the first commit onward a turn ends one of exactly three ways:
   after it. It means the work is pushed, the pull request carries the tip, and
   there is something to read.
 - **A dilemma** opens with a **`DILEMMA:`** line, naming what is being decided,
-  and asks the one question that blocks the work, with a question mark.
+  and asks the one question that blocks the work, with a question mark. The
+  `dilemma-screen` agent reads it before the turn is allowed to end: a question
+  I could have decided and recorded comes straight back, because stopping the
+  session costs the user hours and the answer costs them one line in review.
+  What survives the screen is a question where proceeding on a guess would be
+  unsafe or would throw the work away. A decision `dilemma-triage` already
+  marked `ask-human` is never screened.
 - **An answer** replies to something the user asked, and ends with the line that
   says nothing else moved: **`Still ready for review.`** if a hand-off is
   standing, **`Still waiting for dilemma verdict.`** if a question is. The
@@ -283,9 +289,11 @@ into the commits the work is, and the harness refuses the hand-off until it has
 signed off the tip. Pushing is not held up by it: push whenever, as often as you
 like, and split before you ask anyone to read it.
 
-**`dusk-dev:comment-review` has already run**, once per commit, dispatched by the
-harness the moment the commit landed, and anything it found was moved into the
-commit message then, not now.
+**`dusk-dev:comment-review` has already run** on every commit whose diff added a
+comment line, dispatched by the harness the moment the commit landed, and
+anything it found was moved into the commit message then, not now. A commit
+that added none was never sent to it, and `comments.md` says so rather than
+saying the reviewer found nothing.
 
 ## Push and open the PR over the MCP
 
@@ -396,6 +404,19 @@ it reads as a hand-off, it is not one, and the user has no way to tell which.
 The harness checks the line: it must be last, the worktree gone, the pull
 request open at the pushed tip with the decisions in its body. A message that
 claims it while any of that is false is sent back with the check that failed.
+
+**The hand-off goes out once per branch.** From the moment it does, the human is
+reading; nothing I do afterwards sends the branch to review again. A review
+finding, my own or an agent's, is fixed, committed, pushed and said on the pull
+request — and that turn ends `Still ready for review.`, because the hand-off it
+restates is the one that is already standing. There is no second
+`Ready for review.`, no second split to wait on, no second round of review
+agents. The harness refuses the line on a branch that has had it.
+
+This is the loop it exists to stop: the agents report, I fix, the fix changes
+the tip, every sign-off is stale again, the agents run again — and the human,
+who was ready to read an hour ago, is still waiting for a branch that will not
+sit still.
 
 **The hand-off is not the end of the session. It is the point where two reviews
 start at once** — see the next section.

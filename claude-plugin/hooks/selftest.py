@@ -9,7 +9,7 @@ HOOKS = Path(__file__).resolve().parent
 
 
 def run(script, hook_input):
-    env = dict(os.environ, DUSK_HARNESS_DATA=str(DATA), PYTHONPATH=str(HOOKS))
+    env = dict(os.environ, DUSK_HARNESS_DATA=str(DATA), PYTHONPATH=str(HOOKS), DUSK_NO_DILEMMA_SCREEN="1")
     completed = subprocess.run(
         [sys.executable, str(HOOKS / script)],
         input=json.dumps(hook_input),
