@@ -64,6 +64,16 @@
                         "timeout": 10
                     }
                 ]
+            },
+            {
+                "matcher": "Agent",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_agent.py\"",
+                        "timeout": 10
+                    }
+                ]
             }
         ],
         "PostToolUse": [

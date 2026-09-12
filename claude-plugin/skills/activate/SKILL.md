@@ -33,10 +33,18 @@ in, so from the first commit onward a turn ends one of exactly three ways:
   standing, **`Still waiting for dilemma verdict.`** if a question is. The
   answer comes first and the line is last, so the user reads what they asked for
   and then where that leaves things.
+- **A wait** opens with **`WAITING ON SUBAGENTS:`** and names the agents whose
+  answers the work needs. It is only for that: the harness refuses it unless an
+  agent this session dispatched is still running, and when they report the work
+  carries on rather than waiting again.
 
 Nothing else ends a turn, and the harness checks it on every turn once the
-session has committed or pushed. A status report that is none of the three
-leaves the user with nothing to do and no idea whether it is their move.
+session has committed or pushed. A status report that is none of the four leaves
+the user with nothing to do and no idea whether it is their move.
+
+The status line carries the same state, so it is visible without reading back:
+*working*, *waiting on <agents>*, *handed over, awaiting review*, or *awaiting a
+verdict*.
 
 **An answer does not change what is standing**, which is why it restates it
 rather than claiming it again. A hand-off stays standing until the work moves
@@ -475,7 +483,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
 ☐ Nothing personal written anywhere: no name, no email address, no home directory, no handle
-☐ Every turn since the first commit ended as a hand-off, a `DILEMMA:` question, or an answer restating what still stands
+☐ Every turn since the first commit ended as a hand-off, a `DILEMMA:` question, a `WAITING ON SUBAGENTS:` wait, or an answer restating what still stands
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ Hand-off sent **before** the review agents ran, not after
 ☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes

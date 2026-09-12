@@ -105,6 +105,23 @@ def identity():
     return done.stdout.strip() or str(Path.home().name)
 
 
+def waiting_session():
+    path = DATA / "sessions" / "waiting.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "agents": ["self-review", "race-screen"]}))
+    return "waiting"
+
+
+def session_field(name, key, value):
+    path = DATA / "sessions" / f"{name}.json"
+    found = json.loads(path.read_text()).get(key) if path.exists() else None
+    return (0 if found == value else 1, str(found), "")
+
+
+def statusline():
+    return run("statusline.py", {"session_id": waiting_session()})
+
+
 def handed_session(branch):
     path = DATA / "sessions" / "handed.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,6 +196,11 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a Ready line that is not last is blocked", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Ready for review.\n\nAlso this."}), 2, "last line"),
         expect("a turn after a commit must hand over or ask", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "Here is where things stand."}), 2, "DILEMMA"),
         expect("an unmarked question after a commit is blocked", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "Which of the two should it be?"}), 2, "DILEMMA"),
+        expect("a wait with no agent running is blocked", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "WAITING ON SUBAGENTS: self-review"}), 2, "None is"),
+        expect("a wait while an agent runs passes", run("stop.py", {"session_id": waiting_session(), "cwd": str(REPO), "last_assistant_message": "WAITING ON SUBAGENTS: self-review, race-screen"}), 0),
+        expect("dispatching an agent records it", run("pre_agent.py", {"session_id": "dispatch", "cwd": str(REPO), "tool_input": {"subagent_type": "dusk-dev:self-review"}}), 0),
+        expect("the agent landed in the session", session_field("dispatch", "agents", ["self-review"]), 0),
+        expect("the status line names the state", statusline(), 0, "waiting on self-review"),
         expect("an answer with nothing standing is blocked", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 2, "None did"),
         expect("an answer restating the standing hand-off passes", run("stop.py", {"session_id": standing_session("ready"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 0),
         expect("the wrong standing line is blocked", run("stop.py", {"session_id": standing_session("dilemma"), "cwd": str(REPO), "last_assistant_message": "It reads the reflog.\n\nStill ready for review."}), 2, "what stands is the dilemma"),

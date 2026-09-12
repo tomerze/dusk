@@ -1,7 +1,11 @@
 {
     "spinnerVerbs": {
         "mode": "replace",
-        "verbs": ["Twilighting", "Nightfalling", "Dusking"]
+        "verbs": [
+            "Twilighting",
+            "Nightfalling",
+            "Dusking"
+        ]
     },
     "extraKnownMarketplaces": {
         "dusk": {
@@ -13,5 +17,9 @@
     },
     "enabledPlugins": {
         "dusk-dev@dusk": true
+    },
+    "statusLine": {
+        "type": "command",
+        "command": "python3 \"$CLAUDE_PROJECT_DIR/claude-plugin/hooks/statusline.py\""
     }
 }

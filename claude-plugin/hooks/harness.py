@@ -17,6 +17,7 @@ CONVENTIONAL_PREFIX = re.compile(
 ISSUE_IN_SUBJECT = re.compile(r"\(#\d+\)")
 READY_LINE = "Ready for review."
 DILEMMA_LINE = "DILEMMA:"
+WAITING_LINE = "WAITING ON SUBAGENTS:"
 STANDING_LINE = {
     "ready": "Still ready for review.",
     "dilemma": "Still waiting for dilemma verdict.",
@@ -126,7 +127,7 @@ def branch_name(branch):
 
 def session_state(session_id):
     path = data_dir() / "sessions" / f"{safe_name(session_id)}.json"
-    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False, "committed": False, "standing": None, "handed": None}
+    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False, "committed": False, "standing": None, "handed": None, "agents": []}
     state = load_json(path, default)
     for key, value in default.items():
         state.setdefault(key, value)

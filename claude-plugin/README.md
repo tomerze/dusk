@@ -25,6 +25,7 @@ To run a checkout's copy while changing it, start Claude Code with
 | skills | `skills/` — `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
 | agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `decision-ranker` |
 | hooks | `hooks/` — one script per event; `python3 hooks/selftest.py` runs them against canned input |
+| status line | `hooks/statusline.py` — the session's state, wired from `.claude/settings.json` |
 
 ## What the hooks enforce
 
@@ -37,7 +38,8 @@ To run a checkout's copy while changing it, start Claude Code with
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
 - `git push` never targets master and requires every commit on the branch to pass the subject checks. It never waits for the split; the hand-off does.
 - A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
-- Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
+- Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, opens with `WAITING ON SUBAGENTS:` while an agent it dispatched is still running, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
+- The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict.
 - A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.
 
 ## Three phases

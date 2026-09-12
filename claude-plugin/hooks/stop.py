@@ -5,6 +5,7 @@ from harness import (
     DILEMMA_LINE,
     READY_LINE,
     STANDING_LINE,
+    WAITING_LINE,
     READY_SIGNOFFS,
     REVIEW_SIGNOFFS,
     block,
@@ -33,6 +34,12 @@ def answered(path, title):
 
 READY_ALONE = re.compile(rf"^[ \t]*{re.escape(READY_LINE)}[ \t]*$", re.M)
 DILEMMA_MARK = re.compile(rf"^[ \t]*\**{re.escape(DILEMMA_LINE)}", re.M)
+WAITING_MARK = re.compile(rf"^[ \t]*\**{re.escape(WAITING_LINE)}", re.M)
+
+
+def waits_on_agents(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    return bool(lines) and bool(WAITING_MARK.match(lines[0]))
 
 
 def restates_standing(message):
@@ -116,14 +123,21 @@ def main():
             session["standing"] = "ready"
     elif marks_dilemma(message):
         session["standing"] = "dilemma"
+    elif waits_on_agents(message):
+        if not session.get("agents"):
+            problems.append(
+                f"`{WAITING_LINE}` says an agent this session dispatched is still running. None is. "
+                "Carry on with the work, or end the turn the way its state actually is."
+            )
     elif session.get("committed") or drive.get("phase") in ("pushed", "opened"):
         restated = restates_standing(message)
         if restated is None:
             problems.append(
                 f"This session has changed the history, so the turn is marked. It ends with "
                 f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
-                f"`{DILEMMA_LINE}` line and asks the one question that blocks the work, or it "
-                f"answers what the user asked and ends with the line that says nothing else moved: "
+                f"`{DILEMMA_LINE}` line and asks the one question that blocks the work, or with "
+                f"`{WAITING_LINE}` naming the agents it is waiting on, or it answers what the user "
+                f"asked and ends with the line that says nothing else moved: "
                 f"`{STANDING_LINE['ready']}` or `{STANDING_LINE['dilemma']}`."
             )
         elif standing is None:

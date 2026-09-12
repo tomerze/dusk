@@ -5,6 +5,7 @@ from harness import (
     session_state,
     amend,
     holding,
+    session_state,
     replace_text,
     agent_type,
     block,
@@ -27,6 +28,18 @@ def raised(drive, values):
     if values["VERDICT"] == "ask-human":
         drive.setdefault("pending_questions", []).append(values["DECISION"])
     drive.pop("ranked_sha", None)
+
+
+def stopped(session, name):
+    waiting = session.get("agents") or []
+    if name in waiting:
+        waiting.remove(name)
+    session["agents"] = waiting
+
+
+def finished(hook_input):
+    session_path, _ = session_state(hook_input.get("session_id", ""))
+    amend(session_path, lambda session: stopped(session, agent_type(hook_input)))
 
 
 def reviewed(cwd, hook_input):
@@ -181,6 +194,7 @@ HANDLERS = {
 
 def main():
     hook_input = read_input()
+    finished(hook_input)
     handler = HANDLERS.get(agent_type(hook_input))
     if handler:
         handler(hook_input.get("cwd", "."), hook_input.get("last_assistant_message") or "", hook_input)
