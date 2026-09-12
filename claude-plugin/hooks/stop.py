@@ -34,8 +34,15 @@ SCREEN_PROMPT = (
 )
 
 
+def excerpt(message):
+    if len(message) <= DILEMMA_EXCERPT:
+        return message
+    half = DILEMMA_EXCERPT // 2
+    return message[:half] + "\n\n[…cut…]\n\n" + message[-half:]
+
+
 def stalling(cwd, message):
-    answer = headless_agent("dilemma-screen", SCREEN_PROMPT.format(message=message[:DILEMMA_EXCERPT]), cwd)
+    answer = headless_agent("dilemma-screen", SCREEN_PROMPT.format(message=excerpt(message)), cwd)
     if answer is None or field(answer, "VERDICT") != "not-a-blocker":
         return None
     return field(answer, "WHY") or "it is the kind of call the agent makes and records."
