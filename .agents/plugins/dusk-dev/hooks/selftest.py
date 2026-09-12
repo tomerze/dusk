@@ -160,6 +160,18 @@ def review_file(name, text, present=True):
     return (0 if found == present else 1, "", "")
 
 
+def handed_review(name, message, branch):
+    path = DATA / "sessions" / "handed-review.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "handed": branch}))
+    return {"session_id": "handed-review", "cwd": str(REPO), "agent_type": f"dusk-dev:{name}", "last_assistant_message": message}
+
+
+def branch_review_file(branch, name, text):
+    path = REPO / "review" / branch / name
+    return (0 if path.exists() and text in path.read_text() else 1, str(path), "")
+
+
 with tempfile.TemporaryDirectory() as temp:
     DATA = Path(temp) / "data"
     REPO = Path(temp) / "repo"
@@ -233,6 +245,8 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a string review is recorded", run("subagent_stop.py", agent("string-review", '- I looked at every crate\n- src/b.rs:7 — "no such pid" — kill prints it\nSTRINGS: found')), 0),
         expect("the narration was dropped", review_file("strings.md", "- I looked", present=False), 0),
         expect("the string landed in the file", review_file("strings.md", '"no such pid"'), 0),
+        expect("a review follows the pushed branch, not the checkout's", run("subagent_stop.py", handed_review("string-review", '- src/a.rs:1 — "gone" — a prompt\n**STRINGS: found**', "pushed-branch")), 0),
+        expect("the review landed under the pushed branch", branch_review_file("pushed-branch", "strings.md", '"gone"'), 0),
         expect("the report links a location to vscode", review_file("report.html", 'data-file="src/a.rs" data-line="12"'), 0),
         expect("a slow writer does not lose a fast one's field", concurrent_write(), 0),
         expect("a first write keeps the keys it did not touch", first_write(), 0),

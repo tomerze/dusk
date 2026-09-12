@@ -54,8 +54,8 @@ def record(cwd, key, branch=None):
     save_json(path, drive)
 
 
-def clear(cwd, key):
-    branch = current_branch(cwd)
+def clear(cwd, key, branch=None):
+    branch = branch or current_branch(cwd)
     path, drive = drive_state(branch, cwd)
     drive.pop(key, None)
     save_json(path, drive)
@@ -74,7 +74,7 @@ def atomic_commit(cwd, message, hook_input):
     problems = lint_branch(cwd)
     if problems:
         block("Commits that do not pass: " + "; ".join(problems))
-    record(cwd, "split_sha")
+    record(cwd, "split_sha", reviewed(cwd, hook_input))
     git(cwd, "tag", "-d", "harness-snapshot")
 
 
@@ -85,7 +85,7 @@ def self_review(cwd, message, hook_input):
     if verdict == "pass":
         record(cwd, "reviewed_sha", reviewed(cwd, hook_input))
     else:
-        clear(cwd, "reviewed_sha")
+        clear(cwd, "reviewed_sha", reviewed(cwd, hook_input))
 
 
 def race_screen(cwd, message, hook_input):
@@ -98,7 +98,7 @@ def race_screen(cwd, message, hook_input):
     if race == "none" or races == "none":
         record(cwd, "race_sha", reviewed(cwd, hook_input))
     else:
-        clear(cwd, "race_sha")
+        clear(cwd, "race_sha", reviewed(cwd, hook_input))
 
 
 def race_inspector(cwd, message, hook_input):
@@ -119,7 +119,7 @@ def dilemma_triage(cwd, message, hook_input):
         block("Answer in the six lines DECISION, DECIDED, ALTERNATIVES, REVERSAL, VERDICT, WHY; missing: " + ", ".join(missing))
     if values["VERDICT"] not in ("decide-alone", "ask-human"):
         block("VERDICT is `decide-alone` or `ask-human`.")
-    branch = current_branch(cwd)
+    branch = reviewed(cwd, hook_input)
     path = decisions_path(cwd, branch)
     path.parent.mkdir(parents=True, exist_ok=True)
     with holding(path):
@@ -142,7 +142,7 @@ def decision_ranker(cwd, message, hook_input):
     match = re.search(r"^RANKED:\s*\n((?:\s*\d+\..*\n?)+)", message or "", re.M)
     if not match:
         block("End with `RANKED:` followed by one numbered line per decision: `1. <title> — attention: high|medium|low — <why>`.")
-    branch = current_branch(cwd)
+    branch = reviewed(cwd, hook_input)
     path = decisions_path(cwd, branch)
     if not path.exists():
         block(f"{path} does not exist; nothing to rank.")
@@ -152,11 +152,10 @@ def decision_ranker(cwd, message, hook_input):
         ranked = "\n## Ranked\n\n" + match.group(1).strip() + "\n"
         replace_text(path, text[:heading_end] + ranked + text[heading_end:])
     report.render(cwd, branch)
-    record(cwd, "ranked_sha", reviewed(cwd, hook_input))
+    record(cwd, "ranked_sha", branch)
 
 
-def write_review(cwd, name, title, message):
-    branch = current_branch(cwd)
+def write_review(cwd, name, title, message, branch):
     directory = review_dir(cwd, branch)
     directory.mkdir(parents=True, exist_ok=True)
     lines = findings(message)
@@ -168,15 +167,17 @@ def write_review(cwd, name, title, message):
 def terminology_review(cwd, message, hook_input):
     if field(message, "TERMS") not in ("none", "found"):
         block("End with `TERMS: none` or `TERMS: found`; each term as `- <term> — <file>:<line> — <what it names> — <the word the codebase already has for it, or none>`.")
-    write_review(cwd, "terminology.md", "Terminology introduced on", message)
-    record(cwd, "terminology_sha", reviewed(cwd, hook_input))
+    branch = reviewed(cwd, hook_input)
+    write_review(cwd, "terminology.md", "Terminology introduced on", message, branch)
+    record(cwd, "terminology_sha", branch)
 
 
 def string_review(cwd, message, hook_input):
     if field(message, "STRINGS") not in ("none", "found"):
         block("End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> — \"<string>\" — <where a person sees it>`.")
-    write_review(cwd, "strings.md", "User-facing strings introduced on", message)
-    record(cwd, "strings_sha", reviewed(cwd, hook_input))
+    branch = reviewed(cwd, hook_input)
+    write_review(cwd, "strings.md", "User-facing strings introduced on", message, branch)
+    record(cwd, "strings_sha", branch)
 
 
 HANDLERS = {
