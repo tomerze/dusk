@@ -2,7 +2,7 @@ import os
 import re
 from pathlib import Path
 
-from harness import deny, haiku, read_input, repository, save_json, session_state
+from harness import deny, haiku, personal, read_input, repository, save_json, session_state
 
 COMMENT_LINE = {
     ".rs": r"^\s*//",
@@ -62,6 +62,17 @@ def main():
     rel = relative(path, cwd)
     if rel.startswith("..") and not same_repository(path, cwd):
         return
+
+    written = new if not old else "\n".join(
+        line for line in new.splitlines() if line not in set(old.splitlines())
+    )
+    named = sorted(value for value in personal(cwd) if value in written)
+    if named:
+        deny(
+            "Nothing personal goes in this repository: no name, no email address, no home "
+            f"directory, no account handle. This edit writes {named[0]!r}. Say it in the reply if "
+            "the user needs to read it, and write the file without it."
+        )
 
     pattern = COMMENT_LINE.get(suffix)
     if pattern:

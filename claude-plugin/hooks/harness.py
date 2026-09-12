@@ -105,6 +105,16 @@ def safe_name(name):
     return re.sub(r"[^A-Za-z0-9._-]", "_", name or "detached")
 
 
+def personal(cwd):
+    strings = {Path.home().name, str(Path.home())}
+    for setting in ("user.name", "user.email"):
+        code, value = git(cwd, "config", "--get", setting)
+        if code == 0 and value:
+            strings.add(value)
+            strings.update(value.split("@")[0].split())
+    return {value for value in strings if len(value) > 2}
+
+
 def repository(cwd):
     code, common = git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
     return common if code == 0 else ""

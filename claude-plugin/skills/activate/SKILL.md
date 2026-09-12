@@ -44,11 +44,31 @@ past it; a question stays standing until the user answers it. Getting the line
 wrong is worse than leaving it out: it tells the user the ball is in the other
 court.
 
+## Nothing personal goes in the repository
+
+**No name, no email address, no home directory path, no account handle — not in
+code, not in a comment, not in a commit message, not in a manifest, not in a
+skill, not in a pull request.** The repository is public and permanent; a person
+who has to be named there cannot take it back. This holds for the user, for
+anyone they work with, and for me.
+
+Where one is unavoidable, it is derived at run time and never written down: the
+repository's owner comes from `git remote get-url origin`, the author of a
+commit comes from git's own configuration, and a path comes from `$HOME` or `~`.
+If something genuinely needs a person's name in it, I say so in the reply and let
+the user write it.
+
+The pre-edit hook enforces this against the git user's own name and address and
+their home directory, read fresh each time, so nothing personal is stored in the
+harness either.
+
 ## What is in force
 
 The hooks check the working agreements as each action is taken:
 
 - No comment line is written by me, in any file.
+- Nothing personal is written anywhere: no name, no email address, no home
+  directory, no account handle.
 - A commit subject has no conventional-commit prefix, does not start with Say,
   and carries no issue number; no message carries a watermark trailer.
 - `git commit` runs in the foreground with `timeout: 600000`; nothing is staged
@@ -281,7 +301,7 @@ whole environment, not just the numbers.
 
 ```
 git push -u origin <branch>
-mcp__github__create_pull_request(owner="tomerze", repo="dusk", head=…, base="master", title=…, body=…)
+mcp__github__create_pull_request(owner=…, repo=…, head=…, base="master", title=…, body=…)
 ```
 
 `gh` 2.46.0 is installed on this machine and the MCP works too; either opens
@@ -331,7 +351,7 @@ the user cannot check it out to review it.
 handing it over:
 
 ```
-mcp__github__pull_request_read(method="get", owner="tomerze", repo="dusk", pullNumber=N)
+mcp__github__pull_request_read(method="get", owner=…, repo=…, pullNumber=N)
 ```
 
 `merged: true` means the review is over. Anything pushed to that branch after the
@@ -418,7 +438,7 @@ hand-off has already gone out.
 ## Merge on explicit approval
 
 ```
-mcp__github__merge_pull_request(owner="tomerze", repo="dusk", pullNumber=…, merge_method=…)
+mcp__github__merge_pull_request(owner=…, repo=…, pullNumber=…, merge_method=…)
 ```
 
 Ask which merge method if it is not obvious from the repository's history.
@@ -450,6 +470,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ Anything found later: another commit on the same branch, body updated — never a second PR
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
+☐ Nothing personal written anywhere: no name, no email address, no home directory, no handle
 ☐ Every turn since the first commit ended as a hand-off, a `DILEMMA:` question, or an answer restating what still stands
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ Hand-off sent **before** the review agents ran, not after

@@ -22,9 +22,13 @@ assumes its rules are in force, and none of them is repeated here.
 
 ## Step 1 — Read the issue over the MCP
 
+The repository is whatever `origin` points at — read it rather than assuming,
+and use that `owner` and `repo` in every call below:
+
 ```
-mcp__github__issue_read(method="get",          owner="tomerze", repo="dusk", issue_number=N)
-mcp__github__issue_read(method="get_comments", owner="tomerze", repo="dusk", issue_number=N)
+git remote get-url origin
+mcp__github__issue_read(method="get",          owner=…, repo=…, issue_number=N)
+mcp__github__issue_read(method="get_comments", owner=…, repo=…, issue_number=N)
 ```
 
 Write its definition of done out as a checklist. Every bullet is something the

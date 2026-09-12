@@ -132,7 +132,7 @@ that left go with it.
 (classic). Retarget and retitle over REST instead:
 
 ```bash
-gh api -X PATCH repos/tomerze/dusk/pulls/<N> \
+gh api -X PATCH repos/<owner>/<repo>/pulls/<N> \
   -f base=<branch> -f title="<title>" -F body=@<file>
 ```
 

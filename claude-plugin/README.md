@@ -29,6 +29,7 @@ To run a checkout's copy while changing it, start Claude Code with
 ## What the hooks enforce
 
 - No comment line is added to a `.rs`, `.capnp`, `.py`, `.toml`, `.c` or `.h` file.
+- Nothing personal is written into any file: the git user's name, their email address and their home directory are refused, read fresh each time so the harness stores none of them.
 - A commit subject has no conventional-commit prefix, does not start with Say, carries no issue number, and no message carries a watermark trailer.
 - `git commit` runs in the foreground with a 600000 ms timeout; nothing is staged with `git add -A` or `git add .` except the atomic-commit snapshot.
 - No polling loop over a command's output; no `cp` of a `target` directory; no bare `git stash`.

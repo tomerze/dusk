@@ -1,9 +1,9 @@
 {
     "name": "dusk",
-    "description": "The dusk repository's own Claude Code plugins.",
     "owner": {
-        "name": "Tomer Zeitune"
+        "name": "dusk"
     },
+    "description": "The dusk repository's own Claude Code plugins.",
     "plugins": [
         {
             "name": "dusk-dev",
