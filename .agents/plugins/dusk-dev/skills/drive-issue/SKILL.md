@@ -159,8 +159,8 @@ branch at a time, so for as long as yours is checked out on it the user cannot
 check it out to review it: `git checkout <branch>` in their own checkout fails,
 and the first they hear of the reason is the error. Everything is pushed by this
 point, so the worktree holds nothing the remote does not — except its review
-folder and its build directory, which come out first so the decisions survive
-and the next session starts warm:
+folder and its build directory: the folder is copied out so the decisions
+survive, the build directory parked so the next session starts warm:
 
 ```
 mkdir -p ../../../review/<branch>
@@ -169,7 +169,7 @@ mv target ~/.cache/dusk-target/<branch>
 ExitWorktree(action="remove")
 ```
 
-**Carry the review folder out first.** The hooks write it to
+**Copy the review folder out first.** The hooks write it to
 `<cwd>/review/<branch>/`, so a drive run in a worktree keeps it inside the
 worktree and `ExitWorktree` takes it along with everything else. The reviewer
 loses nothing directly — the decisions are already in the pull request body —
