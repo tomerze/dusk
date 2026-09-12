@@ -23,6 +23,37 @@ MUTATING = re.compile(
 )
 
 
+INTERPRETER = re.compile(r"(ba|z|k|da)?sh|python3?|perl|ruby|node|deno|awk|xargs|env")
+
+
+def interpreter(word):
+    return bool(INTERPRETER.fullmatch(word.rsplit("/", 1)[-1]))
+
+
+def fed_to_interpreter(line):
+    segments = line.split("|")
+    for index, segment in enumerate(segments):
+        if "<<" not in segment:
+            continue
+        for candidate in [segment] + segments[index + 1:]:
+            words = candidate.split()
+            if words and interpreter(words[0]):
+                return True
+        return False
+    return False
+
+
+def without_heredocs(command):
+    def strip(match):
+        start = command.rfind("\n", 0, match.start()) + 1
+        end = command.find("\n", match.start())
+        if fed_to_interpreter(command[start:end if end != -1 else len(command)]):
+            return match.group(0)
+        return match.group(1)
+
+    return re.sub(r"(<<-?\s*'?(\w+)'?\s*\n).*?\n\2\b", strip, command, flags=re.S)
+
+
 def commit_messages(command):
     messages = []
     for match in re.finditer(r"""(?:^|\s)(?:-m|--message)(?:=|\s+)("((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""", command):
@@ -73,11 +104,12 @@ def main():
     command = tool_input.get("command", "")
     cwd = hook_input.get("cwd", ".")
     agent = agent_type(hook_input)
+    code = without_heredocs(command)
 
     def has(pattern):
-        return re.search(pattern, command) is not None
+        return re.search(pattern, code) is not None
 
-    if agent in READ_ONLY_AGENTS and MUTATING.search(command):
+    if agent in READ_ONLY_AGENTS and MUTATING.search(code):
         deny(f"The {agent} agent reads; it does not change the tree or the history.")
     if has(r"\b(until|while)\b[^\n]*\bsleep\b") or has(r"\bsleep\s+\d+[^\n]*\b(grep|tail|cat|test|ls)\b"):
         deny("Never poll for a command you started: the harness re-invokes you when a background command exits (AGENTS.md, Never poll for a command I started).")
@@ -87,7 +119,8 @@ def main():
         deny("No bare git stash and no stash pop: the stash stack is shared with every worktree. Use git stash push -u -m <tag>, restore with git stash apply <sha>, then drop it by tag.")
     if has(r"\bcargo\s+(test|nextest)\b"):
         ask("Tests run only when the user asked for them (AGENTS.md, Don't write or run tests unless told). Did they ask?")
-    if has(r"\bgit\s+add\b[^\n;&|]*(\s-A\b|\s--all\b|\s\.(?=\s|$))") and "snapshot" not in command:
+    snapshot = has(r"\bgit\s+commit\b") and any("snapshot" in message.lower() for message in commit_messages(command))
+    if has(r"\bgit\s+add\b[^\n;&|]*(\s-A\b|\s--all\b|\s\.(?=\s|$))") and not snapshot:
         deny("Stage named paths, never git add -A or git add . — only the atomic-commit snapshot is taken that way.")
     if has(r"\bgit\s+commit\b"):
         timeout = tool_input.get("timeout") or 120000
