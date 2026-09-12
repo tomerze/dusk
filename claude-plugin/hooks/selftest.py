@@ -54,6 +54,20 @@ def concurrent_list():
     return (0 if after.get("agents") == ["b", "c"] else 1, str(after), "")
 
 
+def pushed_branches():
+    sys.path.insert(0, str(HOOKS))
+    import post_bash
+
+    cases = {
+        "git push -u origin topic": "topic",
+        "git push -q --force-with-lease origin claude-plugin": "claude-plugin",
+        "git push origin HEAD:main": "main",
+        "git push": None,
+    }
+    wrong = {c: post_bash.pushed_branch(c) for c, want in cases.items() if post_bash.pushed_branch(c) != want}
+    return (0 if not wrong else 1, str(wrong), "")
+
+
 def first_write():
     sys.path.insert(0, str(HOOKS))
     os.environ["CLAUDE_PLUGIN_DATA"] = str(DATA)
@@ -89,6 +103,13 @@ def concurrent_write():
 def identity():
     done = subprocess.run(["git", "config", "--get", "user.name"], capture_output=True, text=True, check=False)
     return done.stdout.strip() or str(Path.home().name)
+
+
+def handed_session(branch):
+    path = DATA / "sessions" / "handed.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "handed": branch, "loaded_skills": ["activate"]}))
+    return "handed"
 
 
 def standing_session(state):
@@ -154,6 +175,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a file in another worktree of the repository is not", run("pre_edit.py", edit(str(REPO / "src/lib.rs"), "let a = 1;", "// note\nlet a = 1;")), 2, "do not write comments"),
         expect("a markdown edit is free", run("pre_edit.py", edit(str(REPO / "docs/x.md"), "a", "# b")), 0),
         expect("a stop with nothing pending passes", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Done."}), 0),
+        expect("the hand-off is checked against the branch that was pushed", run("stop.py", {"session_id": handed_session("other-branch"), "cwd": str(REPO), "last_assistant_message": "Ready for review."}), 2, "other-branch"),
         expect("a Ready line that is not last is blocked", run("stop.py", {"session_id": "selftest", "cwd": str(REPO), "last_assistant_message": "Ready for review.\n\nAlso this."}), 2, "last line"),
         expect("a turn after a commit must hand over or ask", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "Here is where things stand."}), 2, "DILEMMA"),
         expect("an unmarked question after a commit is blocked", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "Which of the two should it be?"}), 2, "DILEMMA"),
@@ -180,6 +202,7 @@ with tempfile.TemporaryDirectory() as temp:
         expect("the report links a location to vscode", review_file("report.html", 'data-file="src/a.rs" data-line="12"'), 0),
         expect("a slow writer does not lose a fast one's field", concurrent_write(), 0),
         expect("a first write keeps the keys it did not touch", first_write(), 0),
+        expect("a push names the branch it pushed, not the checkout's", pushed_branches(), 0),
         expect("two writers of one list keep both changes", concurrent_list(), 0),
         expect("the report carries every section", review_file("report.html", "User-facing strings introduced"), 0),
     ]

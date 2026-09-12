@@ -2,6 +2,7 @@ import re
 
 import report
 from harness import (
+    session_state,
     amend,
     holding,
     replace_text,
@@ -14,7 +15,7 @@ from harness import (
     field,
     findings,
     git,
-    head,
+    tip,
     lint_branch,
     read_input,
     review_dir,
@@ -28,10 +29,15 @@ def raised(drive, values):
     drive.pop("ranked_sha", None)
 
 
-def record(cwd, key):
-    branch = current_branch(cwd)
+def reviewed(cwd, hook_input):
+    _, session = session_state(hook_input.get("session_id", ""))
+    return session.get("handed") or current_branch(cwd)
+
+
+def record(cwd, key, branch=None):
+    branch = branch or current_branch(cwd)
     path, drive = drive_state(branch)
-    drive[key] = head(cwd)
+    drive[key] = tip(cwd, branch)
     save_json(path, drive)
 
 
@@ -42,7 +48,7 @@ def clear(cwd, key):
     save_json(path, drive)
 
 
-def atomic_commit(cwd, message):
+def atomic_commit(cwd, message, hook_input):
     code, snapshot = git(cwd, "rev-parse", "-q", "--verify", "harness-snapshot")
     if code != 0:
         block("Tag the final tree before splitting: git tag -f harness-snapshot HEAD. The tag is the proof the split lost nothing.")
@@ -59,17 +65,17 @@ def atomic_commit(cwd, message):
     git(cwd, "tag", "-d", "harness-snapshot")
 
 
-def self_review(cwd, message):
+def self_review(cwd, message, hook_input):
     verdict = field(message, "VERDICT")
     if verdict not in ("pass", "findings"):
         block("End the review with `VERDICT: pass` or `VERDICT: findings`, after the findings in the three-line form.")
     if verdict == "pass":
-        record(cwd, "reviewed_sha")
+        record(cwd, "reviewed_sha", reviewed(cwd, hook_input))
     else:
         clear(cwd, "reviewed_sha")
 
 
-def race_screen(cwd, message):
+def race_screen(cwd, message, hook_input):
     race = field(message, "RACE")
     if race not in ("none", "possible"):
         block("End with `RACE: none` or `RACE: possible`; when possible, dispatch the race-inspector agent and relay its `RACES:` line.")
@@ -77,22 +83,22 @@ def race_screen(cwd, message):
     if race == "possible" and races not in ("none", "found"):
         block("A possible race needs the race-inspector agent's verdict: relay its `RACES: none` or `RACES: found` line.")
     if race == "none" or races == "none":
-        record(cwd, "race_sha")
+        record(cwd, "race_sha", reviewed(cwd, hook_input))
     else:
         clear(cwd, "race_sha")
 
 
-def race_inspector(cwd, message):
+def race_inspector(cwd, message, hook_input):
     if field(message, "RACES") not in ("none", "found"):
         block("End with `RACES: none` or `RACES: found`, each race written as interleaving, state, consequence, fix.")
 
 
-def comment_review(cwd, message):
+def comment_review(cwd, message, hook_input):
     if field(message, "COMMENTS") not in ("none", "found"):
         block("End with `COMMENTS: none` or `COMMENTS: found`; each finding as `- <file>:<line> — <the comment> — <why it belongs in the commit message>`.")
 
 
-def dilemma_triage(cwd, message):
+def dilemma_triage(cwd, message, hook_input):
     names = ("DECISION", "DECIDED", "ALTERNATIVES", "REVERSAL", "VERDICT", "WHY")
     values = {name: field(message, name) for name in names}
     missing = [name for name, value in values.items() if not value]
@@ -119,7 +125,7 @@ def dilemma_triage(cwd, message):
     report.render(cwd, branch)
 
 
-def decision_ranker(cwd, message):
+def decision_ranker(cwd, message, hook_input):
     match = re.search(r"^RANKED:\s*\n((?:\s*\d+\..*\n?)+)", message or "", re.M)
     if not match:
         block("End with `RANKED:` followed by one numbered line per decision: `1. <title> — attention: high|medium|low — <why>`.")
@@ -133,7 +139,7 @@ def decision_ranker(cwd, message):
         ranked = "\n## Ranked\n\n" + match.group(1).strip() + "\n"
         replace_text(path, text[:heading_end] + ranked + text[heading_end:])
     report.render(cwd, branch)
-    record(cwd, "ranked_sha")
+    record(cwd, "ranked_sha", reviewed(cwd, hook_input))
 
 
 def write_review(cwd, name, title, message):
@@ -146,18 +152,18 @@ def write_review(cwd, name, title, message):
     report.render(cwd, branch)
 
 
-def terminology_review(cwd, message):
+def terminology_review(cwd, message, hook_input):
     if field(message, "TERMS") not in ("none", "found"):
         block("End with `TERMS: none` or `TERMS: found`; each term as `- <term> — <file>:<line> — <what it names> — <the word the codebase already has for it, or none>`.")
     write_review(cwd, "terminology.md", "Terminology introduced on", message)
-    record(cwd, "terminology_sha")
+    record(cwd, "terminology_sha", reviewed(cwd, hook_input))
 
 
-def string_review(cwd, message):
+def string_review(cwd, message, hook_input):
     if field(message, "STRINGS") not in ("none", "found"):
         block("End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> — \"<string>\" — <where a person sees it>`.")
     write_review(cwd, "strings.md", "User-facing strings introduced on", message)
-    record(cwd, "strings_sha")
+    record(cwd, "strings_sha", reviewed(cwd, hook_input))
 
 
 HANDLERS = {
@@ -177,7 +183,7 @@ def main():
     hook_input = read_input()
     handler = HANDLERS.get(agent_type(hook_input))
     if handler:
-        handler(hook_input.get("cwd", "."), hook_input.get("last_assistant_message") or "")
+        handler(hook_input.get("cwd", "."), hook_input.get("last_assistant_message") or "", hook_input)
 
 
 if __name__ == "__main__":

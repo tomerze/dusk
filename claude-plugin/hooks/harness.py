@@ -126,7 +126,7 @@ def branch_name(branch):
 
 def session_state(session_id):
     path = data_dir() / "sessions" / f"{safe_name(session_id)}.json"
-    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False, "committed": False, "standing": None}
+    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False, "committed": False, "standing": None, "handed": None}
     state = load_json(path, default)
     for key, value in default.items():
         state.setdefault(key, value)
@@ -152,11 +152,6 @@ def git(cwd, *args):
 def current_branch(cwd):
     code, branch = git(cwd, "rev-parse", "--abbrev-ref", "HEAD")
     return branch if code == 0 else None
-
-
-def head(cwd):
-    code, sha = git(cwd, "rev-parse", "HEAD")
-    return sha if code == 0 else None
 
 
 def agent_type(hook_input):
@@ -225,11 +220,16 @@ REVIEW_SIGNOFFS = (
 )
 
 
-def missing_signoffs(cwd, signoffs=READY_SIGNOFFS):
-    branch = current_branch(cwd)
-    tip = head(cwd)
+def tip(cwd, branch=None):
+    code, sha = git(cwd, "rev-parse", branch or "HEAD")
+    return sha if code == 0 else None
+
+
+def missing_signoffs(cwd, signoffs=READY_SIGNOFFS, branch=None):
+    branch = branch or current_branch(cwd)
+    at = tip(cwd, branch)
     _, drive = drive_state(branch)
-    return [name for key, name in signoffs if drive.get(key) != tip]
+    return [name for key, name in signoffs if drive.get(key) != at]
 
 
 def field(message, name):

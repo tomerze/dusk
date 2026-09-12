@@ -13,7 +13,7 @@ from harness import (
     decisions_path,
     drive_state,
     git,
-    head,
+    tip,
     missing_signoffs,
     pull_request_view,
     read_input,
@@ -62,7 +62,7 @@ def ready_problems(cwd, branch, last):
     if "/.claude/worktrees/" in str(Path(cwd).resolve()):
         problems.append("the worktree is still in place; the branch is not free for the user to check out")
     remote = branch_name(branch)
-    _, ahead = git(cwd, "rev-list", "--count", f"origin/{remote}..HEAD")
+    _, ahead = git(cwd, "rev-list", "--count", f"origin/{remote}..{branch}")
     if ahead and ahead != "0":
         problems.append(f"{ahead} commit(s) not pushed")
     pull_request = pull_request_view(cwd, remote)
@@ -71,11 +71,11 @@ def ready_problems(cwd, branch, last):
     else:
         if pull_request.get("state") != "OPEN":
             problems.append(f"PR #{pull_request['number']} is {pull_request.get('state')}, not open")
-        if pull_request.get("headRefOid") != head(cwd):
+        if pull_request.get("headRefOid") != tip(cwd, branch):
             problems.append(f"PR #{pull_request['number']} does not carry the local tip")
         if "## Decisions" not in (pull_request.get("body") or ""):
             problems.append("the PR body does not carry the ranked decisions under `## Decisions`")
-    unsplit = missing_signoffs(cwd, READY_SIGNOFFS)
+    unsplit = missing_signoffs(cwd, READY_SIGNOFFS, branch)
     if unsplit:
         problems.append(
             ", ".join(unsplit) + " has not signed off this tip. A person cannot read a branch that "
@@ -92,6 +92,7 @@ def main():
     if not branch:
         return
     session_path, session = session_state(hook_input.get("session_id", ""))
+    branch = session.get("handed") or branch
     drive_path, drive = drive_state(branch)
     problems = []
 
@@ -104,7 +105,7 @@ def main():
     if claimed:
         problems.extend(ready_problems(cwd, branch, last))
         if not problems:
-            waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS)
+            waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
             if waiting:
                 problems.append(
                     "the hand-off stands and the human is reading it. Now run the agents that "

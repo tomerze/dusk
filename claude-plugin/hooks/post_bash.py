@@ -10,7 +10,7 @@ from harness import (
     field,
     findings,
     git,
-    head,
+    tip,
     headless_agent,
     read_input,
     review_dir,
@@ -22,6 +22,16 @@ COMMENT_PROMPT = (
     "Review commit {sha} on the current branch: run `git show {sha}` and judge every "
     "comment line it adds or changes."
 )
+
+
+def pushed_branch(command):
+    match = re.search(r"\bgit\s+push\b([^\n;&|]*)", command)
+    if not match:
+        return None
+    words = [word for word in match.group(1).split() if not word.startswith("-")]
+    if len(words) < 2:
+        return None
+    return words[1].split(":")[-1]
 
 
 def review_commit(cwd, branch, sha, subject):
@@ -74,13 +84,17 @@ def main():
             drive["issue"] = session["drive"].get("issue")
             drive["phase"] = drive.get("phase") or "working"
             changed = True
-        sha = head(cwd)
+        sha = tip(cwd)
         _, subject = git(cwd, "log", "-1", "--format=%s")
         if sha and not re.match(r"^WIP\b", subject, re.I):
             review_commit(cwd, branch, sha, subject)
     if re.search(r"\bgit\s+push\b", command):
         drive["phase"] = "pushed"
         changed = True
+        pushed = pushed_branch(command) or branch
+        if session.get("handed") != pushed:
+            session["handed"] = pushed
+            save_json(session_path, session)
     if changed:
         save_json(path, drive)
 
