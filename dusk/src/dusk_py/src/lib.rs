@@ -4,7 +4,9 @@
 use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_connection::Connection;
 use dusk_program::anyhow::Result;
+use dusk_program_sh::client::open_prompt;
 use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo, StaticShEntriesBuilder};
+use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::str::FromStr;
@@ -49,6 +51,7 @@ fn entry_info_to_dict<'py>(py: Python<'py>, info: &EntryInfo) -> PyResult<Bound<
 pub(crate) enum Message {
     Shutdown(mpsc::UnboundedSender<Result<()>>),
     Sh(String, mpsc::Sender<Result<Vec<u8>>>),
+    Prompt(mpsc::UnboundedSender<Result<()>>),
 }
 
 // Since we need the capnp rpc runtime to run using tokio on a single thread the design of this
@@ -108,16 +111,28 @@ impl Dusk {
         self.disconnect_internal(py)
     }
 
-    fn sh(&mut self, _py: Python, command: String) -> PyResult<ShellOutput> {
-        let tx = self
-            .message_tx
-            .lock()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
-            .as_ref()
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?
-            .clone();
+    fn sh(&mut self, command: String) -> PyResult<ShellOutput> {
+        let sender = self.sender()?;
+        ShellOutput::new(command, &sender).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    }
 
-        ShellOutput::new(command, &tx).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    /// Open an interactive prompt on the node's default shell server, on the
+    /// calling terminal. Blocks while the prompt is up and returns when it is left.
+    fn prompt(&mut self, py: Python) -> PyResult<()> {
+        let sender = self.sender()?;
+        let (result_sender, mut result_receiver) = mpsc::unbounded_channel();
+        sender
+            .send(Message::Prompt(result_sender))
+            .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(format!("{error:?}")))?;
+        match py.detach(move || result_receiver.blocking_recv()) {
+            Some(Ok(())) => Ok(()),
+            Some(Err(error)) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "{error:#}"
+            ))),
+            None => Err(pyo3::exceptions::PyRuntimeError::new_err(
+                "the prompt ended without a result",
+            )),
+        }
     }
 
     /// Look up help for the available programs.
@@ -160,6 +175,16 @@ impl Dusk {
 }
 
 impl Dusk {
+    fn sender(&self) -> PyResult<mpsc::UnboundedSender<Message>> {
+        Ok(self
+            .message_tx
+            .lock()
+            .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?
+            .clone())
+    }
+
     fn connection_thread(
         address: std::net::SocketAddr,
         mut message_rx: mpsc::UnboundedReceiver<Message>,
@@ -199,6 +224,20 @@ impl Dusk {
                 match message_rx.recv().await {
                     Some(Message::Sh(command, output_tx)) => {
                         handle_sh(client.clone(), command, output_tx);
+                    }
+                    Some(Message::Prompt(result_sender)) => {
+                        let client = client.clone();
+                        tokio::task::spawn_local(async move {
+                            let result = open_prompt(
+                                client,
+                                StaticShEntriesBuilder::default(),
+                                DEFAULT_PID,
+                            )
+                            .await;
+                            if let Err(error) = result_sender.send(result) {
+                                tracing::warn!(error = %format!("{error:?}"), "nobody was waiting for the prompt's result");
+                            }
+                        });
                     }
                     Some(Message::Shutdown(result_tx)) => {
                         Self::handle_shutdown(client, connection, result_tx).await;
