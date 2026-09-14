@@ -129,10 +129,12 @@ where
                 }
 
                 let (stream, done_receiver) = self.get_stream(is_raw);
-                if let Err(e) = self
-                    .shell
-                    .sh(line, stream, done_receiver, self.stop_signal.clone())
-                    .await
+                if let Err(e) = async {
+                    self.shell
+                        .sh(line, stream, done_receiver, self.stop_signal.clone())?
+                        .await
+                }
+                .await
                 {
                     tracing::error!("{:?} error:\n{:?}", first_word, e);
                 }

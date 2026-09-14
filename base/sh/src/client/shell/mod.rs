@@ -8,6 +8,7 @@ use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program::anyhow::Result;
 use std::format;
+use std::future::Future;
 use std::rc::Rc;
 use std::string::{String, ToString};
 use std::sync::{Arc, Mutex};
@@ -154,13 +155,13 @@ impl Shell {
         })
     }
 
-    pub async fn sh(
+    pub fn sh(
         &mut self,
         script: &str,
         stream: stream::Client,
         done_receiver: oneshot::Receiver<()>,
         stop_signal: Rc<Notify>,
-    ) -> Result<()> {
+    ) -> Result<impl Future<Output = Result<()>> + use<>> {
         let sh_process = self.sh_process.clone();
 
         let sh_portal = capnp_rpc::new_future_client(async move {
@@ -183,9 +184,11 @@ impl Shell {
         sh_request.get().set_stop(stop_cap);
         sh_request.get().set_compiler(self.compiler.clone());
 
-        sh_request.send().promise.await?;
-        let _ = done_receiver.await;
-        Ok(())
+        Ok(async move {
+            sh_request.send().promise.await?;
+            let _ = done_receiver.await;
+            Ok(())
+        })
     }
 
     /// Returns the names of functions currently defined in the sh process.
