@@ -50,6 +50,24 @@ fn a_command_can_be_run_many_times_on_one_object() {
 }
 
 #[test]
+fn a_prompt_without_a_terminal_raises_rather_than_hanging() {
+    let port = gen_port();
+    let node = DuskNixImpl::new(LISTEN_ADDRESS, port);
+    node.expect_errors();
+    let started = Instant::now();
+    let (ok, output) = connected(port, "node.prompt()");
+    assert!(!ok, "a prompt with nowhere to open should raise:\n{output}");
+    assert!(
+        output.contains("there is no terminal to open a prompt on"),
+        "{output}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(20),
+        "it should raise at once, not hang"
+    );
+}
+
+#[test]
 fn a_connection_to_nothing_raises() {
     let port = gen_port();
     let started = Instant::now();
