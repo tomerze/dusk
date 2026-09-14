@@ -9,6 +9,8 @@ SLASH = re.compile(r"^\s*/(?:dusk-dev:)?([a-z][a-z0-9-]*)")
 def main():
     hook_input = read_input()
     prompt = hook_input.get("user_input") or hook_input.get("prompt") or ""
+    if prompt.lstrip().startswith("<task-notification>"):
+        return
     session_path, session = session_state(hook_input.get("session_id", ""))
     slash = SLASH.match(prompt)
     if slash:
