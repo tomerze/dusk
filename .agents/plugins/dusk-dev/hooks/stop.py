@@ -165,6 +165,9 @@ def main():
         ready, pull_request_url = ready_problems(cwd, branch, last)
         problems.extend(problem(text) for text in ready)
         if not problems:
+            session["standing"] = "ready"
+            session["handed_off"] = branch
+            session["pull_request"] = pull_request_url
             waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
             if waiting:
                 problems.append(problem(
@@ -172,10 +175,6 @@ def main():
                     "review alongside them - " + ", ".join(waiting) + " - and put what they find "
                     "on the pull request as it lands."
                 ))
-        if not problems:
-            session["standing"] = "ready"
-            session["handed_off"] = branch
-            session["pull_request"] = pull_request_url
     elif marks_dilemma(message):
         why = None if pending else stalling(cwd, message)
         if why:
