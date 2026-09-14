@@ -110,3 +110,9 @@ opened where nobody could type into it.
 
 The [API gateway](../features/gateway.md#no-interactive-views) sets it
 automatically in its own process.
+
+## `DUSK_CLIENT_HOSTNAME`
+
+A prompt shows up in the node's `ps` as `sh[prompt ⟷ <hostname>]`, naming the
+machine the prompt is on. Set `DUSK_CLIENT_HOSTNAME` to send a name of your own
+instead of the one the machine reports.
