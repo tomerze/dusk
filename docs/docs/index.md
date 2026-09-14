@@ -19,7 +19,7 @@
 
     ---
 
-    Drop the C library into an app you already ship — every device running it
+    Drop the C library into an app you already ship - every device running it
     becomes a manageable node.
 
     [Embed it →](getting-started/guides/embed.md)

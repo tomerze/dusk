@@ -4,14 +4,14 @@ The project instructions for this repository are the **`dusk-developer` skill**,
 in the `dusk-dev` plugin at `.agents/plugins/dusk-dev/skills/dusk-developer/SKILL.md`.
 This file carries none of them itself.
 
-**Claude Code:** load it — `/dusk-dev:dusk-developer`. The plugin is registered
+**Claude Code:** load it - `/dusk-dev:dusk-developer`. The plugin is registered
 by `.claude/settings.json` for anyone who trusts this folder.
 
 **Codex:** the plugin is registered by `.codex/config.toml` for anyone who
 trusts this repository; `codex plugin add dusk-dev@dusk` then puts every skill
 below in scope by name.
 
-**Every other agent** — anything that reads this file and has no skill loader —
+**Every other agent** - anything that reads this file and has no skill loader -
 read `.agents/plugins/dusk-dev/skills/dusk-developer/SKILL.md` now, before anything
 else, and treat what it says as this file's content.
 

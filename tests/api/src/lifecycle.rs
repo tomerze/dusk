@@ -20,7 +20,7 @@ async fn test_process_lifecycle() {
 
             let ps_program_args = PsArgs::new(None).as_program_args().unwrap();
 
-            // Dusk.process — create the process
+            // Dusk.process - create the process
             let mut process_request = client.process_request();
             ps_program_args
                 .with_reader(|reader| process_request.get().set_program_args(reader))
@@ -35,7 +35,7 @@ async fn test_process_lifecycle() {
                 .get_result()
                 .unwrap();
 
-            // Dusk.run — start executing it
+            // Dusk.run - start executing it
             let mut run_request = client.run_request();
             run_request.get().set_process(process.clone());
             run_request.send().promise.await.unwrap();
@@ -51,13 +51,13 @@ async fn test_process_lifecycle() {
                 .unwrap()
                 .get_result();
 
-            // Dusk.kill — send SIGTERM (15)
+            // Dusk.kill - send SIGTERM (15)
             let mut kill_request = client.kill_request();
             kill_request.get().set_pid(pid);
             kill_request.get().set_signal(15);
             kill_request.send().promise.await.unwrap();
 
-            // Dusk.waitpid — must block until the process has fully exited
+            // Dusk.waitpid - must block until the process has fully exited
             let mut waitpid_request = client.waitpid_request();
             waitpid_request.get().set_pid(pid);
             waitpid_request.send().promise.await.unwrap();

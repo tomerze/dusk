@@ -17,7 +17,7 @@ use portable_atomic_util::Arc;
 use tracing::Level;
 
 /// The mid-write sentinel. It collides with a real descriptor position only at
-/// `u64::MAX` — unreachable (see the no-wrap note on [`lane::Ring`]).
+/// `u64::MAX` - unreachable (see the no-wrap note on [`lane::Ring`]).
 const LANE_SEQUENCE_WRITING: u64 = u64::MAX;
 
 pub(crate) const LEVELS: [Level; 5] = [
@@ -38,7 +38,7 @@ pub(crate) fn level_index(level: Level) -> usize {
 #[derive(Clone, Copy, Debug)]
 pub enum StartPosition {
     /// Yield every signal currently retained (oldest-first) before following new
-    /// ones — a `tail -f`-style replay-then-tail.
+    /// ones - a `tail -f`-style replay-then-tail.
     Replay,
     /// Skip the retained history; only yield signals pushed after subscribing.
     Live,
@@ -109,7 +109,7 @@ impl SignalBuffer {
         })
     }
 
-    /// A producer handle — `Send` but not `Sync`: one per producer thread.
+    /// A producer handle - `Send` but not `Sync`: one per producer thread.
     pub fn writer(&self) -> Writer {
         Writer::new(self.inner.clone())
     }
@@ -138,7 +138,7 @@ impl SignalBuffer {
     }
 
     /// A consumer with a caller-supplied wall-clock offset (Unix ms minus the
-    /// node's monotonic ms at the same instant) — for contexts with no RPC
+    /// node's monotonic ms at the same instant) - for contexts with no RPC
     /// session. An offset of 0 yields embassy-relative timestamps.
     pub fn reader_with_offset(
         &self,

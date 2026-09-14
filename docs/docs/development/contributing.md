@@ -4,14 +4,14 @@ How to work in the Dusk codebase.
 
 ## Setup
 
-Get the toolchain, build dependencies, and pre-commit hooks in place first — see
+Get the toolchain, build dependencies, and pre-commit hooks in place first - see
 [Setup](index.md) and [Installation](../getting-started/guides/installation.md).
 
 ## Conventions
 
 A few rules are enforced more strictly than usual:
 
-- **No abbreviations.** Identifiers are spelled out — `request`, not `req`;
+- **No abbreviations.** Identifiers are spelled out - `request`, not `req`;
   `address`, not `addr`. This holds even for short-lived locals.
 - **Respect the `no_std` / `std` split.** Server-side code stays `no_std`-clean;
   std-only code belongs behind the `client` feature. A quick check:

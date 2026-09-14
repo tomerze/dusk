@@ -1,6 +1,6 @@
 # Quickstart
 
-Run a node and connect to it in under a minute — the fastest way to see Dusk's
+Run a node and connect to it in under a minute - the fastest way to see Dusk's
 analytics and diagnosis against a live node. This assumes you've completed
 [Installation](installation.md). (To put Dusk inside an app you already ship, see
 [Embed Dusk in your app](embed.md).)

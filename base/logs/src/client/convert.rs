@@ -8,7 +8,7 @@ use std::vec::Vec;
 
 /// The OpenTelemetry-standard unique log-record id: a backend that honours the
 /// convention treats records sharing it as duplicates and keeps one. Vendor
-/// neutral, and log records only — the convention has no span equivalent.
+/// neutral, and log records only - the convention has no span equivalent.
 const LOG_RECORD_UID_ATTRIBUTE: &str = "log.record.uid";
 
 const ELASTICSEARCH_DOCUMENT_ID_ATTRIBUTE: &str = "elasticsearch.document_id";
@@ -154,7 +154,7 @@ fn span_json(span: span::Reader, namespace_id: u64) -> capnp::Result<serde_json:
     if !name.is_empty() {
         object.insert("name".into(), name.into());
     }
-    // Unknown ordinals (a newer node) pass through by number — both sides are
+    // Unknown ordinals (a newer node) pass through by number - both sides are
     // the OTLP enum.
     let kind = match span.get_kind() {
         Ok(kind) => kind as i32,

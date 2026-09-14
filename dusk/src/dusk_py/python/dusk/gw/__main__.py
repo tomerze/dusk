@@ -1,7 +1,7 @@
 """Command-line entry point: ``python -m dusk.gw <ip> <port>``, or ``dusk_gw``.
 
 Parses the bind address with click and hands it to :func:`serve`, which blocks
-running the dusk API gateway — the ``/v1`` REST API and the ``/mcp`` MCP server.
+running the dusk API gateway - the ``/v1`` REST API and the ``/mcp`` MCP server.
 """
 
 from __future__ import annotations

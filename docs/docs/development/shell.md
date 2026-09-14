@@ -1,7 +1,7 @@
 # The Shell
 
-The dusk shell is small in surface — a handful of operators, no variables, no
-pipes — but the machinery behind a single line is spread across two processes
+The dusk shell is small in surface - a handful of operators, no variables, no
+pipes - but the machinery behind a single line is spread across two processes
 and five representations. This page traces a line of shell from the keystroke to
 the spawned process: what it turns into at each stage, where the compiler runs,
 when the client connection is load-bearing and when it isn't, and how errors
@@ -13,8 +13,8 @@ travel back.
 |-------|------|------|
 | `base/sh` | both | the `sh` program. `parser/` and `client/` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
-| `base/sh/src/client/shell/` | client (`std`) | `Shell` — drives the `sh` process a client was handed |
-| `dusk_connection` | client (`std`) | `Connection` — the TCP/RPC link |
+| `base/sh/src/client/shell/` | client (`std`) | `Shell` - drives the `sh` process a client was handed |
+| `dusk_connection` | client (`std`) | `Connection` - the TCP/RPC link |
 
 ## Representations at a glance
 
@@ -49,21 +49,21 @@ different moments.
 would, and calls `Dusk.process` then `process.run()`. The node calls the args'
 `created` callback with the prompt process, and everything else is the
 callback's: `Created` (`base/sh/src/client/run_prompt.rs`) spawns a task that builds a
-`Shell` around the node's default shell server, at `sh.capnp`'s `defaultPid` —
+`Shell` around the node's default shell server, at `sh.capnp`'s `defaultPid` -
 starting one there if nothing is running it, since a client that connects finds
-the default shell server rather than making another — opens the prompt on this terminal, and
+the default shell server rather than making another - opens the prompt on this terminal, and
 **returns at once**. It has to: the prompt
 waits for the process's portal, the portal waits for the process to be run, and
-the run cannot be sent until `Dusk.process` — which is waiting for this
-callback — has returned. Under `DUSK_NON_INTERACTIVE` the callback opens
+the run cannot be sent until `Dusk.process` - which is waiting for this
+callback - has returned. Under `DUSK_NON_INTERACTIVE` the callback opens
 nothing and fails the call instead, because there is no terminal to open on.
 
 The CLI runs the prompt process with **`process.run()`**, not `Dusk.run`, so the
-call returns when that process exits — which is what `exit` at the prompt does
+call returns when that process exits - which is what `exit` at the prompt does
 to it. The CLI then reaps it and leaves; the shell server it was attached
 to is untouched, and the next client attaches to the same one. A connection that drops
-takes the prompt process with it, so the CLI creates and runs another — without
-the callback this time, since the prompt it opened is still there — while the
+takes the prompt process with it, so the CLI creates and runs another - without
+the callback this time, since the prompt it opened is still there - while the
 `Shell`'s own `auto_reconnect` brings the shell server back at `defaultPid` and keeps
 the open prompt working across the break.
 
@@ -75,19 +75,19 @@ goes: it keeps its functions and is there for the next client.
 
 **A prompt is a process.** `sh --prompt` runs `sh` in `ShMode::Prompt`, a mode
 whose process does nothing on the node: it is the view's lifetime, and the work
-is all on the client. The mode carries the client's hostname — its own, or
-`DUSK_CLIENT_HOSTNAME` — which the process takes as its name, so it appears in
+is all on the client. The mode carries the client's hostname - its own, or
+`DUSK_CLIENT_HOSTNAME` - which the process takes as its name, so it appears in
 `ps` as `sh[prompt ⟷ pc1]` and says which machine is at it. The `sh` entry builds its args with a `created` callback
 carrying the pid of the shell server to attach to (`defaultPid`, or the one
 `--prompt <pid>` names), so the node calls back into the client that built the
 args and the prompt opens there, driving the shell server at that pid. Leaving
-the prompt kills the prompt process — never the shell server — so whoever ran
+the prompt kills the prompt process - never the shell server - so whoever ran
 `sh --prompt` is told the view is over: `dusk <address>` returns, and
 `node.prompt()` returns. A
 prompt-mode `output` parks until that happens, so a `sh --prompt` inside a
 script waits for its view the way `logs view`'s statement waits for its pager.
-The callback refuses instead — failing the `Dusk.process` call that fired it,
-and killing the prompt process it was called with — when `DUSK_NON_INTERACTIVE`
+The callback refuses instead - failing the `Dusk.process` call that fired it,
+and killing the prompt process it was called with - when `DUSK_NON_INTERACTIVE`
 is set, when the client's output is not a terminal, or when a prompt is already
 open on it. A terminal has one prompt, so a `sh --prompt` typed at a prompt is
 an error rather than a second view on the same screen.
@@ -95,19 +95,19 @@ an error rather than a second view on the same screen.
 **`sh --server`** starts the node's default shell server and nothing else: no
 view, no callback, `output` answers `daemonize` so the statement that ran it
 leaves it running for clients to attach to. Its pid is `defaultPid`, or the one
-`sh --server <pid>` names — the same pid `sh --prompt <pid>` attaches to, so a
+`sh --server <pid>` names - the same pid `sh --prompt <pid>` attaches to, so a
 shell server outside the default one is two commands rather than a special case.
 
 **One command.** `dusk <address> "ps"` and `dusk.sh(...)` from Python run `sh`
 in `ShMode::Script`, with no callback at all, and drive it themselves:
-`Dusk.process`, `Dusk.run` — a process of its own, not the caller's session —
+`Dusk.process`, `Dusk.run` - a process of its own, not the caller's session -
 then the portal, `OutputPortal.output` into the caller's stream, and `kill` plus
 `waitpid` when `output` returns without daemonising. That is what the node's
 interpreter does for every program in a script, done by the client for the one
 program it runs itself.
 
 **`sh` as a program.** When `sh <command>` (or `sh -d <command>`) runs as a
-program — nested in another script, or launched directly — the command string is
+program - nested in another script, or launched directly - the command string is
 parsed at args-build time (`ShArgs::new`, `base/sh/src/client/mod.rs`) into a
 `Script` baked into the program's args as `ShMode::Script` / `DetachedScript`.
 The script then runs when the caller drives the process's `OutputPortal.output`
@@ -122,7 +122,7 @@ Either way the server side is identical: a `Script` reader handed to
 The grammar is a nom parser in `base/sh/src/parser/`. It is deliberately tiny.
 
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
-to end of line, and only when the `#` starts a word — a `#` inside a word
+to end of line, and only when the `#` starts a word - a `#` inside a word
 (`http://host/page#section`) is just a character. Text inside `'…'` / `"…"` is
 preserved verbatim.
 
@@ -138,13 +138,13 @@ trailing separator is allowed.
 ps && date || true
 ```
 
-`&&` and `||` share one precedence level and fold left — there is no
+`&&` and `||` share one precedence level and fold left - there is no
 parenthesised grouping, and the operators only join *commands*, not sub-chains.
 
 **A command** is a run of space-separated words; the parser stores the raw source
-slice (`recognize`), it does **not** split into argv here — that happens later,
+slice (`recognize`), it does **not** split into argv here - that happens later,
 during compilation. A **word** is single-quoted, double-quoted, or bare. Quotes
-use `is_not` — there is no escape character; a quote runs to the next matching
+use `is_not` - there is no escape character; a quote runs to the next matching
 quote. A bare word ends at any of `` \t\r\n;&|(){} ``.
 
 **A function definition** is `identifier () { body }`, where `body` is a full
@@ -182,7 +182,7 @@ struct Script {
 ## Compilation
 
 `compiler::compile` (`base/sh/src/interpreter/compiler.rs`) lowers a `Script`
-reader into a `Frame` — a flat `Vec<Inst>` walked by a program counter. It runs
+reader into a `Frame` - a flat `Vec<Inst>` walked by a program counter. It runs
 **every time a script executes** (`Interpreter::exec`), plus per-function via
 `compile_function` (see [Functions](#functions)).
 
@@ -197,15 +197,15 @@ The instruction set (`inst.rs`):
 
 **`&&` and `||` compile to jumps.** For `a && b` the compiler emits `a`, a
 `JumpIfError` placeholder, then `b`, and back-patches the jump target to just
-past `b` — so if `a` leaves an error in the result register, `b` is skipped.
+past `b` - so if `a` leaves an error in the result register, `b` is skipped.
 `||` is the mirror image with `JumpIfOk`. The "exit status" of a command is
 simply whether its `Inst` left `Ok` or `Err` in the register.
 
 **Each command word round-trips to the client.** This is the part worth
 internalising. For a command, the compiler looks at the first word. If it names a
 known function it emits `Call`. Otherwise it calls
-`compiler.build_program_args(text)` — an **RPC back to the client**, on the
-`Compiler` capability the script arrived with — which resolves the program name
+`compiler.build_program_args(text)` - an **RPC back to the client**, on the
+`Compiler` capability the script arrived with - which resolves the program name
 against the `SH_ENTRIES` table and returns a fully-built `ProgramArgs` capability
 (itself wrapping client-side capabilities). That becomes `Inst::ProgramArgs`. So
 compilation is *not* a local server operation: every external program in a script
@@ -216,7 +216,7 @@ were created.)
 
 **Tail-call optimisation.** If a frame's last instruction is `Call`, it is
 rewritten to `TailCall`, which the interpreter executes by reusing the current
-frame rather than recursing — so `foo() { foo }` loops forever without growing
+frame rather than recursing - so `foo() { foo }` loops forever without growing
 the stack.
 
 ## Execution
@@ -228,7 +228,7 @@ the stack.
 - **`ProgramArgs`** → `Execution::program_args` (`execution.rs`): `Dusk.process`
   then `Dusk.run`, fetch the process portal, cast it to `OutputPortal`, and call
   `output(stream)` with the caller's own stream. Both the portal fetch and the
-  output call are `select`ed against the `stop` signal — the fetch as well as the
+  output call are `select`ed against the `stop` signal - the fetch as well as the
   call, because a program that does its work before reporting itself ready (as
   `sleep` does) parks the shell on the portal for the whole command, and a
   `stop` raced only against `output` would go unobserved until the work it was
@@ -236,7 +236,7 @@ the stack.
   it is finished, and the `daemonize` it answers with is how it says whether it
   means to keep running: the process is killed (`SIGTERM`) and reaped
   (`waitpid`) unless it asked to be left alone. These RPCs go through
-  `dusk_core::local_client` — an **in-process, server-local** `Dusk` client — so
+  `dusk_core::local_client` - an **in-process, server-local** `Dusk` client - so
   spawning/killing does not touch the network. (The launched program may still
   hold the *remote* client embedded in its args.)
 - **`Call`** resolves the function's frame and runs it as a nested `exec_inner`;
@@ -244,7 +244,7 @@ the stack.
 - **`DefineFunction`** mutates the function table (see below).
 - **Jumps** set `pc` from the result register.
 
-`exec` writes into the caller's stream and never closes it — one line of shell
+`exec` writes into the caller's stream and never closes it - one line of shell
 runs many programs into the same one. `ShPortal.sh` closes it once the line is
 finished, error or not (a failure to close is logged at `warn`).
 
@@ -256,12 +256,12 @@ Functions are the one piece of shell state that outlives a single line.
 belongs to the `sh` `Process`, made when the process is. Each `sh` has its own:
 a function defined at a prompt lives in the shell server that prompt is attached
 to, where the next client attaching to it finds it, and a `sh <command>` or
-`sh -d` elsewhere on the node — its own process — does not have it.
+`sh -d` elsewhere on the node - its own process - does not have it.
 
 **Definition.** `name() { … }` compiles to `DefineFunction`, which at runtime
 inserts the body (an owned capnp message) into the table, drops any stale
 compiled frame, and eagerly recompiles. Redefining overwrites (logged at `info`).
-Defining with an **empty body** removes the function — that is how you undefine
+Defining with an **empty body** removes the function - that is how you undefine
 one.
 
 **Compilation & caching.** Function bodies are compiled by `compile_function`
@@ -272,7 +272,7 @@ Recursion is handled by inserting an empty placeholder frame under the symbol
 looping the compiler.
 
 **No arguments.** A function call is a bare word. Passing arguments to a function
-(`greet foo`) is a compile error — functions take no parameters.
+(`greet foo`) is a compile error - functions take no parameters.
 
 **Listing.** `ShPortal.functions()` returns the table's keys. The prompt calls
 this *before every prompt render* to feed the syntax highlighter (and the
@@ -284,21 +284,21 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 
 | Operation | Needs the live client connection? |
 |-----------|-----------------------------------|
-| Parsing text → `Script` | No — runs entirely client-side, before anything is sent |
-| Submitting a line / awaiting its output | Yes — `ShPortal.sh`, then await `done` |
-| **Compiling** each external program | **Yes** — `build_program_args` RPCs *back* to the client, on the line's `Compiler`, per program |
-| Spawning / killing the resulting process | No network — uses the server-local `dusk_core::local_client` |
-| Listing functions (highlighter, `functions` builtin) | Yes — `ShPortal.functions`, once per prompt |
+| Parsing text → `Script` | No - runs entirely client-side, before anything is sent |
+| Submitting a line / awaiting its output | Yes - `ShPortal.sh`, then await `done` |
+| **Compiling** each external program | **Yes** - `build_program_args` RPCs *back* to the client, on the line's `Compiler`, per program |
+| Spawning / killing the resulting process | No network - uses the server-local `dusk_core::local_client` |
+| Listing functions (highlighter, `functions` builtin) | Yes - `ShPortal.functions`, once per prompt |
 
 The connection itself is resilient, and so is the shell on top of it.
 `Connection` wraps its capability in `capnp_rpc::auto_reconnect`, and so does
 `Shell`: the process it was handed is the first incarnation, and when a call
 finds the node gone, `Shell::recreate_sh_process` makes a fresh server-mode `sh`
-at `defaultPid` on the node that answers next — with no `created` callback on
+at `defaultPid` on the node that answers next - with no `created` callback on
 those args, so no second prompt opens. Meanwhile the keepalive pings `pid()` on
 an RTT-adaptive interval and the status line reads `disconnected` while it
 fails. A prompt therefore outlives the node it was opened against, which is why
-the CLI waits for the prompt rather than for its `process.run()` — that call
+the CLI waits for the prompt rather than for its `process.run()` - that call
 dies with the connection.
 
 ## Error handling
@@ -308,18 +308,18 @@ script came in on.
 
 - **Syntax errors** surface client-side from `Parser::parse` as `"syntax
   error"`. On the interactive path `Shell::sh` returns the error and
-  `execute_command` logs it at `error` — the prompt survives.
-- **Compile errors** — an unknown program (`no sh entry found for …`), a
-  malformed command, a function given arguments, or an unknown function — abort
+  `execute_command` logs it at `error` - the prompt survives.
+- **Compile errors** - an unknown program (`no sh entry found for …`), a
+  malformed command, a function given arguments, or an unknown function - abort
   `compile`, which fails `exec`, which the `sh_exec_task` reports through its
   completion signal; `ShPortal.sh` then returns a capnp error that the client
   `await`s and logs.
 - **Execution errors** are split into `ExecutionError::Runtime` (infrastructure:
-  a failed RPC, a missing portal — logged at `error` server-side) and
+  a failed RPC, a missing portal - logged at `error` server-side) and
   `ExecutionError::Program` (the spawned program itself reported failure via its
   portal or non-zero `waitpid`). Both land in the result register, where `&&` /
   `||` read them as exit status.
-- **Eager dependency compilation** deliberately swallows errors — a missing or
+- **Eager dependency compilation** deliberately swallows errors - a missing or
   broken function body is left for the runtime `Call` to surface, so defining a
   function that references a not-yet-defined one is not itself an error.
 - **`daemonize`** is not an error at all: it is a program saying it means to

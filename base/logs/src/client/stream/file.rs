@@ -91,7 +91,7 @@ impl logs_args::stream::Server for FileStream {
 }
 
 /// Open on first use, then append `batch` as jsonl. Awaiting the write is the
-/// backpressure — a slow file/pipe parks the node's stream.
+/// backpressure - a slow file/pipe parks the node's stream.
 async fn append(state: &Rc<Mutex<State>>, batch: &[serde_json::Value]) -> Result<()> {
     let mut guard = state.lock().await;
     if let State::Unopened(file_path) = &*guard {

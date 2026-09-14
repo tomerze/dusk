@@ -1,7 +1,7 @@
 """The API describes itself: the OpenAPI document and the Swagger UI over it.
 
 The document is generated from the same models that validate requests, so these
-tests are not checking that it was written down correctly — they check the things
+tests are not checking that it was written down correctly - they check the things
 generation does not guarantee: that it is reachable under the mount, that it
 describes every route and no others, and that it does not promise behaviour the
 API cannot deliver.
@@ -77,8 +77,8 @@ def test_each_endpoint_documents_exactly_what_it_can_return(
     spec: dict, path: str, method: str, statuses: set[str]
 ):
     # Exactly, in both directions. A 404 on /connect would promise a failure
-    # that endpoint cannot produce — it mints descriptors rather than reading
-    # them — and a missing 502 would leave a caller unprepared for one it will
+    # that endpoint cannot produce - it mints descriptors rather than reading
+    # them - and a missing 502 would leave a caller unprepared for one it will
     # meet the first time a node is busy.
     assert set(spec["paths"][path][method]["responses"]) == statuses
 
@@ -111,7 +111,7 @@ def test_every_failure_is_reported_in_the_one_error_shape(spec: dict):
 def test_no_endpoint_promises_a_422_the_api_never_sends(spec: dict):
     # FastAPI documents a 422 on anything it validates, but a rejected body is
     # reported as 400 here. A documented status no caller can receive is a lie
-    # in the contract, so it is stripped — along with the schemas describing it.
+    # in the contract, so it is stripped - along with the schemas describing it.
     for path, operations in spec["paths"].items():
         for method, operation in operations.items():
             assert "422" not in operation["responses"], (path, method)
@@ -157,7 +157,7 @@ def test_the_browsable_interface_reaches_nothing_outside_this_gateway(
 ):
     """The property that makes `/v1/docs` usable on an air-gapped host.
 
-    Not "the assets are vendored" — that is the mechanism. This is the outcome:
+    Not "the assets are vendored" - that is the mechanism. This is the outcome:
     nothing on the page is fetched from anywhere but this process, so it renders
     the same with no route to the internet. FastAPI's built-in page would fail
     this on three counts: its script, its stylesheet, and its favicon.
@@ -173,7 +173,7 @@ def test_the_swagger_validator_badge_is_turned_off(client: TestClient):
     """Swagger UI phones a third party for the badge unless told not to.
 
     Its default ``validatorUrl`` is ``validator.swagger.io``, which it is handed
-    the address of this API's document — a request that cannot succeed on an
+    the address of this API's document - a request that cannot succeed on an
     isolated network, and one that hands an internal API's URL to a stranger
     anywhere else. The setting lives inside the page's script, not in a src or
     href, so the external-URL check above does not cover it.

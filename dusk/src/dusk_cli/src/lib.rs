@@ -160,7 +160,7 @@ pub async fn main() -> Result<()> {
         let env_filter =
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
         // The CLI's own diagnostics go to stderr so they never mix into a
-        // command's stdout — e.g. `logs --replay-only` stays a clean dump.
+        // command's stdout - e.g. `logs --replay-only` stays a clean dump.
         tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
             .with_env_filter(env_filter)

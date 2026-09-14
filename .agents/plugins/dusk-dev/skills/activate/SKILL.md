@@ -1,12 +1,12 @@
 ---
 name: activate
-description: Put the dusk working rules in force on whatever branch is checked out — every decision through the dilemma-triage agent as it is made, one commit while working and the atomic-commit agent's split just before the push, a fix reported in three lines, the review agents alongside the human, the hand-off that ends "Ready for review.", and merging only on explicit approval. Use it at the start of any work in this repository that is not an issue drive: a branch the user is already on, a fix they described, a change they asked for by hand. drive-issue invokes it and adds the issue mechanics on top.
+description: Put the dusk working rules in force on whatever branch is checked out - every decision through the dilemma-triage agent as it is made, one commit while working and the atomic-commit agent's split just before the push, a fix reported in three lines, the review agents alongside the human, the hand-off that ends "Ready for review.", and merging only on explicit approval. Use it at the start of any work in this repository that is not an issue drive: a branch the user is already on, a fix they described, a change they asked for by hand. drive-issue invokes it and adds the issue mechanics on top.
 ---
 
 # Activate the dusk rules
 
 The working sequence for any change in this repository, on the branch that is
-checked out right now. Nothing here is about how to write the code — the
+checked out right now. Nothing here is about how to write the code - the
 `dusk-developer` skill and the working agreements own that. This is how decisions are made, how commits
 are made, how the branch is handed over, and what the harness checks while that
 happens.
@@ -50,8 +50,8 @@ the user with nothing to do and no idea whether it is their move.
 
 The status line carries the same state, so it is visible without reading back:
 *working*, *waiting on <agents>*, *handed over, awaiting review*, or *awaiting a
-verdict*. Once a hand-off is accepted it leads with the pull request —
-`ready to review <url>` on its own first line — so the link to review is in
+verdict*. Once a hand-off is accepted it leads with the pull request -
+`ready to review <url>` on its own first line - so the link to review is in
 front of the user without scrolling back for it.
 
 **An answer does not change what is standing**, which is why it restates it
@@ -62,7 +62,7 @@ court.
 
 ## Nothing personal goes in the repository
 
-**No name, no email address, no home directory path, no account handle — not in
+**No name, no email address, no home directory path, no account handle - not in
 code, not in a comment, not in a commit message, not in a manifest, not in a
 skill, not in a pull request.** The repository is public and permanent; a person
 who has to be named there cannot take it back. This holds for the user, for
@@ -102,7 +102,7 @@ The hooks check the working agreements as each action is taken:
 
 Work goes through three phases. **Writing:** the rules above, and
 `dilemma-triage` on every decision. **Getting ready to review:** the
-`atomic-commit` agent splits the branch, which is what gates the hand-off —
+`atomic-commit` agent splits the branch, which is what gates the hand-off -
 pushing is free, and pushing often is how the work stays recoverable. **Ready
 for review:** the hand-off goes out and the review agents run alongside the
 human, never ahead of them.
@@ -110,19 +110,19 @@ human, never ahead of them.
 ## Building and measuring
 
 - `cargo check` is cheap and always allowed. **Do not run `cargo test` or
-  `cargo nextest` unless the user asked** — tests are a separate workstream.
+  `cargo nextest` unless the user asked** - tests are a separate workstream.
   Work that asks for tests is asking; running them is then part of
   delivering, and shipping a test you never executed is not.
 - `cargo build --release --bin dusk` is the real build. It is a plain Rust
   release build; the only unusual cost is compiling the vendored Cap'n Proto
   compiler the first time.
 - If the work wants a before/after comparison, **build and measure the
-  unmodified tree first and keep the numbers** — once the target directory is
+  unmodified tree first and keep the numbers** - once the target directory is
   overwritten, recovering the baseline costs another full build. A second
   worktree at `origin/master` is the cheapest way to get it back.
 - Run benchmarks **sequentially on an idle machine**. A benchmark sharing the
   machine with a compile reports numbers that are off by 8×. **Check whether the
-  machine is actually idle first** — other worktrees under `.claude/worktrees/`
+  machine is actually idle first** - other worktrees under `.claude/worktrees/`
   may have their own sessions compiling right now (`ps aux | grep rustc` shows
   whose target directory each one is writing to).
 - **Never state a number you did not measure**, and never explain a slow build
@@ -132,7 +132,7 @@ human, never ahead of them.
   `rustc-LLVM ERROR` and `ld terminated with signal 7 [Bus error]`, which read
   like a broken toolchain. Run `df -h` before believing any of it. Every
   worktree carries its own `target`, so measure them with `du -sh` rather than
-  assuming a size — they differ by more than an order of magnitude. Reclaiming
+  assuming a size - they differ by more than an order of magnitude. Reclaiming
   space means deleting the user's build caches, so **ask first**, and name the
   measured sizes and which branches are already merged so the choice is theirs.
 
@@ -144,13 +144,13 @@ is available even when tests are not. Build with
 one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
 
 - **The `dusk_node` binary always binds 9090**, because
-  `artifacts/dusk_node/src/lib.rs` hardcodes it — that is a property of the
+  `artifacts/dusk_node/src/lib.rs` hardcodes it - that is a property of the
   prebuilt deliverable, not of the runtime. `dusk_nix::run` takes whatever
   address and port you hand its `InitArgs`, which is how
   `tests/common/src/lib.rs` runs many nodes at once. So check
   `pgrep -af dusk_node` before starting one: another session's node may already
   hold 9090, in which case yours exits and your CLI silently talks to *theirs*.
-  Do not kill a node you did not start. Point your own elsewhere — and if you do
+  Do not kill a node you did not start. Point your own elsewhere - and if you do
   that by editing the hardcoded port, `git diff` that file before committing,
   since pre-commit stashes unstaged work and the hooks will never see it.
 - A node built from a different revision answers with the wrong schema, and the
@@ -160,7 +160,7 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
 
 ## Reporting a fix
 
-Every bug I fix is reported in the same three lines — in the reply, and in the
+Every bug I fix is reported in the same three lines - in the reply, and in the
 pull request body. Not a paragraph, not the story of how I found it:
 
 ```
@@ -178,12 +178,12 @@ died with its connection, the assumption that stopped holding and where. **A
 first line I could have written without reading the code is not a report, it is
 an echo.**
 
-Wrong — the symptom, which they already have:
+Wrong - the symptom, which they already have:
 
 > `sh` with no command printed "running in server mode" instead of opening a
 > shell.
 
-Right — the mechanism, which they do not:
+Right - the mechanism, which they do not:
 
 > `Portal::output`'s server-mode arm wrote one value and answered
 > `daemonize = false` immediately, so the interpreter killed and reaped the
@@ -195,7 +195,7 @@ The second line is the change, in one sentence, in the same terms.
 
 **The third line is the one that matters, and the one I will want to skip.** A
 fix that covers the path in the report and not its siblings, that leaves the
-same class of bug reachable another way, that I could not drive and only read —
+same class of bug reachable another way, that I could not drive and only read -
 it says so there. `null` is allowed and it is a claim: it means I went looking
 for the case that breaks this fix and did not find one. Writing `null` because
 nothing came to mind is a lie in three characters.
@@ -203,8 +203,8 @@ nothing came to mind is a lie in three characters.
 ## A skill that misled me is fixed in this session
 
 When this skill, `drive-issue`, `authoring-a-program`, `atomic-commit` or
-`dusk-developer` turns out to describe something that is not true — a step that breaks, a number that is
-wrong, a mechanism that has moved — **I fix it now, in the session that found
+`dusk-developer` turns out to describe something that is not true - a step that breaks, a number that is
+wrong, a mechanism that has moved - **I fix it now, in the session that found
 it.** I do not ask whether to. I do not offer to do it later. I do not write
 "worth fixing when you next touch the skill" and move on: that sentence costs
 the user a decision and leaves the next reader following an instruction I
@@ -212,13 +212,13 @@ already know is false.
 
 It lands as its own commit, at the end with the other text commits, and it rides
 along on whatever branch I am on. If that branch is unrelated to it, the commit
-still rides — I say so in the reply and in the pull request body, once, and the
+still rides - I say so in the reply and in the pull request body, once, and the
 user drops it if they would rather have it separately. Deferring the fix is not
 one of the choices.
 
 Past failure: I reused a parked `target/` at a different worktree path, watched
 the capnp build script fail in a way that named neither, worked out why, fixed
-the build — and then told the user I would correct the skill "when you next want
+the build - and then told the user I would correct the skill "when you next want
 the skill touched". The instruction that had just cost me a build stayed wrong,
 and they had to come back and tell me to fix it.
 
@@ -252,7 +252,7 @@ into the commits the work actually is, and the harness lets it finish only when
 gated on that sign-off.
 
 Review works the same way. A round of comments that changes anything substantial
-is not a handful of fixups aimed at five different commits — squash the affected
+is not a handful of fixups aimed at five different commits - squash the affected
 commits, or the whole branch, back into one, make the changes there, and split
 again. Threading a change into commits you are about to rewrite anyway is the
 work done twice.
@@ -264,7 +264,7 @@ work was scheduled, not part of that sentence, and it is already carried by the
 read as pull-request merge numbers, which they are not.
 
 - **Run `git commit` in the foreground with an explicit long timeout**
-  (`timeout: 600000`). Do not background it, and do not poll for it — the
+  (`timeout: 600000`). Do not background it, and do not poll for it - the
   harness re-invokes you when a background command exits, so a `sleep` loop
   watching your own output file is pure waste. The reason to give it a long
   timeout rather than the default is that pre-commit stashes unstaged work
@@ -272,14 +272,14 @@ read as pull-request merge numbers, which they are not.
 - If a commit is killed anyway, the stash is recoverable from the patch named in
   the hook's `[INFO] Stashing unstaged files to <path>` line: `git apply <path>`.
   **`~/.cache/pre-commit/` is shared by every worktree on the machine.** A patch
-  in there may belong to another session — check that its diff is yours before
+  in there may belong to another session - check that its diff is yours before
   applying it, and never apply one you did not create.
 - The hook set is fmt, clippy, clang-format, clang-tidy, ruff (lint and format)
   and pyright, with `fail_fast: true`. Only fmt and clippy run for a Rust-only
   change; the rest match on C or Python paths and skip. Expect a second attempt
-  when `fmt` rewrites a file and fails the run — re-stage what it touched and
+  when `fmt` rewrites a file and fails the run - re-stage what it touched and
   commit again.
-- Stage explicit paths, never `git add .` — measurement harnesses, `Cargo.lock`
+- Stage explicit paths, never `git add .` - measurement harnesses, `Cargo.lock`
   and anything else you created during setup must stay out of the commit.
 
 ## Getting ready to review
@@ -304,7 +304,7 @@ your message, not discover it as a link in the same breath that announces it is
 already there.
 
 **A branch produces exactly one pull request.** Whatever else the work turns
-up — a stale skill, a broken config, a fix to something adjacent — becomes
+up - a stale skill, a broken config, a fix to something adjacent - becomes
 another commit on the same branch, never a second PR. Handing over a branch is
 handing over one thing to review and one thing to merge; two PRs make the user
 do the bookkeeping this skill exists to do for them.
@@ -316,7 +316,7 @@ opened, fold its commits onto the one branch and close it as superseded.
 
 **Re-check `origin/master` before you push, and re-run the build after you
 rebase.** Dusk work takes hours and the user merges their own PRs in the
-meantime. Master does not only change code — it can delete the build
+meantime. Master does not only change code - it can delete the build
 infrastructure the work was set up around, so treat a rebase as invalidating the
 whole environment, not just the numbers.
 
@@ -328,15 +328,15 @@ mcp__github__create_pull_request(owner=…, repo=…, head=…, base="master", t
 `gh` 2.46.0 is installed on this machine and the MCP works too; either opens
 the PR, and the harness checks the body the same way through both. If the MCP
 returns `403 Resource not accessible by personal access token`, the token lacks
-Pull requests: write — say so and ask the user to grant it rather than
+Pull requests: write - say so and ask the user to grant it rather than
 improvising another route.
 
 **Write the PR body in the first person, as the author of the change.** It is a
-public record of what the commit does, not a message to the user — the same way
+public record of what the commit does, not a message to the user - the same way
 rustc's output is not addressed to anyone in particular. So: no "as we
 discussed", no "let me know if you want", no "say the word and I'll switch", no
 second person at all. A decision that needs the reviewer's attention is stated as
-what was chosen, what was rejected, and what reversing it would cost — then the
+what was chosen, what was rejected, and what reversing it would cost - then the
 reviewer decides in review, in their own words.
 
 The PR body must carry:
@@ -345,7 +345,7 @@ The PR body must carry:
   working. Measured numbers in a table, naming the host, the method, and the run
   count.
 - **Every incompatibility, workaround and deliberate omission.**
-- **Every decision the reviewer might have made differently** — with the
+- **Every decision the reviewer might have made differently** - with the
   alternative and what switching would cost. Dusk's working agreements say design
   decisions are the user's; the PR body is where you hand back the ones you had
   to make to keep moving.
@@ -357,14 +357,14 @@ The PR body must carry:
 
 **The review folder goes in the body, not on the branch.** It is ignored by git
 and never committed, so the pull request is the only place a reviewer can read
-it. Each file lands under its own heading — `## Decisions`, `## Terminology`,
-`## Strings`, `## Comments` — added by `update_pull_request` as each agent
+it. Each file lands under its own heading - `## Decisions`, `## Terminology`,
+`## Strings`, `## Comments` - added by `update_pull_request` as each agent
 finishes. A heading whose agent found nothing says so in one line; it is not
 left out, because a missing heading reads as an agent that never ran.
 
 ## Give the branch back, ask for review, then stop
 
-**If the work happened in a worktree, remove it before you ask** — `drive-issue`
+**If the work happened in a worktree, remove it before you ask** - `drive-issue`
 says how. Git lets one worktree hold a branch at a time, so while yours holds it
 the user cannot check it out to review it.
 
@@ -382,21 +382,21 @@ pushed; if it does not, the push did not land.
 
 This has gone wrong twice, both times silently. #44 and #46 were each merged from
 the state of the branch before the last push, so in both cases the commit that
-push carried never reached master — and both times it was the commit that fixed
+push carried never reached master - and both times it was the commit that fixed
 the very instruction the pull request existed to fix.
 
 Then give the user the PR URL and the branch to check out, as a line they can
-paste — `git checkout <branch>` — and ask them to review. The user reads the diff
+paste - `git checkout <branch>` - and ask them to review. The user reads the diff
 and runs the node from their own checkout, and they should not have to open the
 PR to learn the branch name. Then wait.
 
 **End that message with `Ready for review.` on its own line, and write nothing
 after it.** It is the one sentence the user is looking for, and it means every
-check above has actually passed — not that the work is nearly there, not that it
+check above has actually passed - not that the work is nearly there, not that it
 is pushed and something is still running. Nothing follows it: no summary, no
 caveat, no offer, no question. The line is the end of the message.
 
-**If something is outstanding, that is not a third way to end a turn — it is
+**If something is outstanding, that is not a third way to end a turn - it is
 work I have not finished.** Either it is mine to finish, and I keep going, or it
 is the user's to answer, and the turn is a `DILEMMA:` question. A message that
 reports the state of play and stops is the thing this skill exists to prevent:
@@ -409,18 +409,18 @@ claims it while any of that is false is sent back with the check that failed.
 **The hand-off goes out once per branch.** From the moment it does, the human is
 reading; nothing I do afterwards sends the branch to review again. A review
 finding, my own or an agent's, is fixed, committed, pushed and said on the pull
-request — and that turn ends `Still ready for review.`, because the hand-off it
+request - and that turn ends `Still ready for review.`, because the hand-off it
 restates is the one that is already standing. There is no second
 `Ready for review.`, no second split to wait on, no second round of review
 agents. The harness refuses the line on a branch that has had it.
 
 This is the loop it exists to stop: the agents report, I fix, the fix changes
-the tip, every sign-off is stale again, the agents run again — and the human,
+the tip, every sign-off is stale again, the agents run again - and the human,
 who was ready to read an hour ago, is still waiting for a branch that will not
 sit still.
 
 **The hand-off is not the end of the session. It is the point where two reviews
-start at once** — see the next section.
+start at once** - see the next section.
 
 Do not merge, do not tidy the branch, and do not read silence or a question as
 approval. When comments arrive, verify a claim before implementing it and say so
@@ -451,13 +451,13 @@ Dispatch them together and let them land as they finish:
 
 Each sign-off names the commit it was given, so anything that changes the branch
 means running that agent again. As each lands, say on the pull request what it
-found — the human is reading in parallel, so a finding is worth more the sooner
-it is there. A real finding — a race, a verdict of
-`findings` — is fixed the usual way: squash, fix, re-split, force-push, and say
+found - the human is reading in parallel, so a finding is worth more the sooner
+it is there. A real finding - a race, a verdict of
+`findings` - is fixed the usual way: squash, fix, re-split, force-push, and say
 so on the PR.
 
-The review folder — `decisions.md`, `comments.md`, `terminology.md`,
-`strings.md` and the `report.html` the hooks render from them — is local and
+The review folder - `decisions.md`, `comments.md`, `terminology.md`,
+`strings.md` and the `report.html` the hooks render from them - is local and
 ignored by git. **It is never committed; it goes in the pull request body**, one
 heading per file, updated as each agent lands. A reviewer reads the pull
 request, not my working directory, and a folder on the branch is four files they
@@ -483,8 +483,8 @@ Afterwards report the merge commit.
 ## Keeping this skill true
 
 This file describes an environment that changes under it. When a step here turns
-out to be wrong — a submodule that no longer exists, a build cost that no longer
-applies, a gotcha that was fixed — **say so and fix the skill**, in its own
+out to be wrong - a submodule that no longer exists, a build cost that no longer
+applies, a gotcha that was fixed - **say so and fix the skill**, in its own
 commit, separate from the work that uncovered it. A skill that misdirects the
 next agent is a defect exactly like a wrong comment.
 
@@ -500,8 +500,8 @@ next agent is a defect exactly like a wrong comment.
 ☐ `origin/master` re-checked before pushing; rebased, then the build re-run
 ☐ Pushed; **one** PR opened over the MCP
 ☐ PR body written in the first person, addressed to no one, carrying `## Decisions`
-☐ The review folder copied into the PR body under `## Decisions`, `## Terminology`, `## Strings`, `## Comments` — never committed
-☐ Anything found later: another commit on the same branch, body updated — never a second PR
+☐ The review folder copied into the PR body under `## Decisions`, `## Terminology`, `## Strings`, `## Comments` - never committed
+☐ Anything found later: another commit on the same branch, body updated - never a second PR
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
 ☐ Nothing personal written anywhere: no name, no email address, no home directory, no handle
@@ -515,7 +515,7 @@ next agent is a defect exactly like a wrong comment.
 
 ## I do not write comments
 
-Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
+Not one - not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
 See [dusk-developer](../dusk-developer/SKILL.md#i-do-not-write-comments).

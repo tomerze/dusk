@@ -68,7 +68,7 @@ pub(super) fn compile_function<'a>(
             })
             .collect();
         for dep in dep_symbols {
-            // Ignore errors / missing bodies — runtime resolve will surface them.
+            // Ignore errors / missing bodies - runtime resolve will surface them.
             let _ =
                 compile_function(function_table, compiled_functions, compiler.clone(), &dep).await;
         }

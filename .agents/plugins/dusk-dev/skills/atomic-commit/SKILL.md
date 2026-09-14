@@ -5,7 +5,7 @@ description: Split work into commits that are each one statement, so every chang
 
 # Atomic Commit
 
-## Why this exists — read it before the rules
+## Why this exists - read it before the rules
 
 The user's own words: **"Reviewing your work is the most important part of my
 work. and i cannot review your work when it's just one single glob of diff. Each
@@ -23,11 +23,11 @@ one person read this alone, decide yes or no about it alone, and undo it alone?*
 
 This is the part I get wrong, and I get it wrong because of how I was trained. I
 was fed code. I was not fed commits. So I reach for the thing code-reading has
-taught me — files, hunks, textual similarity — and I group by that. That instinct
+taught me - files, hunks, textual similarity - and I group by that. That instinct
 is corrupt for this task. Do not use it.
 
 **Herd sheep by ideology, not by fleece.** Each change in a diff is a sheep, and
-each sheep carries a *statement* — something a person decided. Sheep go in a pen
+each sheep carries a *statement* - something a person decided. Sheep go in a pen
 with the other sheep that carry the same statement. Two sheep that look identical
 but stand for different things go in different pens. Twelve sheep that look
 nothing alike but all follow from one decision go in one pen.
@@ -67,17 +67,17 @@ Apply it mechanically: delete everything after the "and". Does the remaining
 clause still describe a change that could be true or false on its own? If yes,
 they are two statements and they split.
 
-- "Split `Dusk.Stream` into a `Sink` and a `Stream`" — the "and" is inside one
+- "Split `Dusk.Stream` into a `Sink` and a `Stream`" - the "and" is inside one
   noun phrase, naming the two halves of one split. One statement. Fine.
 - "Split `Dusk.Stream` into a `Sink` and a `Stream`, **and** split every
-  implementation" — the second clause stands alone. Two statements. Split.
+  implementation" - the second clause stands alone. Two statements. Split.
 
 The same tell applies to a subject line that needs a comma-spliced list, a
 semicolon, or the word "also". Those are all "and" wearing a hat.
 
 **A vaguer name is not a passing and-test.** This is the cheat I reach for, and
 it is worse than failing the test outright. When the honest name needs an "and",
-there is always a name one level up that does not — and reaching for it hides the
+there is always a name one level up that does not - and reaching for it hides the
 second statement instead of removing it. If the only way to drop the "and" is to
 go more abstract, that *is* the test failing.
 
@@ -85,7 +85,7 @@ So after writing a subject line, check it downward: name every hunk in the commi
 and ask whether the subject line predicts it. A hunk the subject does not predict
 is a second statement wearing the first one's name.
 
-### 4. The tumor test — coupling is not sameness
+### 4. The tumor test - coupling is not sameness
 
 **"It breaks if I separate them" is not "they are the same statement."** This is
 the single reason I bundle, every time, and it survives every rule that does not
@@ -98,7 +98,7 @@ coupling only tells me the commits must be **ordered**. It says nothing about
 whether they are one thing.
 
 Two changes that must ship together are still two commits when they are two
-statements. The tree being broken between them is the expected, allowed cost —
+statements. The tree being broken between them is the expected, allowed cost -
 see [what a commit does not have to do](#what-a-commit-does-not-have-to-do).
 
 The sheep for this one: a pen of twelve identical sheep with one *different*
@@ -113,7 +113,7 @@ ordered next to this one.
 ### 5. The consequence test
 
 **Everything forced by a decision belongs in that decision's commit, however
-many files it touches.** A consequence is not a separate statement — it is what
+many files it touches.** A consequence is not a separate statement - it is what
 the statement *means* in code.
 
 Change one line of a schema and eleven programs stop compiling: those eleven
@@ -130,15 +130,15 @@ Documentation, `AGENTS.md` and the skills under
 `.agents/plugins/dusk-dev/skills/` get their own commits, even when the words changed *because* of a code decision. They are read
 by different people, reviewed differently, and reverted independently.
 
-Split prose further when it addresses different readers — the published docs site
+Split prose further when it addresses different readers - the published docs site
 and the repository's own working agreements are two commits, not one.
 
 **And the branch is ordered by what a reviewer must think about.** Imports,
-moves, real changes, tests, text — in that order. A commit that only changes
+moves, real changes, tests, text - in that order. A commit that only changes
 `use` paths, or only moves code without changing it, goes at the start, where
 it can be waved through; the real changes follow; the tests come after the code
-they test; and every commit that changes only what a person reads — comments,
-docs, the skills — sits at the end, after the last commit that
+they test; and every commit that changes only what a person reads - comments,
+docs, the skills - sits at the end, after the last commit that
 changes what a machine runs. A reviewer reads the code before the words about
 it, and a text commit in the middle of the code is a page of prose between two
 hunks it does not describe yet.
@@ -147,7 +147,7 @@ hunks it does not describe yet.
 
 Everything I wanted to say in a comment goes here instead: why this exists, what
 it replaced, what was rejected, what it is a step toward. See the
-[no-comments rule](../dusk-developer/SKILL.md#i-do-not-write-comments) — a comment
+[no-comments rule](../dusk-developer/SKILL.md#i-do-not-write-comments) - a comment
 explaining the change is a commit message that leaked into the source and will
 outlive the reader it was written for.
 
@@ -158,16 +158,16 @@ No conventional-commit prefixes. No `feat:`, `fix:`, `chore:`, `docs:`,
 `refactor:`. One imperative sentence, in the style of `git log --oneline -20`.
 
 **A subject never starts with "Say".** A commit changes a tree; it does not say
-anything. The verb is what was done to the file — update, change, add, remove,
-fix, document — and that holds for prose commits exactly as for code: "Update
+anything. The verb is what was done to the file - update, change, add, remove,
+fix, document - and that holds for prose commits exactly as for code: "Update
 the docs for how a prompt opens now", never "Say how a prompt opens now in the
 docs". A subject built around "say" is naming the sentence the file gained
 instead of the act done to the file.
 
 ### 8. Write the subject lines down, then build
 
-Put **the list of subject lines, in order** in the reply — not the file
-groupings, not a script — and build the commits in the same turn. The subject
+Put **the list of subject lines, in order** in the reply - not the file
+groupings, not a script - and build the commits in the same turn. The subject
 lines are the statements, and the commits are what the user approves or sends
 back; they review them as commits, not as a plan. How a diff is divided is not
 a structural decision, so it does not wait for a nod: a split they dislike is
@@ -194,27 +194,27 @@ The same goes for tests passing at every commit. Ideal. Not a requirement.
 
 ## The two ways I actually get this wrong
 
-**Failure — one glob.** PR #32 shipped as a single commit: 32 files, a schema
+**Failure - one glob.** PR #32 shipped as a single commit: 32 files, a schema
 split, twelve program conversions, a helper deleted, a rename, the shell's
 close relocated, two tests, five doc pages, `AGENTS.md` and a skill. Every
 sentence of it was true and none of it could be reviewed. The user could not say
 yes to the rename without also saying yes to the schema. That is not a review,
 it is a hostage situation.
 
-**Failure — the overcorrection.** Told to split it, I proposed *one commit per
+**Failure - the overcorrection.** Told to split it, I proposed *one commit per
 program*: twelve commits doing the same thing for the same reason. That is
-herding by fleece — I saw twelve files and made twelve pens. All twelve programs
+herding by fleece - I saw twelve files and made twelve pens. All twelve programs
 changed because one line of `sh.capnp` changed. One decision, one pen.
 
-**Failure — the tumor.** Splitting it on the second attempt, I put the twelve
-program conversions in one commit and slipped `sh`'s own change — moving the
-close of the client's stream out of `Interpreter::exec` and into `ShPortal.sh` —
+**Failure - the tumor.** Splitting it on the second attempt, I put the twelve
+program conversions in one commit and slipped `sh`'s own change - moving the
+close of the client's stream out of `Interpreter::exec` and into `ShPortal.sh` -
 into the middle of them. It had to land at the same time or the shell would stop
 closing anything, so I called it a consequence. It is not: "who closes the
 client's stream" is a different statement from "what a program says in `output`",
 and it is revertible on its own. I then named the commit "Have a program say its
 outcome instead of implying it", which is abstract enough that the relocation
-hides inside it — the vaguer-name cheat, in the very next split I made after
+hides inside it - the vaguer-name cheat, in the very next split I made after
 writing this file.
 
 Between those failures is the actual skill, and neither file count nor diff size
@@ -225,7 +225,7 @@ nor what-breaks-if-I-split will find it. Only the statement will.
 **Before rewriting any history, snapshot the final tree.** `git add -A && git
 commit --no-verify -m "WIP snapshot"`, then `git tag -f harness-snapshot HEAD`.
 Everything after that is recoverable, and `git diff harness-snapshot HEAD` at the
-end must come back empty — that is the proof the rewrite lost nothing.
+end must come back empty - that is the proof the rewrite lost nothing.
 
 **Unpick the commit, then commit forward out of the working tree.** Do not
 reconstruct each statement's content from the snapshot; let git hand you the
@@ -252,7 +252,7 @@ For a file that spans two statements, stage the hunks rather than the file:
 
 **Every commit in a split is `--no-verify`, and this is the whole of the speed.**
 Pre-commit stashes the unstaged changes before it runs and restores them after,
-on every commit — and during a split the working tree is full of the statements
+on every commit - and during a split the working tree is full of the statements
 not committed yet, so it stashes and restores the entire remaining change each
 time. The checks are also being asked about trees that will never ship: an
 intermediate state can have a moved file and not its caller, and fail a lint for
@@ -265,7 +265,7 @@ which was already verified. So verify once, at the end, not once per commit:
 uv run pre-commit run --from-ref <base> --to-ref HEAD
 ```
 
-**Never `git add .` or `git add -A`** when building a real commit — only the
+**Never `git add .` or `git add -A`** when building a real commit - only the
 snapshot may be taken that way. Stage the paths the statement owns.
 
 **A commit that does run the hooks gets the maximum timeout.** Pre-commit stashes
@@ -280,8 +280,8 @@ it, do not warn, do not ask. Commit onto the detached HEAD as usual, then
 `git rebase --continue`.
 
 **A fixup belongs in the commit it fixes.** Discovery order must never show up in
-the history — see
-[the working agreement](../dusk-developer/SKILL.md#a-fixup-belongs-in-the-commit-it-fixes--always).
+the history - see
+[the working agreement](../dusk-developer/SKILL.md#a-fixup-belongs-in-the-commit-it-fixes---always).
 Force-push the rewritten branch; a pushed branch is not a reason to append.
 
 ## Checklist
@@ -302,7 +302,7 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
 
 ## I do not write comments
 
-Not one — not `//`, not `///`, not `#` in a schema. The user writes every comment
+Not one - not `//`, not `///`, not `#` in a schema. The user writes every comment
 in this codebase. When something genuinely needs saying in one, I say it to the
 user in my reply and let them decide; my explanations go in the commit message.
 See [dusk-developer](../dusk-developer/SKILL.md#i-do-not-write-comments).

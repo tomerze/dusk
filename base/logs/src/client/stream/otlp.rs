@@ -29,7 +29,7 @@ enum State {
     },
 }
 
-/// A `LogsArgs.Stream` that exports each batch to an OTLP/gRPC collector —
+/// A `LogsArgs.Stream` that exports each batch to an OTLP/gRPC collector -
 /// logs on the log signal, reconstructed spans on the trace signal.
 pub struct OtlpStream {
     state: Rc<Mutex<State>>,
@@ -180,7 +180,7 @@ fn resource_spans(
 }
 
 /// Connect on first use, then export this batch's logs and spans. Awaiting the
-/// exports is the backpressure — a slow collector parks the node's stream. On any
+/// exports is the backpressure - a slow collector parks the node's stream. On any
 /// failure the connection is dropped back to [`State::Unconnected`] so the
 /// caller's retry redials.
 async fn export(

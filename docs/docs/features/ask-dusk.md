@@ -1,13 +1,13 @@
 # Ask Dusk
 
 Ask Dusk turns plain English into [shell](shell.md) commands, right inside the
-`dusk` prompt. You don't have to remember a program's name or flags — describe
+`dusk` prompt. You don't have to remember a program's name or flags - describe
 what you want, and Dusk drafts the command.
 
 ## Setting it up
 
 Ask Dusk asks a model you choose, so point it at one first. It works with any
-endpoint that speaks the OpenAI chat-completions API — a commercial provider, a
+endpoint that speaks the OpenAI chat-completions API - a commercial provider, a
 gateway, or a model you host yourself:
 
 ```sh
@@ -35,10 +35,10 @@ export DUSK_LLM_URL='https://gpu-box.lan/v1/chat/completions'      # self-signed
 export DUSK_LLM_TLS_NO_VERIFY=1
 ```
 
-Know what each one gives up. **`http://` is plaintext** — anything on the path
+Know what each one gives up. **`http://` is plaintext** - anything on the path
 between you and the endpoint reads your question and your node's program list.
 **`DUSK_LLM_TLS_NO_VERIFY=1` keeps the encryption but drops the identity
-check** — a passive listener still sees nothing, but Ask Dusk can no longer tell
+check** - a passive listener still sees nothing, but Ask Dusk can no longer tell
 your endpoint from something that answered in its place, so it is for a
 certificate you issued yourself, not a way past a certificate error on the open
 internet. Either one logs a warning naming what stopped protecting the traffic.
@@ -70,8 +70,8 @@ than plausible-looking GNU ones.
 
 Note what leaves the machine. Every question sends your text and your node's
 program list to the endpoint you configured. Even over checked HTTPS the
-operator of that endpoint sees all of it — choose one you are willing to show
+operator of that endpoint sees all of it - choose one you are willing to show
 your fleet's command surface.
 
-For how it works under the hood — the request it builds and the prompt it
-assembles — see [Development › Ask Dusk](../development/ask_dusk.md).
+For how it works under the hood - the request it builds and the prompt it
+assembles - see [Development › Ask Dusk](../development/ask_dusk.md).

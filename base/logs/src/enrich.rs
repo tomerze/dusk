@@ -77,8 +77,8 @@ fn enrich_log_record(
     enriched.set_root::<log_record::Owned>(stored)?;
     {
         // The buffer stores the log record's severity empty (it rides the `Signal`
-        // envelope); fill the OTLP fields back in here, on the way out — both the
-        // numeric severity and its text — so a streamed log record is complete.
+        // envelope); fill the OTLP fields back in here, on the way out - both the
+        // numeric severity and its text - so a streamed log record is complete.
         let mut log_record = enriched.get_root::<log_record::Builder>()?;
         log_record.set_severity_number(severity(level));
         log_record.set_severity_text(level.as_str());
@@ -90,7 +90,7 @@ fn enrich_log_record(
 }
 
 /// A span with its embassy-relative start/end turned into real Unix
-/// nanoseconds. An end of 0 is a span signal written at open — the span has no
+/// nanoseconds. An end of 0 is a span signal written at open - the span has no
 /// end yet, and 0 must stay 0 rather than gain the offset and masquerade as a
 /// real end time. Spans carry no severity, so `level` does not apply.
 fn enrich_span(

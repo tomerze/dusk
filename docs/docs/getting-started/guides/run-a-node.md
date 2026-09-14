@@ -1,21 +1,21 @@
 # Run a dusk node
 
-A node is one running Dusk server — one machine in your fleet. This guide covers
+A node is one running Dusk server - one machine in your fleet. This guide covers
 running one beyond the quickstart binary.
 
 ## The `dusk_node` binary
 
-A node ships as **`dusk_node`** — the server binary under `artifacts/`, run with
+A node ships as **`dusk_node`** - the server binary under `artifacts/`, run with
 `cargo run --bin dusk_node` (its `main` just passes its argument, if it has one,
 to `dusk_node::dusk_node_run()`).
-It links the portable core, a set of programs, and one impl — by default the
+It links the portable core, a set of programs, and one impl - by default the
 **nix** impl (`impls/nix/`, a library, not a binary) for Linux. You make a node
 your own by linking in your programs and, if needed, swapping the underlying impl.
 See [Build a custom impl](custom-impl.md).
 
 ## Choosing the listen address
 
-`dusk_node` takes one optional argument — the `ip:port` it listens on. With no
+`dusk_node` takes one optional argument - the `ip:port` it listens on. With no
 argument it binds `0.0.0.0:9090`, every interface:
 
 ```bash
@@ -35,7 +35,7 @@ Bringing a node up follows a fixed sequence:
 1. Create the node's [namespace](../concepts/namespaces.md) with a random id and
    the executor's spawner.
 2. Register the impl's [`LauncherSet`](../concepts/launchers.md) against that
-   namespace — this is the set of programs the node can run.
+   namespace - this is the set of programs the node can run.
 3. Spawn the first process, `init`, into the namespace via an in-process `Dusk`
    client (`Dusk.process` + `Dusk.run`).
 

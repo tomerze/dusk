@@ -152,7 +152,7 @@ impl dusk_program::process::ProcessMixin for Process {
         }
 
         // The client opens its stream here, where the process is already
-        // running — never when its args were built.
+        // running - never when its args were built.
         let server: logs_capnp::logs_args::server::Client = self.ctx.program_args.server_as()?;
         let response = server.open_stream_request().send().promise.await?;
         let stream = response.get()?.get_stream()?;

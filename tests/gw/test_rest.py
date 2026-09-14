@@ -180,7 +180,7 @@ def test_a_command_the_node_cannot_run_is_a_502(
 ):
     # A node runs each command in a shell task from a bounded pool and answers
     # Busy once they are taken. Letting that escape the handler would answer a
-    # plain-text 500 — the one response this API would not render as JSON.
+    # plain-text 500 - the one response this API would not render as JSON.
     def busy():
         raise RuntimeError("Busy - Too many instances of this task are already running")
         yield

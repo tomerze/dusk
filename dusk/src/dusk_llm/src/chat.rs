@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 pub const ENDPOINT_URL_VARIABLE: &str = "DUSK_LLM_URL";
 /// The model Ask Dusk asks that endpoint for.
 pub const MODEL_VARIABLE: &str = "DUSK_LLM_MODEL";
-/// The bearer token for that endpoint. Optional — some endpoints want none.
+/// The bearer token for that endpoint. Optional - some endpoints want none.
 pub const API_KEY_VARIABLE: &str = "DUSK_LLM_API_KEY";
 /// Set to `1` to keep TLS but stop checking the certificate behind it.
 pub const TLS_NO_VERIFY_VARIABLE: &str = "DUSK_LLM_TLS_NO_VERIFY";
@@ -45,7 +45,7 @@ pub enum Transport {
     Http,
     /// TLS with the certificate checked against the system roots.
     Https,
-    /// TLS with certificate and hostname checks turned off — encrypted against
+    /// TLS with certificate and hostname checks turned off - encrypted against
     /// a passive listener, but it cannot tell the endpoint from an impostor.
     TlsNoVerify,
 }
@@ -61,7 +61,7 @@ pub struct Endpoint {
 
 impl Endpoint {
     /// Build an endpoint. `tls_no_verify` only means anything for an `https`
-    /// URL, where it keeps the encryption and drops the identity check — for a
+    /// URL, where it keeps the encryption and drops the identity check - for a
     /// self-signed certificate on a model you host yourself.
     pub fn new(
         url: &str,
@@ -104,7 +104,7 @@ impl Endpoint {
         }
     }
 
-    /// What protects — or does not protect — a turn in transit.
+    /// What protects - or does not protect - a turn in transit.
     pub fn transport(&self) -> Transport {
         self.transport
     }
@@ -121,7 +121,7 @@ const HELP_ENTRIES: &[(&str, &str, Option<&str>)] = &[
     (MODEL_VARIABLE, "the model to ask that endpoint for", None),
     (
         API_KEY_VARIABLE,
-        "your API key — leave unset if it needs none",
+        "your API key - leave unset if it needs none",
         None,
     ),
     (
@@ -213,7 +213,7 @@ struct ChunkChoice {
 struct ChunkDelta {
     #[serde(default)]
     content: Option<String>,
-    /// A reasoning model streams its thinking here — under this name, or under
+    /// A reasoning model streams its thinking here - under this name, or under
     /// `reasoning` on hosts that follow OpenRouter. It is not part of the
     /// reply, but it is most of what such a model generates in a turn.
     #[serde(default, alias = "reasoning")]
@@ -326,7 +326,7 @@ impl Chat {
                 reqwest::StatusCode::PAYMENT_REQUIRED | reqwest::StatusCode::TOO_MANY_REQUESTS
             ) {
                 bail!(
-                    "{} refused this request ({status}) — its budget or rate limit for this \
+                    "{} refused this request ({status}) - its budget or rate limit for this \
                      caller is spent. Wait a moment and ask again, or point {ENDPOINT_URL_VARIABLE} \
                      and {API_KEY_VARIABLE} at an account with more room.",
                     self.endpoint.url,
@@ -382,8 +382,8 @@ struct Completion {
 }
 
 /// Accumulate the `content` deltas of an OpenAI-style `text/event-stream`
-/// response, firing `on_token` with the running count of generated tokens —
-/// reasoning included — as it grows.
+/// response, firing `on_token` with the running count of generated tokens -
+/// reasoning included - as it grows.
 ///
 /// The buffer is bytes, not text, and is decoded a whole line at a time. A
 /// multi-byte character can land across two chunks of the response, and

@@ -17,7 +17,7 @@ One process serves two protocols over the same connection registry:
   it off.
 
 A descriptor minted over REST is usable over REST only, and one minted by an MCP
-session is usable by that session only — the registry keys connections by the
+session is usable by that session only - the registry keys connections by the
 owner that opened them so it can tear them all down when that owner goes away.
 
 The ``mcp``, ``starlette`` and ``uvicorn`` packages are regular dependencies of
@@ -96,7 +96,7 @@ class ConnectionRegistry:
 
     ``connection_factory`` is the dial for what a connection *is*: it defaults to
     the native ``Dusk`` class, and a caller that wants to drive the gateway
-    against something else — a test double, an instrumented client — passes its
+    against something else - a test double, an instrumented client - passes its
     own.
     """
 
@@ -133,8 +133,8 @@ class ConnectionRegistry:
         """A descriptor no connection in this registry holds. Call under the lock.
 
         Eight hexadecimal digits, drawn from ``secrets`` rather than counted up.
-        Descriptors are not a security boundary — every REST caller shares one
-        owner and so may use any REST descriptor — but a counter would publish
+        Descriptors are not a security boundary - every REST caller shares one
+        owner and so may use any REST descriptor - but a counter would publish
         how many connections the gateway has opened and let any caller address
         another's connection by typing the number below their own, which is a
         worse failure to leave lying around than 32 bits of randomness.
@@ -202,7 +202,7 @@ def app(
     """Build the gateway's ASGI application: REST under ``/v1``, MCP at ``/mcp``.
 
     ``ip`` is the address the returned app will be served on. It changes no
-    binding — that is the ASGI server's job — but the MCP endpoint refuses
+    binding - that is the ASGI server's job - but the MCP endpoint refuses
     requests whose Host header disagrees with a loopback ``ip``, so an app served
     somewhere other than where it was told would turn every MCP client away with
     ``421 Misdirected Request``. :func:`serve` passes the address it binds. Pass
@@ -223,7 +223,7 @@ def app(
     The other two parameters are dials for callers not driving real nodes.
     ``connection_factory`` replaces the native ``Dusk`` class the registry opens
     connections with, and ``programs`` replaces the program set that ``/v1/help``
-    reports and that the MCP tools are generated from — the list ``Dusk.help()``
+    reports and that the MCP tools are generated from - the list ``Dusk.help()``
     returns, each entry a dict with ``name``, ``short_description`` and
     ``long_description``. Left unset, both come from the linked dusk impl.
 
@@ -235,7 +235,7 @@ def app(
     session-end hook calls :meth:`ConnectionRegistry.disconnect_owner`), and when
     the server itself shuts down (the app lifespan below calls
     :meth:`ConnectionRegistry.disconnect_all`). A forgotten ``disconnect`` leaks a
-    connection only until its owner goes away — and a REST descriptor, whose
+    connection only until its owner goes away - and a REST descriptor, whose
     owner is the process, until the gateway stops.
     """
     # The gateway has no terminal to give away, prevents a rogue model from calling `logs view` for example.

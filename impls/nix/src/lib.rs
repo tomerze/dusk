@@ -58,7 +58,7 @@ pub fn run(
         Ok(()) => unreachable!("executor.run() should never return"),
         Err(payload) => match payload.downcast::<ExitCode>() {
             Ok(exit_code) => exit_code.0,
-            // Not our exit code — a real panic. Return -1 rather than
+            // Not our exit code - a real panic. Return -1 rather than
             // resume_unwind: unwinding across an extern "C" caller is UB.
             Err(_payload) => -1,
         },

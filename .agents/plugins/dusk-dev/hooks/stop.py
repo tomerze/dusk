@@ -166,7 +166,7 @@ def main():
             if waiting:
                 problems.append(problem(
                     "the hand-off stands and the human is reading it. Now run the agents that "
-                    "review alongside them — " + ", ".join(waiting) + " — and put what they find "
+                    "review alongside them - " + ", ".join(waiting) + " - and put what they find "
                     "on the pull request as it lands."
                 ))
         if not problems:
@@ -178,7 +178,7 @@ def main():
         if why:
             problems.append(problem(
                 f"the question does not block the work: {why} Decide it, record it in the reply, "
-                "and carry on — the user reads it in review, in one pass, instead of being "
+                "and carry on - the user reads it in review, in one pass, instead of being "
                 "interrupted for it now.",
                 SCREENED,
             ))

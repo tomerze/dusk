@@ -15,7 +15,7 @@ anyhow = { version = "1.0", public = true }
 capnp = { version = "0.21", public = true }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
-# The client-side log viewer (viewer.rs) — all std-only, client feature.
+# The client-side log viewer (viewer.rs) - all std-only, client feature.
 base64 = { version = "0.22.1", optional = true }
 chrono = { version = "0.4.42", optional = true }
 crossterm = { version = "0.29", optional = true }

@@ -91,7 +91,7 @@ impl ShellOutput {
     /// stays quiet, so a caller reading many commands at once needs a thread for
     /// each. Awaiting this instead costs a task. The channel is `tokio`'s, whose
     /// `recv` needs no reactor of its own, so the future is driven by whatever
-    /// event loop the caller is running — asyncio included.
+    /// event loop the caller is running - asyncio included.
     ///
     /// Raises `StopAsyncIteration` once the command has finished, so a caller can
     /// drive it exactly as they would an async iterator. It is not spelled

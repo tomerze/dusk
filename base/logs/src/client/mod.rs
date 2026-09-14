@@ -19,7 +19,7 @@ struct LogsCli {
     /// Only stream signals at this severity or above.
     #[arg(short = 'l', long = "level", value_parser = ["error", "warn", "info", "debug", "trace"], default_value = "trace")]
     level: String,
-    /// Replay the buffered history, then stop — a bounded snapshot that
+    /// Replay the buffered history, then stop - a bounded snapshot that
     /// returns. Use this from scripts and MCP; a plain stream never returns.
     #[arg(long = "replay-only", conflicts_with = "follow_only")]
     replay_only: bool,
@@ -163,7 +163,7 @@ Subcommands:
 * `logs` or `logs view` opens an interactive log pager.
 Intended for an interactive context (the dusk prompt). It has no bounded or
 follow-only mode; use `logs dump` when you need the logs as a command result.
-* `logs dump` returns the logs as Dusk values — one record per signal — on the
+* `logs dump` returns the logs as Dusk values - one record per signal - on the
 command's own output stream. Use this from scripts, the python repl, and MCP:
 its output comes back to the caller (unlike `view`, which paints a terminal, and
 `stream`, which sends to an external sink).

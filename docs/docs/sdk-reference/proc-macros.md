@@ -2,7 +2,7 @@
 
 `dusk_program_proc` (and `dusk_program_sh_proc`) supply the macros that remove
 the boilerplate from a [program](../getting-started/concepts/programs.md). This is
-the framework toolkit — you only meet these when you're
+the framework toolkit - you only meet these when you're
 [customizing Dusk](../customize/index.md). The `sleep` program is a compact
 end-to-end example of all of them.
 
@@ -12,7 +12,7 @@ end-to-end example of all of them.
 dusk_program_proc::metadata!("sleep", VERSION, sleep_capnp::PROGRAM_ID);
 ```
 
-Declares the program's identity — its name, version, and program id. The
+Declares the program's identity - its name, version, and program id. The
 `derive` macros below read this to generate their identity methods, so you
 declare it once and the rest follow.
 
@@ -26,7 +26,7 @@ pub struct Args {
 }
 ```
 
-Builds your `Args` type into the wire `ProgramArgs(D, S)` — packing the `#[data]`
+Builds your `Args` type into the wire `ProgramArgs(D, S)` - packing the `#[data]`
 field as the data half and your `Server` interface as the capability half.
 
 ## `#[impl_args_rpc_server]`

@@ -17,7 +17,7 @@ The only question worth stopping for is one where **proceeding under any assumpt
 - something a user of the node sees, or data that could be lost or corrupted
 - work the user has to authorise: merging, force-pushing over someone else's commits, deleting their caches, touching a host's firewall, network or packages
 - a genuine fork in what the work is *for*, where the two paths produce different deliverables and half the work is thrown away if the guess is wrong
-- a fact only the user has — a credential, an intent, a preference they have not stated anywhere
+- a fact only the user has - a credential, an intent, a preference they have not stated anywhere
 
 `not-a-blocker` when the agent is asking permission it already has, or asking to be told a preference it could pick and report:
 
@@ -29,7 +29,7 @@ The only question worth stopping for is one where **proceeding under any assumpt
 - anything the agent has already answered in its own message before asking
 - a question whose options it lists as roughly equivalent, or where it names a recommendation
 
-A question with a real fork buried inside a pile of cosmetic ones is still `not-a-blocker` if the agent can proceed on the cosmetic ones and ask the real one later — say so in `WHY`.
+A question with a real fork buried inside a pile of cosmetic ones is still `not-a-blocker` if the agent can proceed on the cosmetic ones and ask the real one later - say so in `WHY`.
 
 Read only what you need to judge it. Do not solve the question. Do not read the whole branch. You have three turns; one is usually enough.
 

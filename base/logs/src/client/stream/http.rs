@@ -96,7 +96,7 @@ impl logs_args::stream::Server for HttpStream {
 }
 
 /// POST each signal as a single OTLP/JSON document. Awaiting the posts is the
-/// backpressure — a slow endpoint parks the node's stream.
+/// backpressure - a slow endpoint parks the node's stream.
 async fn post(client: &reqwest::Client, url: &str, batch: &[serde_json::Value]) -> Result<()> {
     for signal in batch {
         client
@@ -111,7 +111,7 @@ async fn post(client: &reqwest::Client, url: &str, batch: &[serde_json::Value]) 
 }
 
 /// The reqwest client. With `DUSK_CLIENT_SKIP_TLS_VERIFY` set it skips certificate
-/// validation so an `https://` target can be a self-signed collector — set
+/// validation so an `https://` target can be a self-signed collector - set
 /// only by tests; unset (always, in production) it validates normally.
 fn build_client() -> Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder();

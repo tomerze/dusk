@@ -1,11 +1,11 @@
 # Programs
 
-> Programs are part of the **framework** layer — the advanced way to use Dusk.
+> Programs are part of the **framework** layer - the advanced way to use Dusk.
 > Most integrations [embed](../../embedding/index.md) a node and run the built-in
 > programs without ever writing one. Reach for this when you're
 > [customizing Dusk](../../customize/index.md).
 
-A **program** is a unit of work a node can run — something like `ps`, or one of
+A **program** is a unit of work a node can run - something like `ps`, or one of
 your own. Programs are static: each is compiled into a node (there is no dynamic
 loading), and a client turns one into a running [process](processes.md) by
 calling `Dusk.process`.
@@ -30,7 +30,7 @@ to the launcher with the same id.
 
 ## 2. Args
 
-A program's args are a capnp struct with two nested members — startup `Data` and
+A program's args are a capnp struct with two nested members - startup `Data` and
 a `Server` interface of client-side callbacks (often empty):
 
 ```capnp
@@ -87,7 +87,7 @@ The async runtime: a struct carrying a `#[process_context]` field, with
 
 ## 5. Portal
 
-The typed capability clients call — a capnp interface extending `Dusk.Portal`:
+The typed capability clients call - a capnp interface extending `Dusk.Portal`:
 
 ```capnp
 interface SleepPortal extends(Dusk.Portal) {}

@@ -15,8 +15,8 @@ the manifests name this plugin where it already sits, at
 
 | manifest | read by |
 |---|---|
-| `.agents/plugins/marketplace.json` | Codex — the marketplace, with this plugin at `./.agents/plugins/dusk-dev` |
-| `.agents/plugins/dusk-dev/.claude-plugin/marketplace.json` | Claude Code — the same marketplace, this directory being both |
+| `.agents/plugins/marketplace.json` | Codex - the marketplace, with this plugin at `./.agents/plugins/dusk-dev` |
+| `.agents/plugins/dusk-dev/.claude-plugin/marketplace.json` | Claude Code - the same marketplace, this directory being both |
 | `.agents/plugins/dusk-dev/.claude-plugin/plugin.json` | Claude Code |
 | `.agents/plugins/dusk-dev/.codex-plugin/plugin.json` | Codex |
 
@@ -58,11 +58,11 @@ agents are Claude Code's; Codex reads the skills.
 
 | part | where |
 |---|---|
-| project instructions | `skills/dusk-developer` — the orientation map for the codebase and the working agreements every change is held to. The repository's root `AGENTS.md` carries none of it: it points here, which is how Codex and anything else without a skill loader find it |
-| skills | `skills/` — `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
-| agents | `agents/` — `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `dilemma-screen`, `decision-ranker` |
-| hooks | `hooks/` — one script per event; `python3 hooks/selftest.py` runs them against canned input |
-| status line | `hooks/statusline.py` — the session's state, wired from `.claude/settings.json` |
+| project instructions | `skills/dusk-developer` - the orientation map for the codebase and the working agreements every change is held to. The repository's root `AGENTS.md` carries none of it: it points here, which is how Codex and anything else without a skill loader find it |
+| skills | `skills/` - `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
+| agents | `agents/` - `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `dilemma-screen`, `decision-ranker` |
+| hooks | `hooks/` - one script per event; `python3 hooks/selftest.py` runs them against canned input |
+| status line | `hooks/statusline.py` - the session's state, wired from `.claude/settings.json` |
 
 ## What the hooks enforce
 
@@ -77,9 +77,9 @@ agents are Claude Code's; Codex reads the skills.
 - A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
 - Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, opens with `WAITING ON SUBAGENTS:` while an agent it dispatched is still running, is a `/what` report, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
 - A marked dilemma is put to `dilemma-screen` before the turn is allowed to end, and comes back refused if the screen says the question does not block the work. A decision `dilemma-triage` already marked `ask-human` is not screened.
-- The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict. Once a hand-off is accepted, `ready to review <pull request url>` is its first line — the url comes from the check that accepted the hand-off, so the line cannot name a pull request that was not verified open at the pushed tip.
+- The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict. Once a hand-off is accepted, `ready to review <pull request url>` is its first line - the url comes from the check that accepted the hand-off, so the line cannot name a pull request that was not verified open at the pushed tip.
 - A message that ends with `Ready for review.` is checked: the line is last, the worktree is gone, the pull request is open at the pushed tip.
-- `Ready for review.` goes out once per branch. After it, a fix is committed, pushed and said on the pull request, and the turn ends `Still ready for review.` — the branch is never handed over a second time, because the human is already reading it.
+- `Ready for review.` goes out once per branch. After it, a fix is committed, pushed and said on the pull request, and the turn ends `Still ready for review.` - the branch is never handed over a second time, because the human is already reading it.
 
 ## Three phases
 
@@ -101,7 +101,7 @@ the human was never waiting on them.
 
 A branch collects what its reviewer needs under `review/<branch>/`, written by
 the hooks from what each agent answers. The folder is ignored by git and never
-committed — it is copied into the pull request body, one heading per file:
+committed - it is copied into the pull request body, one heading per file:
 
 | file | written from |
 |---|---|

@@ -104,7 +104,7 @@ def race_inspector(cwd, message, hook_input):
 
 def comment_review(cwd, message, hook_input):
     if field(message, "COMMENTS") not in ("none", "found"):
-        block("End with `COMMENTS: none` or `COMMENTS: found`; each finding as `- <file>:<line> — <the comment> — <why it belongs in the commit message>`.")
+        block("End with `COMMENTS: none` or `COMMENTS: found`; each finding as `- <file>:<line> - <the comment> - <why it belongs in the commit message>`.")
 
 
 def dilemma_triage(cwd, message, hook_input):
@@ -127,7 +127,7 @@ def dilemma_triage(cwd, message, hook_input):
                 f"- decided: {values['DECIDED']}\n"
                 f"- alternatives: {values['ALTERNATIVES']}\n"
                 f"- reversal: {values['REVERSAL']}\n"
-                f"- triage: {values['VERDICT']} — {values['WHY']}\n"
+                f"- triage: {values['VERDICT']} - {values['WHY']}\n"
             )
     drive_path, _ = drive_state(branch, cwd)
     amend(drive_path, lambda drive: raised(drive, values))
@@ -137,7 +137,7 @@ def dilemma_triage(cwd, message, hook_input):
 def decision_ranker(cwd, message, hook_input):
     match = re.search(r"^RANKED:\s*\n((?:\s*\d+\..*\n?)+)", message or "", re.M)
     if not match:
-        block("End with `RANKED:` followed by one numbered line per decision: `1. <title> — attention: high|medium|low — <why>`.")
+        block("End with `RANKED:` followed by one numbered line per decision: `1. <title> - attention: high|medium|low - <why>`.")
     branch = reviewed(cwd, hook_input)
     path = decisions_path(cwd, branch)
     if not path.exists():
@@ -162,7 +162,7 @@ def write_review(cwd, name, title, message, branch):
 
 def terminology_review(cwd, message, hook_input):
     if field(message, "TERMS") not in ("none", "found"):
-        block("End with `TERMS: none` or `TERMS: found`; each term as `- <term> — <file>:<line> — <what it names> — <the word the codebase already has for it, or none>`.")
+        block("End with `TERMS: none` or `TERMS: found`; each term as `- <term> - <file>:<line> - <what it names> - <the word the codebase already has for it, or none>`.")
     branch = reviewed(cwd, hook_input)
     write_review(cwd, "terminology.md", "Terminology introduced on", message, branch)
     record(cwd, "terminology_sha", branch)
@@ -170,7 +170,7 @@ def terminology_review(cwd, message, hook_input):
 
 def string_review(cwd, message, hook_input):
     if field(message, "STRINGS") not in ("none", "found"):
-        block("End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> — \"<string>\" — <where a person sees it>`.")
+        block("End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> - \"<string>\" - <where a person sees it>`.")
     branch = reviewed(cwd, hook_input)
     write_review(cwd, "strings.md", "User-facing strings introduced on", message, branch)
     record(cwd, "strings_sha", branch)

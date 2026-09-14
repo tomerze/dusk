@@ -1,6 +1,6 @@
 """`POST /v1/sh/stream`: a program's output as it is produced.
 
-The claim worth testing is not that the events are well-formed — it is that a
+The claim worth testing is not that the events are well-formed - it is that a
 reader gets each value while the program is still running. `SlowConnection`
 below releases a value only when the test says so, so a test that reads one
 event before releasing the next has proved the gateway is not waiting for the
@@ -52,7 +52,7 @@ class SlowOutput:
 
     The gate is a ``threading.Event`` because the test sets it from its own
     thread while the gateway runs in another, and it is polled rather than
-    waited on because blocking here would block the event loop — which is the
+    waited on because blocking here would block the event loop - which is the
     property this file exists to check.
     """
 
@@ -108,7 +108,7 @@ def slow_gateway(slow_connection: SlowConnection):
     """A real server on a real socket, whose connections the test controls.
 
     Not TestClient: it collects a whole response before handing it back, so a
-    stream read through it cannot show that anything arrived early — which is
+    stream read through it cannot show that anything arrived early - which is
     the one thing worth proving here. Every other test in this file uses
     TestClient, because buffering does not change what the events say.
     """

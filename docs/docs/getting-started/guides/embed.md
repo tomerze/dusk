@@ -7,13 +7,13 @@ running it into a manageable node in a fleet.
 ## The idea
 
 Dusk's node builds as a C library. You link it into your app and call one
-function — your app is now a Dusk node, and the standard tooling (analytics,
+function - your app is now a Dusk node, and the standard tooling (analytics,
 diagnosis, remote control) works against it. No rewrite, no separate service.
 
 > **TODO:** the end-to-end embed-and-connect experience depends on the
 > connection/transport layer (including encryption and node identity), which is
-> still being built. The integration below — linking the library and starting a
-> node — works today; how a fleet then discovers and securely reaches those nodes
+> still being built. The integration below - linking the library and starting a
+> node - works today; how a fleet then discovers and securely reaches those nodes
 > is the part still in progress.
 
 ## Link the library
@@ -27,7 +27,7 @@ header (`artifacts/dusk_node/include/dusk.h`):
 int32_t dusk_node_run(void *user);
 ```
 
-Link `libdusk_node` and call `dusk_node_run()` — typically on its own thread,
+Link `libdusk_node` and call `dusk_node_run()` - typically on its own thread,
 since it runs the node until shutdown:
 
 ```c
@@ -42,18 +42,18 @@ library, one call.
 
 ## The `user` pointer
 
-`dusk_node` is a template — you copy it, put your programs and your impl in it,
+`dusk_node` is a template - you copy it, put your programs and your impl in it,
 and ship the result, so `dusk_node_run` is a function in **your** library. See
 [Make it yours](#make-it-yours).
 
 Editing the template settles what your node is *built from*. `user` is the other
 half: what your application knows only once it is **running**. It is the one
 channel from the program running the node into the node, and what it points at
-is between the two of them — Dusk itself never looks at it.
+is between the two of them - Dusk itself never looks at it.
 
 The template spends it on the node's listen address: `user` is a NUL-terminated
 `ip:port`, and `NULL` means `0.0.0.0:9090`. That is a decision the template
-makes, not a rule — your node can read the pointer as a config struct, a device
+makes, not a rule - your node can read the pointer as a config struct, a device
 handle, a callback table, or the identifier the device was provisioned with. The
 address is just what a node with nothing else to be told does with it.
 
@@ -64,7 +64,7 @@ address is just what a node with nothing else to be told does with it.
 ## What it gives you
 
 Once your app is a node, point a client at it to get the [analytics and
-diagnosis](../index.md#what-you-get) Dusk is for — see its processes, read its
+diagnosis](../index.md#what-you-get) Dusk is for - see its processes, read its
 logs, and drive it from the [shell](../../features/shell.md), the
 [Python API](connect-a-client.md), or the
 [API gateway](../../features/gateway.md).
@@ -74,6 +74,6 @@ Multiply that across every device running your app and you have a managed fleet.
 
 The default `dusk_node` links the Base programs and the Linux impl. Changing which
 programs ship, targeting a different platform, or adding capabilities of your own
-is the **framework** side of Dusk — see [Write a program](first-program.md) and
+is the **framework** side of Dusk - see [Write a program](first-program.md) and
 [Build a custom impl](custom-impl.md). It's optional: most integrations run the
 defaults.
