@@ -432,6 +432,7 @@ it. It kills the prompt process when the view closes. For one command it runs
 import dusk
 node = dusk.Dusk('127.0.0.1', 9090)   # connects; blocks until the node answers
 print(list(node.sh('ps')))            # sh(command) → iterator of output values
+node.prompt()                         # opens a prompt on this terminal
 node.disconnect()
 dusk.Dusk.help()                      # static: enumerate programs, no connection
 ```
