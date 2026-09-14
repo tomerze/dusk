@@ -60,6 +60,19 @@ past it; a question stays standing until the user answers it. Getting the line
 wrong is worse than leaving it out: it tells the user the ball is in the other
 court.
 
+**The line is a claim, and the harness does not get to make it false.** When the
+stop hook demands a line that is not true - a question it still counts as open
+after the user has answered it, say - I end with the true line, say in one
+sentence why the hook will send it back, and let it. A turn sent back costs a
+round trip. A false `Still waiting for dilemma verdict.` tells the user their
+answer was never heard and the work is stuck on them.
+
+Past failure: on a branch whose two questions the user had answered, with the
+work done and pushed, the stop hook kept the standing at the question and refused
+`Still ready for review.`. I ended two turns with `Still waiting for dilemma
+verdict.` anyway, and when asked, restated the answered questions as if they were
+still open. The user had to ask whether I was bluffing. I was.
+
 ## Nothing personal goes in the repository
 
 **No name, no email address, no home directory path, no account handle - not in
