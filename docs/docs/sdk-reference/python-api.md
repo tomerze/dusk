@@ -26,6 +26,15 @@ Runs `command` through the node's shell and returns a `ShellOutput` - an iterato
 over the command's output values. Iterating pulls values as they stream back;
 iteration ends when the command finishes.
 
+### `node.prompt() -> None`
+
+Opens an interactive prompt on the node's default shell server, on the calling
+terminal, the
+way `logs view` opens a pager there. The call blocks while you use the prompt and
+returns when you leave it: `exit`, or ctrl+d or ctrl+c while typing a line. Ctrl+c
+while a command is running stops that command and keeps the prompt open. Set
+`DUSK_NON_INTERACTIVE` where there is no terminal to give - see below.
+
 ### `node.disconnect() -> None`
 
 Closes the connection. The node and any processes it was running are unaffected;
@@ -80,12 +89,18 @@ it instead.
 
 ## `DUSK_NON_INTERACTIVE`
 
-Some programs are interactive: `logs view` takes over the calling terminal until
-the user quits it. If the process embedding this API has no terminal to give
-away - a service, a notebook kernel, a gateway - set the `DUSK_NON_INTERACTIVE`
-environment variable (to any value) before running commands. Interactive
-commands then refuse to run, with an error naming a non-interactive alternative
-(`logs view` points at `logs dump`), instead of hanging the caller forever.
+Some programs are interactive: `logs view`, `sh --prompt` and `node.prompt()` take over the
+calling terminal until the user quits them. If the process embedding this API
+has no terminal to give away - a service, a notebook kernel, a gateway - set the
+`DUSK_NON_INTERACTIVE` environment variable (to any value) before running
+commands. Interactive commands then refuse to run, with the reason, instead of
+hanging the caller forever: `logs view` points at `logs dump`, and `sh --prompt`
+says `there is no terminal to open a prompt on: DUSK_NON_INTERACTIVE is set`.
+`node.sh(command)` runs unaffected.
+
+`node.prompt()` and `sh --prompt` also refuse on their own when the process's output
+is not a terminal, or when a prompt is already open on it, so a prompt is never
+opened where nobody could type into it.
 
 The [API gateway](../features/gateway.md#no-interactive-views) sets it
 automatically in its own process.
