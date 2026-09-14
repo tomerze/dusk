@@ -15,20 +15,26 @@ node.disconnect()
 
 ## `Dusk`
 
-### `Dusk(address: str, port: int)`
+### `Dusk(address: str, port: int, sh_server_pid: int | None = None)`
 
-Connects to a node at `address:port`. The constructor blocks until the connection
-is established and the node answers, and raises if it can't reach the node.
+Connects to a node at `address:port` and takes hold of a shell server on it: the
+node's default one at `defaultPid`, or the one at `sh_server_pid` - started
+there if nothing is running it yet. The constructor blocks until the connection is established and
+the node answers, and raises if it can't reach the node.
+
+Every command this object runs goes to that shell server, so the shell server's
+state is the object's state: a function defined by one `sh` call is there for the next one,
+and two objects on different pids do not see each other's.
 
 ### `node.sh(command: str) -> ShellOutput`
 
-Runs `command` through the node's shell and returns a `ShellOutput` - an iterator
+Runs `command` in this object's shell server and returns a `ShellOutput` - an iterator
 over the command's output values. Iterating pulls values as they stream back;
 iteration ends when the command finishes.
 
 ### `node.prompt() -> None`
 
-Opens an interactive prompt on the node's default shell server, on the calling
+Opens an interactive prompt on this object's shell server, on the calling
 terminal, the
 way `logs view` opens a pager there. The call blocks while you use the prompt and
 returns when you leave it: `exit`, or ctrl+d or ctrl+c while typing a line. Ctrl+c
