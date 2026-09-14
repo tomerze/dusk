@@ -161,7 +161,8 @@ def write_review(cwd, name, title, message, branch):
 
 
 def terminology_review(cwd, message, hook_input):
-    if field(message, "TERMS") not in ("none", "found"):
+    terms = field(message, "TERMS")
+    if terms not in ("none", "found") or (terms == "found" and not findings(message)):
         block("End with `TERMS: none` or `TERMS: found`; each term as `- <term> - <file>:<line> - <what it names> - <the word the codebase already has for it, or none>`.")
     branch = reviewed(cwd, hook_input)
     write_review(cwd, "terminology.md", "Terminology introduced on", message, branch)
@@ -169,7 +170,8 @@ def terminology_review(cwd, message, hook_input):
 
 
 def string_review(cwd, message, hook_input):
-    if field(message, "STRINGS") not in ("none", "found"):
+    strings = field(message, "STRINGS")
+    if strings not in ("none", "found") or (strings == "found" and not findings(message)):
         block("End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> - \"<string>\" - <where a person sees it>`.")
     branch = reviewed(cwd, hook_input)
     write_review(cwd, "strings.md", "User-facing strings introduced on", message, branch)
