@@ -2,7 +2,7 @@ import re
 
 from harness import context, read_input, save_json, session_state
 
-ISSUE = re.compile(r"(?:^|\s)#\d+\b|github\.com/[\w.-]+/[\w.-]+/issues/\d+|\bissue\s+#?\d+", re.I)
+ISSUE = re.compile(r"(?:^|(?<!\bpr)(?<!\bpull request)\s)#\d+\b|github\.com/[\w.-]+/[\w.-]+/issues/\d+|\bissue\s+#?\d+", re.I)
 SLASH = re.compile(r"^\s*/(?:dusk-dev:)?([a-z][a-z0-9-]*)")
 
 
