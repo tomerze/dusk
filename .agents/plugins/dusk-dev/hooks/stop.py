@@ -150,6 +150,9 @@ def main():
         problems.append(problem("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision."))
 
     claimed, last = claims_ready(message)
+    asked = session["asked"] if "asked" in session else drive.get("pending_questions", [])
+    if session.get("standing") == "dilemma" and asked and all(answered(decisions_path(cwd, branch), title) for title in asked):
+        session["standing"] = "ready" if session.get("handed_off") == branch else None
     standing = session.get("standing")
     if claimed and session.get("handed_off") == branch:
         problems.append(problem(
@@ -162,6 +165,9 @@ def main():
         ready, pull_request_url = ready_problems(cwd, branch, last)
         problems.extend(problem(text) for text in ready)
         if not problems:
+            session["standing"] = "ready"
+            session["handed_off"] = branch
+            session["pull_request"] = pull_request_url
             waiting = missing_signoffs(cwd, REVIEW_SIGNOFFS, branch)
             if waiting:
                 problems.append(problem(
@@ -169,10 +175,6 @@ def main():
                     "review alongside them - " + ", ".join(waiting) + " - and put what they find "
                     "on the pull request as it lands."
                 ))
-        if not problems:
-            session["standing"] = "ready"
-            session["handed_off"] = branch
-            session["pull_request"] = pull_request_url
     elif marks_dilemma(message):
         why = None if pending else stalling(cwd, message)
         if why:
@@ -185,6 +187,7 @@ def main():
             allowed_standing = "dilemma"
         else:
             session["standing"] = "dilemma"
+            session["asked"] = pending
     elif reports_state(message):
         pass
     elif waits_on_agents(message):
@@ -225,6 +228,7 @@ def main():
     if count > MAX_BLOCKS:
         if allowed_standing:
             session["standing"] = allowed_standing
+            session["asked"] = []
         save_json(session_path, session)
         return
     save_json(session_path, session)

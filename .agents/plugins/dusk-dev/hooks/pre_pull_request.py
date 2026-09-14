@@ -19,6 +19,8 @@ def main():
     cwd = hook_input.get("cwd", ".")
     body = tool_input.get("body") or ""
     creating = hook_input.get("tool_name", "").endswith("create_pull_request")
+    if not creating and original.get("body") is None:
+        return
     branch = reviewed(cwd, hook_input)
     path = decisions_path(cwd, branch)
     if path.exists() and "## Decisions" not in body:

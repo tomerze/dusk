@@ -66,7 +66,7 @@ def pushed_branch(command):
     words = [word for word in match.group(1).split() if not word.startswith("-")]
     if len(words) < 2:
         return None
-    return words[1].split(":")[-1]
+    return words[1].lstrip("+").split(":")[-1].removeprefix("refs/heads/")
 
 
 def review_commit(cwd, branch, sha, subject):
