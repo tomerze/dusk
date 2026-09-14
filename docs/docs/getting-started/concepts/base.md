@@ -1,9 +1,9 @@
 # Base programs
 
-Dusk Base is the set of programs that ship with Dusk — the programs a node can
+Dusk Base is the set of programs that ship with Dusk - the programs a node can
 run out of the box. They're optional and swappable: you can write your own
 out-of-tree set and link that into your nodes instead. The relationship between
-Dusk Base and Dusk is like the one between GNU Coreutils and the Linux kernel —
+Dusk Base and Dusk is like the one between GNU Coreutils and the Linux kernel -
 you can go without it, but together they make a node feel like a complete system.
 
 A node can run any Base program over `Dusk.process`; most are also invocable from
@@ -18,14 +18,14 @@ define functions. It's what you talk to through the `dusk` CLI. See
 
 ## `ps`
 
-Lists the Dusk processes *inside* the node — the programs Dusk is running,
-like `docker ps` (not the host's process table) — each with its name, version,
+Lists the Dusk processes *inside* the node - the programs Dusk is running,
+like `docker ps` (not the host's process table) - each with its name, version,
 pid, state and program id.
 
 The `stat` column is one or two letters, the way `ps(1)` does it: `R` for
 running, `S` for suspended, `Z` for exited, and a leading `R` once the process
 has said it is ready. So `RR` is ready and running, `R` running but not yet
-ready, `S` suspended — created but not yet run — and `Z` finished and waiting
+ready, `S` suspended - created but not yet run - and `Z` finished and waiting
 for a `waitpid` to take it out of the list.
 
 ```sh
@@ -35,7 +35,7 @@ ps 0x1a2b     # show just the process with this pid (hex or decimal)
 
 ## `programs`
 
-Lists the programs the node can launch — what it was *compiled with*, as opposed
+Lists the programs the node can launch - what it was *compiled with*, as opposed
 to what is currently running (`ps`) or what this client knows how to invoke
 (`help`). A node and a client are built separately, so the two sets can differ,
 in membership and in version.
@@ -51,7 +51,7 @@ entry shows all of them, separated by ` | `.
 
 ## `logs`
 
-Reads the node's rolling log buffer — live in an interactive viewer, or streamed
+Reads the node's rolling log buffer - live in an interactive viewer, or streamed
 out to a file or a collector. See [Logs](../../features/logs.md).
 
 ```sh
@@ -104,11 +104,11 @@ Prints the node's hostname.
 
 ## `true` / `false`
 
-Do nothing and report success (`true`) or failure (`false`) — building blocks for
+Do nothing and report success (`true`) or failure (`false`) - building blocks for
 shell conditionals.
 
 ## `init`
 
 The first process started on a node. It accepts incoming client connections and
-spawns a session for each. You don't run `init` by hand — the node starts it at
+spawns a session for each. You don't run `init` by hand - the node starts it at
 boot. See [Run a standalone node](../guides/run-a-node.md).

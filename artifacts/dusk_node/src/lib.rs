@@ -10,7 +10,7 @@ pub const DEFAULT_LISTEN_ADDRESS: SocketAddr =
 ///
 /// `user` is whatever the program running the node gives it at run time. This
 /// template reads it as the `ip:port` to listen on, and listens on
-/// [`DEFAULT_LISTEN_ADDRESS`] when it is null — a node built from this template
+/// [`DEFAULT_LISTEN_ADDRESS`] when it is null - a node built from this template
 /// is free to decide the pointer means something else entirely.
 ///
 /// # Safety

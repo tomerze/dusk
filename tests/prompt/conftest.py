@@ -2,7 +2,7 @@
 
 The prompt is a full-screen TUI: it takes over a terminal, asks that terminal
 where the cursor is, and repaints on every keystroke. Testing it therefore needs
-a terminal, not a pipe — these tests give it one with ``ttyd``, which puts a real
+a terminal, not a pipe - these tests give it one with ``ttyd``, which puts a real
 pty behind a websocket, and drive that websocket the way a person drives a
 keyboard. A bare pty is not enough: nothing in it answers the cursor-position
 query, and the prompt gives up.
@@ -164,7 +164,7 @@ class Terminal:
         return readable("".join(self.screen))
 
     def type(self, line: str, settle: float = 2.5, until: str | None = None) -> str:
-        # Type at an idle prompt, the way a person does — and give reedline the
+        # Type at an idle prompt, the way a person does - and give reedline the
         # beat it needs to be reading again before the keystrokes land.
         self.wait_for("❯", timeout=10)
         time.sleep(0.4)

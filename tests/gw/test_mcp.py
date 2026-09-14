@@ -97,7 +97,7 @@ def test_mcp_answers_clients_that_reach_the_address_it_is_served_on(
     # FastMCP arms DNS-rebinding protection from the address it is given and
     # rejects any mismatched Host with 421. Left to its own default that address
     # is loopback whatever the gateway binds, which turns away every client of a
-    # gateway served on 0.0.0.0 — so the address must be threaded through.
+    # gateway served on 0.0.0.0 - so the address must be threaded through.
     import dusk.gw
 
     application = dusk.gw.app(
@@ -214,7 +214,7 @@ def test_descriptors_are_unique_across_owners(
     connection_factory: FakeConnectionFactory,
 ):
     # Uniqueness has to hold registry-wide, not per owner: minting one that some
-    # other owner already holds would be invisible here — lookups are scoped —
+    # other owner already holds would be invisible here - lookups are scoped -
     # and would leave two connections sharing a name for whoever untangles it.
     import dusk.gw
 

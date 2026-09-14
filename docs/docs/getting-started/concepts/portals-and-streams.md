@@ -1,7 +1,7 @@
 # Portals & Streams
 
-A running [process](processes.md) exposes its API through a **portal** — a typed
-Cap'n Proto capability — and moves data over **streams**.
+A running [process](processes.md) exposes its API through a **portal** - a typed
+Cap'n Proto capability - and moves data over **streams**.
 
 ## Portals
 
@@ -15,13 +15,13 @@ interface Portal {
 ```
 
 A program **extends** `Portal` with the methods clients actually call. A client
-obtains a portal with `process.portal()` — which resolves once the process is
-[ready](processes.md#readiness) — reads its `programId`, and downcasts the
+obtains a portal with `process.portal()` - which resolves once the process is
+[ready](processes.md#readiness) - reads its `programId`, and downcasts the
 capability to the program's concrete portal type.
 
 > Programs that produce output to the shell extend the shell's `OutputPortal`
 > (its `output(stream)` method). That is a convention of the
-> [shell](../../features/shell.md), layered on top of `Dusk.Portal` — it is not
+> [shell](../../features/shell.md), layered on top of `Dusk.Portal` - it is not
 > part of the core portal.
 
 ## Streams
@@ -52,5 +52,5 @@ nested `list`s, and `record`s.
 
 A `Record` carries a `typeId` and a list of `(key, value)` fields. The type id
 names the struct shape, so a client can recognise and render structured, tabular
-output without any compiled schema on the wire — this is how a program like `ps`
+output without any compiled schema on the wire - this is how a program like `ps`
 returns its results.

@@ -126,7 +126,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                         )?
                         // Phase 2: consume `self` into a server cap and stash
                         // it in args.server. Use `get_args()` (not
-                        // `init_args()`) — `init_args()` clears both pointer
+                        // `init_args()`) - `init_args()` clears both pointer
                         // slots and would wipe the data we just wrote.
                         let server: #server_client =
                             dusk_program::dusk_capnp::capnp_rpc::new_client(self);

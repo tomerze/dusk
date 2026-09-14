@@ -14,7 +14,7 @@ use tracing::Level;
 /// producer thread via [`SignalBuffer::writer`](crate::buffer::SignalBuffer::writer).
 pub struct Writer {
     inner: Arc<SignalBufferInner>,
-    /// Reusable packing scratch — `write` allocates only as the largest signal
+    /// Reusable packing scratch - `write` allocates only as the largest signal
     /// seen so far grows it.
     packed: RefCell<Vec<u8>>,
 }

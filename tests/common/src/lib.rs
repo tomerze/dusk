@@ -19,7 +19,7 @@ pub fn gen_port() -> u16 {
 }
 
 /// A `LogsArgs.Stream` that records the body of every ERROR-severity entry the
-/// node streams to it — the harness's error monitor, hosted directly rather
+/// node streams to it - the harness's error monitor, hosted directly rather
 /// than going through `logs stream <url>`.
 struct ErrorCaptureStream {
     errors: Arc<Mutex<Vec<String>>>,

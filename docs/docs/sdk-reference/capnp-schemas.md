@@ -51,7 +51,7 @@ interface Process {
 
 ### `Portal`
 
-The base of every process's public API — it carries only the program id, and each
+The base of every process's public API - it carries only the program id, and each
 program **extends** it with typed methods:
 
 ```capnp
@@ -77,7 +77,7 @@ struct ProgramArgs(D, S) {
 }
 ```
 
-A program supplies its own `Data` and `Server` types as `D` and `S` — typically a
+A program supplies its own `Data` and `Server` types as `D` and `S` - typically a
 `struct Data { union { … } }` of startup data and an `interface Server { … }` of
 client-side callbacks.
 
@@ -100,7 +100,7 @@ interface Stream {
 }
 ```
 
-`send` returns a `StreamResult` (`stream.capnp`) — the placeholder type that makes
+`send` returns a `StreamResult` (`stream.capnp`) - the placeholder type that makes
 the method a streaming method, so the RPC layer applies flow control instead of
 acknowledging delivery.
 
@@ -138,6 +138,6 @@ downcasting, and `ps`/`programs` output all key off this id.
 ## Using the schemas externally
 
 An out-of-tree client talks to a node by depending on `dusk_capnp` and driving the
-`Dusk` capability directly — exactly what the CLI, the Python extension, and the
+`Dusk` capability directly - exactly what the CLI, the Python extension, and the
 API gateway do. The schemas are the only contract you need; nothing about a
 node's impl leaks across the wire.

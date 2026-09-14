@@ -144,7 +144,7 @@ def main():
         ask("Tests run only when the user asked for them (dusk-developer, Don't write or run tests unless told). Did they ask?")
     snapshot = has(r"\bgit\s+commit\b") and any("snapshot" in message.lower() for message in commit_messages(command))
     if has(r"\bgit\s+add\b[^\n;&|]*(\s-A\b|\s--all\b|\s\.(?=\s|$))") and not snapshot:
-        deny("Stage named paths, never git add -A or git add . — only the atomic-commit snapshot is taken that way.")
+        deny("Stage named paths, never git add -A or git add . - only the atomic-commit snapshot is taken that way.")
     if has(r"\bgit\s+commit\b"):
         timeout = tool_input.get("timeout") or 120000
         verifies = not has(r"--no-verify\b")

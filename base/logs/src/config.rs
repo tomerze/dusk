@@ -16,7 +16,7 @@ pub struct LaneConfig {
     pub levels: Vec<Level>,
     /// Maximum retained bytes; the lane evicts its own oldest to stay within it.
     pub byte_capacity: usize,
-    /// Maximum retained signals — the lane's fixed slot count.
+    /// Maximum retained signals - the lane's fixed slot count.
     pub signal_capacity: usize,
 }
 

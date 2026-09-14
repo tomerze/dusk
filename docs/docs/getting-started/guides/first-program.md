@@ -1,12 +1,12 @@
 # Write a program
 
-Writing your own program is the **framework** side of Dusk — the third way people
+Writing your own program is the **framework** side of Dusk - the third way people
 reach for it, after [analytics and diagnosis](../index.md#what-you-get). Most
 integrations run the Base programs and never need this; you write a program when
 you want a node to do something the built-ins don't. It's also where Dusk's
 modularity shows: a program is a self-contained unit you drop into a node.
 
-A program is a unit of work a node can run — something like `ps`, or one of your
+A program is a unit of work a node can run - something like `ps`, or one of your
 own. This guide walks the five parts in order, using a `sleep`-style program as
 the example. For the reference on each part, follow the links into
 [Concepts](../concepts/programs.md).
@@ -132,5 +132,5 @@ pub fn sh_entry() -> ShEntry { /* name, short/long description, args builder */ 
 
 ## Wire it into a node
 
-Finally, add the launcher to the node's program set so nodes can run it — see
+Finally, add the launcher to the node's program set so nodes can run it - see
 [Build a custom impl](custom-impl.md).

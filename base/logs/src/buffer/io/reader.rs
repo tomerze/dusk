@@ -60,7 +60,7 @@ impl Reader {
         }
     }
 
-    /// Whether the reader has yielded every signal retained at subscription —
+    /// Whether the reader has yielded every signal retained at subscription -
     /// the end of a `Replay`'s history. Signals logged since are beyond this
     /// boundary, so a replay-only snapshot stops here even while the node keeps
     /// logging. (Eviction past the boundary also counts as caught up: those
@@ -73,8 +73,8 @@ impl Reader {
     }
 
     /// The next signal, parking until one arrives, enriched with its severity
-    /// and real timestamps. Signals this reader will never yield — evicted,
-    /// reclaimed mid-read, or unparseable — are skipped.
+    /// and real timestamps. Signals this reader will never yield - evicted,
+    /// reclaimed mid-read, or unparseable - are skipped.
     pub async fn read(&mut self) -> Builder<HeapAllocator> {
         loop {
             // Sample before scanning: a write landing mid-scan moves the version,
@@ -84,7 +84,7 @@ impl Reader {
                 return signal;
             }
             // Under sustained writer pressure the version has always already
-            // moved, making the park below ready on its first poll — which
+            // moved, making the park below ready on its first poll - which
             // never yields. Without this unconditional yield the loop starves
             // the single-threaded executor.
             embassy_futures::yield_now().await;
@@ -114,7 +114,7 @@ impl Reader {
     /// One synchronous read attempt: merge the lanes in global-sequence order
     /// and return the next signal's level (its bytes land in the scratch).
     /// Evicted and reclaimed signals are stepped over; `None` means nothing is
-    /// yieldable right now — caught up, or the next candidate is mid-write —
+    /// yieldable right now - caught up, or the next candidate is mid-write -
     /// and the next `write`'s notify resolves it.
     fn try_step(&mut self) -> Option<(Level, u64)> {
         loop {

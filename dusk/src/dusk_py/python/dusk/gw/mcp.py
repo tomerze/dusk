@@ -2,8 +2,8 @@
 
 Builds the FastMCP application and registers its tools: the gateway's ``connect``
 / ``disconnect``, and one tool per dusk program. Program tools come from the
-program set the gateway was built with — the link-time set ``Dusk.help()``
-reports — so they are known without any connection.
+program set the gateway was built with - the link-time set ``Dusk.help()``
+reports - so they are known without any connection.
 
 MCP is always mounted. The gateway serves it beside the ``/v1`` REST API
 (:mod:`dusk.gw.rest`) out of the same connection registry, and there is no switch
@@ -34,12 +34,12 @@ if TYPE_CHECKING:
     from . import ConnectionRegistry
 
 INSTRUCTIONS = """
-Think of each Dusk Node as its own self-contained operating system — not a Linux box.
+Think of each Dusk Node as its own self-contained operating system - not a Linux box.
 A Node has its own shell language (the Dusk shell), its own programs, and its own
 process model (running processes you can list with `ps` and signal with `kill`). It is
 NOT Unix: there is no `/bin`, no coreutils, no filesystem to shell out to, and no
 Linux/Unix tools. The ONLY commands a Node can run are the Dusk programs compiled into
-it — and this gateway exposes exactly those, one MCP tool per program (`ps`, `kill`,
+it - and this gateway exposes exactly those, one MCP tool per program (`ps`, `kill`,
 `logs`, `hostname`, `sh`, `sleep`, …). If a capability isn't one of these program
 tools, it does not exist on the Node: use the Dusk program built for the job (e.g.
 `logs` to read logs, `ps` to list processes), never reach for a Unix command like
@@ -47,7 +47,7 @@ tools, it does not exist on the Node: use the Dusk program built for the job (e.
 does not run Unix shell commands.
 
 Dusk is a framework for fleet management: many such Nodes, each driven the same way.
-You drive a Node a bit like SSH — connect, then run its programs — but what you reach
+You drive a Node a bit like SSH - connect, then run its programs - but what you reach
 on the far side is a Dusk OS, not a Unix host.
 
 **This MCP server is a gateway that opens client connections to Dusk Nodes on your
@@ -62,37 +62,37 @@ Node's programs and read their output.
 You may hold several connections to different Nodes at once, each identified by its own descriptor.
 
 Reading program output:
-A program's output is returned as JSON. Sometimes — not always — a program wraps its
+A program's output is returned as JSON. Sometimes - not always - a program wraps its
 result in a type id. When it does, the output is a JSON object with exactly one top-level
 key: a `0x`-prefixed hexadecimal number (for example `0xcef2c7c974bf44ec`). That key is a
-Cap'n Proto type id — a constant identifying *what kind of result this is*. It is NOT a node
+Cap'n Proto type id - a constant identifying *what kind of result this is*. It is NOT a node
 id, connection descriptor, pid, namespace, session, or any runtime/per-call identifier, and
 it carries no meaning beyond "the value underneath is of this type". The real data is the
 object nested under that key.
 
-Other programs return a plain JSON value instead — a string, object, number, boolean, list, or null —
+Other programs return a plain JSON value instead - a string, object, number, boolean, list, or null -
 with no type-id key, in which case the value itself is the data. So before interpreting any
 output, check its shape: a single `0x…` key means "typed result, read the fields underneath";
 anything else is the data directly. Never invent a meaning for the hex key or present it as data.
 
 Long-running programs:
 Every program tool supports task-augmented invocation (MCP tasks). If a command may run for a
-while — a long `sleep`, a shell script, a live `logs` follow — invoke the tool *as an MCP task*
+while - a long `sleep`, a shell script, a live `logs` follow - invoke the tool *as an MCP task*
 (this is NOT your client's generic "run in background" flag, which is a different mechanism and
 will just block the call): you get a task id back immediately while the program runs on the
 gateway, and you can keep working. Poll the task and fetch its result when the program finishes;
 a program that never finishes you simply never poll. Quick commands work as plain synchronous
-calls. Cancelling a task does NOT kill the program on the node — use the `kill` tool for that.
+calls. Cancelling a task does NOT kill the program on the node - use the `kill` tool for that.
 
 Commands on one connection run concurrently: a long-running one (a live `logs` follow you left
 running as a task) does NOT block other commands on the same descriptor. Still prefer a bounded
 read over an endless stream (see Reading logs).
 
 Reading logs:
-Use the `logs` tool's `dump` subcommand — it returns the logs to you as the tool result, one
+Use the `logs` tool's `dump` subcommand - it returns the logs to you as the tool result, one
 structured record per log entry. For a BOUNDED snapshot that returns immediately, run the `logs`
 tool with arguments `dump --replay-only`. To follow the live logs, run `dump` (without
---replay-only) as an MCP task and `kill` it when you're done — a plain follow never returns on its
+--replay-only) as an MCP task and `kill` it when you're done - a plain follow never returns on its
 own. Add `-l <level>` (error|warn|info|debug|trace) to raise the severity floor.
 
 Do NOT use `logs view` (the interactive terminal pager; it is unavailable here) or `logs stream
@@ -100,7 +100,7 @@ Do NOT use `logs view` (the interactive terminal pager; it is unavailable here) 
 gateway host, not delivered to you, and a plain stream never returns. Only `dump` hands the logs
 to you.
 
-Each dumped entry is a typed record — read it as described in "Reading program output" above (the
+Each dumped entry is a typed record - read it as described in "Reading program output" above (the
 single `0x…` key is the entry's Cap'n Proto type id; the fields are nested underneath). A `time`
 field (e.g. `timeUnixNano`) is an integer count of nanoseconds since the Unix epoch.
 """
@@ -161,9 +161,9 @@ def register_tools(
         title="Connect to a dusk server",
         description=(
             "Open a connection to a dusk server at the given host and port. "
-            "Returns a descriptor string — eight hexadecimal digits — that "
+            "Returns a descriptor string - eight hexadecimal digits - that "
             "identifies this connection; pass it to every program tool and to "
-            "the disconnect tool. You may hold several connections at once — "
+            "the disconnect tool. You may hold several connections at once - "
             "each call returns a new descriptor. Connections are closed "
             "automatically when this session ends, but call disconnect when "
             "you are done with one to free it sooner."
@@ -233,8 +233,8 @@ def _register_task_support(server: "FastMCP", program_names: frozenset[str]) -> 
     in the background; the client polls the task and fetches the result when
     the program finishes, so a long-running program never stalls the caller.
 
-    FastMCP has no hook for tasks — task support lives on the lowlevel server,
-    and FastMCP's result conversion cannot carry a ``CreateTaskResult`` — so
+    FastMCP has no hook for tasks - task support lives on the lowlevel server,
+    and FastMCP's result conversion cannot carry a ``CreateTaskResult`` - so
     this re-registers the lowlevel handlers FastMCP installed: ``list_tools``
     to advertise ``execution.taskSupport "optional"`` on every program tool,
     and ``call_tool`` to divert task-augmented calls through ``run_task``.

@@ -1,4 +1,4 @@
-use crate::client::run_prompt::client_hostname;
+use crate::client::client_hostname;
 use crate::entry::{ProgramArgsBuilder, StaticShEntriesBuilder};
 use crate::sh_capnp::DEFAULT_PID;
 use crate::{ShArgs, ShMode};

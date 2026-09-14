@@ -31,7 +31,7 @@ static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 /// flip the prompt's chat-mode flag.
 pub(crate) const TOGGLE_CHAT_HOST_COMMAND: &str = "dusk:toggle_chat";
 
-/// Two-state mode flag — `false` = command, `true` = chat. Shared
+/// Two-state mode flag - `false` = command, `true` = chat. Shared
 /// between the main loop (writer) and [`CommandPrompt`] (reader on
 /// every reedline redraw). Atomic so reedline's prompt impl stays Send.
 #[derive(Clone, Default)]

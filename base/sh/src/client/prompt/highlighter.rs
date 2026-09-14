@@ -28,7 +28,7 @@ fn bracket_style() -> Style {
 impl CustomHighlighter {
     /// Push the currently-accumulated word with a colour decided by where we
     /// are. Returns `Some(index_in_buffer)` when the word was pushed at a
-    /// command-start position — caller may want to recolour it as a function
+    /// command-start position - caller may want to recolour it as a function
     /// definition if a `(` follows.
     fn flush_word(
         styled: &mut StyledText,
@@ -76,7 +76,7 @@ impl Highlighter for CustomHighlighter {
         // it has propagated to the live function table.
         let mut local_functions: Vec<String> = Vec::new();
         // Index in `styled.buffer` of the most recently flushed command-start
-        // word — a candidate for being recoloured as a function-def name if a
+        // word - a candidate for being recoloured as a function-def name if a
         // `(` follows (allowing whitespace between).
         let mut def_candidate_idx: Option<usize> = None;
 
@@ -230,7 +230,7 @@ impl Highlighter for CustomHighlighter {
                 '(' => {
                     let def_name: Option<String>;
                     if at_command_start && !current.is_empty() {
-                        // `name(` with no space — current word is the def name.
+                        // `name(` with no space - current word is the def name.
                         let name = current.clone();
                         styled.push((function_def_style(), name.clone()));
                         current.clear();
@@ -246,7 +246,7 @@ impl Highlighter for CustomHighlighter {
                             &local_functions,
                         );
                         if let Some(idx) = def_candidate_idx {
-                            // `name (` with whitespace between — recolour the
+                            // `name (` with whitespace between - recolour the
                             // word that was already pushed.
                             let name = styled.buffer[idx].1.clone();
                             styled.buffer[idx].0 = function_def_style();

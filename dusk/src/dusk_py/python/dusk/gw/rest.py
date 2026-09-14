@@ -4,7 +4,7 @@ One endpoint per method of the ``Dusk`` Python class, so a REST caller drives a
 node exactly as a Python caller does:
 
 ===========================  ====================================================
-``POST /v1/connect``         ``Dusk(host, port)`` — returns a descriptor
+``POST /v1/connect``         ``Dusk(host, port)`` - returns a descriptor
 ``POST /v1/disconnect``      ``Dusk.disconnect()``
 ``POST /v1/sh``              ``Dusk.sh(command)``
 ``POST /v1/sh/stream``       ``Dusk.sh(command)``, one event per value
@@ -16,7 +16,7 @@ The API describes itself: ``GET /v1/openapi.json`` is the OpenAPI document
 FastAPI generates from the models below, and ``GET /v1/docs`` is the Swagger UI
 that renders it.
 
-A descriptor is the handle a node connection is addressed by — eight hexadecimal
+A descriptor is the handle a node connection is addressed by - eight hexadecimal
 digits; ``connect`` mints one and ``disconnect`` and ``sh`` consume it. Every REST-minted descriptor
 belongs to the single :data:`~dusk.gw.REST_OWNER`, so any REST caller may use any
 REST descriptor.
@@ -75,7 +75,7 @@ TITLE = "Dusk API gateway"
 DESCRIPTION = """
 Run programs on dusk nodes over HTTP.
 
-`POST /connect` with a node's host and port returns a **descriptor** — an
+`POST /connect` with a node's host and port returns a **descriptor** - an
 eight-digit code like `a3f91c07`. Pass it to `/sh` to run commands on that
 node, and to `/disconnect` when you are done. Open as many connections as you
 need; each gets its own descriptor.
@@ -203,7 +203,7 @@ def build_application(
         mounted_at = request.scope.get("root_path", "").rstrip("/")
         return get_swagger_ui_html(
             openapi_url=f"{mounted_at}/openapi.json",
-            title=f"{TITLE} — API reference",
+            title=f"{TITLE} - API reference",
             swagger_js_url=f"{mounted_at}/static/swagger-ui-bundle.js",
             swagger_css_url=f"{mounted_at}/static/swagger-ui.css",
             swagger_favicon_url=BLANK_FAVICON,
@@ -255,7 +255,7 @@ def build_application(
         summary="Run a shell command on a node",
         description=(
             "Runs one dusk shell command line on the connection the descriptor "
-            "names — exactly what you would type at the `dusk` prompt — and "
+            "names - exactly what you would type at the `dusk` prompt - and "
             "returns everything the program produced. Blocks until the program "
             "finishes."
         ),
@@ -293,13 +293,13 @@ def build_application(
             "[Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events) "
             "stream.\n\n"
             "Four kinds of event are sent:\n\n"
-            "- `start` — the stream is live. Sent straight away, before the "
+            "- `start` - the stream is live. Sent straight away, before the "
             "program has produced anything, so a quiet command is "
             "distinguishable from a gateway that never answered.\n"
-            "- `output` — one value the program produced. Its `data` is that "
+            "- `output` - one value the program produced. Its `data` is that "
             "value as JSON, the same shape `/sh` puts in its `output` list.\n"
-            "- `end` — the program finished. Nothing follows it.\n"
-            "- `error` — the command failed partway through. Nothing follows "
+            "- `end` - the program finished. Nothing follows it.\n"
+            "- `error` - the command failed partway through. Nothing follows "
             'it either, and its `data` is `{"error": "..."}`.\n\n'
             "Use this for a command that runs for a while or never ends on its "
             "own, such as following a node's logs. Disconnecting is how you "
@@ -373,7 +373,7 @@ def _openapi_without_the_unreachable_422(api: "FastAPI") -> "Callable[[], dict]"
     because that is what it would return for a body pydantic rejects. This API
     reports those as ``400`` instead (see :func:`_invalid_request_as_json`), so
     leaving the ``422`` in the document would describe a status no caller can
-    ever receive — and a spec that lies is worse than no spec. The schemas
+    ever receive - and a spec that lies is worse than no spec. The schemas
     describing its body go with it, since nothing references them afterward.
     """
     generate = api.openapi

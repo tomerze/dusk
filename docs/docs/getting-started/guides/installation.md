@@ -7,11 +7,11 @@ Get the toolchain and dependencies in place to build Dusk and run a node.
 Dusk builds a vendored Cap'n Proto compiler from source, so you need a C/C++
 toolchain alongside Rust:
 
-- **Rust** — the repository pins its toolchain. Running `rustup show` from the
+- **Rust** - the repository pins its toolchain. Running `rustup show` from the
   project root installs the correct version automatically.
-- **`make`, `cmake`, `autotools`** — required to build the vendored Cap'n Proto
+- **`make`, `cmake`, `autotools`** - required to build the vendored Cap'n Proto
   compiler under `vendor/`.
-- **[`uv`](https://docs.astral.sh/uv/)** — used for the Python tooling
+- **[`uv`](https://docs.astral.sh/uv/)** - used for the Python tooling
   (pre-commit, the `dusk_py` extension, the docs).
 
 ## Clone and build

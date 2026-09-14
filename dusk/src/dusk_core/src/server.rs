@@ -51,7 +51,7 @@ impl DuskServer {
             task_id.set(spawn_token.id());
             namespace.spawner.spawn(spawn_token);
             // Wait for the process to be registered in the namespace maps before
-            // replying — otherwise a follow-up `portal()` can race the registration
+            // replying - otherwise a follow-up `portal()` can race the registration
             // and see the pid as not-yet-running.
             registered.wait().await;
             Ok(())

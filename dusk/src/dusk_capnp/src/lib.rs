@@ -117,7 +117,7 @@ pub fn build_capnp(path: &str, deps: &[CapnpDep]) {
     cmd.file(path).run().unwrap();
 }
 
-/// Backwards-compatible wrapper — compiles a capnp file with only the default dusk deps.
+/// Backwards-compatible wrapper - compiles a capnp file with only the default dusk deps.
 pub fn build_capnp_file(path: &str) {
     build_capnp(path, &[]);
 }

@@ -1,10 +1,10 @@
-/* Dusk docs theme — dusk gold on a twilight-indigo base.
+/* Dusk docs theme - dusk gold on a twilight-indigo base.
    Colors are applied by overriding Material's CSS custom properties per
    color scheme (palette uses primary: custom / accent: custom). */
 
 /* ---------- Light (default) ---------- */
 [data-md-color-scheme="default"] {
-  --md-default-bg-color:        #f6f4ee;   /* warm off-white — pure white was harsh and this flatters the gold */
+  --md-default-bg-color:        #f6f4ee;   /* warm off-white - pure white was harsh and this flatters the gold */
   --md-primary-fg-color:        #f6f4ee;   /* header matches the page */
   --md-primary-fg-color--light: #f6f4ee;
   --md-primary-fg-color--dark:  #f0b441;
@@ -120,7 +120,7 @@
 .dusk-hero .tagline.cta-lead {
   margin-bottom: 0.6rem;
 }
-/* Lead tagline — bigger than the supporting line, and tucked close to it so
+/* Lead tagline - bigger than the supporting line, and tucked close to it so
    the two read as one grouped pitch. */
 .dusk-hero .tagline.lead {
   font-size: 1.35rem;
@@ -135,7 +135,7 @@
   margin-top: 0;
 }
 
-/* Muted punctuation in the taglines — light grey so the commas/semicolon
+/* Muted punctuation in the taglines - light grey so the commas/semicolon
    recede and give the line a little rhythm. */
 .dusk-hero .tagline .punct {
   color: var(--md-default-fg-color--light);
@@ -148,7 +148,7 @@
   color: #f0b441;
 }
 
-/* Opening phrase of the lead tagline — bigger and semibold so it anchors the
+/* Opening phrase of the lead tagline - bigger and semibold so it anchors the
    line, in a tuned-back grey so it doesn't shout. */
 .dusk-hero .tagline .emph {
   font-size: 1.3em;
@@ -162,7 +162,7 @@
   border-radius: 0.5rem;
 }
 /* Lay the two buttons out as a flex row (with a clean gap) so they stay
-   side-by-side and only wrap when there's genuinely no room — plain inline
+   side-by-side and only wrap when there's genuinely no room - plain inline
    layout was wrapping them on phones even when space was available. */
 .dusk-hero > p:last-of-type {
   display: flex;
@@ -183,7 +183,7 @@
 }
 /* GitHub logo in the "View on" button, in the theme's text colour
    (currentColor) so it blends with the palette. Material sizes icons via the
-   --md-icon-size custom property on .twemoji — setting the svg height does
+   --md-icon-size custom property on .twemoji - setting the svg height does
    nothing, so drive that variable instead. */
 .dusk-hero .gh-button .twemoji {
   --md-icon-size: 1.8em;
@@ -196,7 +196,7 @@
 }
 /* Ghost button ("View on GitHub"). Material's default .md-button takes its text
    and border from --md-primary-fg-color, which is white in light mode (white
-   header) — so it would be invisible on the white page. Pin a visible color. */
+   header) - so it would be invisible on the white page. Pin a visible color. */
 .dusk-hero .md-button:not(.md-button--primary) {
   color: var(--md-default-fg-color);
   border-color: #f0b441;
@@ -222,7 +222,7 @@
   width: 3rem;
 }
 /* Pull the logo into the left corner. Material centres the header content in a
-   61rem column (.md-grid), leaving a large left gutter on wide screens — break
+   61rem column (.md-grid), leaving a large left gutter on wide screens - break
    out of it (full-width header) and zero the logo's own left spacing. */
 .md-header__inner.md-grid {
   max-width: none;
@@ -236,7 +236,7 @@
   font-size: 1.15rem;
 }
 /* The logo↔title gap is set by [dir=ltr] .md-header__title (specificity 0,2,0),
-   which outranks a plain .md-header__title — so match it to close the gap. */
+   which outranks a plain .md-header__title - so match it to close the gap. */
 [dir=ltr] .md-header__title {
   margin-left: 0;
 }
@@ -250,7 +250,7 @@
 .md-header__option { order: 2; }
 
 /* Search field in light mode. Material styles it as translucent white, which
-   assumes a dark header — on our white header it (and its hover state) all but
+   assumes a dark header - on our white header it (and its hover state) all but
    vanishes. Give it a visible light-grey field with dark text. */
 [data-md-color-scheme="default"] .md-search__form {
   background-color: #ebe7df;

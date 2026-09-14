@@ -38,7 +38,7 @@ impl Visit for FieldCollector {
         self.put(field, FieldValue::Text(value.to_string()));
     }
 
-    // A JSON number is a double — exact only to 2^53 — so a 64-bit-magnitude
+    // A JSON number is a double - exact only to 2^53 - so a 64-bit-magnitude
     // integer can't round-trip through one (Kibana). Only 32-bit-range values
     // stay an OTLP int; anything wider becomes a string.
     fn record_i64(&mut self, field: &Field, value: i64) {

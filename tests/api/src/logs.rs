@@ -1,11 +1,11 @@
 //! End-to-end tests for the node's log streams: drive an in-process node and
-//! assert its log records reach each stream — an HTTP collector, an HTTPS
+//! assert its log records reach each stream - an HTTP collector, an HTTPS
 //! collector (self-signed), and an OTLP/gRPC collector (all via the
 //! `logs stream <url>` shell path), plus a custom in-memory `LogsArgs.Stream`
 //! an external author could write (driven straight through the SDK, since a
 //! custom stream has no url).
 //!
-//! The node's launcher set installs the buffer-capture subscriber (always — the
+//! The node's launcher set installs the buffer-capture subscriber (always - the
 //! logs Launcher does it unconditionally), and that subscriber is process-global,
 //! so a `tracing::info!` emitted from the test lands in the node's buffer and
 //! streams out to the stream under test. Each test emits a unique marker and
@@ -49,7 +49,7 @@ const ARRIVAL_TIMEOUT: Duration = Duration::from_secs(15);
 // ---- driving `logs stream` ----
 
 /// The sh result stream. `logs stream` never pushes command output here (it
-/// streams records to the args server instead), so both methods are no-ops —
+/// streams records to the args server instead), so both methods are no-ops -
 /// it only exists because `Shell::sh` requires an output stream.
 struct OutputSink;
 
@@ -167,8 +167,8 @@ async fn spawn_http_collector() -> (String, Arc<Mutex<Vec<serde_json::Value>>>) 
     (format!("http://{address}/"), received)
 }
 
-/// Only aws-lc-rs is linked — reqwest's `rustls` feature, axum-server's
-/// `tls-rustls` and rustls' own default all select it — so rustls 0.23 resolves the
+/// Only aws-lc-rs is linked - reqwest's `rustls` feature, axum-server's
+/// `tls-rustls` and rustls' own default all select it - so rustls 0.23 resolves the
 /// process-wide default itself. Installing it explicitly keeps these tests working
 /// if a dependency ever links `ring` as well, which turns that resolution into a
 /// panic. Installing once is enough; a later attempt returns `Err` and is ignored.
@@ -249,7 +249,7 @@ async fn spawn_grpc_collector() -> (String, Arc<Mutex<Vec<OtlpLogRecord>>>) {
 
 /// A custom in-memory stream: a `LogsArgs.Stream` an external author could
 /// write, capturing each streamed record's message body. No file, no collector,
-/// no console — it straps straight onto the stream interface and reads the capnp
+/// no console - it straps straight onto the stream interface and reads the capnp
 /// records itself.
 struct CaptureStream {
     captured: Arc<Mutex<Vec<String>>>,

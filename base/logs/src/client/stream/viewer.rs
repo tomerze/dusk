@@ -40,14 +40,14 @@ const TRIM_CHUNK: usize = 4_096;
 const WRAP_MARGIN: usize = 19;
 
 /// A `LogsArgs.Stream` that pages the node's logs in an interactive
-/// terminal viewer. Unlike the other streams it can't write on `send` — the
-/// pager UI runs concurrently — so `send` feeds the pager's bounded channel
+/// terminal viewer. Unlike the other streams it can't write on `send` - the
+/// pager UI runs concurrently - so `send` feeds the pager's bounded channel
 /// (the backpressure) and the pager drains it; `stop` is answered when the user
 /// quits.
 pub struct ViewerStream {
     entries: mpsc::Sender<Vec<Line>>,
     stop: Rc<Notify>,
-    /// Fired on drop — i.e. when the node-side capability is gone — so the pager
+    /// Fired on drop - i.e. when the node-side capability is gone - so the pager
     /// can surface the disconnect in its status bar even while paused.
     disconnected: Rc<Notify>,
 }
@@ -95,7 +95,7 @@ impl logs_args::stream::Server for ViewerStream {
         let signal_batch = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_signal_batch());
         let entries = dusk_capnp::pry!(signal_batch.get_signals());
         let ack = dusk_capnp::pry!(signal_batch.get_ack());
-        // Render to pager lines here, off the capnp signals — the pager never
+        // Render to pager lines here, off the capnp signals - the pager never
         // sees a log record, only its styled lines.
         let lines = entry_lines(entries);
         let sender = self.entries.clone();
@@ -129,7 +129,7 @@ impl logs_args::stream::Server for ViewerStream {
 /// The pager lines for a streamed batch, rendered straight off the capnp
 /// signals. Spans aren't shown in the viewer (they go to the other streams);
 /// only log records render. A signal that fails to read is skipped with a
-/// warning — one bad signal must not drop the batch.
+/// warning - one bad signal must not drop the batch.
 pub(crate) fn entry_lines(entries: capnp::struct_list::Reader<signal::Owned>) -> Vec<Line> {
     let mut lines = Vec::new();
     for entry in entries {
@@ -152,7 +152,7 @@ pub(crate) fn entry_lines(entries: capnp::struct_list::Reader<signal::Owned>) ->
     lines
 }
 
-/// The log-record reader of a `Signal`, or `None` if it is a span — the viewer
+/// The log-record reader of a `Signal`, or `None` if it is a span - the viewer
 /// shows only logs (spans go to the other sinks).
 fn log_record_of(signal: signal::Reader) -> capnp::Result<Option<log_record::Reader>> {
     match signal.which()? {
@@ -172,7 +172,7 @@ struct Span {
 #[derive(Clone)]
 pub(crate) struct Line {
     spans: Vec<Span>,
-    /// The concatenated span text — what search, selection, and yank act on.
+    /// The concatenated span text - what search, selection, and yank act on.
     pub(crate) plain: String,
 }
 
@@ -343,11 +343,11 @@ fn log_record_lines(
 
 #[derive(Clone, Copy, PartialEq)]
 enum VisualKind {
-    /// `v` — charwise.
+    /// `v` - charwise.
     Char,
-    /// `V` — linewise.
+    /// `V` - linewise.
     Line,
-    /// `Ctrl-V` — blockwise: the rectangle spanned by anchor and cursor.
+    /// `Ctrl-V` - blockwise: the rectangle spanned by anchor and cursor.
     Block,
 }
 
@@ -372,7 +372,7 @@ enum Outcome {
 
 /// An ordered visual selection: `start <= end` position-wise, both
 /// `(line, column)`. For [`VisualKind::Block`] the columns of `start` and
-/// `end` are independent — use [`Selection::columns`] for the rectangle.
+/// `end` are independent - use [`Selection::columns`] for the rectangle.
 #[derive(Clone, Copy)]
 struct Selection {
     start: (usize, usize),
@@ -387,7 +387,7 @@ impl Selection {
     }
 
     /// The selected half-open column span on line `index` (clamped to
-    /// `length`), per kind — the one place yank and rendering agree on what
+    /// `length`), per kind - the one place yank and rendering agree on what
     /// is selected.
     fn span_on_line(&self, index: usize, length: usize) -> (usize, usize) {
         match self.kind {
@@ -416,7 +416,7 @@ struct Pager {
     lines: Vec<Line>,
     cursor: (usize, usize),
     /// The first visual row on screen: a line index plus a wrap-row offset
-    /// within that line — lines wrap to the terminal width, so one line can
+    /// within that line - lines wrap to the terminal width, so one line can
     /// occupy several rows.
     top: (usize, usize),
     follow: bool,
@@ -507,7 +507,7 @@ impl Pager {
         'pager: loop {
             tokio::select! {
                 // Intake is gated on FOLLOW: in NORMAL mode nothing is received,
-                // so nothing can move — not even retention trimming — and the
+                // so nothing can move - not even retention trimming - and the
                 // stream's flow-control window fills until the node parks.
                 // Resuming drains the backlog.
                 batch = entries.recv(), if pager.follow => match batch {
@@ -529,7 +529,7 @@ impl Pager {
                     }
                 }
             }
-            // Drain whatever is already queued before paying for a frame —
+            // Drain whatever is already queued before paying for a frame -
             // under a log flood this folds many batches into one redraw.
             while pager.follow {
                 match entries.try_recv() {
@@ -715,7 +715,7 @@ impl Pager {
             self.follow = false;
         }
         self.cursor.0 = target;
-        // Moving down never re-enters FOLLOW, even onto the last line — the
+        // Moving down never re-enters FOLLOW, even onto the last line - the
         // modes are explicit: `f` / `G` (or `:N` to the bottom) follow.
         self.clamp_column();
         self.scroll_to_cursor();
@@ -858,7 +858,7 @@ impl Pager {
     }
 
     /// The selection if one is active (leaving visual mode), the cursor's
-    /// line otherwise — into the clipboard.
+    /// line otherwise - into the clipboard.
     fn copy_selection_or_line(&mut self) -> Result<()> {
         if let Some(selection) = self.selection() {
             let text = self.yank_text(&selection);
@@ -874,7 +874,7 @@ impl Pager {
     }
 
     fn copy_to_clipboard(&mut self, text: &str) -> Result<()> {
-        // A native clipboard tool first — not every terminal honors OSC 52
+        // A native clipboard tool first - not every terminal honors OSC 52
         // (VTE-based ones ignore it entirely). OSC 52 stays as the fallback:
         // the terminal owns the clipboard there, so it works over SSH.
         if copy_with_system_tool(text) {
@@ -990,7 +990,7 @@ impl Pager {
             let rows = self.viewport_rows() as isize;
             match key.code {
                 // Ctrl+Shift+C copies, like `y`; bare Ctrl+C quits. Whether
-                // the former reaches us at all is the terminal's call — many
+                // the former reaches us at all is the terminal's call - many
                 // keep it for their own copy shortcut.
                 KeyCode::Char('c') | KeyCode::Char('C')
                     if key.modifiers.contains(KeyModifiers::SHIFT) =>
@@ -1112,7 +1112,7 @@ impl Pager {
     // ---- rendering ----
 
     /// One frame: synchronized (the terminal applies it atomically), each row
-    /// overwritten in place and cleared to end-of-line *after* printing —
+    /// overwritten in place and cleared to end-of-line *after* printing -
     /// clearing first is what makes a repaint flicker.
     fn draw(&self) -> Result<()> {
         let mut out = stdout();
@@ -1342,7 +1342,7 @@ impl Pager {
 }
 
 /// `wl-copy` under Wayland, then `xclip`/`xsel` under X11. False when no tool
-/// is present (or none succeeded) — the caller falls back to OSC 52.
+/// is present (or none succeeded) - the caller falls back to OSC 52.
 fn copy_with_system_tool(text: &str) -> bool {
     let candidates: &[(&str, &[&str], &str)] = &[
         ("wl-copy", &[], "WAYLAND_DISPLAY"),
@@ -1365,7 +1365,7 @@ fn copy_with_system_tool(text: &str) -> bool {
         if let Some(mut stdin) = child.stdin.take()
             && stdin.write_all(text.as_bytes()).is_err()
         {
-            // Reap and move on — a failure here only means trying the next
+            // Reap and move on - a failure here only means trying the next
             // tool, with OSC 52 as the final fallback.
             let _ = child.wait();
             continue;

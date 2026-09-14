@@ -21,7 +21,7 @@ pub(crate) const HEX_ID_FIELDS: &[&str] = &["pid", "program_id", "namespace_id",
 /// A span's collected fields, shared cheaply across the records that reference it.
 type SpanFields = Arc<Vec<(&'static str, FieldValue)>>;
 
-/// A stack of span field-sets — a span's effective scope.
+/// A stack of span field-sets - a span's effective scope.
 #[cfg(feature = "console")]
 type Scope = Vec<SpanFields>;
 
@@ -50,8 +50,8 @@ struct ClosedSpan {
 struct State {
     /// Live spans, keyed by id.
     spans: BTreeMap<u64, SpanRecord>,
-    /// The entered-span stack as `(span id, task root span id)`. One stack — the
-    /// executor runs one task at a time — but each entry is tagged with the id of
+    /// The entered-span stack as `(span id, task root span id)`. One stack - the
+    /// executor runs one task at a time - but each entry is tagged with the id of
     /// the task root span it belongs to, so a span left entered across another
     /// task's `.await` never widens that task's scope. The tag is a span id (from
     /// `last_id`), not the reused embassy task id, so it is unique for the life of
@@ -78,7 +78,7 @@ impl BufferLayer {
         }
     }
 
-    /// The entered spans' field-sets for the current task, root-first — the
+    /// The entered spans' field-sets for the current task, root-first - the
     /// console line's scope. Stored records don't carry it; a log reaches its
     /// spans' fields through its span and trace ids.
     #[cfg(feature = "console")]
@@ -128,8 +128,8 @@ impl BufferLayer {
 
 impl Subscriber for BufferLayer {
     fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
-        // Track every span and see every event; the buffer's lane routing — not
-        // a global filter — decides what is kept (see `event`).
+        // Track every span and see every event; the buffer's lane routing - not
+        // a global filter - decides what is kept (see `event`).
         true
     }
 
@@ -153,7 +153,7 @@ impl Subscriber for BufferLayer {
         // The span rides its own level's lane (`info_span!`/`debug_span!`/…); only
         // record it when that lane is kept.
         let routed = self.routed[level_index(*metadata.level())];
-        // Stamp the start outside the state lock — `Instant::now()` takes the time
+        // Stamp the start outside the state lock - `Instant::now()` takes the time
         // driver's mutex, which must not nest inside the critical section.
         let start_milliseconds = if routed {
             Instant::now().as_millis()
@@ -169,7 +169,7 @@ impl Subscriber for BufferLayer {
 
             // Derive the span's identity in its trace: the parent is the task's
             // innermost currently-entered span, the trace is the task root
-            // (root-first first entered) — the span's own id if it is the root.
+            // (root-first first entered) - the span's own id if it is the root.
             // Both are written at open and again at close. Only derived when the
             // span's lane keeps the signal.
             let current_task_root = state
@@ -228,7 +228,7 @@ impl Subscriber for BufferLayer {
     }
 
     fn record(&self, id: &span::Id, values: &span::Record<'_>) {
-        // Collect outside the lock — visiting runs caller formatting code.
+        // Collect outside the lock - visiting runs caller formatting code.
         let existing = self.state.lock(|state| {
             state
                 .borrow()
@@ -254,12 +254,12 @@ impl Subscriber for BufferLayer {
             return;
         }
 
-        // Collect the event's own fields once — visiting runs caller formatting
+        // Collect the event's own fields once - visiting runs caller formatting
         // code, so it must not run twice.
         let mut event_fields = FieldCollector::default();
         event.record(&mut event_fields);
 
-        // A log's span is the innermost it's within; its trace is its task — the
+        // A log's span is the innermost it's within; its trace is its task - the
         // id of that task's root span.
         let current = self
             .state

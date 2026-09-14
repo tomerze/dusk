@@ -30,7 +30,7 @@ pub(crate) fn build_log_record(
     let mut message = Builder::new_default();
     {
         let mut log_record = message.init_root::<signal::Builder>().init_log_record();
-        // Stamp embassy-relative milliseconds now (the writer no longer can —
+        // Stamp embassy-relative milliseconds now (the writer no longer can -
         // the log record is wrapped in a Signal); enrichment converts it to Unix
         // time on the way out.
         log_record.set_time_unix_nano(Instant::now().as_millis());

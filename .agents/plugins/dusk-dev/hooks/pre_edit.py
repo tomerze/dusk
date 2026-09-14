@@ -87,8 +87,8 @@ def main():
     loaded = set(session["loaded_skills"])
     if rel.startswith("base/") and suffix in PROGRAM_SUFFIXES and "authoring-a-program" not in loaded:
         deny(
-            "This is a Dusk program. Invoke /dusk-dev:authoring-a-program first — it covers a "
-            "program's schema, args, launcher, process, portal and shell entry — then make the edit."
+            "This is a Dusk program. Invoke /dusk-dev:authoring-a-program first - it covers a "
+            "program's schema, args, launcher, process, portal and shell entry - then make the edit."
         )
     driver_paths = rel.startswith("impls/") or rel.startswith("dusk/src/dusk_core/src/driver")
     if driver_paths and suffix == ".rs" and "adding-a-driver-method" not in loaded:
@@ -100,8 +100,8 @@ def main():
             save_json(session_path, session)
         if verdict:
             deny(
-                "This changes the Driver trait. Invoke /dusk-dev:adding-a-driver-method first — "
-                "a Driver method is added in four layers, modelled on hostname — then make the edit."
+                "This changes the Driver trait. Invoke /dusk-dev:adding-a-driver-method first - "
+                "a Driver method is added in four layers, modelled on hostname - then make the edit."
             )
 
 

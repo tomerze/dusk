@@ -59,7 +59,7 @@ jobs:
       # --no-install-project keeps this job off the Rust toolchain: installing
       # the project itself would build the dusk_py extension through maturin.
       # Its dependencies still come from uv.lock, so this job tests the versions
-      # the project actually pins rather than whatever resolves today — naming
+      # the project actually pins rather than whatever resolves today - naming
       # them on the command line instead is how this job once installed mcp 2.0
       # against a tree written for 1.x. The gateway's tests supply their own
       # connections and program set and stub the extension out, so they need

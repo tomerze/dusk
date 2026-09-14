@@ -142,7 +142,7 @@ where
         Ok(false)
     }
 
-    /// Number of visual lines `buffer` occupies in the prompt — used by
+    /// Number of visual lines `buffer` occupies in the prompt - used by
     /// the relative post-`read_line` edits to climb back over the
     /// buffer to the indicator / status rows. Multi-line buffers (via
     /// Alt+Enter) get counted by literal newlines; we don't try to
@@ -195,7 +195,7 @@ where
     ) -> Result<bool> {
         Self::strip_rtt_suffix(buffer, status_plain_width)?;
 
-        // A comment-only (or blank) line executes nothing — keep its
+        // A comment-only (or blank) line executes nothing - keep its
         // indicator dim and its history item free of execution metadata.
         let runs_command = !crate::parser::strip_comments(buffer).trim().is_empty();
         if runs_command {
@@ -238,7 +238,7 @@ where
         entries.sort_by_key(|entry| entry.name);
         let mut programs = String::new();
         for entry in entries {
-            programs += &format!("\n## {} — {}\n", entry.name, entry.short_description);
+            programs += &format!("\n## {} - {}\n", entry.name, entry.short_description);
             let long_description = entry.long_description.trim();
             if !long_description.is_empty() {
                 programs += long_description;
@@ -268,7 +268,7 @@ where
             }),
             move || {
                 // An endpoint that reasons before answering sends nothing at
-                // all until it is done — measured at 3 to 17 seconds against
+                // all until it is done - measured at 3 to 17 seconds against
                 // Gemini. A count of zero for that whole stretch reads as a
                 // stall, so the wait is named instead of tallied.
                 let progress = match token_count.load(Ordering::Relaxed) {
@@ -375,7 +375,7 @@ where
             match sig {
                 Signal::Success(buffer) if buffer == TOGGLE_CHAT_HOST_COMMAND => {
                     // Entering is where Ask Dusk has to prove it can answer. If
-                    // it can't, say so now and stay in command mode — the
+                    // it can't, say so now and stay in command mode - the
                     // alternative is taking a question and then binning it.
                     match self.mode.is_chat() {
                         false => match self.prepare_chat() {

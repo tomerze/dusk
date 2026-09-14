@@ -8,9 +8,9 @@ the impls, and the clients.
 
 | Crate | Role |
 |-------|------|
-| `dusk_capnp` | The Cap'n Proto schemas (`dusk.capnp`, `stream.capnp`) — the [wire format](capnp-schemas.md). Depend on it to talk to a node from outside the tree. |
+| `dusk_capnp` | The Cap'n Proto schemas (`dusk.capnp`, `stream.capnp`) - the [wire format](capnp-schemas.md). Depend on it to talk to a node from outside the tree. |
 | `dusk_program` | The SDK a program implements: the `ProcessMixin` / `LauncherMixin` traits, `Namespace`, `ProgramArgs`, `Signal`, `Ready`, and the stream helpers. `no_std`. |
-| `dusk_program_proc` | The [proc macros](proc-macros.md) that remove the boilerplate — `metadata!`, `derive(Args)`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, and the `impl_*_rpc_server` attributes. |
+| `dusk_program_proc` | The [proc macros](proc-macros.md) that remove the boilerplate - `metadata!`, `derive(Args)`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, and the `impl_*_rpc_server` attributes. |
 | `dusk_program_sh_proc` | The `#[sh_entry]` attribute macro. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and `init` wiring. `no_std`. |
 | `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
@@ -18,7 +18,7 @@ the impls, and the clients.
 
 ## Programs (`base/`)
 
-Each Base program is its own crate, named `dusk_program_<name>` — `dusk_program_sh`
+Each Base program is its own crate, named `dusk_program_<name>` - `dusk_program_sh`
 (the shell, which also hosts the `ShEntry` / `SH_ENTRIES` registry), `dusk_program_ps`,
 `dusk_program_kill`, `dusk_program_sleep`, `dusk_program_date`,
 `dusk_program_hostname`, `dusk_program_true`, `dusk_program_false`,
@@ -32,7 +32,7 @@ Each Base program is its own crate, named `dusk_program_<name>` — `dusk_progra
 
 | Crate | Role |
 |-------|------|
-| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive prompt — reedline UI, builtins, output rendering, host of [Ask Dusk](../features/ask-dusk.md) — and the `Shell` that drives the `sh` process a client attaches to. Both are the `sh` program's client side. |
+| `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive prompt - reedline UI, builtins, output rendering, host of [Ask Dusk](../features/ask-dusk.md) - and the `Shell` that drives the `sh` process a client attaches to. Both are the `sh` program's client side. |
 | `dusk_cli` | The `dusk` [CLI](cli.md). |
 | `dusk_py` | The [Python](python-api.md) extension (PyO3, built with maturin). |
 
@@ -44,7 +44,7 @@ Each Base program is its own crate, named `dusk_program_<name>` — `dusk_progra
 
 ## Artifacts (`artifacts/`)
 
-The deliverables you ship — templates to copy and make your own.
+The deliverables you ship - templates to copy and make your own.
 
 | Crate | Role |
 |-------|------|

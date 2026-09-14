@@ -30,7 +30,7 @@ fn message_style(level: Level) -> Style {
 
 /// Print one captured event to stdout, INFO and above: dim timestamp, colored
 /// level, colored message, then the event's own fields and its span scope as
-/// cyan `key=value` — ids ([`HEX_ID_FIELDS`]) as bare hex, so the console agrees
+/// cyan `key=value` - ids ([`HEX_ID_FIELDS`]) as bare hex, so the console agrees
 /// with the buffer and OTLP output. Lower-severity events are captured but not
 /// printed.
 pub(crate) fn print(
@@ -61,7 +61,7 @@ pub(crate) fn print(
     }
 
     // Event fields (sans message) then span scope, innermost-first, first value
-    // per key — the same precedence the buffer's log record uses.
+    // per key - the same precedence the buffer's log record uses.
     let mut seen: Vec<&str> = Vec::new();
     let candidates = event_fields
         .iter()
@@ -88,7 +88,7 @@ pub(crate) fn print(
 }
 
 fn field_value(name: &str, value: &FieldValue) -> String {
-    // Ids ([`HEX_ID_FIELDS`]) render as bare hex — matching buffer enrichment —
+    // Ids ([`HEX_ID_FIELDS`]) render as bare hex - matching buffer enrichment -
     // whether captured as a 32-bit int or, when wider, a decimal string.
     if HEX_ID_FIELDS.contains(&name) {
         let id = match value {

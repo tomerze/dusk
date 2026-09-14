@@ -18,7 +18,7 @@ From [swagger-ui-dist](https://www.npmjs.com/package/swagger-ui-dist) **5.32.14*
 lives in the bundle; the preset supplies `StandaloneLayout`'s topbar and URL
 explorer, which this page does not show. FastAPI's HTML still names
 `SwaggerUIBundle.SwaggerUIStandalonePreset` in its presets list, where it resolves
-to `undefined` and is ignored — this is the same pair of files FastAPI's own docs
+to `undefined` and is ignored - this is the same pair of files FastAPI's own docs
 page loads from a CDN, so it is the configuration Swagger UI is normally run in,
 not one particular to Dusk.
 
@@ -27,7 +27,7 @@ covers.
 
 The page also turns off Swagger UI's validator badge (`validatorUrl: null`),
 because the default hands this API's document address to `validator.swagger.io`.
-`grep validator.swagger.io swagger-ui-bundle.js` still matches — that is the
+`grep validator.swagger.io swagger-ui-bundle.js` still matches - that is the
 default sitting unused inside the bundle, not a request the page makes.
 
 ## Verifying what is here
@@ -39,7 +39,7 @@ sha256sum swagger-ui-bundle.js swagger-ui.css LICENSE
 
 The digests must match the table above. `tests/gw/test_openapi.py` separately
 asserts the served page references no external host, which is the property that
-actually matters — these digests only say *which* copy is here.
+actually matters - these digests only say *which* copy is here.
 
 ## Updating
 

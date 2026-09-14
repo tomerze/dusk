@@ -184,7 +184,7 @@ impl Dusk {
             };
 
             // The capnp client connects lazily, so `init` returns Ok even
-            // against a server that is down — the refused socket only surfaces
+            // against a server that is down - the refused socket only surfaces
             // on the first real RPC. Force one round-trip here so connection
             // setup fails up front, instead of the first command the caller
             // runs after `Dusk(...)` appears to succeed.
@@ -255,7 +255,7 @@ impl Dusk {
             // Wait for thread to finish if we have a handle
             if let Some(handle) = handle_opt {
                 // Release the GIL while joining the connection thread and
-                // waiting for its shutdown result — both block.
+                // waiting for its shutdown result - both block.
                 let shutdown_result = py.detach(move || {
                     let _ = handle.join();
                     result_rx.blocking_recv()
@@ -267,7 +267,7 @@ impl Dusk {
             }
             Ok(())
         } else if let Some(handle) = handle_opt {
-            // No sender but have handle — just wait for the thread, GIL released.
+            // No sender but have handle - just wait for the thread, GIL released.
             py.detach(move || {
                 let _ = handle.join();
             });

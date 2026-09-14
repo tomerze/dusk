@@ -17,6 +17,6 @@ Answer with exactly this shape and nothing after it:
 
 ```
 RANKED:
-1. <decision title, as written in the file> — attention: high|medium|low — <one sentence: why this rank>
+1. <decision title, as written in the file> - attention: high|medium|low - <one sentence: why this rank>
 2. ...
 ```

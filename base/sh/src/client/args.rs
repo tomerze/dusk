@@ -1,4 +1,4 @@
-use crate::client::run_prompt::Created;
+use crate::client::Created;
 use crate::entry::ShEntriesBuilder;
 use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
 use dusk_capnp::capnp_rpc;

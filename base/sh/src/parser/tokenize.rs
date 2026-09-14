@@ -100,8 +100,8 @@ fn word_break(character: char) -> bool {
 }
 
 /// Strip `#` line comments from `input`. Like a shell, a `#` starts a
-/// comment only at the start of a word — at the start of the input or
-/// after a word-breaking character — so a `#` inside a word
+/// comment only at the start of a word - at the start of the input or
+/// after a word-breaking character - so a `#` inside a word
 /// (`http://host/page#section`) is just a character. Quoted strings
 /// (`'...'`, `"..."`) are preserved verbatim.
 pub fn strip_comments(input: &str) -> std::string::String {
@@ -134,7 +134,7 @@ pub fn strip_comments(input: &str) -> std::string::String {
                 out.push(c);
             }
             '#' if out.chars().next_back().is_none_or(word_break) => {
-                // Line comment — drop everything up to (but not including) `\n`.
+                // Line comment - drop everything up to (but not including) `\n`.
                 while let Some(&n) = chars.peek() {
                     if n == '\n' {
                         break;

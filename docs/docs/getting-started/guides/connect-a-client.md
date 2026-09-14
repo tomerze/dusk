@@ -1,7 +1,7 @@
 # Connect a client
 
 Connecting to a node is how you get Dusk's [analytics and
-diagnosis](../index.md#what-you-get) — see what's running, read logs, and drive a
+diagnosis](../index.md#what-you-get) - see what's running, read logs, and drive a
 device. Anything that holds the node's `Dusk` capability can do it; there are
 three first-class ways in.
 
@@ -21,7 +21,7 @@ the prompt:
 cargo run --bin dusk -- 127.0.0.1:9090 "ps"
 ```
 
-This is the human entry point — type commands, read output, define functions.
+This is the human entry point - type commands, read output, define functions.
 See the [Shell](../../features/shell.md) reference for the command language.
 
 ## The Python API
@@ -45,13 +45,13 @@ node.disconnect()
 
 `node.sh(command)` returns an iterator over the command's output values. The
 static `dusk.Dusk.help()` lists the available programs without a connection. This
-is the programmatic entry point — scripting fleet operations, integrating with
+is the programmatic entry point - scripting fleet operations, integrating with
 existing tooling.
 
 ## The HTTP API gateway
 
-For everything that isn't Rust or Python — a dashboard, a CI job, another
-service, an AI agent — Dusk ships `dusk_gw`, an API gateway that puts a node's
+For everything that isn't Rust or Python - a dashboard, a CI job, another
+service, an AI agent - Dusk ships `dusk_gw`, an API gateway that puts a node's
 programs behind HTTP. It comes with the same `dusk` package:
 
 ```bash

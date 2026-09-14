@@ -1,7 +1,7 @@
 """Fixtures for the dusk API gateway tests.
 
-These tests drive the gateway's own logic — routing, request validation, the
-connection registry, error mapping — and never open a real node connection. The
+These tests drive the gateway's own logic - routing, request validation, the
+connection registry, error mapping - and never open a real node connection. The
 gateway takes both of its outside dependencies as parameters (``app`` accepts a
 ``connection_factory`` and a ``programs`` list), so the doubles below are handed
 in the same way any other caller would hand in its own.
