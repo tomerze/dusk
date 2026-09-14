@@ -5,13 +5,17 @@ use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_connection::Connection;
 use dusk_program::anyhow::Result;
 use dusk_program_sh::client::open_prompt;
+use dusk_program_sh::client::shell::Shell;
 use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo, StaticShEntriesBuilder};
+use dusk_program_sh::parser::Parser;
 use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::mpsc;
 
 mod shell_output;
@@ -78,7 +82,8 @@ impl Dusk {
     /// Returns:
     ///     A Dusk client instance
     #[new]
-    fn new(py: Python, address: String, port: u16) -> PyResult<Self> {
+    #[pyo3(signature = (address, port, sh_server_pid=None))]
+    fn new(py: Python, address: String, port: u16, sh_server_pid: Option<u64>) -> PyResult<Self> {
         let address = std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
             std::net::Ipv4Addr::from_str(&address)
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
@@ -88,8 +93,10 @@ impl Dusk {
         let (message_tx, message_rx) = mpsc::unbounded_channel::<Message>();
         let (init_tx, mut init_rx) = mpsc::unbounded_channel::<Result<()>>();
 
-        let thread_handle =
-            std::thread::spawn(move || Self::connection_thread(address, message_rx, init_tx));
+        let server_pid = sh_server_pid.unwrap_or(DEFAULT_PID);
+        let thread_handle = std::thread::spawn(move || {
+            Self::connection_thread(address, server_pid, message_rx, init_tx)
+        });
 
         // Wait for initialization to complete or fail, releasing the GIL so a
         // slow connect doesn't freeze other Python threads.
@@ -111,13 +118,14 @@ impl Dusk {
         self.disconnect_internal(py)
     }
 
+    /// Run `command` in this object's shell server, returning its output values.
     fn sh(&mut self, command: String) -> PyResult<ShellOutput> {
         let sender = self.sender()?;
         ShellOutput::new(command, &sender).map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
-    /// Open an interactive prompt on the node's default shell server, on the
-    /// calling terminal. Blocks while the prompt is up and returns when it is left.
+    /// Open an interactive prompt on this object's shell server, on the calling
+    /// terminal. Blocks while the prompt is up and returns when it is left.
     fn prompt(&mut self, py: Python) -> PyResult<()> {
         let sender = self.sender()?;
         let (result_sender, mut result_receiver) = mpsc::unbounded_channel();
@@ -187,6 +195,7 @@ impl Dusk {
 
     fn connection_thread(
         address: std::net::SocketAddr,
+        server_pid: u64,
         mut message_rx: mpsc::UnboundedReceiver<Message>,
         init_tx: mpsc::UnboundedSender<Result<()>>,
     ) -> Result<()> {
@@ -218,12 +227,40 @@ impl Dusk {
                 let _ = init_tx.send(Err(e.into()));
                 return Ok(());
             }
+            let shell = async {
+                let process = Shell::recreate_sh_process(
+                    client.clone(),
+                    StaticShEntriesBuilder::default(),
+                    server_pid,
+                )
+                .await?;
+                Shell::new(
+                    client.clone(),
+                    StaticShEntriesBuilder::default(),
+                    process,
+                    Parser::new(),
+                )
+                .await
+            }
+            .await;
+            let shell = match shell {
+                Ok(shell) => Rc::new(TokioMutex::new(shell)),
+                Err(error) => {
+                    if let Err(disconnect_error) = connection.disconnect().await {
+                        tracing::warn!(error = %format!("{disconnect_error:#}"), "couldn't disconnect after the shell server failed to start");
+                    }
+                    if init_tx.send(Err(error)).is_err() {
+                        tracing::warn!("nobody was waiting for the connection to be set up");
+                    }
+                    return Ok(());
+                }
+            };
             let _ = init_tx.send(Ok(()));
 
             loop {
                 match message_rx.recv().await {
                     Some(Message::Sh(command, output_tx)) => {
-                        handle_sh(client.clone(), command, output_tx);
+                        handle_sh(shell.clone(), command, output_tx);
                     }
                     Some(Message::Prompt(result_sender)) => {
                         let client = client.clone();
@@ -231,7 +268,7 @@ impl Dusk {
                             let result = open_prompt(
                                 client,
                                 StaticShEntriesBuilder::default(),
-                                DEFAULT_PID,
+                                server_pid,
                             )
                             .await;
                             if let Err(error) = result_sender.send(result) {
