@@ -1,9 +1,12 @@
+use crate::client::run_prompt::client_hostname;
 use crate::entry::{ProgramArgsBuilder, StaticShEntriesBuilder};
+use crate::sh_capnp::DEFAULT_PID;
 use crate::{ShArgs, ShMode};
 use clap::Parser as _;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow;
 use dusk_program::program_args::ProgramArgs;
+use std::format;
 use std::rc::Rc;
 use std::string::String;
 
@@ -12,7 +15,19 @@ use std::string::String;
 struct ShCli {
     #[arg(short = 'd', long = "detach")]
     detach: bool,
+    #[arg(long = "server", value_name = "PID", num_args = 0..=1, value_parser = parse_pid, conflicts_with_all = ["prompt", "detach"])]
+    server: Option<Option<u64>>,
+    #[arg(long = "prompt", value_name = "PID", num_args = 0..=1, value_parser = parse_pid, conflicts_with = "detach")]
+    prompt: Option<Option<u64>>,
     command: Option<String>,
+}
+
+fn parse_pid(pid: &str) -> Result<u64, String> {
+    let parsed = match pid.strip_prefix("0x").or_else(|| pid.strip_prefix("0X")) {
+        Some(digits) => u64::from_str_radix(digits, 16),
+        None => pid.parse(),
+    };
+    parsed.map_err(|error| format!("`{pid}` is not a pid: {error}"))
 }
 
 pub struct ShProgramArgsBuilder {}
@@ -21,8 +36,26 @@ pub struct ShProgramArgsBuilder {}
 impl ProgramArgsBuilder for ShProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
+        if let Some(server_pid) = cli.server {
+            let program_args =
+                ShArgs::new(client, StaticShEntriesBuilder::default(), ShMode::Server)?
+                    .as_program_args()?;
+            program_args.set_pid(Some(server_pid.unwrap_or(DEFAULT_PID)))?;
+            return Ok(program_args);
+        }
+        if let Some(server_pid) = cli.prompt {
+            return Ok(ShArgs::new(
+                client,
+                StaticShEntriesBuilder::default(),
+                ShMode::Prompt {
+                    client_hostname: client_hostname(),
+                    server_pid: server_pid.unwrap_or(DEFAULT_PID),
+                },
+            )?
+            .as_program_args()?);
+        }
         let mode = match cli.command {
-            None => ShMode::Server,
+            None => anyhow::bail!("sh takes a command, --server or --prompt"),
             Some(command) if cli.detach => ShMode::DetachedScript(command),
             Some(command) => ShMode::Script(command),
         };

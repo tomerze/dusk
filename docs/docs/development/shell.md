@@ -44,36 +44,59 @@ the `sh` process.
 There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
-**Interactive prompt.** The CLI runs `sh` the way it would run any program:
-it builds `ShArgs` in `ShMode::Server`, fixes the pid to `sh.capnp`'s
-`defaultPid` — a node has one shell, and a client that connects finds it rather
-than making another — sets a `created` callback on the args, and calls
-`Dusk.process` then `process.run()`. The node calls the callback with the
-process, whether it was built just now or was already there; the callback
-(`Created`, `base/sh/src/client/mod.rs`) spawns a task that builds a `Shell`
-around it and opens the prompt, and **returns at once**. It has to: the prompt
+**Interactive prompt.** `dusk <address>` with no command runs one command:
+`sh --prompt`. It builds the args through the `sh` entry, exactly as a script
+would, and calls `Dusk.process` then `process.run()`. The node calls the args'
+`created` callback with the prompt process, and everything else is the
+callback's: `Created` (`base/sh/src/client/run_prompt.rs`) spawns a task that builds a
+`Shell` around the node's default shell server, at `sh.capnp`'s `defaultPid` —
+starting one there if nothing is running it, since a client that connects finds
+the default shell server rather than making another — opens the prompt on this terminal, and
+**returns at once**. It has to: the prompt
 waits for the process's portal, the portal waits for the process to be run, and
 the run cannot be sent until `Dusk.process` — which is waiting for this
 callback — has returned. Under `DUSK_NON_INTERACTIVE` the callback opens
 nothing and fails the call instead, because there is no terminal to open on.
 
-The CLI runs the process with **`process.run()`**, not `Dusk.run`, so the shell
-runs inside the CLI's own session and the call returns when the shell's `main`
-does. What ends the CLI, though, is the prompt: the callback signals when it is
-over, and the CLI waits for that signal rather than for the run, because a run
-call dies with its connection and a prompt does not. The prompt terminates the
-shell on `exit`.
+The CLI runs the prompt process with **`process.run()`**, not `Dusk.run`, so the
+call returns when that process exits — which is what `exit` at the prompt does
+to it. The CLI then reaps it and leaves; the shell server it was attached
+to is untouched, and the next client attaches to the same one. A connection that drops
+takes the prompt process with it, so the CLI creates and runs another — without
+the callback this time, since the prompt it opened is still there — while the
+`Shell`'s own `auto_reconnect` brings the shell server back at `defaultPid` and keeps
+the open prompt working across the break.
 
-The dead shell stays in `ps` until something reaps it, and the next client to
-run `sh` at `defaultPid` gets a fresh process in its place — a `process.run()`
-on a shell that is already running waits for it instead, so two clients at one
-prompt both leave when the shell does. (`Dusk.run`, which the single-command
-path uses, still answers as soon as the process is spawned.)
 Each accepted line goes `Prompt::execute_command` → `Shell::sh`, which **parses
 the text on the client** into a `Script` and ships it via
 `ShPortal.sh(script, output, stop, compiler)`. One line = one `sh` RPC carrying
 a freshly-parsed `Script`. The shell server is left running when the client
 goes: it keeps its functions and is there for the next client.
+
+**A prompt is a process.** `sh --prompt` runs `sh` in `ShMode::Prompt`, a mode
+whose process does nothing on the node: it is the view's lifetime, and the work
+is all on the client. The mode carries the client's hostname — its own, or
+`DUSK_CLIENT_HOSTNAME` — which the process takes as its name, so it appears in
+`ps` as `sh[prompt ⟷ pc1]` and says which machine is at it. The `sh` entry builds its args with a `created` callback
+carrying the pid of the shell server to attach to (`defaultPid`, or the one
+`--prompt <pid>` names), so the node calls back into the client that built the
+args and the prompt opens there, driving the shell server at that pid. Leaving
+the prompt kills the prompt process — never the shell server — so whoever ran
+`sh --prompt` is told the view is over: `dusk <address>` returns, and
+`node.prompt()` returns. A
+prompt-mode `output` parks until that happens, so a `sh --prompt` inside a
+script waits for its view the way `logs view`'s statement waits for its pager.
+The callback refuses instead — failing the `Dusk.process` call that fired it,
+and killing the prompt process it was called with — when `DUSK_NON_INTERACTIVE`
+is set, when the client's output is not a terminal, or when a prompt is already
+open on it. A terminal has one prompt, so a `sh --prompt` typed at a prompt is
+an error rather than a second view on the same screen.
+
+**`sh --server`** starts the node's default shell server and nothing else: no
+view, no callback, `output` answers `daemonize` so the statement that ran it
+leaves it running for clients to attach to. Its pid is `defaultPid`, or the one
+`sh --server <pid>` names — the same pid `sh --prompt <pid>` attaches to, so a
+shell server outside the default one is two commands rather than a special case.
 
 **One command.** `dusk <address> "ps"` and `dusk.sh(...)` from Python run `sh`
 in `ShMode::Script`, with no callback at all, and drive it themselves:

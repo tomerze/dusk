@@ -1,5 +1,8 @@
 #![allow(unused_imports)]
 
+#[cfg(test)]
+mod sh_view;
+
 use assert_cmd::assert::OutputAssertExt;
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use lazy_static::lazy_static;

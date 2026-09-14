@@ -6,13 +6,13 @@ from harness import (
     WATERMARKS,
     agent_type,
     ask,
-    current_branch,
     decisions_path,
     deny,
     drive_state,
     lint_branch,
     lint_message,
     read_input,
+    reviewed,
     session_state,
 )
 
@@ -102,7 +102,7 @@ def pull_request_problems(cwd, body, creating, hook_input):
     problems = []
     if any(mark in body for mark in WATERMARKS):
         problems.append("the PR body carries a watermark; never")
-    branch = current_branch(cwd)
+    branch = reviewed(cwd, hook_input)
     _, drive = drive_state(branch, cwd)
     _, session = session_state(hook_input.get("session_id", ""))
     issue = drive.get("issue") or (session.get("drive") or {}).get("issue")

@@ -47,7 +47,7 @@ pub struct Shell {
 }
 
 impl Shell {
-    async fn recreate_sh_process<S: ShEntriesBuilder>(
+    pub(crate) async fn recreate_sh_process<S: ShEntriesBuilder>(
         client: dusk::Client,
         sh_entries_builder: S,
         pid: u64,

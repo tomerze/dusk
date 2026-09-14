@@ -4,15 +4,17 @@ use dusk_base::dusk_program::dusk_capnp::capnp::capability::FromClientHook as _;
 use dusk_base::dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
-    client::{prompt::stream::json_stream::JsonStream, run_prompt::Created},
+    client::{
+        prompt::stream::json_stream::JsonStream,
+        run_prompt::open_prompt,
+        stop::{StopSignal, stop_innermost},
+    },
     entry::StaticShEntriesBuilder,
     sh_capnp::{DEFAULT_PID, output_portal},
 };
 use dusk_connection::Connection;
 use std::net::SocketAddr;
-use std::rc::Rc;
 use tokio::signal;
-use tokio::sync::{Notify, oneshot};
 use tracing::{debug, error, info};
 
 #[derive(Parser)]
@@ -35,36 +37,8 @@ async fn kill(client: &dusk::Client, pid: u64) {
     }
 }
 
-async fn prompt(client: dusk::Client, stop_signal: Rc<Notify>) -> Result<()> {
-    let sh_entries_builder = StaticShEntriesBuilder::default();
-    let (finished_sender, finished) = oneshot::channel();
-    let program_args = ShArgs::new(client.clone(), sh_entries_builder.clone(), ShMode::Server)?
-        .as_program_args()?;
-    program_args.set_pid(Some(DEFAULT_PID))?;
-    program_args.set_created(capnp_rpc::new_client(Created {
-        client: client.clone(),
-        sh_entries_builder,
-        stop_signal,
-        finished: Some(finished_sender),
-    }))?;
-    let mut process_request = client.process_request();
-    program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
-    let process = process_request.send().promise.await?.get()?.get_result()?;
-
-    let mut finished = std::pin::pin!(finished);
-    tokio::select! {
-        result = process.run_request().send().promise => {
-            if let Err(error) = result {
-                debug!(error = %error, "the shell this client ran ended");
-            }
-        }
-        _ = finished.as_mut() => return Ok(()),
-    }
-    let _ = finished.await;
-    Ok(())
-}
-
-async fn script(client: dusk::Client, command: String, stop_signal: Rc<Notify>) -> Result<()> {
+async fn script(client: dusk::Client, command: String) -> Result<()> {
+    let stop_signal = StopSignal::new();
     let program_args = ShArgs::new(
         client.clone(),
         StaticShEntriesBuilder::default(),
@@ -102,9 +76,10 @@ async fn script(client: dusk::Client, command: String, stop_signal: Rc<Notify>) 
         .set_stream(capnp_rpc::new_client(json_stream));
     let output_promise = output_request.send().promise;
     tokio::pin!(output_promise);
+    let stop = stop_signal.signal();
     let output_reply = tokio::select! {
         reply = &mut output_promise => reply,
-        _ = stop_signal.notified() => {
+        _ = stop.notified() => {
             kill(&client, pid).await;
             output_promise.await
         }
@@ -124,26 +99,22 @@ async fn script(client: dusk::Client, command: String, stop_signal: Rc<Notify>) 
     Ok(())
 }
 
-async fn run_sh(
-    connection: &Connection,
-    command: Option<String>,
-    stop_signal: Rc<Notify>,
-) -> Result<()> {
+async fn run_sh(connection: &Connection, command: Option<String>) -> Result<()> {
     let client = connection.client().await;
     match command {
-        Some(command) => script(client, command, stop_signal).await,
-        None => prompt(client, stop_signal).await,
+        Some(command) => script(client, command).await,
+        None => open_prompt(client, StaticShEntriesBuilder::default(), DEFAULT_PID).await,
     }
 }
 
-async fn stop_on_ctrl_c(stop_signal: Rc<Notify>) {
+async fn stop_on_ctrl_c() {
     loop {
         if signal::ctrl_c().await.is_err() {
             // SIGINT listener registration failed; park so the work arm drives shutdown.
             error!("couldn't register listener for ctrl+c");
             std::future::pending::<()>().await;
         }
-        stop_signal.notify_waiters();
+        stop_innermost();
     }
 }
 
@@ -153,15 +124,14 @@ async fn run(cli: Cli) {
     if let Err(err) = local_set
         .run_until(async move {
             let connection = Connection::connect(cli.address).await?;
-            let stop_signal = Rc::new(Notify::new());
             tokio::select! {
-                result = run_sh(&connection, cli.command, stop_signal.clone()) => {
+                result = run_sh(&connection, cli.command) => {
                     if let Err(err) = result {
                         error!("{:?}", err);
                     }
                     info!("exiting");
                 }
-                _ = stop_on_ctrl_c(stop_signal.clone()) => {}
+                _ = stop_on_ctrl_c() => {}
             };
             connection.disconnect().await?;
             Ok::<(), anyhow::Error>(())
@@ -197,7 +167,7 @@ pub async fn main() -> Result<()> {
             .init();
     }
 
-    info!("connecting to {}", cli.address);
+    info!("attempting to connect to {}", cli.address);
     run(cli).await;
 
     std::process::exit(0);

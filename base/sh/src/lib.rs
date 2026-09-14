@@ -119,9 +119,15 @@ impl dusk_program::process::ProcessMixin for Process {
             .program_args
             .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
                 Ok(match data.which()? {
-                    sh_capnp::sh_args::data::Which::Server(_) => ("server", false),
-                    sh_capnp::sh_args::data::Which::Script(_) => ("script", false),
-                    sh_capnp::sh_args::data::Which::DetachedScript(_) => ("detached", true),
+                    sh_capnp::sh_args::data::Which::Server(_) => (String::from("server"), false),
+                    sh_capnp::sh_args::data::Which::Script(_) => (String::from("script"), false),
+                    sh_capnp::sh_args::data::Which::DetachedScript(_) => {
+                        (String::from("detached"), true)
+                    }
+                    sh_capnp::sh_args::data::Which::Prompt(client_hostname) => (
+                        format!("prompt \u{27f7} {}", client_hostname?.to_str()?),
+                        false,
+                    ),
                 })
             })?;
         self.ctx
@@ -265,6 +271,16 @@ impl sh_capnp::output_portal::Server for Portal {
                         .write_to_builder(value_builder)?;
                     request.send().await?;
                     results.get().set_daemonize(true);
+                }
+                sh_capnp::sh_args::data::Which::Prompt(_) => {
+                    let stop = Rc::new(Stop::new());
+                    state_cell.borrow_mut().active_stops.push(stop.clone());
+                    stop.wait().await;
+                    state_cell
+                        .borrow_mut()
+                        .active_stops
+                        .retain(|active| !Rc::ptr_eq(active, &stop));
+                    results.get().set_daemonize(false);
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
                     let compiler = ctx

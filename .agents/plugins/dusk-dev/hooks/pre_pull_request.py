@@ -1,6 +1,6 @@
 import re
 
-from harness import allow_with_input, current_branch, decisions_path, deny, read_input
+from harness import allow_with_input, decisions_path, deny, read_input, reviewed
 from pre_bash import pull_request_problems
 
 
@@ -19,7 +19,7 @@ def main():
     cwd = hook_input.get("cwd", ".")
     body = tool_input.get("body") or ""
     creating = hook_input.get("tool_name", "").endswith("create_pull_request")
-    branch = current_branch(cwd)
+    branch = reviewed(cwd, hook_input)
     path = decisions_path(cwd, branch)
     if path.exists() and "## Decisions" not in body:
         decisions = decisions_section(path.read_text())

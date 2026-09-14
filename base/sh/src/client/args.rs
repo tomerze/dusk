@@ -1,7 +1,8 @@
+use crate::client::run_prompt::Created;
 use crate::entry::ShEntriesBuilder;
 use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
 use dusk_capnp::capnp_rpc;
-use dusk_capnp::dusk_capnp::dusk;
+use dusk_capnp::dusk_capnp::{created, dusk};
 use dusk_capnp::pry;
 use dusk_program::IntoCapnp;
 use dusk_program::anyhow::{self, Context};
@@ -14,12 +15,18 @@ pub enum ShMode {
     Server,
     Script(String),
     DetachedScript(String),
+    Prompt {
+        client_hostname: String,
+        server_pid: u64,
+    },
 }
 
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs<S: ShEntriesBuilder> {
     #[data]
     pub data: ArgsDataBuilder,
+    #[created]
+    pub created: Option<created::Client>,
     pub client: dusk::Client,
     pub sh_entries_builder: S,
 }
@@ -27,6 +34,7 @@ pub struct ShArgs<S: ShEntriesBuilder> {
 impl<S: ShEntriesBuilder> ShArgs<S> {
     pub fn new(client: dusk::Client, sh_entries_builder: S, mode: ShMode) -> anyhow::Result<Self> {
         let mut data = ArgsDataBuilder::new_default();
+        let mut created = None;
         {
             let mut data_builder = data.init_root();
             match mode {
@@ -39,17 +47,29 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
                     let mut parser = crate::parser::Parser::new();
                     parser.parse(&command, data_builder.init_detached_script())?;
                 }
+                ShMode::Prompt {
+                    client_hostname,
+                    server_pid,
+                } => {
+                    data_builder.set_prompt(&client_hostname);
+                    created = Some(capnp_rpc::new_client(Created {
+                        client: client.clone(),
+                        sh_entries_builder: sh_entries_builder.clone(),
+                        server_pid,
+                    }));
+                }
             }
         }
         Ok(Self {
             data,
+            created,
             client,
             sh_entries_builder,
         })
     }
 }
 
-async fn program_args_for_command<S: ShEntriesBuilder>(
+pub async fn program_args_for_command<S: ShEntriesBuilder>(
     client: dusk::Client,
     sh_entries_builder: S,
     command: &str,
