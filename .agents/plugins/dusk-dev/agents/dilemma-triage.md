@@ -3,7 +3,7 @@ name: dilemma-triage
 description: Judges one decision the main agent is about to make and says whether it is structural and significant enough to require the human, or can be decided alone and recorded. Dispatch it for every decision as it is made; the hook that reads its answer writes the decision to review/<branch>/decisions.md.
 model: haiku
 effort: low
-maxTurns: 3
+maxTurns: 6
 tools: Read, Grep
 ---
 
