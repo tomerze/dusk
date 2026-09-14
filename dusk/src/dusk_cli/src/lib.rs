@@ -5,8 +5,8 @@ use dusk_base::dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
     client::{
+        open_prompt,
         prompt::stream::json_stream::JsonStream,
-        run_prompt::open_prompt,
         stop::{StopSignal, stop_innermost},
     },
     entry::StaticShEntriesBuilder,
