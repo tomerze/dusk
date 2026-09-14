@@ -48,7 +48,7 @@ different moments.
 `sh --prompt`. It builds the args through the `sh` entry, exactly as a script
 would, and calls `Dusk.process` then `process.run()`. The node calls the args'
 `created` callback with the prompt process, and everything else is the
-callback's: `Created` (`base/sh/src/client/run_prompt.rs`) spawns a task that builds a
+callback's: `Created` (`base/sh/src/client/mod.rs`) spawns a task that builds a
 `Shell` around the node's default shell server, at `sh.capnp`'s `defaultPid` -
 starting one there if nothing is running it, since a client that connects finds
 the default shell server rather than making another - opens the prompt on this terminal, and
