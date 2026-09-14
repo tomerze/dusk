@@ -18,7 +18,9 @@ use std::thread::JoinHandle;
 use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::mpsc;
 
+mod interrupt;
 mod shell_output;
+use interrupt::with_interrupts;
 use shell_output::{ShellOutput, handle_sh};
 
 // Provide a dummy __pender symbol for embassy linkage compatibility
@@ -265,11 +267,11 @@ impl Dusk {
                     Some(Message::Prompt(result_sender)) => {
                         let client = client.clone();
                         tokio::task::spawn_local(async move {
-                            let result = open_prompt(
+                            let result = with_interrupts(open_prompt(
                                 client,
                                 StaticShEntriesBuilder::default(),
                                 server_pid,
-                            )
+                            ))
                             .await;
                             if let Err(error) = result_sender.send(result) {
                                 tracing::warn!(error = %format!("{error:?}"), "nobody was waiting for the prompt's result");
