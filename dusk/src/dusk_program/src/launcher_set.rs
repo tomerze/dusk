@@ -69,22 +69,3 @@ impl LauncherMixin for LauncherSet {
         LauncherSet::launch(self, process_context).await
     }
 }
-
-pub trait LauncherSetBuilder: Send + Sync {
-    fn build(&self) -> Result<LauncherSet>;
-}
-
-pub struct BasicLauncherSetBuilder {
-    launcher_set: LauncherSet,
-}
-
-impl BasicLauncherSetBuilder {
-    pub fn new(launcher_set: LauncherSet) -> Self {
-        BasicLauncherSetBuilder { launcher_set }
-    }
-}
-impl LauncherSetBuilder for BasicLauncherSetBuilder {
-    fn build(&self) -> Result<LauncherSet> {
-        Ok(self.launcher_set.clone())
-    }
-}

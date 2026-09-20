@@ -12,6 +12,7 @@ async-trait = "*"
 tracing = { version = "0.1.41", default-features = false }
 futures-io = { version = "0.3.31", default-features = false, public = true }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+nohash-hasher = "0.2"
 static_cell = "2.1.1"
 portable-atomic = { version = "1", default-features = false, features = ["critical-section", "fallback"] }
 

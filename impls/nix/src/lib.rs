@@ -2,15 +2,12 @@ extern crate alloc;
 
 use alloc::rc::Rc;
 use dusk_program::embassy_executor::Executor;
-use dusk_program::launcher_set;
 use dusk_program::namespace::Namespace;
 use dusk_program::program_args::ProgramArgs;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-pub use dusk_program::launcher_set::BasicLauncherSetBuilder;
 pub use dusk_program::launcher_set::LauncherSet;
-pub use dusk_program::launcher_set::LauncherSetBuilder;
 
 mod driver;
 
@@ -19,7 +16,7 @@ mod driver;
 pub(crate) struct ExitCode(pub(crate) i32);
 
 pub fn run(
-    launcher_set_builder: impl launcher_set::LauncherSetBuilder + 'static,
+    launcher_set: impl Fn() -> dusk_program::anyhow::Result<LauncherSet> + Send + Sync + 'static,
     init_program_args: Rc<ProgramArgs>,
 ) -> i32 {
     // Keep the exit-code panic out of the default panic output so a clean
@@ -52,8 +49,7 @@ pub fn run(
                     .ok(),
             ));
 
-            driver::driver().set_launcher_set_builder(root.id, launcher_set_builder);
-            dusk_core::init::init(root, init_program_args);
+            dusk_core::init::init(root, launcher_set, init_program_args);
         });
     }));
 

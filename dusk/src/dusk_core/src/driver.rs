@@ -1,8 +1,5 @@
-use alloc::rc::Rc;
 use alloc::string::String;
 use dusk_program::anyhow::Result;
-use dusk_program::launcher_set::LauncherSet;
-use dusk_program::namespace::Namespace;
 
 /// Dusk driver.
 #[async_trait::async_trait]
@@ -10,8 +7,6 @@ pub trait Driver: Send + Sync + 'static {
     fn hostname(&self) -> Result<String>;
 
     fn exit(&self, exit_code: i32);
-
-    fn launchers(&self, namespace: Rc<Namespace>) -> Result<LauncherSet>;
 }
 
 /// Set the dusk Driver implementation.
@@ -31,11 +26,6 @@ macro_rules! dusk_driver_impl {
         fn _dusk_exit(exit_code: i32) {
             <$t as $crate::driver::Driver>::exit(&$name, exit_code)
         }
-
-        #[unsafe(no_mangle)]
-        fn _dusk_launchers(namespace: Rc<Namespace>) -> Result<LauncherSet> {
-            <$t as $crate::driver::Driver>::launchers(&$name, namespace)
-        }
     };
 }
 
@@ -43,8 +33,6 @@ unsafe extern "Rust" {
     fn _dusk_hostname() -> Result<String>;
 
     fn _dusk_exit(exit_code: i32);
-
-    fn _dusk_launchers(namespace: Rc<Namespace>) -> Result<LauncherSet>;
 }
 
 pub fn hostname() -> Result<String> {
@@ -53,8 +41,4 @@ pub fn hostname() -> Result<String> {
 
 pub fn exit(exit_code: i32) {
     unsafe { _dusk_exit(exit_code) }
-}
-
-pub fn launchers(namespace: Rc<Namespace>) -> Result<LauncherSet> {
-    unsafe { _dusk_launchers(namespace) }
 }

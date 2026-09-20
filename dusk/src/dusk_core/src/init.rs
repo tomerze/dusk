@@ -1,6 +1,7 @@
 use alloc::rc::Rc;
 use core::cell::Cell;
 use dusk_program::anyhow::Result;
+use dusk_program::launcher_set::LauncherSet;
 use dusk_program::namespace::Namespace;
 use dusk_program::program_args::ProgramArgs;
 use tracing::Instrument;
@@ -43,11 +44,17 @@ async fn init_task(
         span.in_scope(|| error!("init task crashed: {err:#?}"));
     }
     namespace.terminate().await;
+    crate::launchers::remove_launcher_set(namespace.id);
     span.in_scope(|| info!("init task exiting"));
     driver::exit(0);
 }
 
-pub fn init(namespace: Rc<Namespace>, init_program_args: Rc<ProgramArgs>) {
+pub fn init(
+    namespace: Rc<Namespace>,
+    launcher_set: impl Fn() -> Result<LauncherSet> + Send + Sync + 'static,
+    init_program_args: Rc<ProgramArgs>,
+) {
+    crate::launchers::set_launcher_set(namespace.id, launcher_set);
     let task_id = Rc::new(Cell::new(0));
     match init_task(task_id.clone(), namespace.clone(), init_program_args) {
         Ok(spawn_token) => {

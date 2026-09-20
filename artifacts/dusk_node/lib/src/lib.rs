@@ -31,10 +31,7 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
     else {
         return 2;
     };
-    dusk_nix::run(
-        dusk_nix::BasicLauncherSetBuilder::new(launcher_set),
-        init_args,
-    )
+    dusk_nix::run(move || Ok(launcher_set.clone()), init_args)
 }
 
 /// # Safety

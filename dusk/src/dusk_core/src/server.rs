@@ -111,7 +111,7 @@ impl dusk::Server for DuskServer {
 
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
-            let launcher_set = driver::launchers(namespace.clone())
+            let launcher_set = crate::launchers::launchers(namespace.id)
                 .context("launcher set lookup failed")
                 .into_capnp()?;
             let process = namespace
@@ -176,8 +176,8 @@ impl dusk::Server for DuskServer {
         debug!(method = "Dusk.programs", "rpc call");
         let namespace = self.namespace.clone();
         Promise::from_future(async move {
-            let launcher_set = driver::launchers(namespace.clone())
-                .context("couldn't get launcher set from driver")
+            let launcher_set = crate::launchers::launchers(namespace.id)
+                .context("couldn't get the namespace's launcher set")
                 .into_capnp()?;
             let launchers = launcher_set.launchers.lock().await;
             let mut program_entries = results.get().init_program_entries(launchers.len() as u32);
