@@ -41,6 +41,95 @@ Concretely, both of these are wrong:
   commit." Identical text is not the criterion. Two identical-looking edits made
   for different reasons are two commits.
 
+## The branch is the work, not the diary
+
+**Nothing a commit adds may be deleted or rewritten by a later commit on the same
+branch.** The user's own words: **"You can't commit stuff and then overwrite it
+in a later commit. Commits are for review. Why would i review something you
+delete later?"**
+
+And, on why the rewrite is not optional bookkeeping: **"The history of when
+changes were 'discovered' is irrelevant within a PR. Commits are not a dev blog
+telling a story. They are a truth of what we want to CHANGE. That's why we
+absorb. Thats why we rebase."**
+
+That is the whole justification for absorbing and for rebasing, and it is why
+both are routine here rather than something to weigh. A commit answers *what do
+we want this tree to become*, never *what happened to me on the way*. The order I
+learned things in is my problem, not the reviewer's, and a branch that records it
+is asking them to relive my afternoon instead of reading a change.
+
+A branch is not a record of how the work happened. It is the work as it should
+have been done, in an order a person can read. Every line a reviewer reads is a
+line they are being asked to approve, so a line a later commit deletes has spent
+their attention for nothing - and it makes them rule twice on one thing, once on
+a version that was never going to survive.
+
+This is discovery order leaking into history, and it is the same disease as a
+fixup that does not absorb. I write a page, I am told it is wrong, I write it
+again, and both attempts land as commits because both attempts happened. Only the
+second is true. The first belongs nowhere: not in a commit, not on the branch,
+not in front of a reviewer.
+
+So the split is built from **one diff: base against the final tree.** Never from
+the commits in between. The statements are the ones that survive to the end. If a
+commit's content is not in the final tree, it was a draft, not a statement -
+squash it into the commit that carries the final text, or drop it entirely.
+
+### Compute the base yourself; never trust the one you were handed
+
+The paragraphs above were already in this file on the day I broke the rule
+anyway. Asked to rebuild a branch, I took the base named in the request, declared
+everything below it already-reviewed history, and never looked. The drafts were
+below the line. The author found one in a single glance and stopped reading the
+pull request.
+
+So this is not something to remember. It is two commands, run **before** choosing
+a base, every time:
+
+```bash
+base=$(git merge-base origin/master HEAD)
+
+# 1. commits writing a path that does not exist in the final tree.
+#    Every one of them is a draft, whatever else it also does.
+for sha in $(git log --format=%H "$base"..HEAD); do
+  for path in $(git show --format= --name-only "$sha"); do
+    git cat-file -e "HEAD:$path" 2>/dev/null ||
+      echo "$(git log -1 --format=%h "$sha") writes dead path: $path"
+  done
+done
+
+# 2. files written by more than one commit - the same disease in slow motion.
+git log --format= --name-only "$base"..HEAD | sort | uniq -c | sort -rn | awk '$1>1'
+```
+
+**The scope is whatever those return, not what the request said.** A narrower
+base is allowed only once they come back clean above it. A request that names a
+base says where somebody noticed the problem; it never says where the problem
+ends.
+
+The second command is not a failure on its own - two commits may legitimately add
+to one file. It is a list of places to go and check that the later commit does
+not remove or rewrite a line the earlier one added. Check each one; do not read
+the list and move on.
+
+**A file that both moves and changes: move it first.** If the change lands at the
+old path and a later commit moves the file, the first commit writes a path that
+does not exist in the final tree, and the move deletes the line it just added.
+Ordering it the other way - move first, change at the final path - says the same
+thing with no commit touching a dead path. `git log --follow` reads either way;
+a reviewer does not.
+
+The tell, and the check to run before reporting: for each commit, ask whether any
+later commit touches the same lines. A later commit building on an earlier one is
+the branch working; a later commit *replacing* what an earlier one wrote is the
+diary, and the two must be squashed into the one statement they were always
+trying to be.
+
+This applies across the whole branch, not just the commit being split. When the
+range handed over contains an earlier commit whose content has since been
+rewritten, that commit is in scope even if nobody named it.
+
 ## The procedure
 
 ### 1. List the decisions, not the files
@@ -200,7 +289,7 @@ reviewability wins every time. Never bundle to stay green.
 
 The same goes for tests passing at every commit. Ideal. Not a requirement.
 
-## The two ways I actually get this wrong
+## The ways I actually get this wrong
 
 **Failure - one glob.** PR #32 shipped as a single commit: 32 files, a schema
 split, twelve program conversions, a helper deleted, a rename, the shell's
@@ -224,6 +313,27 @@ and it is revertible on its own. I then named the commit "Have a program say its
 outcome instead of implying it", which is abstract enough that the relocation
 hides inside it - the vaguer-name cheat, in the very next split I made after
 writing this file.
+
+**Failure - the diary.** On `esp32-node` I wrote the node artifacts docs page in
+my own words - 194 new lines in one commit - having been asked to *move* the
+text the user had written. Told what I had done, I restored their text in a later
+commit, which deleted 126 of those 194 lines. Six further commits then rewrote
+the same page again as they edited it. Every one of those went to review. The
+user: **"Why would i review something you delete later?"** The error is not that
+those commits were badly divided. It is that they existed at all: only the text
+that survives to the final tree is a statement, and every version before it was a
+draft that should never have reached a commit. The split is built from the base
+against the final tree for exactly this reason.
+
+**Failure - trusting the handed-in base.** Told that a branch showed a reviewer
+text it later deleted, I wrote the rule above into this file - and then rebuilt
+only the range the request had named, and reported the work done. The branch
+still opened on a commit adding `impls/esp32` whose own message said "The crate
+and struct names are placeholders", renamed wholesale to `impls/portable` further
+along; five commits wrote paths absent from the final tree. The author:
+**"This commit is enough for me to stop reading the PR."** Writing the rule down
+did not stop me applying it to a range instead of a branch. Only running the two
+commands does, which is why they are commands and not a paragraph.
 
 Between those failures is the actual skill, and neither file count nor diff size
 nor what-breaks-if-I-split will find it. Only the statement will.
@@ -294,6 +404,9 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
 
 ## Checklist
 
+- ☐ Build from one diff: the base against the **final tree**, never the commits
+      in between
+- ☐ Check that no commit writes a line a later commit deletes; squash any that do
 - ☐ Read the whole diff and list the **decisions**, ignoring file layout
 - ☐ Write a one-sentence subject line for each, before staging anything
 - ☐ Run the and-test on every subject line; split what fails, and never
