@@ -3,12 +3,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from harness import read_input, session_state
+from harness import read_input, running_background, session_state
 
 
 def state(session):
     if session.get("agents"):
         return "waiting on " + ", ".join(session["agents"])
+    running = running_background(session)
+    if running:
+        return "waiting on background work: " + ", ".join(running)
     standing = session.get("standing")
     if standing == "ready":
         return "handed over, awaiting review"

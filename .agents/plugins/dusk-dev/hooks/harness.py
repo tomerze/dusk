@@ -19,6 +19,8 @@ ISSUE_IN_SUBJECT = re.compile(r"\(#\d+\)")
 READY_LINE = "Ready for review."
 DILEMMA_LINE = "DILEMMA:"
 WAITING_LINE = "WAITING ON SUBAGENTS:"
+BACKGROUND_LINE = "WAITING ON BACKGROUND WORK:"
+EXITED = "[exited with code"
 REPORT_HEADINGS = (
     "WHAT IS OVERALL STATE:",
     "WHAT I DID NOW:",
@@ -133,12 +135,27 @@ def branch_name(branch):
 
 def session_state(session_id):
     path = data_dir() / "sessions" / f"{safe_name(session_id)}.json"
-    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False, "committed": False, "standing": None, "handed": None, "agents": []}
+    default = {"loaded_skills": [], "drive": None, "driver_checks": {}, "stop_blocks": {}, "activate_nudged": False, "committed": False, "standing": None, "handed": None, "agents": [], "background": []}
     state = load_json(path, default)
     for key, value in default.items():
         state.setdefault(key, value)
     AS_LOADED[str(path)] = deepcopy(state)
     return path, state
+
+
+def running_background(session):
+    live = []
+    for job in session.get("background") or []:
+        output = job.get("output") if isinstance(job, dict) else None
+        if not output:
+            continue
+        try:
+            text = Path(output).read_text()
+        except OSError:
+            continue
+        if EXITED not in text:
+            live.append(job.get("id") or Path(output).stem)
+    return live
 
 
 def drive_state(branch, cwd="."):

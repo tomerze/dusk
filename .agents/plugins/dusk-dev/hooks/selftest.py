@@ -118,8 +118,22 @@ def session_field(name, key, value):
     return (0 if found == value else 1, str(found), "")
 
 
+def background_session(name, text):
+    output = DATA / "tasks" / f"{name}.output"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text)
+    path = DATA / "sessions" / f"background-{name}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"committed": True, "background": [{"id": name, "output": str(output)}]}))
+    return f"background-{name}"
+
+
 def statusline():
     return run("statusline.py", {"session_id": waiting_session()})
+
+
+def background_statusline():
+    return run("statusline.py", {"session_id": background_session("running", "compiling")})
 
 
 def handed_over_session(url):
@@ -239,6 +253,11 @@ with tempfile.TemporaryDirectory() as temp:
         expect("an unmarked question after a commit is blocked", run("stop.py", {"session_id": "committed", "cwd": str(REPO), "last_assistant_message": "Which of the two should it be?"}), 2, "DILEMMA"),
         expect("a wait with no agent running is blocked", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "WAITING ON SUBAGENTS: self-review"}), 2, "None is"),
         expect("a wait while an agent runs passes", run("stop.py", {"session_id": waiting_session(), "cwd": str(REPO), "last_assistant_message": "WAITING ON SUBAGENTS: self-review, race-screen"}), 0),
+        expect("a background wait with nothing running is blocked", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "WAITING ON BACKGROUND WORK: the cross-compile matrix"}), 2, "None is"),
+        expect("a background wait while a command runs passes", run("stop.py", {"session_id": background_session("running", "compiling"), "cwd": str(REPO), "last_assistant_message": "WAITING ON BACKGROUND WORK: the cross-compile matrix"}), 0),
+        expect("a background wait after the command exited is blocked", run("stop.py", {"session_id": background_session("done", "compiling\n[exited with code 0]\n"), "cwd": str(REPO), "last_assistant_message": "WAITING ON BACKGROUND WORK: the cross-compile matrix"}), 2, "None is"),
+        expect("a subagent wait names the background line when none is an agent", run("stop.py", {"session_id": committed_session(), "cwd": str(REPO), "last_assistant_message": "WAITING ON SUBAGENTS: the cross-compile matrix"}), 2, "WAITING ON BACKGROUND WORK"),
+        expect("the status line names a running background command", background_statusline(), 0, "waiting on background work: running"),
         expect("dispatching an agent records it", run("pre_agent.py", {"session_id": "dispatch", "cwd": str(REPO), "tool_input": {"subagent_type": "dusk-dev:self-review"}}), 0),
         expect("the agent landed in the session", session_field("dispatch", "agents", ["self-review"]), 0),
         expect("the status line names the state", statusline(), 0, "waiting on self-review"),

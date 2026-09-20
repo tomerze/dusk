@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 from harness import (
+    BACKGROUND_LINE,
     DILEMMA_LINE,
     READY_LINE,
     REPORT_HEADINGS,
@@ -22,6 +23,7 @@ from harness import (
     missing_signoffs,
     pull_request_view,
     read_input,
+    running_background,
     save_json,
     session_state,
 )
@@ -67,11 +69,17 @@ def answered(path, title):
 READY_ALONE = re.compile(rf"^[ \t]*{re.escape(READY_LINE)}[ \t]*$", re.M)
 DILEMMA_MARK = re.compile(rf"^[ \t]*\**{re.escape(DILEMMA_LINE)}", re.M)
 WAITING_MARK = re.compile(rf"^[ \t]*\**{re.escape(WAITING_LINE)}", re.M)
+BACKGROUND_MARK = re.compile(rf"^[ \t]*\**{re.escape(BACKGROUND_LINE)}", re.M)
 
 
 def waits_on_agents(message):
     lines = [line for line in message.strip().splitlines() if line.strip()]
     return bool(lines) and bool(WAITING_MARK.match(lines[0]))
+
+
+def waits_on_background(message):
+    lines = [line for line in message.strip().splitlines() if line.strip()]
+    return bool(lines) and bool(BACKGROUND_MARK.match(lines[0]))
 
 
 def reports_state(message):
@@ -194,7 +202,16 @@ def main():
         if not session.get("agents"):
             problems.append(problem(
                 f"`{WAITING_LINE}` says an agent this session dispatched is still running. None is. "
-                "Carry on with the work, or end the turn the way its state actually is."
+                f"A background command is not an agent; if one is still running, the line is "
+                f"`{BACKGROUND_LINE}`. Otherwise carry on with the work, or end the turn the way "
+                "its state actually is."
+            ))
+    elif waits_on_background(message):
+        if not running_background(session):
+            problems.append(problem(
+                f"`{BACKGROUND_LINE}` says a command this session started in the background is "
+                "still running. None is. Collect what it produced, or end the turn the way its "
+                "state actually is."
             ))
     elif session.get("committed") or drive.get("phase") in ("pushed", "opened"):
         restated = restates_standing(message)
@@ -203,7 +220,8 @@ def main():
                 f"This session has changed the history, so the turn is marked. It ends with "
                 f"`{READY_LINE}` on its own line and nothing after it, or it opens with a "
                 f"`{DILEMMA_LINE}` line and asks the one question that blocks the work, or with "
-                f"`{WAITING_LINE}` naming the agents it is waiting on, or it answers what the user "
+                f"`{WAITING_LINE}` naming the agents it is waiting on, or with `{BACKGROUND_LINE}` "
+                f"naming the background command it is waiting on, or it answers what the user "
                 f"asked and ends with the line that says nothing else moved: "
                 f"`{STANDING_LINE['ready']}` or `{STANDING_LINE['dilemma']}`."
             ))
