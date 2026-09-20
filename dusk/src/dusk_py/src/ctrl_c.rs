@@ -6,28 +6,28 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static PROMPT_OPEN: AtomicBool = AtomicBool::new(false);
 
-static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+static CTRL_C_PRESSED: AtomicBool = AtomicBool::new(false);
 
-const INTERRUPT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+const CTRL_C_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 
-extern "C" fn note_interrupt(_signal: i32) {
-    INTERRUPTED.store(true, Ordering::SeqCst);
+extern "C" fn record_ctrl_c(_signal: i32) {
+    CTRL_C_PRESSED.store(true, Ordering::SeqCst);
 }
 
-pub(crate) async fn with_interrupts<F: Future<Output = Result<()>>>(prompt: F) -> Result<()> {
+pub(crate) async fn stop_on_ctrl_c<F: Future<Output = Result<()>>>(prompt: F) -> Result<()> {
     if PROMPT_OPEN
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
         return Err(anyhow!("there is already an open prompt in this process"));
     }
-    let dusk_handler = SigAction::new(
-        SigHandler::Handler(note_interrupt),
+    let recording_handler = SigAction::new(
+        SigHandler::Handler(record_ctrl_c),
         SaFlags::SA_RESTART,
         SigSet::empty(),
     );
-    INTERRUPTED.store(false, Ordering::SeqCst);
-    let python_handler = match unsafe { sigaction(Signal::SIGINT, &dusk_handler) } {
+    CTRL_C_PRESSED.store(false, Ordering::SeqCst);
+    let python_handler = match unsafe { sigaction(Signal::SIGINT, &recording_handler) } {
         Ok(python_handler) => Some(python_handler),
         Err(error) => {
             tracing::warn!(error = %error, "couldn't take ctrl+c for the prompt");
@@ -36,8 +36,8 @@ pub(crate) async fn with_interrupts<F: Future<Output = Result<()>>>(prompt: F) -
     };
     let watcher = tokio::task::spawn_local(async move {
         loop {
-            tokio::time::sleep(INTERRUPT_POLL_INTERVAL).await;
-            if INTERRUPTED.swap(false, Ordering::SeqCst) {
+            tokio::time::sleep(CTRL_C_POLL_INTERVAL).await;
+            if CTRL_C_PRESSED.swap(false, Ordering::SeqCst) {
                 stop_innermost();
             }
         }
