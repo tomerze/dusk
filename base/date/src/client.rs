@@ -94,7 +94,10 @@ fn query_ntp(input: &str) -> anyhow::Result<u64> {
         let allowance = (remaining / left).clamp(NTP_MINIMUM_ATTEMPT, NTP_ATTEMPT_TIMEOUT);
         match query_ntp_address(*server, allowance) {
             Ok(unix_time_ms) => return Ok(unix_time_ms),
-            Err(error) => report.push(format!("`{server}`: {error}")),
+            Err(error) => {
+                tracing::warn!(%server, %error, "NTP query failed");
+                report.push(format!("`{server}`: {error}"));
+            }
         }
     }
     if untried > 0 {
