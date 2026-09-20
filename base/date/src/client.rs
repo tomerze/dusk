@@ -3,7 +3,7 @@ use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::rc::Rc;
 
 const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
@@ -83,7 +83,11 @@ fn query_ntp(server: SocketAddr) -> anyhow::Result<u64> {
     use std::net::UdpSocket;
     use std::time::Duration;
 
-    let socket = UdpSocket::bind("0.0.0.0:0")?;
+    let unspecified = match server {
+        SocketAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        SocketAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+    };
+    let socket = UdpSocket::bind(SocketAddr::new(unspecified, 0))?;
     socket.set_read_timeout(Some(Duration::from_secs(5)))?;
     socket.set_write_timeout(Some(Duration::from_secs(5)))?;
     let socket = UdpSocketWrapper::new(socket);
