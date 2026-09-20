@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "artifacts/dusk_cli",
-    "artifacts/dusk_node",
-    "artifacts/dusk_node_bin",
+    "artifacts/dusk_node/bin",
+    "artifacts/dusk_node/lib",
     "artifacts/dusk_py",
     "dusk/src/dusk_base",
     "dusk/src/dusk_build",

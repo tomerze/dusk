@@ -8,4 +8,4 @@ name = "dusk_node"
 path = "src/main.rs"
 
 [dependencies]
-dusk_node = { path = "../dusk_node" }
+dusk_node = { path = "../lib" }
