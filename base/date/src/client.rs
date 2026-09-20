@@ -5,8 +5,12 @@ use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+const NTP_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
+const NTP_MINIMUM_ATTEMPT: Duration = Duration::from_millis(500);
+const NTP_TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(clap::Parser)]
 #[command(name = "date", no_binary_name = true)]
@@ -77,29 +81,40 @@ fn client_unix_time_ms() -> anyhow::Result<u64> {
 
 fn query_ntp(input: &str) -> anyhow::Result<u64> {
     let servers = resolve_ntp_server(input)?;
+    let deadline = Instant::now() + NTP_TOTAL_TIMEOUT;
     let mut report = Vec::new();
-    for server in &servers {
-        match query_ntp_address(*server) {
+    let mut untried = 0usize;
+    for (index, server) in servers.iter().enumerate() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining < NTP_MINIMUM_ATTEMPT {
+            untried += 1;
+            continue;
+        }
+        let left = (servers.len() - index) as u32;
+        let allowance = (remaining / left).clamp(NTP_MINIMUM_ATTEMPT, NTP_ATTEMPT_TIMEOUT);
+        match query_ntp_address(*server, allowance) {
             Ok(unix_time_ms) => return Ok(unix_time_ms),
             Err(error) => report.push(format!("`{server}`: {error}")),
         }
     }
+    if untried > 0 {
+        report.push(format!("{untried} not tried within {NTP_TOTAL_TIMEOUT:?}"));
+    }
     anyhow::bail!("no address for `{input}` answered: {}", report.join("; "))
 }
 
-fn query_ntp_address(server: SocketAddr) -> anyhow::Result<u64> {
+fn query_ntp_address(server: SocketAddr, timeout: Duration) -> anyhow::Result<u64> {
     use sntpc::{NtpContext, StdTimestampGen, sync::get_time};
     use sntpc_net_std::UdpSocketWrapper;
     use std::net::UdpSocket;
-    use std::time::Duration;
 
     let unspecified = match server {
         SocketAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
         SocketAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
     };
     let socket = UdpSocket::bind(SocketAddr::new(unspecified, 0))?;
-    socket.set_read_timeout(Some(Duration::from_secs(5)))?;
-    socket.set_write_timeout(Some(Duration::from_secs(5)))?;
+    socket.set_read_timeout(Some(timeout))?;
+    socket.set_write_timeout(Some(timeout))?;
     let socket = UdpSocketWrapper::new(socket);
     let context = NtpContext::new(StdTimestampGen::default());
 
