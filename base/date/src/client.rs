@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+const DEFAULT_NTP_PORT: u16 = 123;
 const NTP_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 const NTP_MINIMUM_ATTEMPT: Duration = Duration::from_millis(500);
 const NTP_TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -28,10 +29,14 @@ struct DateCli {
 }
 
 fn resolve_ntp_server(input: &str) -> anyhow::Result<Vec<SocketAddr>> {
-    let with_port = if input.contains(':') {
-        input.to_string()
-    } else {
-        format!("{input}:123")
+    let bare = input
+        .strip_prefix('[')
+        .and_then(|inside| inside.strip_suffix(']'))
+        .unwrap_or(input);
+    let with_port = match bare.parse::<IpAddr>() {
+        Ok(address) => SocketAddr::new(address, DEFAULT_NTP_PORT).to_string(),
+        Err(_) if input.contains(':') => input.to_string(),
+        Err(_) => format!("{input}:{DEFAULT_NTP_PORT}"),
     };
     let resolved: Vec<SocketAddr> = with_port
         .to_socket_addrs()
