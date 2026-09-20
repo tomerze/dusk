@@ -18,8 +18,9 @@ use tracing::{error, info};
 
 use core::cell::Cell;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::Ordering;
 use futures_io::{AsyncRead, AsyncWrite};
+use portable_atomic::AtomicU64;
 use tracing::Instrument;
 
 pub mod driver;

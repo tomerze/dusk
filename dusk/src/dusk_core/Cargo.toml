@@ -13,6 +13,7 @@ tracing = { version = "0.1.41", default-features = false }
 futures-io = { version = "0.3.31", default-features = false, public = true }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 static_cell = "2.1.1"
+portable-atomic = { version = "1", default-features = false, features = ["critical-section", "fallback"] }
 
 dusk_capnp = { path = "../dusk_capnp/", public = true}
 dusk_program = { path = "../dusk_program/", public = true}
