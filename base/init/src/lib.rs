@@ -98,7 +98,10 @@ impl dusk_program::process::ProcessMixin for Process {
                 let port = data.get_port();
                 Ok((address, port))
             })?;
-        let listener = async_net::TcpListener::bind((address.as_str(), port)).await?;
+        let ip_address: std::net::IpAddr = address.parse()?;
+        let listener = async_io::Async::<std::net::TcpListener>::bind(std::net::SocketAddr::new(
+            ip_address, port,
+        ))?;
 
         let namespace_id = self.ctx.namespace.id;
         let kvs = dusk_program_kvs_internal::get_kvs(namespace_id);
@@ -138,7 +141,7 @@ impl dusk_program::process::ProcessMixin for Process {
                             continue;
                         }
                     };
-                    if let Err(error) = stream.set_nodelay(true) {
+                    if let Err(error) = stream.get_ref().set_nodelay(true) {
                         tracing::error!(error = %error, "couldn't set nodelay on a connection");
                         continue;
                     }

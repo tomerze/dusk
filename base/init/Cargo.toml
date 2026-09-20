@@ -9,7 +9,7 @@ dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 dusk_program_kvs_internal = { path = "../kvs/internal" }
-async-net = "2.0.0"
+async-io = "2.6.0"
 futures = { version = "0.3.31", features = ["async-await"] }
 tracing = { version = "0.1.41", default-features = false }
 # Declared for macro use, versions taken from dusk_program
