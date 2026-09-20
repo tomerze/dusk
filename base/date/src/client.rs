@@ -16,29 +16,27 @@ struct DateCli {
     set: Option<String>,
     /// Query the given NTP server (`host[:port]`, default port 123) and set
     /// the server clock to the time it reports.
-    #[arg(
-        long = "ntp",
-        group = "action",
-        value_name = "HOST[:PORT]",
-        value_parser = parse_ntp_server,
-    )]
-    ntp: Option<SocketAddr>,
+    #[arg(long = "ntp", group = "action", value_name = "HOST[:PORT]")]
+    ntp: Option<String>,
     /// Read the wall clock on the client and set the server clock to match it.
     #[arg(long = "sync", group = "action")]
     sync: bool,
 }
 
-fn parse_ntp_server(input: &str) -> Result<SocketAddr, String> {
+fn resolve_ntp_server(input: &str) -> anyhow::Result<Vec<SocketAddr>> {
     let with_port = if input.contains(':') {
         input.to_string()
     } else {
         format!("{input}:123")
     };
-    with_port
+    let resolved: Vec<SocketAddr> = with_port
         .to_socket_addrs()
-        .map_err(|err| format!("failed to resolve `{input}`: {err}"))?
-        .next()
-        .ok_or_else(|| format!("no addresses resolved for `{input}`"))
+        .map_err(|error| anyhow::anyhow!("failed to resolve `{input}`: {error}"))?
+        .collect();
+    if resolved.is_empty() {
+        anyhow::bail!("no addresses resolved for `{input}`");
+    }
+    Ok(resolved)
 }
 
 struct DateProgramArgsBuilder {}
@@ -60,7 +58,7 @@ impl ProgramArgsBuilder for DateProgramArgsBuilder {
                     .map_err(|_| anyhow::anyhow!("timestamp out of range"))?;
                 Args::set_to(unix_time_ms)
             }
-            (_, Some(server), _) => Args::set_to(query_ntp(server)?),
+            (_, Some(server), _) => Args::set_to(query_ntp(&server)?),
             (_, _, true) => Args::set_to(client_unix_time_ms()?),
             _ => Args::show(),
         };
@@ -77,7 +75,19 @@ fn client_unix_time_ms() -> anyhow::Result<u64> {
         .map_err(|_| anyhow::anyhow!("client unix time in ms does not fit in u64"))
 }
 
-fn query_ntp(server: SocketAddr) -> anyhow::Result<u64> {
+fn query_ntp(input: &str) -> anyhow::Result<u64> {
+    let servers = resolve_ntp_server(input)?;
+    let mut report = Vec::new();
+    for server in &servers {
+        match query_ntp_address(*server) {
+            Ok(unix_time_ms) => return Ok(unix_time_ms),
+            Err(error) => report.push(format!("`{server}`: {error}")),
+        }
+    }
+    anyhow::bail!("no address for `{input}` answered: {}", report.join("; "))
+}
+
+fn query_ntp_address(server: SocketAddr) -> anyhow::Result<u64> {
     use sntpc::{NtpContext, StdTimestampGen, sync::get_time};
     use sntpc_net_std::UdpSocketWrapper;
     use std::net::UdpSocket;
@@ -93,8 +103,8 @@ fn query_ntp(server: SocketAddr) -> anyhow::Result<u64> {
     let socket = UdpSocketWrapper::new(socket);
     let context = NtpContext::new(StdTimestampGen::default());
 
-    let result = get_time(server, &socket, context)
-        .map_err(|err| anyhow::anyhow!("NTP query to `{server}` failed: {err:?}"))?;
+    let result =
+        get_time(server, &socket, context).map_err(|error| anyhow::anyhow!("{error:?}"))?;
     Ok(result.sec() as u64 * 1000 + (result.sec_fraction() as u64 * 1000) / (1u64 << 32))
 }
 
