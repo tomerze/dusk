@@ -51,7 +51,7 @@ The server side of every program is `no_std`. This is the **first** thing you pu
    extern crate alloc;
    extern crate capnp;
    ```
-   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl - the workspace `cargo check` still passes, but you've broken the portability contract. The only exception is `init`, which is unconditionally `std` because `async-net::TcpListener` needs it. If you are unsure whether your program needs `std` unconditionally, it doesn't - write the `cfg_attr`.
+   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl - the workspace `cargo check` still passes, but you've broken the portability contract. The only exception is `init`, which is unconditionally `std` because it binds a `std::net::TcpListener`. If you are unsure whether your program needs `std` unconditionally, it doesn't - write the `cfg_attr`.
 
 2. **Every dep in the unconditional `[dependencies]` block must be no_std-clean.** That means:
    - The crate ships a `no_std` mode (check its docs / `[features]` block).
@@ -455,14 +455,16 @@ async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
         .with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
             Ok((data.get_address()?.to_string()?, data.get_port()))
         })?;
-    let listener = async_net::TcpListener::bind(format!("{address}:{port}")).await?;
+    let ip: std::net::IpAddr = address.parse()?;
+    let listener =
+        async_io::Async::<std::net::TcpListener>::bind(std::net::SocketAddr::new(ip, port))?;
     ready.sender().send(true);
 
     loop {
         futures::select! {
             accept_result = listener.accept().fuse() => {
                 let (stream, _) = accept_result?;
-                stream.set_nodelay(true)?;
+                stream.get_ref().set_nodelay(true)?;
                 let (reader, writer) = stream.split();
                 let task_id = Rc::new(Cell::new(0));
                 let session_task = dusk_core::session(
@@ -1200,7 +1202,7 @@ See [[adding-a-driver-method]] for the analogous wiring on the driver side when 
 
 Most programs are `#![cfg_attr(not(feature = "client"), no_std)]`. This means the runtime (`Process`, `Launcher`, RPC handlers) is `no_std`, and the client-side wiring (`clap`, `linkme`, shell entry) is std-only.
 
-`init` is the exception: it uses `async-net::TcpListener` which requires `std`, so its `lib.rs` does **not** start with the `no_std` cfg attribute.
+`init` is the exception: it binds a `std::net::TcpListener` through `async_io::Async`, which requires `std`, so its `lib.rs` does **not** start with the `no_std` cfg attribute.
 
 When adding new `extern crate` lines to your `lib.rs`, mirror what kill/ps does:
 
