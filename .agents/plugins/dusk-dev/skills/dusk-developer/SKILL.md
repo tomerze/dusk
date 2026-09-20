@@ -175,8 +175,6 @@ Everything platform-specific lives behind the `Driver` trait
 
 - `hostname()` - the node's hostname.
 - `exit(exit_code)` - halt the node.
-- `launchers(namespace)` - build the node's `LauncherSet` (the set of programs it
-  can run) for a namespace.
 
 An impl registers its driver once with `dusk_driver_impl!`. See
 [Driver registration](#driver-registration-the-extern-shim-pattern).
@@ -247,8 +245,8 @@ connection has to stay live while a script runs.
 
 `dusk_core` is `no_std` and depends on no impl, yet it must call into one. It does
 so through a link-time shim. `dusk_driver_impl!` defines a `lazy_static` singleton
-for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_exit`, `_dusk_launchers`. `dusk_core::driver` declares those same symbols
+for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname` and
+`_dusk_exit`. `dusk_core::driver` declares those same symbols
 as `unsafe extern "Rust"` and calls through them. The linker resolves them to
 whichever impl is in the final binary.
 
@@ -277,8 +275,9 @@ namespace and hands the client a `Dusk` capability (a `DuskServer` exposed as th
 Cap'n Proto bootstrap capability). The transport underneath is being reworked, so
 don't lean on its specifics.
 
-**`Dusk.process` → run.** `Dusk.process(programArgs)` asks the driver for the
-node's `LauncherSet` (`driver::launchers(namespace)`) and dispatches: it reads
+**`Dusk.process` → run.** `Dusk.process(programArgs)` asks the registry for the
+namespace's `LauncherSet` (`dusk_core::launchers::launchers(namespace_id)`) and
+dispatches: it reads
 `program_args.program_id()` - a **local** read of the in-memory args message, not
 a network call - and runs the matching launcher's `launch`, which returns a
 `Box<dyn Process>`. The new process is registered in the namespace there and
@@ -324,9 +323,12 @@ client to downcast. `Dusk.kill(pid, signal)` looks
 up the process's signal channel in the namespace and sends the signal, which the
 process receives on its `signal_receiver`.
 
-**Startup.** `dusk_node_run()` calls into `dusk_nix::run`, which creates the
-`Namespace`, registers the impl's `LauncherSet` builder, and spawns `init`. `init`
-binds the listener and accepts connections.
+**Startup.** `dusk_node_run()` calls into `dusk_impl::run` - whichever impl the
+`impl_*` feature selected - which creates the `Namespace` and calls
+`dusk_core::init::init` with the launcher set and the init args. `init` registers
+the set against the namespace, spawns the init task, and removes the set again
+when that namespace terminates. `init` binds the listener and accepts
+connections.
 
 The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
 process) lives in `docs/docs/development/shell.md`.
@@ -372,7 +374,7 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
     else {
         return 2;
     };
-    dusk_nix::run(dusk_nix::BasicLauncherSetBuilder::new(launcher_set), init_args)
+    dusk_nix::run(move || Ok(launcher_set.clone()), init_args)
 }
 ```
 
@@ -802,8 +804,8 @@ Past failure: the same module described itself as "pumping" in five places and t
 Three boundaries are not internal seams. They are public Cargo dependencies that downstream authors build against and **cannot ship PRs back to fix gaps** - they fork, work around, or walk away.
 
 1. **`dusk_core` ↔ programs.** Program authors implement `Process` / `Launcher`, build `ProgramArgs`, write `stream::Client`, signal `Ready`.
-2. **`dusk_core` ↔ impls.** Impl authors implement `Driver` via `dusk_driver_impl!`, host the executor, build per-namespace `LauncherSet`s.
-3. **impls ↔ programs.** Impls statically link programs via `LauncherSetBuilder`. Programs do not depend on impls.
+2. **`dusk_core` ↔ impls.** Impl authors implement `Driver` via `dusk_driver_impl!`, host the executor, and hand `dusk_core::init::init` a closure returning the namespace's `LauncherSet`.
+3. **impls ↔ programs.** Impls statically link programs via a closure returning a `LauncherSet`. Programs do not depend on impls.
 
 When designing anything crossing one of these, do the work comprehensively **before the artifact ships**:
 
