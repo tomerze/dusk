@@ -426,12 +426,17 @@ it. It kills the prompt process when the view closes. For one command it runs
 
 ### `dusk_py` - the Python extension
 
-`dusk_py` (a cdylib named `dusk`, built with maturin) exposes a node to Python:
+`dusk_py` (a cdylib named `dusk`, built with maturin) exposes a node to Python.
+A `Dusk` object attaches to a shell server on that node - the node's default one at
+`sh.capnp`'s `defaultPid`, or the one at the `sh_server_pid` it was given - and
+every command it runs goes through that shell server's portal, so state defined
+by one call is there for the next:
 
 ```python
 import dusk
-node = dusk.Dusk('127.0.0.1', 9090)   # connects; blocks until the node answers
-print(list(node.sh('ps')))            # sh(command) → iterator of output values
+node = dusk.Dusk('127.0.0.1', 9090)   # takes the node's default shell server
+print(list(node.sh('ps')))            # runs in that shell server → values
+node.prompt()                         # opens a prompt on it, on this terminal
 node.disconnect()
 dusk.Dusk.help()                      # static: enumerate programs, no connection
 ```

@@ -1,15 +1,13 @@
-use capnp::capability::FromClientHook as _;
-use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_program::anyhow::Result;
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program::value::Value;
-use dusk_program_sh::entry::StaticShEntriesBuilder;
-use dusk_program_sh::sh_capnp::output_portal;
-use dusk_program_sh::{ShArgs, ShMode};
+use dusk_program_sh::client::shell::Shell;
+use dusk_program_sh::client::stop::StopSignal;
 use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 
@@ -147,6 +145,7 @@ fn unpickle(py: Python<'_>, pickle_bytes: &[u8]) -> PyResult<Py<PyAny>> {
 
 pub struct StreamServer {
     pub(crate) tx: mpsc::Sender<Result<Vec<u8>>>,
+    pub(crate) done: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl StreamMixin for StreamServer {
@@ -164,68 +163,43 @@ impl StreamMixin for StreamServer {
         })
     }
 
-    fn end(&mut self) {}
+    fn end(&mut self) {
+        if let Some(done) = self.done.take()
+            && done.send(()).is_err()
+        {
+            tracing::debug!("nobody was waiting for the command to finish");
+        }
+    }
 }
 
-pub fn handle_sh(client: Client, command: String, output_tx: mpsc::Sender<Result<Vec<u8>>>) {
+pub fn handle_sh(
+    shell: Rc<Mutex<Shell>>,
+    command: String,
+    output_tx: mpsc::Sender<Result<Vec<u8>>>,
+) {
+    let (done_sender, done_receiver) = tokio::sync::oneshot::channel();
     let stream_server = Stream::new(StreamServer {
         tx: output_tx.clone(),
+        done: Some(done_sender),
     });
     let stream_client = capnp_rpc::new_client(stream_server);
 
     tokio::task::spawn_local(async move {
-        let result = async {
-            let program_args = ShArgs::new(
-                client.clone(),
-                StaticShEntriesBuilder::default(),
-                ShMode::Script(command),
-            )?
-            .as_program_args()?;
-            let mut process_request = client.process_request();
-            program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
-            let process_reply = process_request.send().promise.await?;
-            let process = process_reply.get()?.get_result()?;
-            let mut run_request = client.run_request();
-            run_request.get().set_process(process.clone());
-            run_request.send().promise.await?;
-            let pid = process
-                .pid_request()
-                .send()
-                .promise
-                .await?
-                .get()?
-                .get_result();
-            let portal_reply = process.portal_request().send().promise.await?;
-            let portal = portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<output_portal::Client>();
-            let mut output_request = portal.output_request();
-            output_request.get().set_stream(stream_client);
-            let output_reply = output_request.send().promise.await;
-            let daemonize = match &output_reply {
-                Ok(reply) => reply.get()?.get_daemonize(),
-                Err(_) => false,
-            };
-            if !daemonize {
-                let mut kill_request = client.kill_request();
-                kill_request.get().set_pid(pid);
-                kill_request.get().set_signal(15);
-                if let Err(error) = kill_request.send().promise.await {
-                    tracing::debug!(pid, error = %error, "kill after output returned");
-                }
-                let mut waitpid_request = client.waitpid_request();
-                waitpid_request.get().set_pid(pid);
-                let waited = waitpid_request.send().promise.await;
-                output_reply?;
-                waited?;
+        let stop_signal = StopSignal::new();
+        let command_run =
+            shell
+                .lock()
+                .await
+                .sh(&command, stream_client, done_receiver, stop_signal.signal());
+        let result = match command_run {
+            Ok(command_run) => command_run.await,
+            Err(error) => Err(error),
+        };
+        if let Err(error) = result {
+            let message = format!("{error:#}");
+            if output_tx.send(Err(error)).await.is_err() {
+                tracing::warn!(error = %message, "nobody was reading the command's error");
             }
-            Ok::<(), dusk_program::anyhow::Error>(())
-        }
-        .await;
-
-        if let Err(e) = result {
-            let _ = output_tx.send(Err(e)).await;
         }
     });
 }

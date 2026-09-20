@@ -1,5 +1,8 @@
 #![allow(unused_imports)]
 
+#[cfg(test)]
+mod sh_view;
+
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use std::process::Command;
 

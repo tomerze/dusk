@@ -15,16 +15,31 @@ node.disconnect()
 
 ## `Dusk`
 
-### `Dusk(address: str, port: int)`
+### `Dusk(address: str, port: int, sh_server_pid: int | None = None)`
 
-Connects to a node at `address:port`. The constructor blocks until the connection
-is established and the node answers, and raises if it can't reach the node.
+Connects to a node at `address:port` and takes hold of a shell server on it: the
+node's default one at `defaultPid`, or the one at `sh_server_pid` - started
+there if nothing is running it yet. The constructor blocks until the connection is established and
+the node answers, and raises if it can't reach the node.
+
+Every command this object runs goes to that shell server, so the shell server's
+state is the object's state: a function defined by one `sh` call is there for the next one,
+and two objects on different pids do not see each other's.
 
 ### `node.sh(command: str) -> ShellOutput`
 
-Runs `command` through the node's shell and returns a `ShellOutput` - an iterator
+Runs `command` in this object's shell server and returns a `ShellOutput` - an iterator
 over the command's output values. Iterating pulls values as they stream back;
 iteration ends when the command finishes.
+
+### `node.prompt() -> None`
+
+Opens an interactive prompt on this object's shell server, on the calling
+terminal, the
+way `logs view` opens a pager there. The call blocks while you use the prompt and
+returns when you leave it: `exit`, or ctrl+d or ctrl+c while typing a line. Ctrl+c
+while a command is running stops that command and keeps the prompt open. Set
+`DUSK_NON_INTERACTIVE` where there is no terminal to give - see below.
 
 ### `node.disconnect() -> None`
 
@@ -80,12 +95,24 @@ it instead.
 
 ## `DUSK_NON_INTERACTIVE`
 
-Some programs are interactive: `logs view` takes over the calling terminal until
-the user quits it. If the process embedding this API has no terminal to give
-away - a service, a notebook kernel, a gateway - set the `DUSK_NON_INTERACTIVE`
-environment variable (to any value) before running commands. Interactive
-commands then refuse to run, with an error naming a non-interactive alternative
-(`logs view` points at `logs dump`), instead of hanging the caller forever.
+Some programs are interactive: `logs view`, `sh --prompt` and `node.prompt()` take over the
+calling terminal until the user quits them. If the process embedding this API
+has no terminal to give away - a service, a notebook kernel, a gateway - set the
+`DUSK_NON_INTERACTIVE` environment variable (to any value) before running
+commands. Interactive commands then refuse to run, with the reason, instead of
+hanging the caller forever: `logs view` points at `logs dump`, and `sh --prompt`
+says `there is no terminal to open a prompt on: DUSK_NON_INTERACTIVE is set`.
+`node.sh(command)` runs unaffected.
+
+`node.prompt()` and `sh --prompt` also refuse on their own when the process's output
+is not a terminal, or when a prompt is already open on it, so a prompt is never
+opened where nobody could type into it.
 
 The [API gateway](../features/gateway.md#no-interactive-views) sets it
 automatically in its own process.
+
+## `DUSK_CLIENT_HOSTNAME`
+
+A prompt shows up in the node's `ps` as `sh[prompt ⟷ <hostname>]`, naming the
+machine the prompt is on. Set `DUSK_CLIENT_HOSTNAME` to send a name of your own
+instead of the one the machine reports.
