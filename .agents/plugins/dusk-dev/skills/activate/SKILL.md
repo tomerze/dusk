@@ -21,7 +21,7 @@ the one unrecoverable step.
 
 The user reviews what I hand them, and the agents review it beside them; the
 merge waits for both. That only works if every turn says which state the work is
-in, so from the first commit onward a turn ends one of exactly three ways:
+in, so from the first commit onward a turn ends one of exactly five ways:
 
 - **A hand-off** ends with **`Ready for review.`** on its own line, with nothing
   after it. It means the work is pushed, the pull request carries the tip, and
@@ -39,18 +39,30 @@ in, so from the first commit onward a turn ends one of exactly three ways:
   standing, **`Still waiting for dilemma verdict.`** if a question is. The
   answer comes first and the line is last, so the user reads what they asked for
   and then where that leaves things.
-- **A wait** opens with **`WAITING ON SUBAGENTS:`** and names the agents whose
-  answers the work needs. It is only for that: the harness refuses it unless an
-  agent this session dispatched is still running, and when they report the work
-  carries on rather than waiting again.
+- **A wait on agents** opens with **`WAITING ON SUBAGENTS:`** and names the
+  agents whose answers the work needs. It is only for that: the harness refuses
+  it unless an agent this session dispatched is still running, and when they
+  report the work carries on rather than waiting again.
+- **A wait on background work** opens with **`WAITING ON BACKGROUND WORK:`** and
+  names the command. A long build or a cross-compile matrix is not an agent, and
+  saying `WAITING ON SUBAGENTS:` for one is a lie the harness will catch. The
+  harness refuses this line too unless a command this session started in the
+  background has not yet exited - it reads the command's own output for the exit
+  marker rather than trusting bookkeeping, so a stale record refuses the line
+  instead of permitting it falsely.
 
 Nothing else ends a turn, and the harness checks it on every turn once the
-session has committed or pushed. A status report that is none of the four leaves
+session has committed or pushed. A status report that is none of the five leaves
 the user with nothing to do and no idea whether it is their move.
 
+**Do not reach for the nearest line that passes.** When work is genuinely
+blocked on something running, say so with the line that names it. Ending
+`Still ready for review.` while a build is still going says nothing else moved
+and the ball is in the user's court, when in fact neither is true.
+
 The status line carries the same state, so it is visible without reading back:
-*working*, *waiting on <agents>*, *handed over, awaiting review*, or *awaiting a
-verdict*. Once a hand-off is accepted it leads with the pull request -
+*working*, *waiting on <agents>*, *waiting on background work: <command>*,
+*handed over, awaiting review*, or *awaiting a verdict*. Once a hand-off is accepted it leads with the pull request -
 `ready to review <url>` on its own first line - so the link to review is in
 front of the user without scrolling back for it.
 
@@ -518,7 +530,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ PR confirmed still open and carrying the pushed tip, not already merged
 ☐ Branch named in the hand-back, as `git checkout <branch>`
 ☐ Nothing personal written anywhere: no name, no email address, no home directory, no handle
-☐ Every turn since the first commit ended as a hand-off, a `DILEMMA:` question, a `WAITING ON SUBAGENTS:` wait, or an answer restating what still stands
+☐ Every turn since the first commit ended as a hand-off, a `DILEMMA:` question, a `WAITING ON SUBAGENTS:` wait, a `WAITING ON BACKGROUND WORK:` wait, or an answer restating what still stands
 ☐ Review requested, the message ending `Ready for review.` and nothing after it
 ☐ Hand-off sent **before** the review agents ran, not after
 ☐ `self-review`, `race-screen`, `terminology-review`, `string-review` and `decision-ranker` run after it, each landing on the PR as it finishes

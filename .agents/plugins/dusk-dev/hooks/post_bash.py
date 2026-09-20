@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 
 import report
 from harness import (
@@ -57,6 +58,24 @@ def needs_review(cwd, sha):
         elif line.startswith("+") and pattern.search(line[1:]):
             return True
     return False
+
+
+OUTPUT_PATH = re.compile(r"(\S+/tasks/[\w-]+\.output)")
+
+
+def started_background(session, hook_input):
+    if not hook_input.get("tool_input", {}).get("run_in_background"):
+        return False
+    match = OUTPUT_PATH.search(json.dumps(hook_input.get("tool_response", "")))
+    if not match:
+        return False
+    output = match.group(1)
+    jobs = session.get("background") or []
+    if any(job.get("output") == output for job in jobs if isinstance(job, dict)):
+        return False
+    jobs.append({"id": Path(output).stem, "output": output})
+    session["background"] = jobs
+    return True
 
 
 def pushed_branch(command):
@@ -119,6 +138,8 @@ def main():
     session_path, session = session_state(hook_input.get("session_id", ""))
     path, drive = drive_state(branch, cwd)
     changed = False
+    if started_background(session, hook_input):
+        save_json(session_path, session)
     if re.search(r"\bgit\s+(commit|push)\b", command) and not session.get("committed"):
         _, last = git(cwd, "reflog", "-1", "--format=%gs")
         if last.startswith("commit") or re.search(r"\bgit\s+push\b", command):
