@@ -48,7 +48,7 @@ pub fn run(
                 spawner,
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
+                    .map(|duration| duration.as_millis() as u64)
                     .ok(),
             ));
 
