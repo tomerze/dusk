@@ -2,6 +2,13 @@ use dusk_base::dusk_program_init::Args as InitArgs;
 use std::ffi::{CStr, c_char, c_void};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+#[cfg(feature = "impl_nix")]
+use dusk_nix as dusk_impl;
+#[cfg(feature = "impl_std")]
+use dusk_std as dusk_impl;
+#[cfg(feature = "impl_windows")]
+use dusk_windows as dusk_impl;
+
 /// Where this node listens when it is handed no address of its own.
 pub const DEFAULT_LISTEN_ADDRESS: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 9090);
@@ -31,7 +38,7 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
     else {
         return 2;
     };
-    dusk_nix::run(move || Ok(launcher_set.clone()), init_args)
+    dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
 }
 
 /// # Safety
