@@ -16,6 +16,7 @@ members = [
     "dusk/src/dusk_py",
     "impls/nix",
     "impls/std",
+    "impls/windows",
     "base/kill",
     "base/init",
     "base/programs",

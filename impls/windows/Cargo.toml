@@ -1,0 +1,17 @@
+[package]
+name = "dusk_windows"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+embassy-executor = { version = "0.10.0", features = ["trace", "platform-std", "nightly", "executor-thread"] }
+embassy-time = { version = "0.5", features = ["std"] }
+async-trait = "*"
+
+dusk_core = { path = "../../dusk/src/dusk_core/" }
+dusk_program = { path = "../../dusk/src/dusk_program", public = true }
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+critical-section = { version = "1", features = ["std"] }
+getrandom = "0.2"
+tracing = { version = "0.1.41", default-features = false }
+windows-sys = { version = "0.61", features = ["Win32_System_WindowsProgramming"] }
