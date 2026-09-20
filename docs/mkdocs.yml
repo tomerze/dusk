@@ -67,6 +67,7 @@ nav:
   - Embedding:
       - embedding/index.md
       - The C library: getting-started/guides/embed.md
+      - Node artifacts: embedding/node-artifacts.md
   - Features:
       - Analytics: features/analytics.md
       - Diagnosis: features/diagnosis.md
