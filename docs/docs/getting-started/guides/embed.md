@@ -19,7 +19,7 @@ diagnosis, remote control) works against it. No rewrite, no separate service.
 ## Link the library
 
 `dusk_node` builds as both a static and a shared C library, with a one-function
-header (`artifacts/dusk_node/include/dusk.h`):
+header (`artifacts/dusk_node/lib/include/dusk.h`):
 
 ```c
 #include "dusk.h"
@@ -36,9 +36,13 @@ dusk_node_run(NULL);              // a node on 0.0.0.0:9090; returns an exit cod
 dusk_node_run("127.0.0.1:9090");  // the same node, listening on loopback
 ```
 
-From Rust, link the `dusk_node` rlib and call `dusk_node::dusk_node_run()`. From
-any other language, bind the C function. That's the whole integration: one
-library, one call.
+From Rust, link the `dusk_node` rlib and call
+`dusk_node::dusk_node_run()`. From any other language, bind the C function.
+That's the whole integration: one library, one call.
+
+Which impl you build it with depends on where your application runs - `impl_nix`
+here, `impl_windows` on Windows, `impl_std` everywhere else. See
+[Node artifacts](../../embedding/node-artifacts.md).
 
 ## The `user` pointer
 

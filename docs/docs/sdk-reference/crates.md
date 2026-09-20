@@ -50,6 +50,7 @@ The deliverables you ship - templates to copy and make your own.
 
 | Crate | Role |
 |-------|------|
-| `dusk_node` / `dusk_node_bin` | The packaged server: a Rust rlib, a C library, or the `dusk_node` binary. See [Embedding](../embedding/index.md). |
+| `dusk_node` | The packaged server: a Rust rlib, a C library, or a staticlib to link into firmware or any host application. Which impl it links is a cargo feature - `impl_nix`, `impl_windows` or `impl_std`. See [Node artifacts](../embedding/node-artifacts.md). |
+| `dusk_node_bin` | Wraps it as the `dusk_node` binary, taking the same feature. |
 | `dusk_cli_bin` | Builds the `dusk` CLI binary. |
 | `dusk_py` (artifact) | Builds the `dusk` Python extension. |
