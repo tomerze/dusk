@@ -80,6 +80,8 @@ dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
                true, false, init, logs)
 impls/nix/     The Linux impl (Embassy executor, the NixDriver)
+impls/std/     The std impl (Embassy executor, the StdDriver)
+impls/windows/ The Windows impl (Embassy executor, the WindowsDriver)
 artifacts/     Deliverables you ship: dusk_node (server), dusk (CLI), dusk_py
 docs/          The documentation site (MkDocs)
 vendor/        External libs submodules
@@ -95,7 +97,9 @@ vendor/        External libs submodules
 | `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. `dusk_program_sh_proc` also carries `sh_to_bytecode!`, which lowers source to bytecode at the calling crate's build time. |
 | `dusk_program_sh_bytecode` | Lowers source to bytecode - the first step of source to bytecode to instructions: the grammar, the AST, `bytecode.capnp`, the `Parser`, and the `bytecode` module every caller goes through. Its `parser` feature is off for a node, which needs only the schema. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
-| `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
+| `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
+| `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
+| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and aborts rather than unwinding on `exit`. Nothing in it is platform-specific, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side - the prompt UI and the `Shell` that drives the shell server a client attaches to. |
 | `dusk_connection` | `Connection` - the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |

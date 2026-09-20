@@ -19,7 +19,7 @@ Search the codebase for every type that implements the `Driver` trait:
 grep -r "impl Driver for" impls/
 ```
 
-Each result is a file you must edit in addition to the core trait file. Right now only `impls/nix/src/driver.rs` exists, but there may be more in the future - always discover them dynamically rather than hardcoding paths.
+Each result is a file you must edit in addition to the core trait file. Right now `impls/nix/src/driver.rs`, `impls/std/src/driver.rs` and `impls/windows/src/driver.rs` all exist, and there may be more in the future - always discover them dynamically rather than hardcoding paths. A `Driver` method you add has to land in every one of them, or the impls you skipped stop linking.
 
 ---
 
