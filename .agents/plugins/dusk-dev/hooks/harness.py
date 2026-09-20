@@ -189,7 +189,7 @@ def findings(message):
     return [
         line.rstrip()
         for line in (message or "").splitlines()
-        if line.startswith("- ") and LOCATION.search(line)
+        if line.startswith(("- ", "|")) and LOCATION.search(line)
     ]
 
 
