@@ -121,7 +121,7 @@ impl Dusk {
     }
 
     /// Run `command` in this object's shell server, returning its output values.
-    fn sh(&mut self, command: String) -> PyResult<ShellOutput> {
+    fn sh(&self, command: String) -> PyResult<ShellOutput> {
         let sender = self.sender()?;
         ShellOutput::new(command, &sender).map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
