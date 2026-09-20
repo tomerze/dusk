@@ -2,8 +2,9 @@
 //!
 //! One [`Kvs`] per namespace, shared by every program that asks [`get_kvs`] for
 //! it. The `Kvs` itself is not reference counted; callers hold an `Arc<Kvs>`.
+#![no_std]
 
-use super::*;
+extern crate alloc;
 
 use alloc::sync::Arc;
 use core::cell::RefCell;
@@ -13,19 +14,24 @@ use dusk_program::embassy_sync::lazy_lock::LazyLock;
 use dusk_program::embassy_sync::mutex::Mutex;
 use dusk_program::embassy_sync::rwlock::RwLock;
 use dusk_program::hashbrown::HashMap;
+use dusk_program::value::Value;
 use nohash_hasher::BuildNoHashHasher;
 
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
-/// The id a key name hashes to: fnv1a, 64-bit, salted with `kvs_capnp::SALT`.
+/// Mixed into every key id so kvs ids never collide with a plain fnv1a hash of
+/// the same name.
+pub const SALT: u64 = 0x9396_8e6e_30a5_93d6;
+
+/// The id a key name hashes to: fnv1a, 64-bit, salted with [`SALT`].
 ///
 /// `const`, so a program can name its keys at compile time. Distinct names can
 /// hash to the same id.
 #[must_use]
 pub const fn key_id(name: &str) -> u64 {
     let bytes = name.as_bytes();
-    let mut hash = FNV_OFFSET_BASIS ^ kvs_capnp::SALT;
+    let mut hash = FNV_OFFSET_BASIS ^ SALT;
     let mut index = 0;
     while index < bytes.len() {
         hash = (hash ^ (bytes[index] as u64)).wrapping_mul(FNV_PRIME);

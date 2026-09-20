@@ -17,7 +17,7 @@ extern crate capnp;
 
 #[cfg(feature = "client")]
 pub mod client;
-pub mod kvs;
+pub use dusk_program_kvs_internal as kvs;
 
 /// Re-exported so [`known_key!`] expands in a crate that does not depend on
 /// `linkme` itself.
