@@ -26,7 +26,7 @@ Each Base program is its own crate, named `dusk_program_<name>` - `dusk_program_
 [Base programs](../getting-started/concepts/base.md).
 
 `dusk_base` ties them together: it re-exports the programs and provides
-`launcher_set()`, the set a node links.
+`default_launcher_set()`, the set a node links.
 
 ## Clients (`dusk/src/`)
 
