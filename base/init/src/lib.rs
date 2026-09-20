@@ -16,7 +16,6 @@ dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
 const VERSION_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.version");
 const GIT_REV_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.git_rev");
 const NAMESPACE_ID_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.namespace_id");
-const HOSTNAME_KEY: u64 = dusk_program_kvs::kvs::key_id("dusk.hostname");
 
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
@@ -107,8 +106,6 @@ impl dusk_program::process::ProcessMixin for Process {
         )
         .await;
         kvs.set(NAMESPACE_ID_KEY, Value::Uint(namespace_id)).await;
-        kvs.set(HOSTNAME_KEY, Value::String(dusk_core::driver::hostname()?))
-            .await;
 
         ready.sender().send(true);
 
