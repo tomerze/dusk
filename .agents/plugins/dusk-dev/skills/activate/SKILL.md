@@ -359,6 +359,25 @@ returns `403 Resource not accessible by personal access token`, the token lacks
 Pull requests: write - say so and ask the user to grant it rather than
 improvising another route.
 
+**A pull request body is not a diary either.** The rule that governs commits -
+[the branch is the work, not the diary](../atomic-commit/SKILL.md#the-branch-is-the-work-not-the-diary) -
+governs the body just as hard. It states what the branch changes, never how it
+was arrived at: no "it began as X and turned out to be Y", no rename narrated, no
+correcting an earlier version of the body, no crate or path named that the final
+tree does not contain. A reviewer who searches for one of those finds nothing,
+and learns only that the body is stale.
+
+The tell is any past-tense sentence about my own process. "It began as
+`impls/esp32` and turned out to name no platform at all" is the story of my
+afternoon. "The impl names no platform: it asks for `std`, threads, a
+`critical-section` implementation and a `getrandom` backend" is the change. Write
+the second.
+
+This needs saying separately because the body outlives the commits. A history
+rebuilt to drop the drafts, under a body that still narrates them, leaves the
+reviewer reading about commits that are not there - and rewriting the history
+without rewriting the body is a half-done job that reads worse than either half.
+
 **Write the PR body in the first person, as the author of the change.** It is a
 public record of what the commit does, not a message to the user - the same way
 rustc's output is not addressed to anyone in particular. So: no "as we
