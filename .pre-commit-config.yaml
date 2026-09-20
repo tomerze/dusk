@@ -8,7 +8,7 @@ repos:
       rev: v19.1.7
       hooks:
       -   id: clang-format
-          files: ^(dusk/src/dusk_llm/warmup/|artifacts/dusk_node/include/).*\.(c|h)$
+          files: ^artifacts/dusk_node/lib/include/.*\.(c|h)$
   -   repo: local
       hooks:
       -   id: clang-tidy
@@ -17,14 +17,12 @@ repos:
           language: python
           additional_dependencies: ["clang-tidy==19.1.0"]
           pass_filenames: false
-          files: ^dusk/src/dusk_llm/warmup/.*\.c$
+          files: ^artifacts/dusk_node/lib/include/.*\.h$
           args:
           -   --quiet
-          -   dusk/src/dusk_llm/warmup/main.c
+          -   artifacts/dusk_node/lib/include/dusk.h
           -   --
           -   -std=c11
-          -   -Ivendor/ik_llama.cpp/include
-          -   -Ivendor/ik_llama.cpp/ggml/include
       -   id: ruff-check
           name: ruff (lint)
           entry: uvx ruff check --force-exclude
