@@ -240,8 +240,11 @@ def lint_branch(cwd, base="origin/master"):
         if re.match(r"^WIP\b", subject, re.I):
             problems.append(f"{short} is still a WIP commit; split it with atomic-commit first")
         problems.extend(f"{short}: {problem}" for problem in lint_message(message))
-        _, files = git(cwd, "show", "--name-only", "--format=", short)
-        paths = files.split()
+        listed, files = git(cwd, "show", "--name-only", "--format=", short)
+        if listed != 0:
+            problems.append(f"{short}: could not list its changed paths; the docs/tests marker was not checked")
+            continue
+        paths = files.splitlines()
         if paths and all(path.startswith("docs/") for path in paths) and not subject.startswith("Update docs"):
             problems.append(f"{short}: `{subject}` changes only docs/; a docs commit's subject starts `Update docs`")
         if paths and all(path.startswith("tests/") for path in paths) and not subject.startswith("Add tests"):

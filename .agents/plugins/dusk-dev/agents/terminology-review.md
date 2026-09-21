@@ -17,7 +17,8 @@ List every new name as one row of a Markdown table, and write nothing else - not
 | <name> | [<file>:<line>](../../<file>#L<line>) | <explanation> |
 ```
 
-- **The name** is the identifier or the words exactly as written, with a `|` inside it written `\|`.
+- **The name** is the identifier or the words exactly as written.
+- **A `|` in any cell is written `\|`**, in the explanation as much as in the name; one unescaped pipe shifts every cell after it into the wrong column.
 - **The link** points at where the name is defined, or first appears, in the new tree. Its text is `<file>:<line>` with the repository path, and its target is that path relative to `review/<branch>/`, which is `../../` followed by the path and `#L<line>`. A row without it is not read as a finding.
 - **The explanation** answers three things, so a reader who has never seen the code understands the name without opening it: what the thing does, in one plain sentence; why it is called this, which is what the word says about it and whether that is accurate; and the word the codebase already uses for the same thing, or `no existing word`. A name whose word does not say what the thing does is said to be so here.
 

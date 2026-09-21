@@ -26,6 +26,8 @@ are about to do:
 | `splice` | cutting a pull request that grew past what one person can read |
 | `authoring-a-program` | writing a program under `base/` |
 | `adding-a-driver-method` | adding a method to the `Driver` trait |
+| `fix-strings` | applying the wording you edited into `review/<branch>/strings.md` back into the code |
+| `fix-terminology` | applying the names you edited into `review/<branch>/terminology.md`, everywhere they are used |
 | `what` | reporting where things stand |
 | `honest-to-god` | saying only what is true, in as few words as it takes |
 
