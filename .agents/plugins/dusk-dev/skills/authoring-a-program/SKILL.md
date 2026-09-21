@@ -196,6 +196,7 @@ dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core         = { path = "../../dusk/src/dusk_core/" }
 # If you extend Sh.OutputPortal, add:
 dusk_program_sh   = { path = "../sh", public = true }
+dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 # Common helpers - add only what you actually use:
 anyhow            = { version = "1.0", public = true }
 slab              = { version = "0.4", public = true }
@@ -206,15 +207,15 @@ linkme            = { version = "*", optional = true, public = false }
 clap              = { version = "4", features = ["derive"], optional = true }
 
 [build-dependencies]
-dusk_capnp = { path = "../../dusk/src/dusk_capnp/" }
+dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
-client = ["linkme", "dusk_program_sh/client", "clap"]
+client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
 ```
 
 `public = true` on the dusk-* deps matters: downstream crates (e.g. `ps` re-exporting types from `sh`) need to see them. Don't omit it.
 
-If your program does **not** need to be runnable from a shell prompt (e.g. it's spawned only by other programs internally), skip `linkme`, `clap`, and the `client` feature entirely. `init` is the canonical example of a feature-less program.
+If your program does **not** need to be runnable from a shell prompt (e.g. it's spawned only by other programs internally), skip `linkme`, `clap`, `dusk_program_sh_proc` and the shell-entry `client` feature entirely. `init` is the canonical example of a program with no shell entry - its `client` feature only turns on `dusk_program_kvs_internal/client`, for the known kvs keys it sets.
 
 ---
 
@@ -224,7 +225,7 @@ If your schema imports only `dusk.capnp`:
 
 ```rust
 fn main() {
-    dusk_capnp::build_capnp_file("capnp/<name>.capnp");
+    dusk_build::build(&[("capnp/<name>.capnp", &[])]);
 }
 ```
 
@@ -232,14 +233,14 @@ If you also import a sibling program's schema, declare each as a `CapnpDep`:
 
 ```rust
 fn main() {
-    dusk_capnp::build_capnp(
+    dusk_build::build(&[(
         "capnp/<name>.capnp",
-        &[dusk_capnp::CapnpDep {
+        &[dusk_build::CapnpDep {
             schema: concat!(env!("CARGO_MANIFEST_DIR"), "/../sh/capnp/sh.capnp"),
             crate_name: "dusk_program_sh",
             schema_ids: &[0xb25a041190c0e845], // top-level @<id> of sh.capnp
         }],
-    );
+    )]);
 }
 ```
 
@@ -1131,7 +1132,7 @@ Consequences worth knowing before you write one:
 
 ## Step 8 - Register with the impl and the clients
 
-The base programs are aggregated by the `dusk_base` crate (`dusk/src/dusk_base`). That crate re-exports every base program, holds the canonical `default_launcher_set()`, and holds `link_anchors()` (the linker-keep-alive for shell entries). The deliverables (`artifacts/dusk_node/lib`, `artifacts/dusk_cli`, `artifacts/dusk_py`) depend on `dusk_base` rather than on individual program crates. Adding a program means editing `dusk_base` - **and**, because of the duplication described below, the live server's launcher vec too.
+The base programs are aggregated by the `dusk_base` crate (`dusk/src/dusk_base`). That crate re-exports every base program, holds the canonical `default_launcher_set()`, and holds `link_anchors()` (the linker-keep-alive for shell entries). The deliverables (`artifacts/dusk_node/lib`, `artifacts/dusk_cli`, `artifacts/dusk_py`) depend on `dusk_base` rather than on individual program crates. Adding a program means editing `dusk_base`, and nothing else: the live server takes its launchers from `default_launcher_set()`.
 
 ### `dusk/src/dusk_base/Cargo.toml`
 
@@ -1241,7 +1242,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] `base/<name>/` directory with `Cargo.toml`, `build.rs`, `capnp/<name>.capnp`, `src/lib.rs`
 - [ ] `Cargo.toml` lists `dusk_program`, `dusk_capnp`, `dusk_program_proc`, `dusk_core` as path deps with `public = true` where appropriate
 - [ ] `capnp/<name>.capnp` declares a fresh file-level `@0x…;` ID and a `const programId :UInt64 = 0x…;` (both generated with `capnp id`, never hand-typed)
-- [ ] `build.rs` calls `dusk_capnp::build_capnp_file(...)` or `dusk_capnp::build_capnp(..., deps)`
+- [ ] `build.rs` calls `dusk_build::build(&[("capnp/<name>.capnp", deps)])`, with `&[]` for `deps` when the schema imports only `dusk.capnp`
 - [ ] `lib.rs` invokes `dusk_program_proc::metadata!("<name>", VERSION, <name>_capnp::PROGRAM_ID)` before any derive
 - [ ] `Args` struct has exactly one `#[data]` field and a constructor matching the surface the program needs
 - [ ] `impl_args_rpc_server` on the args impl block (usually empty)
