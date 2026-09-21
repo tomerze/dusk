@@ -19,6 +19,7 @@ members = [
     "impls/windows",
     "base/kill",
     "base/init",
+    "base/nightfall",
     "base/programs",
     "base/ps",
     "base/sh",
