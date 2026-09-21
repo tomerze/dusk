@@ -16,14 +16,23 @@ struct KvsCli {
 #[derive(clap::Subcommand)]
 enum KvsAction {
     /// Read the value stored under a key
-    Get { key: String },
+    Get {
+        key: String,
+    },
     /// Store a value under a key
-    Set { key: String, value: String },
+    Set {
+        key: String,
+        value: String,
+    },
     /// Remove a key
-    Delete { key: String },
+    Delete {
+        key: String,
+    },
     /// Report whether a key is present
-    Exists { key: String },
-    /// Run no operation and stay alive, serving this process's portal
+    Exists {
+        key: String,
+    },
+    // Bind kvs on the client as a redis-compatible server
     Bind,
 }
 
