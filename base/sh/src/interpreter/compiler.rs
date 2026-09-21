@@ -5,8 +5,8 @@ use core::pin::Pin;
 use dusk_program::anyhow::{Result, anyhow};
 use hashbrown::HashSet;
 
+use crate::script;
 use crate::sh_capnp;
-use crate::sh_capnp::script;
 
 use super::inst::{self, Frame, Inst, ScriptWrapper};
 use super::{CompiledFunctions, FunctionTable};

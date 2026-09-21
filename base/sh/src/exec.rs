@@ -38,7 +38,7 @@ async fn sh_exec_task(
     );
     async move {
         let result: anyhow::Result<()> = async {
-            let reader = script_msg.get_root_as_reader::<sh_capnp::script::Reader>()?;
+            let reader = script_msg.get_root_as_reader::<crate::script::Reader>()?;
             interpreter.exec(reader, output, &stop, compiler).await
         }
         .await;
@@ -55,7 +55,7 @@ async fn sh_exec_task(
 pub(crate) fn spawn_sh_exec_task(
     ctx: &ProcessContext,
     interpreter: Interpreter,
-    script: sh_capnp::script::Reader<'_>,
+    script: crate::script::Reader<'_>,
     output: dusk_capnp::dusk_capnp::stream::Client,
     state: Rc<RefCell<State>>,
     stop: Rc<Stop>,
@@ -64,7 +64,7 @@ pub(crate) fn spawn_sh_exec_task(
     Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 > {
     let mut script_msg = capnp::message::Builder::new_default();
-    script_msg.set_root::<sh_capnp::script::Owned>(script)?;
+    script_msg.set_root::<crate::script::Owned>(script)?;
 
     state.borrow_mut().active_stops.push(stop.clone());
 

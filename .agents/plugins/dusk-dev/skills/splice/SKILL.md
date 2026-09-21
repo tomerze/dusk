@@ -124,6 +124,12 @@ A reviewer opens the middle PR and builds it.
 Push the new branches, force-push the rewritten original, then open the PRs from
 the bottom of the stack up, so each one has a base to target.
 
+**Only the PR that finishes the issue carries `Closes #N`.** Merging any of the
+others leaves the issue unfinished, and a closing keyword in one of their bodies
+would close it anyway - the bottom of a stack targets master, so GitHub acts on
+it. Their bodies say **`Part of #N`** instead, and name the PR that closes it.
+The harness takes either keyword.
+
 **The original PR is now a different PR.** It carries a fraction of what it
 carried, so its title and body no longer describe it. Rewrite both: what these
 commits do, which PR it is stacked on, and which of the known-problems and

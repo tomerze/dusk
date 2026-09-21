@@ -1,4 +1,5 @@
-use std::vec::Vec;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ast<'a> {

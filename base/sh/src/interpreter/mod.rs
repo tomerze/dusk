@@ -9,8 +9,8 @@ use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::mutex::Mutex;
 use hashbrown::{HashMap, HashSet};
 
+use crate::script;
 use crate::sh_capnp;
-use crate::sh_capnp::script;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
