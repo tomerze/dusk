@@ -18,8 +18,8 @@ you just link your programs into a node built on it.
 
 ## Implement the `Driver`
 
-Provide the platform primitives Dusk asks for - `hostname()`, `exit(exit_code)`,
-and `launchers(namespace)` - and register them once with `dusk_driver_impl!`. The
+Provide the platform primitives Dusk asks for - `hostname()` and
+`exit(exit_code)` - and register them once with `dusk_driver_impl!`. The
 macro defines the `#[no_mangle]` extern symbols `dusk_core` calls through; the
 linker connects the two.
 
@@ -39,8 +39,10 @@ which the Embassy mutexes in `dusk_program` rely on.
 
 Decide which programs nodes on this impl can run by building a per-namespace
 [`LauncherSet`](../concepts/launchers.md) (for example with
-`LauncherSet::from_launchers(vec![...])`). This is the set the driver's
-`launchers(namespace)` hook returns.
+`LauncherSet::from_launchers(vec![...])`), and hand `dusk_core::init::init` a
+closure returning it. `init` puts it in the registry and takes it out again when
+the namespace terminates, so registration is not something an impl does or has
+to undo. The registry lives in `dusk_core`, not in the driver.
 
 ## Host the executor
 

@@ -45,6 +45,9 @@ linear scan, so launcher vecs are kept short.
 ## Registration
 
 An impl builds a node's `LauncherSet` - typically with
-`LauncherSet::from_launchers(vec![...])` - and hands it back through the driver's
-`launchers(namespace)` hook. Which programs a node can run is exactly which
-launchers that set contains. See [Build a custom impl](../guides/custom-impl.md).
+`LauncherSet::from_launchers(vec![...])` - and hands `dusk_core::init::init` a
+closure returning it. `init` registers the set against the namespace it starts
+and drops it when that namespace terminates; the impl never touches the registry
+itself. Which programs a node can run is exactly which launchers that set
+contains.
+See [Build a custom impl](../guides/custom-impl.md).

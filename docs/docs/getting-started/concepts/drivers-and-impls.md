@@ -10,9 +10,7 @@ supercomputers - the programs and the policy are shared; only the driver changes
 `Driver` is a small `Send + Sync` trait of OS/hardware hooks:
 
 - **`hostname()`** - what this node calls itself,
-- **`exit(exit_code)`** - halt the node,
-- **`launchers(namespace)`** - build the node's [`LauncherSet`](launchers.md) for a
-  namespace (the set of programs it can run).
+- **`exit(exit_code)`** - halt the node.
 
 An impl implements `Driver` and registers it once with `dusk_driver_impl!`.
 
@@ -20,8 +18,8 @@ An impl implements `Driver` and registers it once with `dusk_driver_impl!`.
 
 `dusk_core` is `no_std` and depends on **no** impl, yet it has to call into one.
 It does this through a link-time shim. `dusk_driver_impl!` defines a `lazy_static`
-singleton for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_exit`, `_dusk_launchers`. `dusk_core::driver` declares those same symbols as
+singleton for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`
+and `_dusk_exit`. `dusk_core::driver` declares those same symbols as
 `unsafe extern "Rust"` and calls through them. The linker resolves the symbols to
 whichever impl is linked into the final binary. Callers in `dusk_core`, programs,
 and other `no_std` crates only ever name `dusk_core::driver::*` and get whatever

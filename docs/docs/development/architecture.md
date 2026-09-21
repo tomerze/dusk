@@ -40,8 +40,8 @@ node.
 
 Starting work is two steps. `Dusk.process(programArgs)` gets the node's
 [`LauncherSet`](../getting-started/concepts/launchers.md) from the
-[driver](../getting-started/concepts/drivers-and-impls.md)'s `launchers(namespace)`
-hook and launches a [process](../getting-started/concepts/processes.md) - the
+registry in `dusk_core::launchers`, keyed by namespace id, and launches a
+[process](../getting-started/concepts/processes.md) - the
 launcher is chosen by a **local** read of the args' program id (no network call).
 Then either `Dusk.run(process)` spawns it as its own task (a daemon that outlives
 the session) or `process.run()` runs it inside the calling session.
@@ -51,7 +51,7 @@ the session) or `process.run()` runs it inside the calling session.
 Two seams are resolved by the linker rather than by data:
 
 - **The driver shim.** `dusk_core` calls `unsafe extern "Rust"` symbols
-  (`_dusk_hostname`, `_dusk_exit`, `_dusk_launchers`) that the impl defines via
+  (`_dusk_hostname`, `_dusk_exit`) that the impl defines via
   `dusk_driver_impl!`. `dusk_core` depends on no impl; the impl satisfies the
   symbols. See [Drivers & Impls](../getting-started/concepts/drivers-and-impls.md).
 - **The shell entry table.** Shell-invocable programs register into a
