@@ -78,7 +78,7 @@ dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
                dusk_program, dusk_program_proc, dusk_connection, dusk_llm,
                dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
-               true, false, init, logs)
+               true, false, init, nightfall, logs)
 impls/nix/     The Linux impl (Embassy executor, the NixDriver)
 impls/std/     The std impl (Embassy executor, the StdDriver)
 impls/windows/ The Windows impl (Embassy executor, the WindowsDriver)
@@ -279,8 +279,9 @@ primitive.
 
 ## How a command runs
 
-**A client session.** When a client connects, the node's `init` process accepts
-the connection and spawns a `session` task that shares the node's single
+**A client session.** When a client connects, the node's `nightfall` process - the
+foreground command of the init script `init` runs through `sh` - accepts the
+connection and spawns a `session` task that shares the node's single
 namespace and hands the client a `Dusk` capability (a `DuskServer` exposed as the
 Cap'n Proto bootstrap capability). The transport underneath is being reworked, so
 don't lean on its specifics.
@@ -338,10 +339,10 @@ process receives on its `signal_receiver`.
 `dusk_core::init::init` with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process is handed an init script - a
-`Bytecode.Script` - and starts a detached `sh` to run it, then waits for its own
-`Terminate`, so nothing about the script's lifetime is init's business; for the
-node artifact that script is always `nightfall -l 9090`, compiled at build time
-with `sh_to_bytecode!`. `nightfall` binds the listener and accepts connections,
+`Bytecode.Script` - and runs it through `sh` in Script mode; for the node
+artifact that script is `nightfall -l 9090` compiled at build time with
+`sh_to_bytecode!`, or `nightfall -l <ip:port>` compiled at run time when the node
+is given an address. `nightfall` binds the listener and accepts connections,
 running in the foreground of that script.
 
 The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
@@ -372,16 +373,29 @@ its default configuration (building the logs launcher inside it also installs
 the global tracing subscriber, unconditionally - and nothing in the tree enables
 the logs program's `console` feature, so a node captures every event into its
 buffer and prints none of them), and `dusk_impl::run` starts the node with an
-`init` whose init script runs `nightfall` on port 9090:
+`init` whose init script runs `nightfall` on the address it is given:
 
 ```rust
-#[unsafe(no_mangle)]
-pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
+pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
+    let Some(listen_address) = (unsafe { listen_address(user.cast::<c_char>()) }) else {
+        eprintln!("dusk_node: not a valid ip:port");
+        return 64;
+    };
     dusk_base::link_anchors();
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let init_script = dusk_program_sh_proc::sh_to_bytecode!("nightfall -l 9090");
+    let init_script = if listen_address == DEFAULT_LISTEN_ADDRESS {
+        dusk_program_sh_proc::sh_to_bytecode!("nightfall -l 9090")
+    } else {
+        match compile::compile(&format!("nightfall -l {listen_address}")) {
+            Ok(init_script) => init_script,
+            Err(error) => {
+                eprintln!("dusk_node: the init script does not compile: {error}");
+                return 2;
+            }
+        }
+    };
     let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
     else {
         return 2;
