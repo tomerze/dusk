@@ -159,7 +159,7 @@ def main():
 
     claimed, last = claims_ready(message)
     asked = session["asked"] if "asked" in session else drive.get("pending_questions", [])
-    if session.get("standing") == "dilemma" and asked and all(answered(decisions_path(cwd, branch), title) for title in asked):
+    if session.get("standing") == "dilemma" and all(answered(decisions_path(cwd, branch), title) for title in asked):
         session["standing"] = "ready" if session.get("handed_off") == branch else None
     standing = session.get("standing")
     if claimed and session.get("handed_off") == branch:
