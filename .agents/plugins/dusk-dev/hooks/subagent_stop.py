@@ -151,10 +151,14 @@ def decision_ranker(cwd, message, hook_input):
     record(cwd, "ranked_sha", branch)
 
 
+def table_rows(message):
+    return [row for row in findings(message) if row.startswith("|")]
+
+
 def write_review(cwd, name, title, column, skill, message, branch):
     directory = review_dir(cwd, branch)
     directory.mkdir(parents=True, exist_ok=True)
-    rows = findings(message)
+    rows = table_rows(message)
     if rows:
         body = (
             f"Edit a {column.lower()} cell and run `/dusk-dev:{skill}` to apply it.\n\n"
@@ -168,7 +172,7 @@ def write_review(cwd, name, title, column, skill, message, branch):
 
 def terminology_review(cwd, message, hook_input):
     terms = field(message, "TERMS")
-    if terms not in ("none", "found") or (terms == "found" and not findings(message)):
+    if terms not in ("none", "found") or (terms == "found" and not table_rows(message)):
         block("End with `TERMS: none` or `TERMS: found`; each name as a table row `| <name> | [<file>:<line>](../../<file>#L<line>) | <what it does, why it is called that, the word the codebase already has> |`.")
     branch = reviewed(cwd, hook_input)
     write_review(cwd, "terminology.md", "Terminology introduced on", "Name", "fix-terminology", message, branch)
@@ -177,7 +181,7 @@ def terminology_review(cwd, message, hook_input):
 
 def string_review(cwd, message, hook_input):
     strings = field(message, "STRINGS")
-    if strings not in ("none", "found") or (strings == "found" and not findings(message)):
+    if strings not in ("none", "found") or (strings == "found" and not table_rows(message)):
         block("End with `STRINGS: none` or `STRINGS: found`; each string as a table row `| <string> | [<file>:<line>](../../<file>#L<line>) | <who sees it, where and when> |`.")
     branch = reviewed(cwd, hook_input)
     write_review(cwd, "strings.md", "User-facing strings introduced on", "String", "fix-strings", message, branch)
