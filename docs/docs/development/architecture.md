@@ -29,8 +29,10 @@ included.
 ## A client session
 
 A node has exactly one [namespace](../getting-started/concepts/namespaces.md),
-created at startup. The node's `init` process binds the TCP listener and, for
-each incoming connection, spawns a `dusk_core` **session** task that shares that
+created at startup. The node's `init` process runs the init script it is handed
+through `sh` - for the node artifact, `nightfall -l <ip:port>` - and `nightfall`
+binds the TCP listener and, for each
+incoming connection, spawns a `dusk_core` **session** task that shares that
 one namespace - so all connected clients see the same processes. The session
 wraps a `DuskServer` as a Cap'n Proto bootstrap capability and runs an RPC system
 over the stream. The client now holds a `Dusk` capability and can call into the
