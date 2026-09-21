@@ -1,4 +1,5 @@
 use dusk_base::dusk_program_init::Args as InitArgs;
+use dusk_base::dusk_program_sh::bytecode;
 use std::ffi::{CStr, c_char, c_void};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -30,11 +31,22 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
         eprintln!("dusk_node: not a valid ip:port");
         return 64;
     };
+    dusk_base::link_anchors();
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let Ok(init_args) =
-        InitArgs::new(&listen_address.ip().to_string(), listen_address.port()).as_program_args()
+    let init_script = if listen_address == DEFAULT_LISTEN_ADDRESS {
+        dusk_program_sh_proc::sh_to_bytecode!("nightfall -l 9090")
+    } else {
+        match bytecode::lower_from_source(&format!("nightfall -l {listen_address}")) {
+            Ok(init_script) => init_script,
+            Err(error) => {
+                eprintln!("dusk_node: the init script does not lower: {error}");
+                return 2;
+            }
+        }
+    };
+    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
     else {
         return 2;
     };
