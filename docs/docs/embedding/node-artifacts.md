@@ -63,13 +63,23 @@ gcc main.c -I../dusk/artifacts/dusk_node/lib/include -L../dusk/target/release/ -
 
 ## How to build with CMake
 
+To build using CMake with one of the configuration presents do
+
+```
+# configure using `nix-x64-linux` preset, 
+# to see available presets look at artifact/dusk_node/CMakePresets.json
+cmake --preset nix-x64-linux 
+# build 
+make -C build/nix-x64-linux dusk_node_cargo_bin dusk_node_cargo
+```
+
 If your application is a CMake project, you do not have to run `cargo` yourself
 or work out the link line. `artifacts/dusk_node` is a CMake project: point
 `add_subdirectory` at it and link the target.
 
 ```cmake
-set(DUSK_NODE_IMPL nix)
-set(DUSK_NODE_CARGO_TARGET x86_64-unknown-linux-gnu)
+set(DUSK_NODE_IMPL nix CACHE STRING "")
+set(DUSK_NODE_CARGO_TARGET x86_64-unknown-linux-gnu CACHE STRING "")
 add_subdirectory(path/to/dusk/artifacts/dusk_node dusk_node)
 
 target_link_libraries(my_app PRIVATE dusk::node)

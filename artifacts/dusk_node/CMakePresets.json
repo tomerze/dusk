@@ -4,12 +4,12 @@
     {
       "name": "base",
       "hidden": true,
-      "generator": "Ninja",
+      "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
-      "name": "linux-x64-nix",
+      "name": "nix-x64-linux",
       "inherits": "base",
       "cacheVariables": {
         "DUSK_NODE_CARGO_TARGET": "x86_64-unknown-linux-gnu",
@@ -18,6 +18,6 @@
     }
   ],
   "buildPresets": [
-    { "name": "linux-x64-nix", "configurePreset": "linux-x64-nix" }
+    { "name": "nix-x64-linux ", "configurePreset": "nix-x64-linux" }
   ]
 }
