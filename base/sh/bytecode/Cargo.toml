@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 nom = { version = "8.0.0", public = true }
+capnp = { version = "0.21.5", public = true }
+
+[build-dependencies]
+dusk_capnp = { path = "../../../dusk/src/dusk_capnp/" }

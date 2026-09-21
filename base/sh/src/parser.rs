@@ -16,7 +16,7 @@ impl Parser {
         &mut self,
         first: &ast::Expr,
         second: &ast::Expr,
-        builder: &mut crate::sh_capnp::script::statement::expr::expr_pair::Builder,
+        builder: &mut crate::script::statement::expr::expr_pair::Builder,
     ) -> Result<()> {
         let mut first_builder = builder.reborrow().init_first();
         self.parse_expr(first, &mut first_builder)?;
@@ -28,7 +28,7 @@ impl Parser {
     fn parse_expr(
         &mut self,
         expr: &ast::Expr,
-        builder: &mut crate::sh_capnp::script::statement::expr::Builder,
+        builder: &mut crate::script::statement::expr::Builder,
     ) -> Result<()> {
         match expr {
             ast::Expr::Command(source) => {
@@ -49,7 +49,7 @@ impl Parser {
     fn parse_statement(
         &mut self,
         stmt: &ast::Statement,
-        builder: &mut crate::sh_capnp::script::statement::Builder,
+        builder: &mut crate::script::statement::Builder,
     ) -> Result<()> {
         match stmt {
             ast::Statement::Expr(expr) => {
@@ -66,11 +66,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_ast(
-        &mut self,
-        program_ast: &ast::Ast,
-        builder: crate::sh_capnp::script::Builder,
-    ) -> Result<()> {
+    fn parse_ast(&mut self, program_ast: &ast::Ast, builder: crate::script::Builder) -> Result<()> {
         let mut stmts = builder.init_statements(program_ast.statements.len() as u32);
         for (i, ast_stmt) in program_ast.statements.iter().enumerate() {
             let mut stmt = stmts.reborrow().get(i as u32);
@@ -79,7 +75,7 @@ impl Parser {
         Ok(())
     }
 
-    pub fn parse(&mut self, s: &str, builder: crate::sh_capnp::script::Builder) -> Result<()> {
+    pub fn parse(&mut self, s: &str, builder: crate::script::Builder) -> Result<()> {
         let stripped = tokenize::strip_comments(s);
         let (remaining, program_ast) =
             tokenize::ast(&stripped).map_err(|_| anyhow::anyhow!("syntax error"))?;
