@@ -7,6 +7,8 @@ use nom::combinator::recognize;
 use nom::multi::{fold_many0, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded};
 
+use alloc::boxed::Box;
+
 use crate::ast;
 
 fn quoted_single(input: &str) -> IResult<&str, &str> {
@@ -29,7 +31,7 @@ fn identifier(input: &str) -> IResult<&str, &str> {
     recognize(take_while1(|c: char| c.is_alphanumeric() || c == '_')).parse(input)
 }
 
-pub fn command_words(input: &str) -> IResult<&str, std::vec::Vec<&str>> {
+pub fn command_words(input: &str) -> IResult<&str, alloc::vec::Vec<&str>> {
     separated_list1(space1, word).parse(input)
 }
 
@@ -104,8 +106,8 @@ fn word_break(character: char) -> bool {
 /// after a word-breaking character - so a `#` inside a word
 /// (`http://host/page#section`) is just a character. Quoted strings
 /// (`'...'`, `"..."`) are preserved verbatim.
-pub fn strip_comments(input: &str) -> std::string::String {
-    let mut out = std::string::String::with_capacity(input.len());
+pub fn strip_comments(input: &str) -> alloc::string::String {
+    let mut out = alloc::string::String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
     let mut in_single = false;
     let mut in_double = false;
