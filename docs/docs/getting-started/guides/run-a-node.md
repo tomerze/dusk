@@ -9,7 +9,7 @@ A node ships as **`dusk_node`** - the server binary under `artifacts/`, run with
 `cargo run --bin dusk_node` (its `main` just passes its argument, if it has one,
 to `dusk_node::dusk_node_run()`).
 It links the portable core, a set of programs, and one impl - by default the
-**nix** impl (`impls/nix/`, a library, not a binary) for Linux. You make a node
+**nix** impl (`impls/nix/`, a library, not a binary) for Unix-like systems. You make a node
 your own by linking in your programs and, if needed, swapping the underlying impl.
 See [Build a custom impl](custom-impl.md).
 

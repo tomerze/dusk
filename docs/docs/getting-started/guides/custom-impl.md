@@ -13,8 +13,10 @@ read [Drivers & Impls](../concepts/drivers-and-impls.md) first.
 ## When you need a custom impl
 
 You need a new impl when you want nodes on hardware no existing impl covers. If
-an impl for your platform already exists (the nix impl covers Linux), you don't -
-you just link your programs into a node built on it.
+an impl for your platform already exists (the nix impl covers Unix-like systems,
+the windows impl covers Windows, and the std impl covers everything else
+with the Rust standard library), you don't - you just link your programs into a
+node built on it.
 
 ## Implement the `Driver`
 

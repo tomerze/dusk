@@ -72,7 +72,7 @@ Multiply that across every device running your app and you have a managed fleet.
 
 ## Make it yours
 
-The default `dusk_node` links the Base programs and the Linux impl. Changing which
+The default `dusk_node` links the Base programs and the nix impl. Changing which
 programs ship, targeting a different platform, or adding capabilities of your own
 is the **framework** side of Dusk - see [Write a program](first-program.md) and
 [Build a custom impl](custom-impl.md). It's optional: most integrations run the

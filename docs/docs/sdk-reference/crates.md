@@ -40,7 +40,9 @@ Each Base program is its own crate, named `dusk_program_<name>` - `dusk_program_
 
 | Crate | Role |
 |-------|------|
-| `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and accepts client connections. |
+| `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and accepts client connections. Reads the hostname with `gethostname(2)`. |
+| `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
+| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, and recovers a node's exit code the same way nix and windows do. It names no platform, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, macOS, the BSDs, illumos and Linux. Its `hosted` feature, on by default, supplies `critical-section/std` and Embassy's std platform; firmware that brings its own turns it off. |
 
 ## Artifacts (`artifacts/`)
 
