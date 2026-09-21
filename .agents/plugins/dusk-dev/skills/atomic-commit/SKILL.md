@@ -289,6 +289,18 @@ reviewability wins every time. Never bundle to stay green.
 
 The same goes for tests passing at every commit. Ideal. Not a requirement.
 
+**And never go looking.** Do not check out each commit and compile it, and do
+not `cargo check` anything but the tip. Walking a seventeen-commit branch
+through `cargo check --workspace` costs many minutes of the user's time and
+tokens to measure the one property they have already said is not required. If
+some later reader - a review agent, a hook, me on the next pass - reports a
+non-compiling intermediate commit as a defect, that report is wrong; the answer
+is to say so, not to rewrite the history to satisfy it.
+
+The user, verbatim, when I was about to compile all seventeen: **"Don't ever
+fucking compile seventeen commits! THE PROPERTY EVERY COMMIT MUST COMPILE
+DOESN'T EVEN EXIST! IT'S A NICE TO HAVE NOT A HARD LIMIT."**
+
 ## The ways I actually get this wrong
 
 **Failure - one glob.** PR #32 shipped as a single commit: 32 files, a schema
