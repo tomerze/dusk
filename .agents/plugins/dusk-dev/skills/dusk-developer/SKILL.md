@@ -107,7 +107,9 @@ vendor/        External libs submodules
 | `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
 
 The deployable server is `dusk_node` (package `dusk_node_bin`, bin `dusk_node`),
-which links Dusk Core, the Base programs, and one impl.
+which links Dusk Core, the Base programs, and one impl. There is one library
+artifact, `dusk_node` in `artifacts/dusk_node/lib`, and one binary wrapping it in
+`artifacts/dusk_node/bin`.
 
 ## Core concepts
 
@@ -385,8 +387,8 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
 There is one entry point, and `user` is the only thing a caller gives it. This
 template reads it as a NUL-terminated `ip:port`, falling back to
 `DEFAULT_LISTEN_ADDRESS` (`0.0.0.0:9090`) when it is null - a node built from
-the template can read the pointer as anything it likes. `dusk_node_bin` passes
-its own optional `ip:port` argument straight through.
+the template can read the pointer as anything it likes. `dusk_node_bin`
+passes its own optional `ip:port` argument straight through.
 
 For custom launcher arguments (e.g. a different `LogsConfig`), skip
 `default_launcher_set` and assemble the set yourself with
@@ -398,7 +400,7 @@ three ways:
 - **As a binary** - `dusk_node_bin` wraps it as the `dusk_node` executable
   (`cargo run --bin dusk_node`).
 - **As a C library** - the `staticlib`/`cdylib` expose one entry point, declared
-  in `artifacts/dusk_node/include/dusk.h`:
+  in `artifacts/dusk_node/lib/include/dusk.h`:
   ```c
   int32_t dusk_node_run(void *user);
   ```
@@ -407,8 +409,8 @@ three ways:
   surface. `user` carries what the program running the node gives it at run
   time - editing the template settles what a node is built from, `user` carries
   what is only known once it runs. Dusk itself never looks at it.
-- **As a Rust rlib** - call `dusk_node::dusk_node_run()` directly, or copy its
-  body to assemble your own node (different programs, different impl).
+- **As a Rust rlib** - call `dusk_node::dusk_node_run()` directly, or copy
+  its body to assemble your own node (different programs, different impl).
 
 ### `dusk` - the CLI
 

@@ -170,7 +170,7 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9191 "ps"`).
 
 - **The `dusk_node` binary takes its `ip:port` as its first argument**, and only
   falls back to `DEFAULT_LISTEN_ADDRESS` (`0.0.0.0:9090`) when given none -
-  `artifacts/dusk_node_bin/src/main.rs` hands argv[1] straight to
+  `artifacts/dusk_node/bin/src/main.rs` hands argv[1] straight to
   `dusk_node_run`. So check `pgrep -af dusk_node` before starting one: another
   session's node may already hold 9090, in which case yours exits and your CLI
   silently talks to *theirs*. Do not kill a node you did not start. Start your
