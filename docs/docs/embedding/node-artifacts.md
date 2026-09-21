@@ -259,7 +259,7 @@ Builds as a C static library.
 ```bash
 rustup component add rust-src
 
-cargo build --profile prod -Z build-std=std,panic_abort \
+cargo build --profile prod -Z build-std=std \
   --target <target> -p dusk_node --no-default-features --features impl_std
 ```
 
