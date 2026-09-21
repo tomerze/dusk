@@ -88,37 +88,12 @@ library.
 `nix`, `windows` or `std`. Use the table under [How to build](#how-to-build) to
 pick the one for your platform.
 
-There is no default and nothing is guessed from your compiler or your target: a
-target triple does not settle the question, because the std impl builds for
-Linux too. Configuring without it stops with an error listing the impls the node
-actually has, read from the library's manifest rather than from a list kept
-here.
-
-**Pairing it with `DUSK_NODE_CARGO_TARGET` is yours to get right.** The build
-checks that the impl exists; it does not check that the impl suits the triple,
-and it will not. Which impls make sense for which targets is the table above,
-and encoding that table a second time in the build is how it goes stale. So
-`nix` with an ESP-IDF triple configures, and `windows` with a Linux triple
-configures and compiles - the first fails when `nix` cannot find a Unix libc,
-the second when the linker cannot resolve `GetComputerNameW`.
 
 ### DUSK_NODE_CARGO_TARGET
 
 **Required**, the host included. It is the Rust target triple to build for, it
 selects that platform's library naming and system libraries, and it puts the
 output under `target/<triple>/`.
-
-There is no host default on purpose. The only thing CMake has to offer is
-`CMAKE_SYSTEM_NAME`, which names a platform and not a triple: it is `Windows`
-for both MSVC and MinGW, whose libraries are named differently, and `Linux` for
-both glibc and musl, whose system libraries differ. A default built on it points
-the build at a library that is not there, and does it at generate time, where
-nothing checks the path. `cargo -vV` prints your host triple as `host:`.
-
-```cmake
-set(DUSK_NODE_CARGO_TARGET riscv32imc-esp-espidf)
-set(DUSK_NODE_IMPL std)
-```
 
 ### DUSK_NODE_CARGO_PROFILE
 
