@@ -156,7 +156,7 @@ impl dusk_program::process::ProcessMixin for Process {
         let server: logs_capnp::logs_args::server::Client = self.ctx.program_args.server_as()?;
         let response = server.open_stream_request().send().promise.await?;
         let stream = response.get()?.get_stream()?;
-        ::tracing::info!(pid = self.ctx.pid, "the client opened its logs stream");
+        ::tracing::info!(pid = self.ctx.pid, "logs stream opened");
         ready.sender().send(true);
 
         let dusk_client = dusk_core::local_client(self.ctx.namespace.clone()).await;
