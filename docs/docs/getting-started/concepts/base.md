@@ -61,6 +61,17 @@ logs stream otlp://myotel:4317 # stream straight to an otel collector (traces in
 logs dump --replay-only         # return the buffered history as values, then exit
 ```
 
+## `kvs`
+
+Reads and writes the node's in-memory key-value store, shared by every program
+on it. See [Key-value store](../../features/kvs.md).
+
+```sh
+kvs get dusk.version         # read a value
+kvs set deploy.stage canary  # store a string
+kvs delete deploy.stage      # remove it
+```
+
 ## `kill`
 
 Sends a signal to a process by pid. The default signal is `15` (Terminate),
