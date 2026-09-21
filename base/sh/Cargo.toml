@@ -41,6 +41,7 @@ client = [
     "linkme",
     "clap",
     "dusk_program_sh_proc",
+    "dusk_program_sh_bytecode/parser",
     "tokio",
     "reedline",
     "crossterm",
