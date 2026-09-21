@@ -92,8 +92,8 @@ vendor/        External libs submodules
 | `dusk_capnp` | The Cap'n Proto schemas (`dusk.capnp`, `stream.capnp`) - the wire format every client and node speaks. |
 | `dusk_program` | The SDK a program implements: the `ProcessMixin` / `LauncherMixin` traits, `Namespace`, `ProgramArgs`, `Signal`, `Ready`, and the stream helpers. |
 | `dusk_program_proc` | The proc macros that remove the boilerplate: `metadata!`, `derive(Args)`, `impl_args_rpc_server`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, `impl_portal_rpc_server`. |
-| `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. |
-| `dusk_program_sh_bytecode` | The sh script compiler: the grammar, the AST, `bytecode.capnp`, and the `Parser` that lowers a script into a `Script`. Its `parser` feature is off for a node, which needs only the schema. |
+| `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. `dusk_program_sh_proc` also carries `sh_to_bytecode!`, which lowers source to bytecode at the calling crate's build time. |
+| `dusk_program_sh_bytecode` | Lowers source to bytecode - the first step of source to bytecode to instructions: the grammar, the AST, `bytecode.capnp`, the `Parser`, and the `bytecode` module every caller goes through. Its `parser` feature is off for a node, which needs only the schema. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Linux impl: hosts the Embassy executor, implements `NixDriver`, enables `embassy-time/std`, and binds the TCP listener. |
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side - the prompt UI and the `Shell` that drives the shell server a client attaches to. |
