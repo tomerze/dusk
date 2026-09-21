@@ -1,17 +1,17 @@
 # Dusk node artifacts
 
-You can use these artifcats to embed a Dusk Node into (almost) any application.
+You can use these artifacts to embed a Dusk Node into (almost) any application.
 
 ## How to build
 
 There is one node artifact, and which impl it links is a cargo feature. Follow
 the `build` docs section of the impl relevant for you
 
-For *Nix platforms (Linux, Dawrin, FreeBSD) use artifacts/dusk_node/lib (lib) or artifacts/dusk_node/bin (An executable ELF), with `impl_nix`
+For *Nix platforms (Linux, Darwin, FreeBSD) use artifacts/dusk_node/lib (lib) or artifacts/dusk_node/bin (An executable ELF), with `impl_nix`
 
 For Windows use the same two, with `impl_windows` (lib and .exe)
 
-For other platforms which support the Rust standard library (ESP-IDF for example) use artifcats/dusk_node/lib (lib), with `impl_std`
+For other platforms which support the Rust standard library (ESP-IDF for example) use artifacts/dusk_node/lib (lib), with `impl_std`
 
 
 | Operating system | Impl feature |
@@ -142,7 +142,7 @@ Run the Dusk Node (recommended to do this early on application startup)
 dusk_node_run(NULL); // This function blocks, make sure to run it on a dedicated thread.
 ```
 
-#### Executable
+### Executable
 
 Some Dusk node executables require some trivial command-line arguments to run. 
 
@@ -154,7 +154,7 @@ ELF file on *Nix, a PE file on Windows.
 
 ## Nix
 
-A Dusk node artifcat for *Nix platforms (Linux, Dawrin, FreeBSD)
+A Dusk node artifact for *Nix platforms (Linux, Darwin, FreeBSD)
 
 Builds as a C static library.
 
@@ -212,7 +212,7 @@ cargo build --profile prod --target <target> -p dusk_node
 
 ## Windows
 
-A Dusk node artifcat for Windows
+A Dusk node artifact for Windows
 
 Builds as a C static library.
 
@@ -248,7 +248,7 @@ cargo build --profile prod --target <target> -p dusk_node \
 
 ## Std
 
-A Dusk node artifcat for every platform that has support for the Rust standard library and threads.
+A Dusk node artifact for every platform that has support for the Rust standard library and threads.
 
 Builds as a C static library.
 
@@ -264,7 +264,7 @@ cargo build --profile prod -Z build-std=std,panic_abort \
 Xtensa needs the esp-rs forked compiler (`espup install`) and `cargo +esp`,
 otherwise the same command with `--target xtensa-esp32-espidf`.
 
-# Possible targets
+### Possible targets
 
 | Target |
 |---|
