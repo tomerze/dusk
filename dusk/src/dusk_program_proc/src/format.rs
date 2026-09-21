@@ -178,6 +178,9 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                     fn version(&self) -> alloc::string::String {
                         alloc::string::String::from(format!("{}", #version))
                     }
+                    fn git_rev(&self) -> alloc::string::String {
+                        alloc::string::String::from(GIT_REV)
+                    }
                     fn clone_box(&self) -> alloc::boxed::Box<dyn dusk_program::process::Process> {
                         alloc::boxed::Box::new(self.clone())
                     }
