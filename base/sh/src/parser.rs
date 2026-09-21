@@ -1,10 +1,8 @@
 use crate::anyhow::Result;
 use dusk_program::anyhow;
+use dusk_program_sh_bytecode::{ast, tokenize};
 
-mod ast;
-mod tokenize;
-
-pub use tokenize::{command_words, strip_comments};
+pub use dusk_program_sh_bytecode::tokenize::{command_words, strip_comments};
 
 #[derive(Clone, Default)]
 pub struct Parser;

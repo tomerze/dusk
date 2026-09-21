@@ -7,7 +7,7 @@ use nom::combinator::recognize;
 use nom::multi::{fold_many0, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded};
 
-use super::ast;
+use crate::ast;
 
 fn quoted_single(input: &str) -> IResult<&str, &str> {
     delimited(char('\''), is_not("'"), char('\'')).parse(input)
