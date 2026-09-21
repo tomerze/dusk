@@ -30,7 +30,7 @@ use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
 use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_program_sh::sh_capnp;
-use dusk_program_sh::{ShArgs, ShMode};
+use dusk_program_sh::{ShArgs, ShMode, bytecode};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 
 use opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::{
@@ -104,7 +104,7 @@ async fn drive_logs_stream(
     let program_args = ShArgs::new(
         client.clone(),
         StaticShEntriesBuilder::default(),
-        ShMode::Script(command.to_string()),
+        ShMode::Script(bytecode::lower_from_source(command).unwrap()),
     )
     .unwrap()
     .as_program_args()

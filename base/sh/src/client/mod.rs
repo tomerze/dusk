@@ -164,7 +164,6 @@ async fn prompt<S: ShEntriesBuilder>(
         client.clone(),
         sh_entries_builder.clone(),
         server,
-        crate::parser::Parser::new(),
     )
     .await?;
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {

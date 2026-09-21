@@ -7,7 +7,6 @@ use dusk_program::anyhow::Result;
 use dusk_program_sh::client::open_prompt;
 use dusk_program_sh::client::shell::Shell;
 use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo, StaticShEntriesBuilder};
-use dusk_program_sh::parser::Parser;
 use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -240,7 +239,6 @@ impl Dusk {
                     client.clone(),
                     StaticShEntriesBuilder::default(),
                     process,
-                    Parser::new(),
                 )
                 .await
             }

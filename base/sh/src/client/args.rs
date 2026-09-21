@@ -7,18 +7,25 @@ use dusk_capnp::pry;
 use dusk_program::IntoCapnp;
 use dusk_program::anyhow::{self, Context};
 use dusk_program::program_args::ProgramArgs;
+use dusk_program_sh_bytecode::bytecode;
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
 
 pub enum ShMode {
     Server,
-    Script(String),
-    DetachedScript(String),
+    Script(Vec<u8>),
+    DetachedScript(Vec<u8>),
     Prompt {
         client_hostname: String,
         server_pid: u64,
     },
+}
+
+fn read_bytecode(
+    bytecode: &[u8],
+) -> anyhow::Result<capnp::message::Reader<dusk_capnp::capnp::serialize::OwnedSegments>> {
+    bytecode::read(bytecode).context("a script's bytecode is not a Script message")
 }
 
 #[derive(dusk_program_proc::Args)]
@@ -39,13 +46,13 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
             let mut data_builder = data.init_root();
             match mode {
                 ShMode::Server => data_builder.set_server(()),
-                ShMode::Script(command) => {
-                    let mut parser = crate::parser::Parser::new();
-                    parser.parse(&command, data_builder.init_script())?;
+                ShMode::Script(bytecode) => {
+                    let message = read_bytecode(&bytecode)?;
+                    data_builder.set_script(message.get_root()?)?;
                 }
-                ShMode::DetachedScript(command) => {
-                    let mut parser = crate::parser::Parser::new();
-                    parser.parse(&command, data_builder.init_detached_script())?;
+                ShMode::DetachedScript(bytecode) => {
+                    let message = read_bytecode(&bytecode)?;
+                    data_builder.set_detached_script(message.get_root()?)?;
                 }
                 ShMode::Prompt {
                     client_hostname,

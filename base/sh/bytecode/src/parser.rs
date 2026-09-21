@@ -63,9 +63,11 @@ impl Parser {
 
     pub fn parse(&mut self, s: &str, builder: script::Builder) -> Result<(), SyntaxError> {
         let stripped = tokenize::strip_comments(s);
-        let (remaining, program_ast) = tokenize::ast(&stripped).map_err(|_| SyntaxError)?;
-        if !remaining.trim().is_empty() {
-            return Err(SyntaxError);
+        let (remaining, program_ast) =
+            tokenize::ast(&stripped).map_err(|_| SyntaxError::whole_script())?;
+        let trailing = remaining.trim_start();
+        if !trailing.is_empty() {
+            return Err(SyntaxError::at(trailing));
         }
 
         self.parse_ast(&program_ast, builder);

@@ -12,7 +12,8 @@ travel back.
 | Crate | Side | Role |
 |-------|------|------|
 | `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
-| `base/sh/bytecode` | both | `dusk_program_sh_bytecode` - `capnp/bytecode.capnp` always; the grammar, the AST and the `Parser` that lowers a script into a `Script` behind its `parser` feature, so a node compiles only the schema |
+| `base/sh/bytecode` | both | `dusk_program_sh_bytecode` - `capnp/bytecode.capnp` always; the grammar, the AST and the `Parser` that lowers source to bytecode behind its `parser` feature, so a node compiles only the schema |
+| `base/sh/proc` | client (`std`) | `#[sh_entry]`, and `sh_to_bytecode!`, which lowers source to bytecode at the calling crate's build time |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
 | `base/sh/src/client/shell/` | client (`std`) | `Shell` - drives the `sh` process a client was handed |
 | `dusk_connection` | client (`std`) | `Connection` - the TCP/RPC link |
@@ -122,6 +123,20 @@ Either way the server side is identical: a `Script` reader handed to
 
 The grammar is a nom parser in `base/sh/bytecode/`. It is deliberately tiny.
 
+Source is lowered to bytecode before it goes anywhere else. `ShMode::Script`
+and `ShMode::DetachedScript` carry bytecode, never source, so every caller runs
+`bytecode::lower_from_source` first - the CLI, the `sh` entry, the prompt's
+`Shell::sh` - and there is one description of what a script lowers to.
+
+That lowering can also happen at build time.
+`dusk_program_sh_proc::sh_to_bytecode!("echo hi")` - from the
+`dusk_program_sh_proc` crate, which a caller adds alongside `dusk_program_sh` -
+runs the same call while the calling crate is compiled and expands to the
+bytecode it produced, ready to hand to `ShMode::Script`. A syntax error is then
+a compile error. The parser is still linked, because every other caller lowers
+at run time; what build-time lowering buys is that that script is never parsed
+at run time.
+
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
 to end of line, and only when the `#` starts a word - a `#` inside a word
 (`http://host/page#section`) is just a character. Text inside `'…'` / `"…"` is
@@ -159,7 +174,8 @@ greet() {
 ```
 
 `Parser::parse` strips comments, runs the nom `ast` parser, and rejects the input
-as `"syntax error"` if anything fails or any non-whitespace remains unconsumed.
+as `"syntax error"` if anything fails, and as ``"syntax error at `…`"``, naming
+the line it stopped on, if non-whitespace remains unconsumed.
 On success it walks the AST straight into the capnp `Script` builder.
 
 ## The wire format
