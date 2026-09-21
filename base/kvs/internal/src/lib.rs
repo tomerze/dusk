@@ -142,6 +142,11 @@ impl Kvs {
     pub async fn exists(&self, key: u64) -> bool {
         self.entries.read().await.contains_key(&key)
     }
+
+    /// Every key present at one instant, in no particular order.
+    pub async fn scan(&self) -> alloc::vec::Vec<u64> {
+        self.entries.read().await.keys().copied().collect()
+    }
 }
 
 type Registry =
