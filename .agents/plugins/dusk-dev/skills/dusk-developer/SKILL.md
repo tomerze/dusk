@@ -352,9 +352,10 @@ run and talk to a node."
 `dusk_node` packages Dusk Core, the Base programs, and an impl into a runnable
 node. Its body is tiny - `default_launcher_set()` builds every Base program at
 its default configuration (building the logs launcher inside it also installs
-the global tracing subscriber, since `dusk_node` enables the logs program's
-`console` feature), and `dusk_nix::run` starts the node with an `init` bound to
-the address it is given:
+the global tracing subscriber, unconditionally - and nothing in the tree enables
+the logs program's `console` feature, so a node captures every event into its
+buffer and prints none of them), and `dusk_nix::run` starts the node with an
+`init` bound to the address it is given:
 
 ```rust
 pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {

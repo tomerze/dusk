@@ -60,6 +60,7 @@ pub trait Process: ProcessMixin {
     fn program_id(&self) -> u64;
     fn name(&self) -> alloc::string::String;
     fn version(&self) -> alloc::string::String;
+    fn git_rev(&self) -> alloc::string::String;
     fn clone_box(&self) -> Box<dyn Process>;
     fn namespace(&self) -> Rc<Namespace>;
     fn pid(&self) -> u64;
@@ -94,13 +95,20 @@ impl dyn Process {
         }
         entry.suspended.sender().send(false);
 
-        tracing::info!("main run");
+        tracing::info!(
+            pid,
+            program_id = self.program_id(),
+            program_name = self.name(),
+            program_version = self.version(),
+            git_rev = self.git_rev(),
+            "main run"
+        );
         let result = self
             .main(entry.channel.dyn_receiver(), entry.ready)
             .instrument(tracing::Span::current())
             .await;
         let error = result.as_ref().err().map(|e| e.to_string());
-        tracing::info!(error = error, "main exit");
+        tracing::info!(pid, error = error, "main exit");
 
         namespace.exit(pid, result.map_err(|e| e.to_string())).await;
         Ok(())
