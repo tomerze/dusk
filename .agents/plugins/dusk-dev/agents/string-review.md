@@ -25,7 +25,8 @@ List every string the branch adds or changes as one row of a Markdown table, and
 | <the string, verbatim> | [<file>:<line>](../../<file>#L<line>) | <who sees it, where and when> |
 ```
 
-- **The string** is the text exactly as it is written at that line, so that replacing it there is a plain text replacement: a format placeholder stays as written (`{error:#}`), a `|` inside it is written `\|`, and a string that spans lines is written whole on one row with each line break as `<br>`. Skip strings that only name an identifier, a path or a format.
+- **The string** is the text exactly as it is written at that line, so that replacing it there is a plain text replacement: a format placeholder stays as written (`{error:#}`), and a string that spans lines is written whole on one row with each line break as `<br>`. Skip strings that only name an identifier, a path or a format.
+- **A `|` in any cell is written `\|`**, in the explanation as much as in the string; one unescaped pipe shifts every cell after it into the wrong column.
 - **The link** points at the line the string lives on in the new tree. Its text is `<file>:<line>` with the repository path, and its target is that path relative to `review/<branch>/`, which is `../../` followed by the path and `#L<line>`. A row without it is not read as a finding. One row, one string: a line with two strings gets two rows.
 - **The explanation** says who reads it, where and when, in one sentence: `RuntimeError raised by node.prompt() when another prompt is already open in the same Python process`.
 
