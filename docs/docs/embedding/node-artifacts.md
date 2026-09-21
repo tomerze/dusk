@@ -144,7 +144,9 @@ dusk_node_run(NULL); // This function blocks, make sure to run it on a dedicated
 
 ### Executable
 
-Some Dusk node executables require some trivial command-line arguments to run. 
+`dusk_node` takes one optional argument, the `ip:port` it listens on. With no
+argument it binds `0.0.0.0:9090`. An argument that is not a literal address and
+port exits with status 64 without starting the node.
 
 Run Dusk node executables just like any other executable on your platform.
 
