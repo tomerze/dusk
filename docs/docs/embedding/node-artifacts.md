@@ -61,6 +61,71 @@ For example
 gcc main.c -I../dusk/artifacts/dusk_node/lib/include -L../dusk/target/release/ -ldusk_node
 ```
 
+## How to build with CMake
+
+If your application is a CMake project, you do not have to run `cargo` yourself
+or work out the link line. `artifacts/dusk_node` is a CMake project: point
+`add_subdirectory` at it and link the target.
+
+```cmake
+set(DUSK_NODE_IMPL nix)
+set(DUSK_NODE_CARGO_TARGET x86_64-unknown-linux-gnu)
+add_subdirectory(path/to/dusk/artifacts/dusk_node dusk_node)
+
+target_link_libraries(my_app PRIVATE dusk::node)
+```
+
+`dusk::node` carries the include directory, so `#include "dusk.h"` works with no
+further paths, and it carries the system libraries a Rust static library needs
+on that platform.
+
+`dusk::node_bin` is the executable, if you want the binary rather than the
+library.
+
+### DUSK_NODE_IMPL
+
+**Required.** It names which impl the node links, without the `impl_` prefix -
+`nix`, `windows` or `std`. Use the table under [How to build](#how-to-build) to
+pick the one for your platform.
+
+There is no default and nothing is guessed from your compiler or your target: a
+target triple does not settle the question, because the std impl builds for
+Linux too. Configuring without it stops with an error listing the impls the node
+actually has, read from the library's manifest rather than from a list kept
+here.
+
+**Pairing it with `DUSK_NODE_CARGO_TARGET` is yours to get right.** The build
+checks that the impl exists; it does not check that the impl suits the triple,
+and it will not. Which impls make sense for which targets is the table above,
+and encoding that table a second time in the build is how it goes stale. So
+`nix` with an ESP-IDF triple configures, and `windows` with a Linux triple
+configures and compiles - the first fails when `nix` cannot find a Unix libc,
+the second when the linker cannot resolve `GetComputerNameW`.
+
+### DUSK_NODE_CARGO_TARGET
+
+**Required**, the host included. It is the Rust target triple to build for, it
+selects that platform's library naming and system libraries, and it puts the
+output under `target/<triple>/`.
+
+There is no host default on purpose. The only thing CMake has to offer is
+`CMAKE_SYSTEM_NAME`, which names a platform and not a triple: it is `Windows`
+for both MSVC and MinGW, whose libraries are named differently, and `Linux` for
+both glibc and musl, whose system libraries differ. A default built on it points
+the build at a library that is not there, and does it at generate time, where
+nothing checks the path. `cargo -vV` prints your host triple as `host:`.
+
+```cmake
+set(DUSK_NODE_CARGO_TARGET riscv32imc-esp-espidf)
+set(DUSK_NODE_IMPL std)
+```
+
+### DUSK_NODE_CARGO_PROFILE
+
+The cargo profile, empty to follow `CMAKE_BUILD_TYPE`: `Debug` takes cargo's
+`dev`, `MinSizeRel` takes `prod`, and anything else takes `release`. Set it to
+name a profile directly.
+
 ## How to run
 
 ### Library
