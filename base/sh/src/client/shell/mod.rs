@@ -1,5 +1,5 @@
 use crate::entry::ShEntriesBuilder;
-use crate::parser::Parser;
+use dusk_program_sh_bytecode::bytecode;
 use crate::sh_capnp::{compiler, sh_portal, sh_stop};
 use crate::{ShArgs, ShCompiler, ShMode};
 use capnp::capability::{FromClientHook, Promise};
@@ -38,7 +38,6 @@ impl sh_stop::Server for Stop {
 pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 
 pub struct Shell {
-    parser: Parser,
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
     compiler: compiler::Client,
@@ -111,7 +110,6 @@ impl Shell {
         client: dusk::Client,
         sh_entries_builder: S,
         served: process::Client,
-        parser: Parser,
     ) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
@@ -145,7 +143,6 @@ impl Shell {
         let keepalive_task = Self::spawn_keepalive_task(sh_process.clone(), rtt_handle.clone());
 
         Ok(Shell {
-            parser,
             sh_process,
             compiler,
             hostname: hostname.into(),
@@ -178,8 +175,9 @@ impl Shell {
         });
 
         let mut sh_request = sh_portal.sh_request();
-        let script_builder = sh_request.get().init_script();
-        self.parser.parse(script, script_builder)?;
+        let lowered = bytecode::lower_from_source(script)?;
+        let message = bytecode::read(&lowered)?;
+        sh_request.get().set_script(message.get_root()?)?;
         sh_request.get().set_output(stream);
         sh_request.get().set_stop(stop_cap);
         sh_request.get().set_compiler(self.compiler.clone());

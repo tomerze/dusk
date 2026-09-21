@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use dusk_base::dusk_program::dusk_capnp::capnp::capability::FromClientHook as _;
 use dusk_base::dusk_program::dusk_capnp::dusk_capnp::dusk;
+use dusk_base::dusk_program_sh::bytecode;
 use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
     client::{
@@ -42,7 +43,7 @@ async fn script(client: dusk::Client, command: String) -> Result<()> {
     let program_args = ShArgs::new(
         client.clone(),
         StaticShEntriesBuilder::default(),
-        ShMode::Script(command),
+        ShMode::Script(bytecode::lower_from_source(&command)?),
     )?
     .as_program_args()?;
     let mut process_request = client.process_request();
