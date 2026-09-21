@@ -5,6 +5,8 @@ extern crate alloc;
 #[cfg(feature = "parser")]
 pub mod ast;
 #[cfg(feature = "parser")]
+pub mod bytecode;
+#[cfg(feature = "parser")]
 pub mod parser;
 #[cfg(feature = "parser")]
 pub mod syntax_error;
