@@ -19,3 +19,14 @@
 /.claude/worktrees/**
 .superpowers/
 /review/
+*.make
+*.cmake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+install_manifest.txt
+Makefile
+*.make

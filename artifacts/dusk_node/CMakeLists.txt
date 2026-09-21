@@ -112,7 +112,7 @@ set(DUSK_NODE_LIBRARY_PATH
 set(DUSK_NODE_EXECUTABLE_PATH
     "${DUSK_NODE_OUTPUT_DIRECTORY}/dusk_node${DUSK_NODE_EXECUTABLE_SUFFIX}")
 
-add_custom_target(build_node_lib
+add_custom_target(libdusk_node
     COMMAND "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node
@@ -124,7 +124,7 @@ add_custom_target(build_node_lib
     VERBATIM)
 
 add_library(dusk_node STATIC IMPORTED GLOBAL)
-add_dependencies(dusk_node build_node_lib)
+add_dependencies(dusk_node libdusk_node)
 set_target_properties(dusk_node PROPERTIES
     IMPORTED_LOCATION "${DUSK_NODE_LIBRARY_PATH}"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/lib/include"
@@ -132,7 +132,7 @@ set_target_properties(dusk_node PROPERTIES
 
 add_library(dusk::node ALIAS dusk_node)
 
-add_custom_target(build_node_bin
+add_custom_target(dusk_node
     COMMAND "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node_bin
@@ -144,7 +144,7 @@ add_custom_target(build_node_bin
     VERBATIM)
 
 add_executable(dusk_node_bin IMPORTED GLOBAL)
-add_dependencies(dusk_node_bin build_node_bin)
+add_dependencies(dusk_node_bin dusk_node)
 set_target_properties(dusk_node_bin PROPERTIES IMPORTED_LOCATION "${DUSK_NODE_EXECUTABLE_PATH}")
 
 add_executable(dusk::node_bin ALIAS dusk_node_bin)
