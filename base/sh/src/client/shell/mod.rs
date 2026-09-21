@@ -1,5 +1,4 @@
 use crate::entry::ShEntriesBuilder;
-use dusk_program_sh_bytecode::bytecode;
 use crate::sh_capnp::{compiler, sh_portal, sh_stop};
 use crate::{ShArgs, ShCompiler, ShMode};
 use capnp::capability::{FromClientHook, Promise};
@@ -7,6 +6,7 @@ use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program::anyhow::Result;
+use dusk_program_sh_bytecode::bytecode;
 use std::format;
 use std::future::Future;
 use std::rc::Rc;
