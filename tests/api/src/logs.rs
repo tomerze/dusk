@@ -24,6 +24,7 @@ use capnp::capability::FromClientHook as _;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_connection::Connection;
+use dusk_program::anyhow;
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
@@ -84,9 +85,9 @@ async fn drive_logs_stream(
     command: &str,
     marker: &'static str,
     predicate: Box<dyn FnMut() -> bool>,
-) -> bool {
+) -> anyhow::Result<bool> {
     let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
-    let connection = Connection::connect(address).await.unwrap();
+    let connection = Connection::connect(address).await?;
     let client = connection.client().await;
 
     // Emit the marker on a loop so the live stream is guaranteed to carry it,
@@ -104,11 +105,9 @@ async fn drive_logs_stream(
     let program_args = ShArgs::new(
         client.clone(),
         StaticShEntriesBuilder::default(),
-        ShMode::Script(bytecode::lower_from_source(command).unwrap()),
-    )
-    .unwrap()
-    .as_program_args()
-    .unwrap();
+        ShMode::Script(bytecode::lower_from_source(command)?),
+    )?
+    .as_program_args()?;
     let drive = async {
         let mut process_request = client.process_request();
         program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
@@ -131,7 +130,7 @@ async fn drive_logs_stream(
     let found = tokio::select! {
         result = drive => {
             // `logs stream` should outlive the wait; if it returned, surface why.
-            result.unwrap();
+            result?;
             false
         }
         found = wait_until(predicate, ARRIVAL_TIMEOUT) => found,
@@ -139,7 +138,7 @@ async fn drive_logs_stream(
 
     marker_task.abort();
     let _ = connection.disconnect().await;
-    found
+    Ok(found)
 }
 
 // ---- receivers ----
@@ -445,10 +444,12 @@ async fn test_logs_stream_to_http() {
                         .any(|record| record.to_string().contains(marker))
                 }),
             )
-            .await;
+            .await?;
             assert!(found, "marker never POSTed to the http collector");
+            Ok::<(), anyhow::Error>(())
         })
-        .await;
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -479,10 +480,12 @@ async fn test_logs_stream_to_https() {
                         .any(|record| record.to_string().contains(marker))
                 }),
             )
-            .await;
+            .await?;
             assert!(found, "marker never POSTed to the https collector");
+            Ok::<(), anyhow::Error>(())
         })
-        .await;
+        .await
+        .unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -508,8 +511,10 @@ async fn test_logs_stream_to_grpc() {
                     })
                 }),
             )
-            .await;
+            .await?;
             assert!(found, "marker never exported to the gRPC collector");
+            Ok::<(), anyhow::Error>(())
         })
-        .await;
+        .await
+        .unwrap();
 }
