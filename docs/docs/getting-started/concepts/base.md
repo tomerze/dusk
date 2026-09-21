@@ -120,6 +120,20 @@ shell conditionals.
 
 ## `init`
 
-The first process started on a node. It accepts incoming client connections and
-spawns a session for each. You don't run `init` by hand - the node starts it at
+The first process started on a node. It is handed an init script - a
+`Bytecode.Script` - and runs it through `sh` in Script mode; for the node
+artifact the script is `nightfall -l <ip:port>`, which starts
+[`nightfall`](#nightfall). You don't run `init` by hand - the node starts it at
 boot. See [Run a standalone node](../guides/run-a-node.md).
+
+## `nightfall`
+
+Listens on TCP and opens a Dusk session with every connection it accepts. It
+keeps running until it is terminated. The node artifact has `init` run it at
+boot, on the node's listen address; run from the shell it opens one more
+listener and holds the shell as a foreground command until it is terminated.
+
+```sh
+nightfall -l 4000              # listen on port 4000, on every address
+nightfall -l 127.0.0.1:4000    # listen on one address
+```
