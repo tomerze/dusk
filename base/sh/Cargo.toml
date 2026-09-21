@@ -15,7 +15,6 @@ hashbrown = { version = "0.15", default-features = false, features = ["default-h
 linkme = { version = "0.3", optional = true, public = true }
 # Declared for macro use, versions taken from dusk_program
 capnp = { version = "0.21", public = false }
-nom = { version = "8.0.0", optional = true, public = true }
 clap = { version = "4", features = ["derive"], optional = true }
 dusk_program_sh_proc = { path = "proc", optional = true }
 dusk_program_sh_bytecode = { path = "bytecode", optional = true, public = true }
@@ -40,7 +39,6 @@ dusk_build = { path = "../../dusk/src/dusk_build" }
 [features]
 client = [
     "linkme",
-    "nom",
     "clap",
     "dusk_program_sh_proc",
     "dusk_program_sh_bytecode",
