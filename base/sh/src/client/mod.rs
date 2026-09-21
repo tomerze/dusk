@@ -160,12 +160,7 @@ async fn prompt<S: ShEntriesBuilder>(
     let stop_signal = StopSignal::new();
     let server =
         Shell::recreate_sh_process(client.clone(), sh_entries_builder.clone(), server_pid).await?;
-    let mut shell = Shell::new(
-        client.clone(),
-        sh_entries_builder.clone(),
-        server,
-    )
-    .await?;
+    let mut shell = Shell::new(client.clone(), sh_entries_builder.clone(), server).await?;
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
         StreamRequest::Raw => {
             let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(true);

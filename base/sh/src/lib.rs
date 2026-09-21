@@ -49,7 +49,6 @@ pub mod client;
 pub use client::args::{ShArgs, ShCompiler, ShMode};
 #[cfg(feature = "client")]
 pub use dusk_program_sh_bytecode::bytecode;
-#[cfg(feature = "client")]
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
