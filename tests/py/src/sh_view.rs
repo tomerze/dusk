@@ -248,3 +248,40 @@ fn python_sees_the_help_for_a_program() {
         "help names the prompt form:\n{output}"
     );
 }
+
+#[test]
+fn commands_on_one_object_run_at_the_same_time() {
+    let port = gen_port();
+    let _node = DuskNixImpl::new(LISTEN_ADDRESS, port);
+    let (ok, output) = connected(
+        port,
+        "import threading, time\n\
+         never_read = node.sh(\"sleep 20000\")\n\
+         print(\"hostname while a command runs:\", len(list(node.sh(\"hostname\"))))\n\
+         finished = []\n\
+         def run():\n\
+         \x20   finished.append(list(node.sh(\"sleep 2000\")))\n\
+         threads = [threading.Thread(target=run) for _ in range(4)]\n\
+         started = time.monotonic()\n\
+         for thread in threads:\n\
+         \x20   thread.start()\n\
+         for thread in threads:\n\
+         \x20   thread.join(30)\n\
+         elapsed = time.monotonic() - started\n\
+         print(\"finished:\", len(finished))\n\
+         print(\"in parallel:\", elapsed < 6, round(elapsed, 1))",
+    );
+    assert!(ok, "{output}");
+    assert!(
+        output.contains("hostname while a command runs: 1"),
+        "a command still running does not hold the object:\n{output}"
+    );
+    assert!(
+        output.contains("finished: 4"),
+        "every command finished, none got stuck:\n{output}"
+    );
+    assert!(
+        output.contains("in parallel: True"),
+        "four 2-second sleeps ran side by side, not one after another:\n{output}"
+    );
+}

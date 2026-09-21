@@ -18,9 +18,9 @@ use std::thread::JoinHandle;
 use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::mpsc;
 
-mod interrupt;
+mod ctrl_c;
 mod shell_output;
-use interrupt::with_interrupts;
+use ctrl_c::stop_on_ctrl_c;
 use shell_output::{ShellOutput, handle_sh};
 
 // Provide a dummy __pender symbol for embassy linkage compatibility
@@ -121,7 +121,7 @@ impl Dusk {
     }
 
     /// Run `command` in this object's shell server, returning its output values.
-    fn sh(&mut self, command: String) -> PyResult<ShellOutput> {
+    fn sh(&self, command: String) -> PyResult<ShellOutput> {
         let sender = self.sender()?;
         ShellOutput::new(command, &sender).map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
@@ -267,7 +267,7 @@ impl Dusk {
                     Some(Message::Prompt(result_sender)) => {
                         let client = client.clone();
                         tokio::task::spawn_local(async move {
-                            let result = with_interrupts(open_prompt(
+                            let result = stop_on_ctrl_c(open_prompt(
                                 client,
                                 StaticShEntriesBuilder::default(),
                                 server_pid,
