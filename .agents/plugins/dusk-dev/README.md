@@ -59,7 +59,7 @@ agents are Claude Code's; Codex reads the skills.
 | part | where |
 |---|---|
 | project instructions | `skills/dusk-developer` - the orientation map for the codebase and the working agreements every change is held to. The repository's root `AGENTS.md` carries none of it: it points here, which is how Codex and anything else without a skill loader find it |
-| skills | `skills/` - `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
+| skills | `skills/` - `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `fix-strings` and `fix-terminology` apply what the user edited into the review's tables; `authoring-a-program` and `adding-a-driver-method` for the code |
 | agents | `agents/` - `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `dilemma-screen`, `decision-ranker` |
 | hooks | `hooks/` - one script per event; `python3 hooks/selftest.py` runs them against canned input |
 | status line | `hooks/statusline.py` - the session's state, wired from `.claude/settings.json` |
@@ -69,6 +69,7 @@ agents are Claude Code's; Codex reads the skills.
 - No comment line is added to a `.rs`, `.capnp`, `.py`, `.toml`, `.c` or `.h` file.
 - Nothing personal is written into any file: the git user's name, their email address and their home directory are refused, read fresh each time so the harness stores none of them.
 - A commit subject has no conventional-commit prefix, does not start with Say, carries no issue number, and no message carries a watermark trailer.
+- A commit that changes only `docs/` has a subject starting `Update docs`, and one that changes only `tests/` starts `Add tests`, so a reviewer can skip the low-stakes commits by their first two words.
 - `git commit` runs in the foreground with a 600000 ms timeout; nothing is staged with `git add -A` or `git add .` except the atomic-commit snapshot.
 - No polling loop over a command's output; no `cp` of a `target` directory; no bare `git stash`.
 - `cargo test` and `cargo nextest` ask first.
@@ -107,8 +108,8 @@ committed - it is copied into the pull request body, one heading per file:
 |---|---|
 | `decisions.md` | every decision, put to `dilemma-triage` as it is made, with its verdict on whether the human must be asked; `decision-ranker` heads the file with the ranking before the pull request, and the pull-request hook copies that into the body |
 | `comments.md` | `comment-review`, run as a commit lands if its diff adds a comment line; a comment that belongs in the commit message comes straight back to the session, and a commit that added none is recorded as not reviewed |
-| `terminology.md` | `terminology-review`, the words the branch introduces and the word the codebase already had |
-| `strings.md` | `string-review`, every user-facing string the branch adds or changes and where a person sees it |
+| `terminology.md` | `terminology-review`, a **Name \| Link \| Explanation** table of every name the branch introduces: what it does, why it is called that, and the word the codebase already had. The user edits a name cell and runs `/dusk-dev:fix-terminology`, which renames it everywhere |
+| `strings.md` | `string-review`, a **String \| Link \| Explanation** table of every user-facing string the branch adds or changes, error messages included, and who sees each one. The user edits a string cell and runs `/dusk-dev:fix-strings`, which puts the new wording back at its line |
 | `report.html` | rendered from the four, whenever one of them changes |
 
 Open `report.html` in a browser: every `file:line` in it is a link that opens
