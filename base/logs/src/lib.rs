@@ -29,6 +29,21 @@ pub use config::{LaneConfig, LogsConfig};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+const WRITTEN_KEY: u64 = dusk_program_kvs_internal::key_id("logs.written");
+const DROPPED_NO_LANE_KEY: u64 = dusk_program_kvs_internal::key_id("logs.dropped_no_lane");
+const DROPPED_OVERSIZE_KEY: u64 = dusk_program_kvs_internal::key_id("logs.dropped_oversize");
+const WRITE_FAILURES_KEY: u64 = dusk_program_kvs_internal::key_id("logs.write_failures");
+const OVERWRITTEN_KEY: u64 = dusk_program_kvs_internal::key_id("logs.overwritten");
+
+#[cfg(feature = "client")]
+mod known_keys {
+    dusk_program_kvs_internal::known_key!(WRITTEN, "logs.written");
+    dusk_program_kvs_internal::known_key!(DROPPED_NO_LANE, "logs.dropped_no_lane");
+    dusk_program_kvs_internal::known_key!(DROPPED_OVERSIZE, "logs.dropped_oversize");
+    dusk_program_kvs_internal::known_key!(WRITE_FAILURES, "logs.write_failures");
+    dusk_program_kvs_internal::known_key!(OVERWRITTEN, "logs.overwritten");
+}
+
 dusk_program_proc::metadata!("logs", VERSION, logs_capnp::PROGRAM_ID);
 
 /// OTLP common types (the AnyValue/KeyValue family and InstrumentationScope),
@@ -127,6 +142,27 @@ impl Process {
     }
 }
 
+impl Process {
+    /// Record the buffer's counters under the `logs.*` kvs keys.
+    async fn publish_counters(&self) {
+        let kvs = dusk_program_kvs_internal::get_kvs(self.ctx.namespace.id);
+        let counts = self.buffer.drop_counts();
+        kvs.set(WRITTEN_KEY, Value::Uint(self.buffer.written()))
+            .await;
+        kvs.set(DROPPED_NO_LANE_KEY, Value::Uint(counts.no_lane))
+            .await;
+        kvs.set(DROPPED_OVERSIZE_KEY, Value::Uint(counts.oversize))
+            .await;
+        kvs.set(WRITE_FAILURES_KEY, Value::Uint(counts.write_failures))
+            .await;
+        kvs.set(
+            OVERWRITTEN_KEY,
+            Value::List(counts.overwritten.into_iter().map(Value::Uint).collect()),
+        )
+        .await;
+    }
+}
+
 #[async_trait::async_trait(?Send)]
 impl dusk_program::process::ProcessMixin for Process {
     fn portal(&self) -> portal::Client {
@@ -141,11 +177,13 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
+        self.publish_counters().await;
         if self.dump {
             ready.sender().send(true);
             loop {
                 let signal = signal_receiver.receive().await;
                 if let Signal::Terminate = signal {
+                    self.publish_counters().await;
                     return Ok(());
                 }
             }
@@ -178,6 +216,7 @@ impl dusk_program::process::ProcessMixin for Process {
             Either::Second(()) => Ok(()),
         };
         self.streamer_done.signal(());
+        self.publish_counters().await;
         Ok(streaming_result?)
     }
 }

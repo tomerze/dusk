@@ -4,42 +4,7 @@ use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
-use linkme::distributed_slice;
 use std::rc::Rc;
-
-/// A key name some program registered, paired with the id it hashes to.
-#[derive(Copy, Clone)]
-pub struct KnownKey {
-    pub name: &'static str,
-    pub id: u64,
-}
-
-/// Every key name registered with [`known_key!`](crate::known_key), collected
-/// at link time.
-#[distributed_slice]
-pub static KNOWN_KEYS: [KnownKey] = [..];
-
-/// The name `id` was hashed from, if a program registered it.
-#[must_use]
-pub fn known_key_name(id: u64) -> Option<&'static str> {
-    KNOWN_KEYS
-        .iter()
-        .find(|key| key.id == id)
-        .map(|key| key.name)
-}
-
-/// Register a key name so `kvs get` would know what name to associate with an id.
-#[macro_export]
-macro_rules! known_key {
-    ($binding:ident, $name:literal) => {
-        #[$crate::linkme::distributed_slice($crate::client::KNOWN_KEYS)]
-        #[linkme(crate = $crate::linkme)]
-        static $binding: $crate::client::KnownKey = $crate::client::KnownKey {
-            name: $name,
-            id: $crate::kvs::key_id($name),
-        };
-    };
-}
 
 #[derive(clap::Parser)]
 #[command(name = "kvs", no_binary_name = true)]

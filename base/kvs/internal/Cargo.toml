@@ -1,0 +1,13 @@
+[package]
+name = "dusk_program_kvs_internal"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dusk_program = { path = "../../../dusk/src/dusk_program", public = true }
+nohash-hasher = { version = "0.2", default-features = false, public = false }
+tracing = { version = "0.1.41", default-features = false }
+linkme = { version = "0.3", optional = true, public = true }
+
+[features]
+client = ["linkme"]

@@ -148,6 +148,14 @@ impl SignalBuffer {
         Reader::new(self.inner.clone(), start, offset_from_unix_time_ms)
     }
 
+    /// How many signals have been stored since the buffer was created. Signals
+    /// dropped on the way in are not counted; signals later overwritten are.
+    pub fn written(&self) -> u64 {
+        self.inner
+            .global_sequence
+            .load(core::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn drop_counts(&self) -> DropCounts {
         use core::sync::atomic::Ordering;
         DropCounts {

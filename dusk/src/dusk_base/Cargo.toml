@@ -26,6 +26,7 @@ client = [
     "dusk_program_echo/client",
     "dusk_program_false/client",
     "dusk_program_hostname/client",
+    "dusk_program_init/client",
     "dusk_program_kill/client",
     "dusk_program_kvs/client",
     "dusk_program_logs/client",

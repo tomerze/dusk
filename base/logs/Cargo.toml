@@ -10,6 +10,7 @@ dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
+dusk_program_kvs_internal = { path = "../kvs/internal" }
 embassy-executor = "0.10.0"
 anyhow = { version = "1.0", public = true }
 capnp = { version = "0.21", public = true }
@@ -42,6 +43,7 @@ embassy-time = { version = "0.5", features = ["std"] }
 [features]
 client = [
     "linkme",
+    "dusk_program_kvs_internal/client",
     "dusk_program_sh/client",
     "clap",
     "dusk_program_sh_proc",
