@@ -5,6 +5,8 @@ using Sh = import "/capnp/sh.capnp";
 
 const programId :UInt64 = 0xa491d262995861be;
 
+const scanTypeId :UInt64 = 0x84e09148e9d394f3;
+
 # key is fnv1a of the key name, salted as `dusk_program_kvs_internal::key_id`
 # does it.
 struct KvsArgs {
@@ -18,9 +20,12 @@ struct KvsArgs {
       delete @3 :UInt64;
       exists @4 :UInt64;
       bind @5 :Void;
+      scan @6 :Void;
     }
   }
-  interface Server {}
+  interface Server {
+    transpose @0 (keys :List(UInt64), output :Dusk.Stream) -> ();
+  }
 }
 
 interface KvsPortal extends(Dusk.Portal, Sh.OutputPortal) {

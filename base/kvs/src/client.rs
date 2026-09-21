@@ -4,7 +4,15 @@ use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
+use std::borrow::ToOwned;
 use std::rc::Rc;
+
+/// How a key id is shown to a user: the name the program that writes it
+/// registered, else `0x…` hex.
+#[must_use]
+pub fn key_display(id: u64) -> String {
+    crate::kvs::known_key_name(id).map_or_else(|| format!("{id:#018x}"), str::to_owned)
+}
 
 #[derive(clap::Parser)]
 #[command(name = "kvs", no_binary_name = true)]
@@ -34,6 +42,8 @@ enum KvsAction {
     },
     // Bind kvs on the client as a redis-compatible server
     Bind,
+    /// List every key, by name where a program registered one
+    Scan,
 }
 
 struct KvsProgramArgsBuilder {}
@@ -47,6 +57,7 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
             KvsAction::Set { key, value } => Args::set(key_id(&key), &Value::String(value))?,
             KvsAction::Delete { key } => Args::delete(key_id(&key)),
             KvsAction::Exists { key } => Args::exists(key_id(&key)),
+            KvsAction::Scan => Args::scan(),
             KvsAction::Bind => Args::bind(),
         };
         Ok(args.as_program_args()?)
@@ -70,6 +81,8 @@ The key-value store is in-memory and shared across all programs on the node.
   prompt are stored as strings.
 * `kvs delete <key>` removes `<key>` and reports whether it was present.
 * `kvs exists <key>` reports whether `<key>` is present.
+* `kvs scan` lists every key: its name where the program that writes it
+  registered one, and the id it travels as.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.
