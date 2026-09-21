@@ -35,6 +35,15 @@ const DROPPED_OVERSIZE_KEY: u64 = dusk_program_kvs_internal::key_id("logs.droppe
 const WRITE_FAILURES_KEY: u64 = dusk_program_kvs_internal::key_id("logs.write_failures");
 const OVERWRITTEN_KEY: u64 = dusk_program_kvs_internal::key_id("logs.overwritten");
 
+#[cfg(feature = "client")]
+mod known_keys {
+    dusk_program_kvs_internal::known_key!(WRITTEN, "logs.written");
+    dusk_program_kvs_internal::known_key!(DROPPED_NO_LANE, "logs.dropped_no_lane");
+    dusk_program_kvs_internal::known_key!(DROPPED_OVERSIZE, "logs.dropped_oversize");
+    dusk_program_kvs_internal::known_key!(WRITE_FAILURES, "logs.write_failures");
+    dusk_program_kvs_internal::known_key!(OVERWRITTEN, "logs.overwritten");
+}
+
 dusk_program_proc::metadata!("logs", VERSION, logs_capnp::PROGRAM_ID);
 
 /// OTLP common types (the AnyValue/KeyValue family and InstrumentationScope),

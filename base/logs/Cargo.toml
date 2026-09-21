@@ -43,6 +43,7 @@ embassy-time = { version = "0.5", features = ["std"] }
 [features]
 client = [
     "linkme",
+    "dusk_program_kvs_internal/client",
     "dusk_program_sh/client",
     "clap",
     "dusk_program_sh_proc",

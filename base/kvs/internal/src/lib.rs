@@ -24,6 +24,47 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// the same name.
 pub const SALT: u64 = 0x9396_8e6e_30a5_93d6;
 
+#[cfg(feature = "client")]
+pub use linkme;
+
+/// A key name some program registered, paired with the id it hashes to.
+#[cfg(feature = "client")]
+#[derive(Copy, Clone)]
+pub struct KnownKey {
+    pub name: &'static str,
+    pub id: u64,
+}
+
+/// Every key name registered with [`known_key!`], collected at link time.
+#[cfg(feature = "client")]
+#[linkme::distributed_slice]
+pub static KNOWN_KEYS: [KnownKey] = [..];
+
+/// Register a key name, so that a client can show an id under the name it was
+/// hashed from.
+#[cfg(feature = "client")]
+#[macro_export]
+macro_rules! known_key {
+    ($binding:ident, $name:literal) => {
+        #[$crate::linkme::distributed_slice($crate::KNOWN_KEYS)]
+        #[linkme(crate = $crate::linkme)]
+        static $binding: $crate::KnownKey = $crate::KnownKey {
+            name: $name,
+            id: $crate::key_id($name),
+        };
+    };
+}
+
+/// The name `id` was hashed from, if a program registered it.
+#[cfg(feature = "client")]
+#[must_use]
+pub fn known_key_name(id: u64) -> Option<&'static str> {
+    KNOWN_KEYS
+        .iter()
+        .find(|key| key.id == id)
+        .map(|key| key.name)
+}
+
 /// The id a key name hashes to: fnv1a, 64-bit, salted with [`SALT`].
 ///
 /// `const`, so a program can name its keys at compile time. Distinct names can

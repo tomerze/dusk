@@ -7,3 +7,7 @@ edition = "2024"
 dusk_program = { path = "../../../dusk/src/dusk_program", public = true }
 nohash-hasher = { version = "0.2", default-features = false, public = false }
 tracing = { version = "0.1.41", default-features = false }
+linkme = { version = "0.3", optional = true, public = true }
+
+[features]
+client = ["linkme"]

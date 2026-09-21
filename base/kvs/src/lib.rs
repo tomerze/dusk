@@ -19,11 +19,6 @@ extern crate capnp;
 pub mod client;
 pub use dusk_program_kvs_internal as kvs;
 
-/// Re-exported so [`known_key!`] expands in a crate that does not depend on
-/// `linkme` itself.
-#[cfg(feature = "client")]
-pub use linkme;
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("kvs", VERSION, kvs_capnp::PROGRAM_ID);
