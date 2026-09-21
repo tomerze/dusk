@@ -14,6 +14,16 @@ pub fn key_display(id: u64) -> String {
     crate::kvs::known_key_name(id).map_or_else(|| format!("{id:#018x}"), str::to_owned)
 }
 
+/// The id a user-typed key refers to: a `0x…` hex id as [`key_display`] shows
+/// one, else the hash of the name.
+#[must_use]
+pub fn key_parse(key: &str) -> u64 {
+    key.strip_prefix("0x")
+        .or_else(|| key.strip_prefix("0X"))
+        .and_then(|hex| u64::from_str_radix(hex, 16).ok())
+        .unwrap_or_else(|| key_id(key))
+}
+
 #[derive(clap::Parser)]
 #[command(name = "kvs", no_binary_name = true)]
 struct KvsCli {
@@ -53,10 +63,10 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
     async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = KvsCli::try_parse_from(args)?;
         let args = match cli.action {
-            KvsAction::Get { key } => Args::get(key_id(&key)),
-            KvsAction::Set { key, value } => Args::set(key_id(&key), &Value::String(value))?,
-            KvsAction::Delete { key } => Args::delete(key_id(&key)),
-            KvsAction::Exists { key } => Args::exists(key_id(&key)),
+            KvsAction::Get { key } => Args::get(key_parse(&key)),
+            KvsAction::Set { key, value } => Args::set(key_parse(&key), &Value::String(value))?,
+            KvsAction::Delete { key } => Args::delete(key_parse(&key)),
+            KvsAction::Exists { key } => Args::exists(key_parse(&key)),
             KvsAction::Scan => Args::scan(),
             KvsAction::Bind => Args::bind(),
         };
@@ -82,7 +92,8 @@ The key-value store is in-memory and shared across all programs on the node.
 * `kvs delete <key>` removes `<key>` and reports whether it was present.
 * `kvs exists <key>` reports whether `<key>` is present.
 * `kvs scan` lists every key: its name where the program that writes it
-  registered one, and the id it travels as.
+  registered one, and the id it travels as. A `<key>` anywhere above may be
+  that id, as `0x…`, instead of a name.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.
