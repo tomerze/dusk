@@ -28,4 +28,5 @@ interface KvsPortal extends(Dusk.Portal, Sh.OutputPortal) {
   set @1 (key :UInt64, value :Dusk.Value) -> ();
   delete @2 (key :UInt64) -> (deleted :Bool);
   exists @3 (key :UInt64) -> (exists :Bool);
+  scan @4 (output :Dusk.Stream) -> ();
 }

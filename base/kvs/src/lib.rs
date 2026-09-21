@@ -23,6 +23,9 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("kvs", VERSION, kvs_capnp::PROGRAM_ID);
 
+/// How many key ids travel in one value of a scan's stream.
+const SCAN_PAGE_SIZE: usize = 64;
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
@@ -232,6 +235,26 @@ impl Portal {
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
             results.get().set_exists(kvs.exists(key).await);
+            Ok(())
+        })
+    }
+
+    fn scan(
+        &mut self,
+        params: kvs_capnp::kvs_portal::ScanParams,
+        _results: kvs_capnp::kvs_portal::ScanResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let output = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_output());
+        let kvs = self.process.kvs.clone();
+        Promise::from_future(async move {
+            let keys = kvs.scan().await;
+            for page in keys.chunks(SCAN_PAGE_SIZE) {
+                let mut send_request = output.send_request();
+                Value::List(page.iter().copied().map(Value::Uint).collect())
+                    .write_to_builder(send_request.get().init_value())?;
+                send_request.send().await?;
+            }
+            output.done_request().send().promise.await?;
             Ok(())
         })
     }
