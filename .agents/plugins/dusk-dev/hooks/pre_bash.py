@@ -106,8 +106,11 @@ def pull_request_problems(cwd, body, creating, hook_input):
     _, drive = drive_state(branch, cwd)
     _, session = session_state(hook_input.get("session_id", ""))
     issue = drive.get("issue") or (session.get("drive") or {}).get("issue")
-    if issue and not re.search(rf"Closes #{issue}\b", body):
-        problems.append(f"the PR body must carry `Closes #{issue}`")
+    if issue and not re.search(rf"(Closes|Part of) #{issue}\b", body):
+        problems.append(
+            f"the PR body must carry `Closes #{issue}`, or `Part of #{issue}` "
+            "when it is one of a stack and another pull request closes the issue"
+        )
     if creating and drive.get("pr"):
         problems.append(f"one pull request per drive: update #{drive['pr']} instead of opening another")
     path = decisions_path(cwd, branch)

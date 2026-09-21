@@ -144,7 +144,10 @@ with an error that named neither the symlink nor the branch that removed it.
 Open the pull request as `activate` says. For an issue the body also carries:
 
 - **`Closes #N`**, so the merge closes the issue. The harness refuses a body
-  without it.
+  without it. Exactly one pull request carries it: when a drive is
+  [spliced](../splice/SKILL.md) into a stack, the others say **`Part of #N`**
+  instead, because merging one of them leaves the issue unfinished and a closing
+  keyword would close it anyway. The harness takes either.
 - **One section per acceptance criterion in the issue**, in the issue's own
   terms - the definition of done from Step 1, answered.
 
