@@ -1,7 +1,11 @@
 import html
 import os
+import re
 
 from harness import LOCATION, branch_name, current_branch, holding, replace_text, review_dir
+
+MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+TABLE_SEPARATOR = re.compile(r"^\|[\s:|-]+\|$")
 
 SECTIONS = (
     ("decisions.md", "Decisions"),
@@ -22,6 +26,8 @@ h3 {{ font-size: 1rem; margin: 1.5rem 0 0.25rem; }}
 label {{ display: block; margin: 1rem 0; color: #555; }}
 input {{ width: 100%; font: inherit; padding: 0.25rem; }}
 a {{ color: #0b57d0; }}
+table {{ border-collapse: collapse; margin: 0.5rem 0; }}
+th, td {{ border: 1px solid #ddd; padding: 0.25rem 0.5rem; text-align: left; vertical-align: top; }}
 </style>
 <h1>Review of {branch}</h1>
 <label>Checkout path, for the links that open a line in VS Code
@@ -52,9 +58,31 @@ def linkify(line):
     )
 
 
+def cells(line):
+    return [
+        MARKDOWN_LINK.sub(lambda match: match.group(1), cell.strip().replace("\\|", "|"))
+        for cell in re.split(r"(?<!\\)\|", line.strip()[1:-1])
+    ]
+
+
+def table(rows):
+    head, *body = rows
+    header = "".join(f"<th>{html.escape(cell)}</th>" for cell in head)
+    lines = "".join("<tr>" + "".join(f"<td>{linkify(cell)}</td>" for cell in row) + "</tr>" for row in body)
+    return f"<table><tr>{header}</tr>{lines}</table>"
+
+
 def section(title, text):
     parts = [f"<h2>{html.escape(title)}</h2>"]
-    for line in text.splitlines():
+    rows = []
+    for line in text.splitlines() + [""]:
+        if line.startswith("|"):
+            if not TABLE_SEPARATOR.match(line.strip()):
+                rows.append(cells(line))
+            continue
+        if rows:
+            parts.append(table(rows))
+            rows = []
         if line.startswith("# ") or not line.strip():
             continue
         if line.startswith("## "):

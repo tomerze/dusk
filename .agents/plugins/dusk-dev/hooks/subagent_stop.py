@@ -151,11 +151,17 @@ def decision_ranker(cwd, message, hook_input):
     record(cwd, "ranked_sha", branch)
 
 
-def write_review(cwd, name, title, message, branch):
+def write_review(cwd, name, title, column, skill, message, branch):
     directory = review_dir(cwd, branch)
     directory.mkdir(parents=True, exist_ok=True)
-    lines = findings(message)
-    body = "\n".join(lines) if lines else "- none"
+    rows = findings(message)
+    if rows:
+        body = (
+            f"Edit a {column.lower()} cell and run `/dusk-dev:{skill}` to apply it.\n\n"
+            f"| {column} | Link | Explanation |\n|---|---|---|\n" + "\n".join(rows)
+        )
+    else:
+        body = "None."
     (directory / name).write_text(f"# {title} {branch_name(branch)}\n\n{body}\n")
     report.render(cwd, branch)
 
@@ -163,18 +169,18 @@ def write_review(cwd, name, title, message, branch):
 def terminology_review(cwd, message, hook_input):
     terms = field(message, "TERMS")
     if terms not in ("none", "found") or (terms == "found" and not findings(message)):
-        block("End with `TERMS: none` or `TERMS: found`; each term as `- <term> - <file>:<line> - <what it names> - <the word the codebase already has for it, or none>`.")
+        block("End with `TERMS: none` or `TERMS: found`; each name as a table row `| <name> | [<file>:<line>](../../<file>#L<line>) | <what it does, why it is called that, the word the codebase already has> |`.")
     branch = reviewed(cwd, hook_input)
-    write_review(cwd, "terminology.md", "Terminology introduced on", message, branch)
+    write_review(cwd, "terminology.md", "Terminology introduced on", "Name", "fix-terminology", message, branch)
     record(cwd, "terminology_sha", branch)
 
 
 def string_review(cwd, message, hook_input):
     strings = field(message, "STRINGS")
     if strings not in ("none", "found") or (strings == "found" and not findings(message)):
-        block("End with `STRINGS: none` or `STRINGS: found`; each string as `- <file>:<line> - \"<string>\" - <where a person sees it>`.")
+        block("End with `STRINGS: none` or `STRINGS: found`; each string as a table row `| <string> | [<file>:<line>](../../<file>#L<line>) | <who sees it, where and when> |`.")
     branch = reviewed(cwd, hook_input)
-    write_review(cwd, "strings.md", "User-facing strings introduced on", message, branch)
+    write_review(cwd, "strings.md", "User-facing strings introduced on", "String", "fix-strings", message, branch)
     record(cwd, "strings_sha", branch)
 
 

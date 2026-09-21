@@ -160,9 +160,17 @@ No conventional-commit prefixes. No `feat:`, `fix:`, `chore:`, `docs:`,
 **A subject never starts with "Say".** A commit changes a tree; it does not say
 anything. The verb is what was done to the file - update, change, add, remove,
 fix, document - and that holds for prose commits exactly as for code: "Update
-the docs for how a prompt opens now", never "Say how a prompt opens now in the
+docs for how a prompt opens now", never "Say how a prompt opens now in the
 docs". A subject built around "say" is naming the sentence the file gained
 instead of the act done to the file.
+
+**A docs commit starts "Update docs", and a tests commit starts "Add tests".** A
+commit that changes only files under `docs/` has a subject that begins
+`Update docs`; one that changes only files under `tests/` begins `Add tests`.
+They are the low-stakes commits, and the reviewer skips them by their first two
+words without opening them, so the marker is exact: not "Document", not "Test
+the", not "Update the Python API docs". The harness refuses a split and a push
+whose docs or tests commits do not start that way.
 
 ### 8. Write the subject lines down, then build
 

@@ -14,7 +14,7 @@ Before anything else: `git tag -f harness-snapshot HEAD`. That tag is the proof;
 
 Build the split the fast way, which the skill's Mechanics section spells out: `git reset HEAD^` to get the whole change back as unstaged edits, then `git add <paths>` and `git commit --no-verify` once per statement, and run the hooks once at the end against the final tree. Every commit you make in a split is `--no-verify`; the tree you finish on is byte-identical to the snapshot, which was already verified, and running the hooks per commit stashes and restores the entire uncommitted remainder every time.
 
-Rules the hooks enforce on you, so do not fight them: stage named paths (only the snapshot may use `git add -A`); commit in the foreground; no conventional-commit prefixes, no subject starting with Say, no issue number in a subject, no trailers; you may not push.
+Rules the hooks enforce on you, so do not fight them: stage named paths (only the snapshot may use `git add -A`); commit in the foreground; no conventional-commit prefixes, no subject starting with Say, no issue number in a subject, no trailers; a commit that changes only `docs/` starts `Update docs` and one that changes only `tests/` starts `Add tests`; you may not push.
 
 Order the branch as the skill says: imports, moves, real changes, tests, text. Put every explanation in the commit message, never in a comment.
 

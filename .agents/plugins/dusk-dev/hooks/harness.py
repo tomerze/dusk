@@ -206,7 +206,7 @@ def findings(message):
     return [
         line.rstrip()
         for line in (message or "").splitlines()
-        if line.startswith("- ") and LOCATION.search(line)
+        if line.startswith(("- ", "|")) and LOCATION.search(line)
     ]
 
 
@@ -240,6 +240,12 @@ def lint_branch(cwd, base="origin/master"):
         if re.match(r"^WIP\b", subject, re.I):
             problems.append(f"{short} is still a WIP commit; split it with atomic-commit first")
         problems.extend(f"{short}: {problem}" for problem in lint_message(message))
+        _, files = git(cwd, "show", "--name-only", "--format=", short)
+        paths = files.split()
+        if paths and all(path.startswith("docs/") for path in paths) and not subject.startswith("Update docs"):
+            problems.append(f"{short}: `{subject}` changes only docs/; a docs commit's subject starts `Update docs`")
+        if paths and all(path.startswith("tests/") for path in paths) and not subject.startswith("Add tests"):
+            problems.append(f"{short}: `{subject}` changes only tests/; a tests commit's subject starts `Add tests`")
     return problems
 
 
