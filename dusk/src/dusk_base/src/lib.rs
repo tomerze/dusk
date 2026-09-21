@@ -7,6 +7,7 @@ pub use dusk_program_init;
 pub use dusk_program_kill;
 pub use dusk_program_kvs;
 pub use dusk_program_logs;
+pub use dusk_program_nightfall;
 pub use dusk_program_programs;
 pub use dusk_program_ps;
 pub use dusk_program_sh;
@@ -28,6 +29,7 @@ pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
         Box::new(dusk_program_init::Launcher::new()),
         Box::new(dusk_program_kill::Launcher::new()),
         Box::new(dusk_program_kvs::Launcher::new()),
+        Box::new(dusk_program_nightfall::Launcher::new()),
         Box::new(dusk_program_programs::Launcher::new()),
         Box::new(dusk_program_ps::Launcher::new()),
         Box::new(dusk_program_sh::Launcher::new()),
@@ -51,6 +53,7 @@ pub fn link_anchors() {
     black_box(dusk_program_hostname::client::sh_entry);
     black_box(dusk_program_kill::client::sh_entry);
     black_box(dusk_program_kvs::client::sh_entry);
+    black_box(dusk_program_nightfall::client::sh_entry);
     black_box(dusk_program_programs::client::sh_entry);
     black_box(dusk_program_ps::client::sh_entry);
     black_box(dusk_program_sleep::client::sh_entry);
