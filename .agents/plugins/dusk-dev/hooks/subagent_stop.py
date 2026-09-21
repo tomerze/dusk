@@ -27,7 +27,9 @@ from harness import (
 
 def raised(drive, values):
     if values["VERDICT"] == "ask-human":
-        drive.setdefault("pending_questions", []).append(values["DECISION"])
+        pending = drive.setdefault("pending_questions", [])
+        if values["DECISION"] not in pending:
+            pending.append(values["DECISION"])
     drive.pop("ranked_sha", None)
 
 
@@ -121,14 +123,15 @@ def dilemma_triage(cwd, message, hook_input):
     with holding(path):
         if not path.exists():
             path.write_text(f"# Decisions on {branch_name(branch)}\n")
-        with path.open("a") as decisions:
-            decisions.write(
-                f"\n## {values['DECISION']}\n"
-                f"- decided: {values['DECIDED']}\n"
-                f"- alternatives: {values['ALTERNATIVES']}\n"
-                f"- reversal: {values['REVERSAL']}\n"
-                f"- triage: {values['VERDICT']} - {values['WHY']}\n"
-            )
+        if f"\n## {values['DECISION']}\n" not in path.read_text():
+            with path.open("a") as decisions:
+                decisions.write(
+                    f"\n## {values['DECISION']}\n"
+                    f"- decided: {values['DECIDED']}\n"
+                    f"- alternatives: {values['ALTERNATIVES']}\n"
+                    f"- reversal: {values['REVERSAL']}\n"
+                    f"- triage: {values['VERDICT']} - {values['WHY']}\n"
+                )
     drive_path, _ = drive_state(branch, cwd)
     amend(drive_path, lambda drive: raised(drive, values))
     report.render(cwd, branch)
