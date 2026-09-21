@@ -25,6 +25,22 @@ For every commit, check:
 - User-facing strings that explain the change instead of telling the reader what to do.
 - Anything the issue's definition of done asks for that the branch does not answer.
 
+## What is not a finding
+
+**An intermediate commit that does not compile.** Not a finding, not a defect,
+not a note at the bottom. The working agreements say so in the user's own words,
+in `atomic-commit`: *"i don't fucking care if it doesn't compile or if it makes
+no sense checking out a random commit in the tree. ideally make it compile for
+git bisect but that's ideally. NOT A MUST."* Reporting it as a problem is how a
+reviewable split gets rewritten back into a bundled one, which is the failure
+this whole review exists to prevent. Only the tip has to build.
+
+So do not run `cargo check` at a commit that is not the tip, and never walk the
+branch compiling each commit - that is many minutes of the user's time to
+measure something they have already said they do not want.
+
+The same goes for tests failing at an intermediate commit.
+
 Report each finding in the three-line form, mechanism first:
 
 ```

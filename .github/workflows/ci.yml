@@ -85,18 +85,17 @@ jobs:
 
       # The versions are the ones .pre-commit-config.yaml pins: clang-format
       # from mirrors-clang-format v19.1.7, clang-tidy from the local hook's
-      # additional_dependencies. artifacts/dusk_node/include/dusk.h is the only
-      # C file left in the repository; both hooks also name
-      # dusk/src/dusk_llm/warmup/main.c, which no longer exists.
+      # additional_dependencies. artifacts/dusk_node/lib/include/dusk.h is the
+      # only C file left in the repository.
       - name: clang-format
         run: >
           uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
-          artifacts/dusk_node/include/dusk.h
+          artifacts/dusk_node/lib/include/dusk.h
 
       - name: clang-tidy
         run: >
           uvx --from clang-tidy==19.1.0 clang-tidy --quiet
-          artifacts/dusk_node/include/dusk.h
+          artifacts/dusk_node/lib/include/dusk.h
           --
           -std=c11
 
