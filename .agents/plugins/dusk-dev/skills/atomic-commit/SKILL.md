@@ -255,7 +255,8 @@ instead of the act done to the file.
 
 **A docs commit starts "Update docs", and a tests commit starts "Add tests".** A
 commit that changes only files under `docs/` has a subject that begins
-`Update docs`; one that changes only files under `tests/` begins `Add tests`.
+`Update docs`; one that changes only files under `tests/` begins `Add tests`, or
+`Update tests` when it changes tests that already exist rather than adding any.
 They are the low-stakes commits, and the reviewer skips them by their first two
 words without opening them, so the marker is exact: not "Document", not "Test
 the", not "Update the Python API docs". The harness refuses a split and a push

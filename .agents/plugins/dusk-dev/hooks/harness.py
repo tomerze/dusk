@@ -247,8 +247,8 @@ def lint_branch(cwd, base="origin/master"):
         paths = files.splitlines()
         if paths and all(path.startswith("docs/") for path in paths) and not subject.startswith("Update docs"):
             problems.append(f"{short}: `{subject}` changes only docs/; a docs commit's subject starts `Update docs`")
-        if paths and all(path.startswith("tests/") for path in paths) and not subject.startswith("Add tests"):
-            problems.append(f"{short}: `{subject}` changes only tests/; a tests commit's subject starts `Add tests`")
+        if paths and all(path.startswith("tests/") for path in paths) and not subject.startswith(("Add tests", "Update tests")):
+            problems.append(f"{short}: `{subject}` changes only tests/; a tests commit's subject starts `Add tests`, or `Update tests` when it changes tests that exist")
     return problems
 
 
