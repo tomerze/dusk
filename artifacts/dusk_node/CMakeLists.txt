@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
+    message(FATAL_ERROR
+        "In-source builds are not supported. Configure into a separate directory, "
+        "e.g. `cmake -S . -B build/<name>` or `cmake --preset <name>`. "
+        "This attempt already created CMakeCache.txt and CMakeFiles/ here; delete them.")
+endif()
+
 project(dusk_node LANGUAGES C)
 
 find_program(DUSK_NODE_CARGO cargo REQUIRED)
@@ -12,6 +19,11 @@ set(DUSK_NODE_CARGO_PROFILE "" CACHE STRING
     "Cargo profile to build the node with; empty follows CMAKE_BUILD_TYPE")
 set(DUSK_NODE_IMPL "" CACHE STRING
     "Which impl the node links; required. See docs/docs/embedding/node-artifacts.md")
+
+# Per-build-dir cargo output: builds with different impls, triples or profiles
+# never overwrite each other's final artifacts, and removing the build dir
+# removes everything.
+set(DUSK_NODE_CARGO_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/cargo")
 
 if(DUSK_NODE_CARGO_PROFILE STREQUAL "")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -39,8 +51,10 @@ if(DUSK_NODE_CARGO_TARGET STREQUAL "")
 endif()
 
 set(DUSK_NODE_OUTPUT_DIRECTORY
-    "${DUSK_NODE_WORKSPACE}/target/${DUSK_NODE_CARGO_TARGET}/${DUSK_NODE_PROFILE_DIRECTORY}")
-set(DUSK_NODE_TARGET_ARGUMENTS --target "${DUSK_NODE_CARGO_TARGET}")
+    "${DUSK_NODE_CARGO_TARGET_DIR}/${DUSK_NODE_CARGO_TARGET}/${DUSK_NODE_PROFILE_DIRECTORY}")
+set(DUSK_NODE_TARGET_ARGUMENTS
+    --target "${DUSK_NODE_CARGO_TARGET}"
+    --target-dir "${DUSK_NODE_CARGO_TARGET_DIR}")
 set(DUSK_NODE_TRIPLE "${DUSK_NODE_CARGO_TARGET}")
 
 string(TOLOWER "${DUSK_NODE_TRIPLE}" DUSK_NODE_TRIPLE)
@@ -112,7 +126,13 @@ set(DUSK_NODE_LIBRARY_PATH
 set(DUSK_NODE_EXECUTABLE_PATH
     "${DUSK_NODE_OUTPUT_DIRECTORY}/dusk_node${DUSK_NODE_EXECUTABLE_SUFFIX}")
 
-add_custom_target(libdusk_node
+# `cmake --build <dir> --target clean` also removes the cargo output.
+set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
+    "${DUSK_NODE_CARGO_TARGET_DIR}")
+
+# ---- library ----
+
+add_custom_target(dusk_node_cargo_lib
     COMMAND "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node
@@ -124,7 +144,7 @@ add_custom_target(libdusk_node
     VERBATIM)
 
 add_library(dusk_node STATIC IMPORTED GLOBAL)
-add_dependencies(dusk_node libdusk_node)
+add_dependencies(dusk_node dusk_node_cargo_lib)
 set_target_properties(dusk_node PROPERTIES
     IMPORTED_LOCATION "${DUSK_NODE_LIBRARY_PATH}"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/lib/include"
@@ -132,7 +152,9 @@ set_target_properties(dusk_node PROPERTIES
 
 add_library(dusk::node ALIAS dusk_node)
 
-add_custom_target(dusk_node
+# ---- executable ----
+
+add_custom_target(dusk_node_cargo_bin
     COMMAND "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node_bin
@@ -144,7 +166,8 @@ add_custom_target(dusk_node
     VERBATIM)
 
 add_executable(dusk_node_bin IMPORTED GLOBAL)
-add_dependencies(dusk_node_bin dusk_node)
-set_target_properties(dusk_node_bin PROPERTIES IMPORTED_LOCATION "${DUSK_NODE_EXECUTABLE_PATH}")
+add_dependencies(dusk_node_bin dusk_node_cargo_bin)
+set_target_properties(dusk_node_bin PROPERTIES
+    IMPORTED_LOCATION "${DUSK_NODE_EXECUTABLE_PATH}")
 
 add_executable(dusk::node_bin ALIAS dusk_node_bin)

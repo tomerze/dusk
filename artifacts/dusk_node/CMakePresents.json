@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-x64-nix",
+      "inherits": "base",
+      "cacheVariables": {
+        "DUSK_NODE_CARGO_TARGET": "x86_64-unknown-linux-gnu",
+        "DUSK_NODE_IMPL": "nix"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "linux-x64-nix", "configurePreset": "linux-x64-nix" }
+  ]
+}
