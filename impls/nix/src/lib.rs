@@ -40,12 +40,15 @@ pub fn run(
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         executor.run(|spawner| {
             // And so it begins
+            let mut seed = [0u8; 16];
+            getrandom::getrandom(&mut seed).expect("the operating system's random source failed");
+
             let root = Rc::new(Namespace::new(
-                rand::random::<u128>(),
+                u128::from_le_bytes(seed),
                 spawner,
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
+                    .map(|duration| duration.as_millis() as u64)
                     .ok(),
             ));
 
