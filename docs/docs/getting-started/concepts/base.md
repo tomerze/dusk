@@ -71,7 +71,7 @@ on it. See [Key-value store](../../features/kvs.md).
 ```sh
 kvs get dusk.version         # read a value
 kvs set deploy.stage canary  # store a string
-kvs delete deploy.stage      # remove it
+kvs scan                     # list every key
 ```
 
 ## `kill`
