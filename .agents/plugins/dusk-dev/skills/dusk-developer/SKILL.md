@@ -109,7 +109,11 @@ vendor/        External libs submodules
 The deployable server is `dusk_node` (package `dusk_node_bin`, bin `dusk_node`),
 which links Dusk Core, the Base programs, and one impl. There is one library
 artifact, `dusk_node` in `artifacts/dusk_node/lib`, and one binary wrapping it in
-`artifacts/dusk_node/bin`.
+`artifacts/dusk_node/bin`. Which impl they link is a cargo feature on the library
+- `impl_nix`, `impl_std` or `impl_windows` - defaulting to `impl_nix`. Exactly one
+may be enabled: every impl defines `_dusk_hostname` and `_dusk_exit`, so two in
+one link is a duplicate symbol. Nothing enforces it - selecting none fails on an
+unresolved `dusk_impl`, selecting two on a duplicate definition of it.
 
 ## Core concepts
 
@@ -363,7 +367,7 @@ node. Its body is tiny - `default_launcher_set()` builds every Base program at
 its default configuration (building the logs launcher inside it also installs
 the global tracing subscriber, unconditionally - and nothing in the tree enables
 the logs program's `console` feature, so a node captures every event into its
-buffer and prints none of them), and `dusk_nix::run` starts the node with an
+buffer and prints none of them), and `dusk_impl::run` starts the node with an
 `init` bound to the address it is given:
 
 ```rust
@@ -380,7 +384,7 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
     else {
         return 2;
     };
-    dusk_nix::run(move || Ok(launcher_set.clone()), init_args)
+    dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
 }
 ```
 
