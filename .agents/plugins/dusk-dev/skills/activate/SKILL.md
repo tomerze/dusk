@@ -166,18 +166,21 @@ human, never ahead of them.
 Running the thing beats reasoning about it, and it is not the test suite, so it
 is available even when tests are not. Build with
 `cargo build --bin dusk_node --bin dusk`, start the node, and drive it with
-one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
+one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9191 "ps"`).
 
-- **The `dusk_node` binary always binds 9090**, because
-  `artifacts/dusk_node/src/lib.rs` hardcodes it - that is a property of the
-  prebuilt deliverable, not of the runtime. `dusk_nix::run` takes whatever
-  address and port you hand its `InitArgs`, which is how
-  `tests/common/src/lib.rs` runs many nodes at once. So check
-  `pgrep -af dusk_node` before starting one: another session's node may already
-  hold 9090, in which case yours exits and your CLI silently talks to *theirs*.
-  Do not kill a node you did not start. Point your own elsewhere - and if you do
-  that by editing the hardcoded port, `git diff` that file before committing,
-  since pre-commit stashes unstaged work and the hooks will never see it.
+- **The `dusk_node` binary takes its `ip:port` as its first argument**, and only
+  falls back to `DEFAULT_LISTEN_ADDRESS` (`0.0.0.0:9090`) when given none -
+  `artifacts/dusk_node_bin/src/main.rs` hands argv[1] straight to
+  `dusk_node_run`. So check `pgrep -af dusk_node` before starting one: another
+  session's node may already hold 9090, in which case yours exits and your CLI
+  silently talks to *theirs*. Do not kill a node you did not start. Start your
+  own on a port of its own - `./target/debug/dusk_node 127.0.0.1:9191` - rather
+  than editing any source to move it.
+- **The node writes nothing to its own stdout**, so redirecting it to a file
+  gets you an empty file rather than its logs. Read them through the node:
+  `./target/debug/dusk <address> "logs dump --replay-only"` returns the buffered
+  history and exits. `logs view` is the interactive view and refuses
+  `--replay-only`.
 - A node built from a different revision answers with the wrong schema, and the
   error names neither the port nor the process: a changed capnp union surfaces as
   `Enum value or union discriminant <n> was not present in the schema`, which
