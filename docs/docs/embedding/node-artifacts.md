@@ -170,7 +170,7 @@ cargo build --profile prod --target <target> -p dusk_node
 
 | Target |
 |---|
-| **nix Tier 1: build and tests gate merges** |
+| **nix, on Rust's tier 1 targets** |
 | aarch64-apple-darwin |
 | aarch64-unknown-linux-gnu |
 | arm-unknown-linux-gnueabi |
@@ -186,7 +186,7 @@ cargo build --profile prod --target <target> -p dusk_node
 | x86_64-unknown-freebsd |
 | x86_64-unknown-linux-gnu |
 | x86_64-unknown-linux-musl |
-| **nix Tier 2: build gates merges, tests optional** |
+| **nix, on Rust's tier 2 targets with host tools** |
 | aarch64-apple-ios |
 | aarch64-linux-android |
 | aarch64-unknown-linux-ohos |
@@ -201,7 +201,7 @@ cargo build --profile prod --target <target> -p dusk_node
 | x86_64-unknown-illumos |
 | x86_64-unknown-linux-ohos |
 | x86_64-unknown-netbsd |
-| **nix Tier 3: built in CI, may be dropped if it blocks work** |
+| **nix, on Rust's tier 3 targets** |
 | armv7-unknown-linux-uclibceabihf |
 | i686-unknown-hurd-gnu |
 | powerpc64-unknown-linux-gnu |
