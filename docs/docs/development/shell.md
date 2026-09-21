@@ -11,7 +11,8 @@ travel back.
 
 | Crate | Side | Role |
 |-------|------|------|
-| `base/sh` | both | the `sh` program. `parser/` and `client/` are client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh/bytecode` | both | `dusk_program_sh_bytecode` - `capnp/bytecode.capnp` always; the grammar, the AST and the `Parser` that lowers a script into a `Script` behind its `parser` feature, so a node compiles only the schema |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
 | `base/sh/src/client/shell/` | client (`std`) | `Shell` - drives the `sh` process a client was handed |
 | `dusk_connection` | client (`std`) | `Connection` - the TCP/RPC link |
@@ -22,11 +23,11 @@ travel back.
 raw text            "ps && date  # comment"           reedline buffer (client/prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
-   │ nom (parser/tokenize.rs)
+   │ nom (bytecode/src/tokenize.rs)
 nom AST             Ast{ [Expr(And(Command "ps",       transient, client-side only
                                    Command "date"))] }
    │ Parser::parse  ─────────────────────────────────  CLIENT / SERVER BOUNDARY
-capnp Script        Script{ statements:[…] }           the wire format (sh.capnp)
+capnp Script        Script{ statements:[…] }           the wire format (script.capnp)
    │ compiler::compile  (server-side)
 Frame (bytecode)    0000: program_args                 Vec<Inst>
                     0001: jump_if_error 0003
@@ -119,7 +120,7 @@ Either way the server side is identical: a `Script` reader handed to
 
 ## Syntax
 
-The grammar is a nom parser in `base/sh/src/parser/`. It is deliberately tiny.
+The grammar is a nom parser in `base/sh/bytecode/`. It is deliberately tiny.
 
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
 to end of line, and only when the `#` starts a word - a `#` inside a word
@@ -163,7 +164,7 @@ On success it walks the AST straight into the capnp `Script` builder.
 
 ## The wire format
 
-`sh.capnp` mirrors the AST one-to-one:
+`bytecode.capnp` mirrors the AST one-to-one:
 
 ```capnp
 struct Script {
