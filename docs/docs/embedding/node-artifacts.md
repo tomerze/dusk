@@ -209,16 +209,17 @@ int main(void)
 
 ### Executable
 
-Available with the nix and windows impls. It takes one optional argument, the
-`ip:port` to listen on:
+Available with the nix and windows impls. It takes no arguments and listens on
+port 9090, on every address:
 
 ```sh
-./dusk_node                  # listens on 0.0.0.0:9090
-./dusk_node 127.0.0.1:7000   # listens on 127.0.0.1:7000
+./dusk_node
 ```
 
-An argument that isn't a literal address and port makes it exit with status 64
-without starting the node.
+The address is built in: the init script the template compiles is
+`nightfall -l 9090`. To listen somewhere else, change that script in your copy of
+`artifacts/dusk_node/lib/src/lib.rs`. Two nodes from the same template cannot run
+on one machine - the second fails to bind.
 
 ## Reference
 

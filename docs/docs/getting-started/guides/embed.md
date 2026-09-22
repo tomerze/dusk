@@ -32,8 +32,7 @@ since it runs the node until shutdown:
 
 ```c
 // in your app's startup
-dusk_node_run(NULL);              // a node on 0.0.0.0:9090; returns an exit code
-dusk_node_run("127.0.0.1:9090");  // the same node, listening on loopback
+dusk_node_run(NULL);   // a node on port 9090; returns an exit code
 ```
 
 From Rust, link the `dusk_node` rlib and call
@@ -55,11 +54,10 @@ half: what your application knows only once it is **running**. It is the one
 channel from the program running the node into the node, and what it points at
 is between the two of them - Dusk itself never looks at it.
 
-The template spends it on the node's listen address: `user` is a NUL-terminated
-`ip:port`, and `NULL` means `0.0.0.0:9090`. That is a decision the template
-makes, not a rule - your node can read the pointer as a config struct, a device
-handle, a callback table, or the identifier the device was provisioned with. The
-address is just what a node with nothing else to be told does with it.
+The template itself ignores `user`, so `NULL` is the only call it needs. It is in
+the signature for the node you build from it: your node can read the pointer as a
+config struct, a device handle, a callback table, or the identifier the device was
+provisioned with.
 
 > **TODO:** node identity and the encrypted transport are part of the
 > connection-layer work, and neither is configurable yet, through `user` or
