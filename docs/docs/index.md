@@ -1,12 +1,14 @@
 <div class="dusk-hero" markdown>
 
+<div style="text-align: center;">
 <h1 class="dusk-wordmark">Dusk</h1>
+<p class="tagline lead"><span class="emph">The one solution for any fleet<span class="punct">.</span></span>
+<span class="emph">Seamlessly drop it in at any scale<span class="punct">.</span></span></p>
+<p class="tagline">Dusk can monitor and manage fleets deployed on everything from microcontrollers to supercomputers.
 
-<p class="tagline lead"><span class="emph">The one solution for any fleet<span class="punct">.</span></span></p>
-
-<p class="tagline">Dusk can manage fleets deployed on everything from microcontrollers to supercomputers</p>
-<p class="tagline lead"><span class="emph">Seamlessly drop it in at any scale<span class="punct">.</span></span></p>
-<p class="tagline">You can embed it into applications you already ship</p>
+And you can run it inside applications you already ship
+</p>
+</div>
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
 [View on   :fontawesome-brands-github:](https://github.com/tomerze/dusk){ .md-button .gh-button title="View on GitHub" }
