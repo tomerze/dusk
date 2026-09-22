@@ -118,20 +118,20 @@ impl dusk_program::process::ProcessMixin for Process {
             );
         }
 
-        let sh_data = self
+        let init_script = self
             .ctx
             .program_args
             .with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
-                let mut sh_data = dusk_program_sh::ArgsDataBuilder::new_default();
-                sh_data.init_root().set_script(data.get_init_script()?)?;
-                Ok(sh_data)
+                let mut message =
+                    capnp::message::Builder::new(capnp::message::HeapAllocator::new());
+                message.set_root(data.get_init_script()?)?;
+                Ok(capnp::serialize::write_message_to_words(&message))
             })?;
-        let sh_args = dusk_program_sh::ShArgs {
-            data: sh_data,
-            created: None,
-            client: dusk_client.clone(),
-            sh_entries_builder: StaticShEntriesBuilder::default(),
-        }
+        let sh_args = dusk_program_sh::ShArgs::new(
+            dusk_client.clone(),
+            StaticShEntriesBuilder::default(),
+            dusk_program_sh::ShMode::Script(init_script),
+        )?
         .as_program_args()?;
 
         let mut process_request = dusk_client.process_request();
