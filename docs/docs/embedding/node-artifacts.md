@@ -1,257 +1,345 @@
 # Dusk node artifacts
 
-You can use these artifacts to embed a Dusk Node into (almost) any application.
+Embed a Dusk node in (almost) any application, as a C static library linked
+into your program or as a standalone binary (executable/firmware).
 
-## How to build
+Getting a node running takes four steps:
 
-There is one node artifact, and which impl it links is a cargo feature. Follow
-the `build` docs section of the impl relevant for you
+1. [Pick the impl](#1-pick-the-impl) for your platform.
+2. [Build](#2-build) the library (or the standalone binary).
+3. [Link](#3-link) the library into your application (standalone binaries don't need this step)
+4. [Run](#4-run) the node as part of your application
 
-For *Nix platforms (Linux, Darwin, FreeBSD) use artifacts/dusk_node/lib (lib) or artifacts/dusk_node/bin (An executable ELF), with `impl_nix`
+## 1. Pick the impl
 
-For Windows use the same two, with `impl_windows` (lib and .exe)
+Each node artifact links one Dusk impl, selected by a cargo feature. Your platform
+decides which:
 
-For other platforms which support the Rust standard library (ESP-IDF for example) use artifacts/dusk_node/lib (lib), with `impl_std`
+| Impl | Cargo feature | Platforms | Artifacts |
+|---|---|---|---|
+| `nix` | `impl_nix` | Unix-like systems: Linux, Android, macOS, iOS, the BSDs and more | library, executable |
+| `windows` | `impl_windows` | Windows | library, executable (`.exe`) |
+| `std` | `impl_std` | Other platforms with the Rust standard library and threads: ESP-IDF, WebAssembly, QNX, VxWorks and more | library |
 
+Every supported operating system and its impl is in the
+[platform list](#platforms).
 
-| Operating system | Impl feature |
-|---|---|
-| Linux (glibc, musl, uClibc, Yocto) | impl_nix |
-| Cygwin | impl_nix |
-| Android | impl_nix |
-| iOS (incl. Mac Catalyst) | impl_nix |
-| macOS | impl_nix |
-| OpenHarmony | impl_nix |
-| FreeBSD | impl_nix |
-| watchOS | impl_nix |
-| tvOS | impl_nix |
-| Solaris | impl_nix |
-| illumos | impl_nix |
-| OpenBSD | impl_nix |
-| NetBSD | impl_nix |
-| Fuchsia | impl_nix |
-| visionOS | impl_nix |
-| Haiku | impl_nix |
-| DragonFly BSD | impl_nix |
-| Redox | impl_nix |
-| GNU/Hurd | impl_nix |
-| Unikraft | impl_nix |
-| Windows (MSVC, MinGW, gnullvm, UWP, Win7) | impl_windows |
-| WebAssembly (WASI, Emscripten, no-OS) | impl_std |
-| ESP-IDF | impl_std |
-| QNX | impl_std |
-| VxWorks | impl_std |
-| Trusty | impl_std |
-| Intel SGX | impl_std |
-| NuttX | impl_std |
-| L4Re | impl_std |
-| SOLID | impl_std |
-| Hermit | impl_std |
-| HelenOS | impl_std |
-| Motor OS | impl_std |
-| PlayStation Vita | impl_std |
-| VEXos | impl_std |
+## 2. Build
 
-## How to link
+`artifacts/dusk_node` is a CMake project that runs `cargo` for you. It needs
+`cargo` with the Rust target installed, and CMake 3.23 or newer. To call
+`cargo` yourself instead, see [Building with cargo](#building-with-cargo).
 
-Link against `libdusk_node.a` and make sure to include `dusk.h`
+### Standalone
 
-For example
-```bash
-gcc main.c -I../dusk/artifacts/dusk_node/lib/include -L../dusk/target/release/ -ldusk_node
+```sh
+cd artifacts/dusk_node
+cmake --list-presets                 # show available presets
+cmake --preset nix-x64-linux         # configure, once per build directory
+make -C build/nix-x64-linux dusk_node_cargo_lib dusk_node_cargo_bin
 ```
 
-## How to build with CMake
-
-To build using CMake with one of the configuration presents do
+Output:
 
 ```
-# configure using `nix-x64-linux` preset, 
-# to see available presets look at artifact/dusk_node/CMakePresets.json
-cmake --preset nix-x64-linux 
-# build 
-make -C build/nix-x64-linux dusk_node_cargo_bin dusk_node_cargo
+build/nix-x64-linux/cargo/x86_64-unknown-linux-gnu/release/libdusk_node.a
+build/nix-x64-linux/cargo/x86_64-unknown-linux-gnu/release/dusk_node
+lib/include/dusk.h
 ```
 
-If your application is a CMake project, you do not have to run `cargo` yourself
-or work out the link line. `artifacts/dusk_node` is a CMake project: point
-`add_subdirectory` at it and link the target.
+Clean:
+
+```sh
+make -C build/nix-x64-linux clean    # or: rm -rf build/nix-x64-linux
+```
+
+### Inside a CMake project, with presets
+
+Needs CMake 3.23 or newer.
+
+`CMakePresets.json` in your project (the `include` path is relative to this
+file, and your preset names must differ from the node's):
+
+```json
+{
+  "version": 4,
+  "include": ["path/to/dusk/artifacts/dusk_node/CMakePresets.json"],
+  "configurePresets": [
+    { "name": "my-app-linux", "inherits": "nix-x64-linux" }
+  ],
+  "buildPresets": [
+    { "name": "my-app-linux", "configurePreset": "my-app-linux" }
+  ]
+}
+```
+
+`CMakeLists.txt`:
 
 ```cmake
-set(DUSK_NODE_IMPL nix CACHE STRING "")
-set(DUSK_NODE_CARGO_TARGET x86_64-unknown-linux-gnu CACHE STRING "")
 add_subdirectory(path/to/dusk/artifacts/dusk_node dusk_node)
 
+# Brings the include path for dusk.h and the system libraries Rust's std needs.
+# Native libraries pulled in by an impl's own dependencies are not included.
 target_link_libraries(my_app PRIVATE dusk::node)
 ```
 
-`dusk::node` carries the include directory, so `#include "dusk.h"` works with no
-further paths, and it carries the system libraries a Rust static library needs
-on that platform.
+### Variables
 
-`dusk::node_bin` is the executable, if you want the binary rather than the
-library.
+The presets set these. To override one, or to build for a target that has no
+preset, pass them with `-D`:
 
-### DUSK_NODE_IMPL
+```sh
+# Override one value of a preset
+cmake --preset nix-x64-linux -DDUSK_NODE_CARGO_PROFILE=dev
 
-**Required.** It names which impl the node links, without the `impl_` prefix -
-`nix`, `windows` or `std`. Use the table under [How to build](#how-to-build) to
-pick the one for your platform.
+# Build for a target that has no preset
+cmake -S . -B build/aarch64-linux \
+  -DDUSK_NODE_IMPL=nix -DDUSK_NODE_CARGO_TARGET=aarch64-unknown-linux-gnu
+make -C build/aarch64-linux dusk_node_cargo_lib
+```
 
+#### DUSK_NODE_IMPL
 
-### DUSK_NODE_CARGO_TARGET
+**Required.** The impl the node links, without the `impl_` prefix: `nix`,
+`windows` or `std`. The valid values are the `impl_*` features in
+`lib/Cargo.toml`, and configuring with any other value lists them.
 
-**Required**, the host included. It is the Rust target triple to build for, it
-selects that platform's library naming and system libraries, and it puts the
-output under `target/<triple>/`.
+#### DUSK_NODE_CARGO_TARGET
 
-### DUSK_NODE_CARGO_PROFILE
+**Required**, even when building for the host (`cargo -vV` prints the host's
+triple as `host:`). The Rust target triple to build for. It selects that
+platform's library naming and system libraries, and it puts the output under
+`cargo/<triple>/` in the node's build directory.
+
+#### DUSK_NODE_CARGO_PROFILE
 
 The cargo profile, empty to follow `CMAKE_BUILD_TYPE`: `Debug` takes cargo's
-`dev`, `MinSizeRel` takes `prod`, and anything else takes `release`. Set it to
-name a profile directly.
+`dev`, `MinSizeRel` takes `prod`, and anything else takes `release`. You can
+set it to name a profile directly.
 
-## How to run
+> **Side note:** if you set these in your CMakeLists.txt instead of a preset,
+> make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
+> A plain `set()` can get quietly dropped on the very first configure, then
+> mysteriously work on the second run.
+
+### Building with cargo
+
+From anywhere in the repository, for the library:
+
+```sh
+# nix
+cargo build --profile prod --target <target> -p dusk_node \
+  --no-default-features --features impl_nix
+
+# windows
+cargo build --profile prod --target <target> -p dusk_node \
+  --no-default-features --features impl_windows
+
+# std
+rustup component add rust-src
+cargo build --profile prod -Z build-std=std --target <target> -p dusk_node \
+  --no-default-features --features impl_std
+```
+
+The library lands in `target/<target>/prod/`. For the executable (nix and
+windows), use `-p dusk_node_bin` instead of `-p dusk_node`.
+
+- `-Z build-std` needs a nightly toolchain.
+- Targets that `rustup target add` can't install need `-Z build-std=std` with
+  any impl, the same way as the std command.
+- Xtensa targets need the esp-rs fork of the compiler (`espup install`) and
+  `cargo +esp`; the command is otherwise the same.
+
+## 3. Link
+
+If you link `dusk::node` from CMake, skip this step: the target brings the
+include path and the system libraries along.
+
+Otherwise, pass the include directory, the library, and the system libraries
+Rust's standard library needs. On Linux with glibc:
+
+```sh
+gcc main.c \
+  -I path/to/dusk/artifacts/dusk_node/lib/include \
+  -L path/to/lib/dir \
+  -ldusk_node -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+```
+
+`path/to/lib/dir` is the directory holding `libdusk_node.a`:
+`artifacts/dusk_node/build/<preset>/cargo/<target>/<profile>/` after a CMake
+build, `target/<target>/prod/` after a cargo build.
+
+For other targets, cargo prints the system libraries to use. Take your cargo
+build command, make it `cargo rustc --lib`, and append
+`-- --print native-static-libs`:
+
+```sh
+cargo rustc --lib --profile prod --target <target> -p dusk_node \
+  --no-default-features --features impl_nix -- --print native-static-libs
+```
+
+The list is on the `native-static-libs:` line of the output.
+
+## 4. Run
 
 ### Library
 
-In your code:
+`dusk_node_run` blocks, so start it on a dedicated thread, early in your
+application's startup. With POSIX threads:
 
-Include the Dusk C API
 ```c
+#include <pthread.h>
 #include "dusk.h"
-```
 
-Run the Dusk Node (recommended to do this early on application startup)
-```c
-dusk_node_run(NULL); // This function blocks, make sure to run it on a dedicated thread.
+static void *run_dusk_node(void *arg)
+{
+    (void)arg;
+    dusk_node_run(NULL);
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t dusk_thread;
+    pthread_create(&dusk_thread, NULL, run_dusk_node, NULL);
+
+    /* ... the rest of your application ... */
+}
 ```
 
 ### Executable
 
-`dusk_node` takes one optional argument, the `ip:port` it listens on. With no
-argument it binds `0.0.0.0:9090`. An argument that is not a literal address and
-port exits with status 64 without starting the node.
+Available with the nix and windows impls. It takes one optional argument, the
+`ip:port` to listen on:
 
-Run Dusk node executables just like any other executable on your platform.
-
-artifacts/dusk_node/bin produces the `dusk_node` executable: the node artifact
-wrapped in a `main` that passes its one optional argument through. An executable
-ELF file on *Nix, a PE file on Windows.
-
-## Nix
-
-A Dusk node artifact for *Nix platforms (Linux, Darwin, FreeBSD)
-
-Builds as a C static library.
-
-### Build
-
-```bash
-cargo build --profile prod --target <target> -p dusk_node
+```sh
+./dusk_node                  # listens on 0.0.0.0:9090
+./dusk_node 127.0.0.1:7000   # listens on 127.0.0.1:7000
 ```
 
-### Possible targets
+An argument that isn't a literal address and port makes it exit with status 64
+without starting the node.
+
+## Reference
+
+### Platforms
+
+| Operating system | Impl |
+|---|---|
+| Linux (glibc, musl, uClibc, Yocto) | `nix` |
+| Android | `nix` |
+| OpenHarmony | `nix` |
+| macOS | `nix` |
+| iOS (incl. Mac Catalyst) | `nix` |
+| watchOS | `nix` |
+| tvOS | `nix` |
+| visionOS | `nix` |
+| FreeBSD | `nix` |
+| OpenBSD | `nix` |
+| NetBSD | `nix` |
+| DragonFly BSD | `nix` |
+| Solaris | `nix` |
+| illumos | `nix` |
+| Fuchsia | `nix` |
+| Haiku | `nix` |
+| Redox | `nix` |
+| GNU/Hurd | `nix` |
+| Cygwin | `nix` |
+| Unikraft | `nix` |
+| Windows (MSVC, MinGW, gnullvm, UWP, Win7) | `windows` |
+| WebAssembly (WASI, Emscripten, no-OS) | `std` |
+| ESP-IDF | `std` |
+| QNX | `std` |
+| VxWorks | `std` |
+| Trusty | `std` |
+| Intel SGX | `std` |
+| NuttX | `std` |
+| L4Re | `std` |
+| SOLID | `std` |
+| Hermit | `std` |
+| HelenOS | `std` |
+| Motor OS | `std` |
+| PlayStation Vita | `std` |
+| VEXos | `std` |
+
+### nix targets
 
 | Target |
 |---|
-| **nix, on Rust's tier 1 targets** |
-| aarch64-apple-darwin |
+| **Linux** |
 | aarch64-unknown-linux-gnu |
 | arm-unknown-linux-gnueabi |
+| arm-unknown-linux-musleabi |
 | armv7-unknown-linux-gnueabihf |
-| i686-unknown-freebsd |
+| armv7-unknown-linux-uclibceabihf |
 | i686-unknown-linux-gnu |
 | i686-unknown-linux-musl |
+| loongarch64-unknown-linux-gnu |
 | mips-unknown-linux-gnu |
 | mips64-unknown-linux-gnuabi64 |
 | mips64el-unknown-linux-gnuabi64 |
 | mipsel-unknown-linux-gnu |
-| powerpc64le-unknown-linux-gnu |
-| x86_64-unknown-freebsd |
-| x86_64-unknown-linux-gnu |
-| x86_64-unknown-linux-musl |
-| **nix, on Rust's tier 2 targets with host tools** |
-| aarch64-apple-ios |
-| aarch64-linux-android |
-| aarch64-unknown-linux-ohos |
-| arm-linux-androideabi |
-| arm-unknown-linux-musleabi |
-| armv7-linux-androideabi |
-| armv7-unknown-linux-ohos |
-| i686-linux-android |
-| loongarch64-unknown-linux-gnu |
-| s390x-unknown-linux-gnu |
-| x86_64-linux-android |
-| x86_64-unknown-illumos |
-| x86_64-unknown-linux-ohos |
-| x86_64-unknown-netbsd |
-| **nix, on Rust's tier 3 targets** |
-| armv7-unknown-linux-uclibceabihf |
-| i686-unknown-hurd-gnu |
 | powerpc64-unknown-linux-gnu |
+| powerpc64le-unknown-linux-gnu |
+| s390x-unknown-linux-gnu |
+| x86_64-unknown-linux-gnu |
+| x86_64-unknown-linux-gnux32 |
+| x86_64-unknown-linux-musl |
+| **Android** |
+| aarch64-linux-android |
+| arm-linux-androideabi |
+| armv7-linux-androideabi |
+| i686-linux-android |
+| x86_64-linux-android |
+| **OpenHarmony** |
+| aarch64-unknown-linux-ohos |
+| armv7-unknown-linux-ohos |
+| x86_64-unknown-linux-ohos |
+| **Apple** |
+| aarch64-apple-darwin |
+| aarch64-apple-ios |
+| **BSD** |
+| i686-unknown-freebsd |
+| x86_64-unknown-freebsd |
+| x86_64-unknown-netbsd |
+| x86_64-unknown-openbsd |
 | x86_64-unknown-dragonfly |
+| **illumos, Fuchsia, Haiku, Redox, GNU/Hurd** |
+| x86_64-unknown-illumos |
 | x86_64-unknown-fuchsia |
 | x86_64-unknown-haiku |
-| x86_64-unknown-linux-gnux32 |
-| x86_64-unknown-openbsd |
 | x86_64-unknown-redox |
+| i686-unknown-hurd-gnu |
 
-## Windows
-
-A Dusk node artifact for Windows
-
-Builds as a C static library.
-
-### Build
-
-```bash
-cargo build --profile prod --target <target> -p dusk_node \
-  --no-default-features --features impl_windows
-```
-
-### Possible targets
+### windows targets
 
 | Target |
 |---|
+| **MSVC** |
 | aarch64-pc-windows-msvc |
 | i686-pc-windows-msvc |
 | x86_64-pc-windows-msvc |
 | arm64ec-pc-windows-msvc |
+| **MinGW** |
 | i686-pc-windows-gnu |
 | x86_64-pc-windows-gnu |
+| **gnullvm** |
 | aarch64-pc-windows-gnullvm |
 | i686-pc-windows-gnullvm |
 | x86_64-pc-windows-gnullvm |
+| **UWP** |
 | aarch64-uwp-windows-msvc |
 | i686-uwp-windows-msvc |
 | x86_64-uwp-windows-msvc |
 | i686-uwp-windows-gnu |
 | x86_64-uwp-windows-gnu |
+| **Windows 7** |
 | i686-win7-windows-msvc |
 | x86_64-win7-windows-msvc |
 | i686-win7-windows-gnu |
 | x86_64-win7-windows-gnu |
 
-## Std
-
-A Dusk node artifact for every platform that has support for the Rust standard library and threads.
-
-Builds as a C static library.
-
-### Build
-
-```bash
-rustup component add rust-src
-
-cargo build --profile prod -Z build-std=std \
-  --target <target> -p dusk_node --no-default-features --features impl_std
-```
-
-Xtensa needs the esp-rs forked compiler (`espup install`) and `cargo +esp`,
-otherwise the same command with `--target xtensa-esp32-espidf`.
-
-### Possible targets
+### std targets
 
 | Target |
 |---|
@@ -334,4 +422,3 @@ otherwise the same command with `--target xtensa-esp32-espidf`.
 | armv7-sony-vita-newlibeabihf |
 | **VEXos** |
 | thumbv7a-vex-v5 |
-
