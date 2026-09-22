@@ -134,7 +134,7 @@ That lowering can also happen at build time.
 `dusk_program_sh_proc` crate, which a caller adds alongside `dusk_program_sh` -
 runs the same call while the calling crate is compiled and expands to the
 bytecode it produced, ready to hand to `ShMode::Script`; the node artifact's
-default init script, `nightfall -l 9090`, is lowered this way. A syntax error is
+init script, `nightfall -l 9090`, is lowered this way. A syntax error is
 then a compile error. The parser is still linked, because every other caller lowers
 at run time; what build-time lowering buys is that that script is never parsed
 at run time.

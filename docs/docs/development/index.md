@@ -35,9 +35,9 @@ Cap'n Proto compiler.
 
 ### Run a node
 
-This starts a `dusk_node` server, which listens on tcp port `9090` (it uses the
-Dusk Nix impl by default). Pass an `ip:port` to listen somewhere else - see
-[Run a dusk node](../getting-started/guides/run-a-node.md#choosing-the-listen-address).
+This starts a `dusk_node` server, which listens on tcp port `9090`, on every
+address (it uses the Dusk Nix impl by default). The address is built in - see
+[Run a dusk node](../getting-started/guides/run-a-node.md#the-listen-address).
 
 ```bash
 cargo run --bin dusk_node
