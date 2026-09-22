@@ -5,8 +5,6 @@ extern crate alloc;
 extern crate capnp;
 
 use dusk_program::anyhow::Context;
-use dusk_program::embassy_futures::select::{Either, select};
-use dusk_program::stream::NoopStream;
 use dusk_program::{ready::Ready, signal::SignalReceiver};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -128,38 +126,22 @@ impl dusk_program::process::ProcessMixin for Process {
             })?;
         let sh_args = dusk_program_sh::ShArgs::new(
             dusk_client.clone(),
-            dusk_program_sh::ShMode::Script(init_script),
+            dusk_program_sh::ShMode::DetachedScript(init_script),
         )?
         .as_program_args()?;
 
         let mut process_request = dusk_client.process_request();
         sh_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
         let process_response = process_request.send().promise.await?;
-        let process = process_response.get()?.get_result()?;
         let mut run_request = dusk_client.run_request();
-        run_request.get().set_process(process.clone());
+        run_request
+            .get()
+            .set_process(process_response.get()?.get_result()?);
         run_request.send().promise.await?;
 
-        let portal_response = process.portal_request().send().promise.await?;
-        let portal = portal_response
-            .get()?
-            .get_result()?
-            .cast_to::<dusk_program_sh::sh_capnp::output_portal::Client>();
-        let mut output_request = portal.output_request();
-        output_request
-            .get()
-            .set_stream(capnp_rpc::new_client(NoopStream::new()));
-        let mut script_completion = output_request.send().promise;
-
         loop {
-            match select(&mut script_completion, signal_receiver.receive()).await {
-                Either::First(result) => {
-                    result?;
-                    tracing::info!("init script finished");
-                    return Ok(());
-                }
-                Either::Second(Signal::Terminate) => return Ok(()),
-                Either::Second(_) => {}
+            if let Signal::Terminate = signal_receiver.receive().await {
+                return Ok(());
             }
         }
     }
