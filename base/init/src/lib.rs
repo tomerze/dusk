@@ -31,8 +31,8 @@ pub struct Args {
 
 impl Args {
     pub fn new(init_script: &[u8]) -> anyhow::Result<Self> {
-        let message = dusk_program_sh::bytecode::read(init_script)
-            .context("the init script's bytecode is not a Script message")?;
+        let message = dusk_program_sh_compiler::compile::read(init_script)
+            .context("the init script is not compiled bytecode")?;
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_init_script(message.get_root()?)?;
         Ok(Args { data })
@@ -124,11 +124,9 @@ impl dusk_program::process::ProcessMixin for Process {
                 message.set_root(data.get_init_script()?)?;
                 Ok(capnp::serialize::write_message_to_words(&message))
             })?;
-        let sh_args = dusk_program_sh::ShArgs::new(
-            dusk_client.clone(),
-            dusk_program_sh::ShMode::DetachedScript(init_script),
-        )?
-        .as_program_args()?;
+        let sh_args =
+            dusk_program_sh::ShArgs::new(dusk_program_sh::ShMode::DetachedScript(init_script))?
+                .as_program_args()?;
 
         let mut process_request = dusk_client.process_request();
         sh_args.with_reader(|reader| process_request.get().set_program_args(reader))?;

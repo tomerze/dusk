@@ -1,80 +1,206 @@
-use crate::client::Created;
-use crate::entry::sh_entries;
-use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
-use dusk_capnp::capnp_rpc;
-use dusk_capnp::dusk_capnp::{created, dusk};
-use dusk_capnp::pry;
-use dusk_program::IntoCapnp;
+use crate::bytecode;
+use crate::entry::{ShEntry, sh_entries};
+use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow::{self, Context};
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_sh_bytecode::bytecode;
+use dusk_program_sh_compiler::{ast, parser, tokenize};
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
 
-pub enum ShMode {
-    Server,
-    Script(Vec<u8>),
-    DetachedScript(Vec<u8>),
-    Prompt {
-        client_hostname: String,
-        server_pid: u64,
-    },
+pub async fn compile(
+    client: dusk::Client,
+    source: &str,
+    defined_functions: &[String],
+) -> anyhow::Result<Vec<u8>> {
+    let mut message = capnp::message::Builder::new(capnp::message::HeapAllocator::new());
+    write(
+        client,
+        source,
+        defined_functions,
+        message.init_root::<bytecode::Builder<'_>>(),
+        Capabilities::Disconnected,
+    )
+    .await?;
+    Ok(capnp::serialize::write_message_to_words(&message))
 }
 
-fn read_bytecode(
-    bytecode: &[u8],
-) -> anyhow::Result<capnp::message::Reader<dusk_capnp::capnp::serialize::OwnedSegments>> {
-    bytecode::read(bytecode).context("a script's bytecode is not a Script message")
+#[derive(Clone, Copy, PartialEq)]
+enum Capabilities {
+    Carried,
+    Disconnected,
 }
 
-#[derive(dusk_program_proc::Args)]
-pub struct ShArgs {
-    #[data]
-    pub data: ArgsDataBuilder,
-    #[created]
-    pub created: Option<created::Client>,
-    pub client: dusk::Client,
+pub async fn compile_into(
+    client: dusk::Client,
+    source: &str,
+    defined_functions: &[String],
+    builder: bytecode::Builder<'_>,
+) -> anyhow::Result<()> {
+    write(
+        client,
+        source,
+        defined_functions,
+        builder,
+        Capabilities::Carried,
+    )
+    .await
 }
 
-impl ShArgs {
-    pub fn new(client: dusk::Client, mode: ShMode) -> anyhow::Result<Self> {
-        let mut data = ArgsDataBuilder::new_default();
-        let mut created = None;
-        {
-            let mut data_builder = data.init_root();
-            match mode {
-                ShMode::Server => data_builder.set_server(()),
-                ShMode::Script(bytecode) => {
-                    let message = read_bytecode(&bytecode)?;
-                    data_builder.set_script(message.get_root()?)?;
+async fn write(
+    client: dusk::Client,
+    source: &str,
+    defined_functions: &[String],
+    builder: bytecode::Builder<'_>,
+    capabilities: Capabilities,
+) -> anyhow::Result<()> {
+    let stripped = tokenize::strip_comments(source);
+    let parsed = parser::parse(&stripped)?;
+    let entries = sh_entries();
+    let mut resolved = Vec::new();
+    let enclosing: HashSet<String> = defined_functions.iter().cloned().collect();
+    resolve_ast(&parsed, &client, &entries, &enclosing, &mut resolved).await?;
+    write_ast(&parsed, &mut resolved.into_iter(), builder, capabilities)?;
+    Ok(())
+}
+
+enum Resolved {
+    Command(Rc<ProgramArgs>),
+    Call(String),
+}
+
+fn resolve_ast<'a>(
+    parsed: &'a ast::Ast<'a>,
+    client: &'a dusk::Client,
+    entries: &'a [ShEntry],
+    enclosing_functions: &'a HashSet<String>,
+    resolved: &'a mut Vec<Resolved>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a>> {
+    Box::pin(async move {
+        let mut functions = enclosing_functions.clone();
+        for statement in &parsed.statements {
+            if let ast::Statement::FunctionDefinition { symbol, .. } = statement {
+                functions.insert(String::from(*symbol));
+            }
+        }
+        for statement in &parsed.statements {
+            match statement {
+                ast::Statement::Expr(expr) => {
+                    resolve_expr(expr, client, entries, &functions, resolved).await?;
                 }
-                ShMode::DetachedScript(bytecode) => {
-                    let message = read_bytecode(&bytecode)?;
-                    data_builder.set_detached_script(message.get_root()?)?;
-                }
-                ShMode::Prompt {
-                    client_hostname,
-                    server_pid,
-                } => {
-                    data_builder.set_prompt(&client_hostname);
-                    created = Some(capnp_rpc::new_client(Created {
-                        client: client.clone(),
-                        server_pid,
-                    }));
+                ast::Statement::FunctionDefinition { body, .. } => {
+                    resolve_ast(body, client, entries, &functions, resolved).await?;
                 }
             }
         }
-        Ok(Self {
-            data,
-            created,
-            client,
-        })
+        Ok(())
+    })
+}
+
+fn resolve_expr<'a>(
+    expr: &'a ast::Expr<'a>,
+    client: &'a dusk::Client,
+    entries: &'a [ShEntry],
+    functions: &'a HashSet<String>,
+    resolved: &'a mut Vec<Resolved>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a>> {
+    Box::pin(async move {
+        match expr {
+            ast::Expr::Command(command) => {
+                let words: Vec<&str> = command.split_whitespace().collect();
+                let program = *words.first().context("empty command")?;
+                let takes_arguments = words.len() > 1;
+                if functions.contains(program) {
+                    if takes_arguments {
+                        anyhow::bail!("function `{program}` cannot take arguments");
+                    }
+                    resolved.push(Resolved::Call(String::from(program)));
+                    return Ok(());
+                }
+                if !takes_arguments && !entries.iter().any(|entry| entry.info.name == program) {
+                    anyhow::bail!("call to unknown symbol: {program}");
+                }
+                resolved.push(Resolved::Command(
+                    program_args_for_command(client.clone(), entries, command).await?,
+                ));
+                Ok(())
+            }
+            ast::Expr::And(first, second) | ast::Expr::Or(first, second) => {
+                resolve_expr(first, client, entries, functions, resolved).await?;
+                resolve_expr(second, client, entries, functions, resolved).await
+            }
+        }
+    })
+}
+
+fn write_ast(
+    parsed: &ast::Ast<'_>,
+    resolved: &mut impl Iterator<Item = Resolved>,
+    builder: bytecode::Builder<'_>,
+    capabilities: Capabilities,
+) -> anyhow::Result<()> {
+    let mut statements = builder.init_statements(parsed.statements.len() as u32);
+    for (index, statement) in parsed.statements.iter().enumerate() {
+        let statement_builder = statements.reborrow().get(index as u32);
+        match statement {
+            ast::Statement::Expr(expr) => {
+                write_expr(expr, resolved, statement_builder.init_expr(), capabilities)?;
+            }
+            ast::Statement::FunctionDefinition { symbol, body } => {
+                let mut definition = statement_builder.init_function_definition();
+                definition.set_symbol(symbol);
+                write_ast(body, resolved, definition.init_body(), capabilities)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_expr(
+    expr: &ast::Expr<'_>,
+    resolved: &mut impl Iterator<Item = Resolved>,
+    mut builder: bytecode::statement::expr::Builder<'_>,
+    capabilities: Capabilities,
+) -> anyhow::Result<()> {
+    match expr {
+        ast::Expr::Command(_) => match resolved.next().context("a command went unresolved")? {
+            Resolved::Command(program_args) => {
+                program_args.with_reader(|reader| match capabilities {
+                    Capabilities::Carried => builder.set_program_args(reader),
+                    Capabilities::Disconnected => {
+                        let mut program_args = builder.reborrow().init_program_args();
+                        program_args.set_program_id(reader.get_program_id());
+                        program_args
+                            .reborrow()
+                            .init_args()
+                            .init_data()
+                            .set_as(reader.get_args().get_data()?)
+                    }
+                })?;
+                Ok(())
+            }
+            Resolved::Call(symbol) => {
+                builder.set_call(&symbol);
+                Ok(())
+            }
+        },
+        ast::Expr::And(first, second) => {
+            let mut pair = builder.init_and();
+            write_expr(first, resolved, pair.reborrow().init_first(), capabilities)?;
+            write_expr(second, resolved, pair.init_second(), capabilities)
+        }
+        ast::Expr::Or(first, second) => {
+            let mut pair = builder.init_or();
+            write_expr(first, resolved, pair.reborrow().init_first(), capabilities)?;
+            write_expr(second, resolved, pair.init_second(), capabilities)
+        }
     }
 }
 
-pub async fn program_args_for_command(
+async fn program_args_for_command(
     client: dusk::Client,
+    entries: &[ShEntry],
     command: &str,
 ) -> anyhow::Result<Rc<ProgramArgs>> {
     let (remaining, words) = crate::parser::command_words(command)
@@ -85,7 +211,7 @@ pub async fn program_args_for_command(
     let program = words
         .first()
         .ok_or_else(|| anyhow::anyhow!("empty command"))?;
-    let builder = sh_entries()
+    let builder = entries
         .iter()
         .find(|entry| entry.info.name == *program)
         .map(|entry| entry.program_args_builder.clone())
@@ -95,40 +221,4 @@ pub async fn program_args_for_command(
         .build(client, &arg_refs)
         .await
         .context("program args builder failed")
-}
-
-#[dusk_program_proc::impl_args_rpc_server]
-impl ShArgs {
-    fn compiler(
-        &mut self,
-        _params: sh_capnp::sh_args::server::CompilerParams,
-        mut results: sh_capnp::sh_args::server::CompilerResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_result(capnp_rpc::new_client(ShCompiler {
-            client: self.client.clone(),
-        }));
-        capnp::capability::Promise::ok(())
-    }
-}
-
-pub struct ShCompiler {
-    pub client: dusk::Client,
-}
-
-impl sh_capnp::compiler::Server for ShCompiler {
-    fn build_program_args(
-        &mut self,
-        params: sh_capnp::compiler::BuildProgramArgsParams,
-        mut results: sh_capnp::compiler::BuildProgramArgsResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        let command = pry!(pry!(pry!(params.get()).get_command()).to_str()).to_string();
-        let client = self.client.clone();
-        capnp::capability::Promise::from_future(async move {
-            let program_args = program_args_for_command(client, &command)
-                .await
-                .into_capnp()?;
-            program_args.with_reader(|reader| results.get().set_program_args(reader))?;
-            Ok(())
-        })
-    }
 }

@@ -180,15 +180,14 @@ pub async fn open_prompt(client: dusk::Client, server_pid: u64) -> anyhow::Resul
     let mut refusals = 0u64;
     let mut last_report = tokio::time::Instant::now();
     loop {
-        let mut sh_args = ShArgs::new(
-            client.clone(),
-            ShMode::Prompt {
-                client_hostname: client_hostname(),
+        let mut sh_args = ShArgs::new(ShMode::Prompt {
+            client_hostname: client_hostname(),
+        })?;
+        if !view_opened {
+            sh_args.created = Some(capnp_rpc::new_client(Created {
+                client: client.clone(),
                 server_pid,
-            },
-        )?;
-        if view_opened {
-            sh_args.created = None;
+            }));
         }
         let program_args = sh_args.as_program_args()?;
         let attempt = async {

@@ -4,7 +4,6 @@ extern crate alloc;
 
 #[cfg(feature = "parser")]
 pub mod ast;
-#[cfg(feature = "parser")]
 pub mod compile;
 pub mod compiled_script;
 #[cfg(feature = "parser")]

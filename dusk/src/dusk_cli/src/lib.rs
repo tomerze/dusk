@@ -2,7 +2,6 @@ use anyhow::Result;
 use clap::Parser;
 use dusk_base::dusk_program::dusk_capnp::capnp::capability::FromClientHook as _;
 use dusk_base::dusk_program::dusk_capnp::dusk_capnp::dusk;
-use dusk_base::dusk_program_sh::bytecode;
 use dusk_base::dusk_program_sh::{
     ShArgs, ShMode,
     client::{
@@ -39,11 +38,8 @@ async fn kill(client: &dusk::Client, pid: u64) {
 
 async fn script(client: dusk::Client, command: String) -> Result<()> {
     let stop_signal = StopSignal::new();
-    let program_args = ShArgs::new(
-        client.clone(),
-        ShMode::Script(bytecode::lower_from_source(&command)?),
-    )?
-    .as_program_args()?;
+    let script = dusk_base::dusk_program_sh::compile(client.clone(), &command, &[]).await?;
+    let program_args = ShArgs::new(ShMode::Script(script))?.as_program_args()?;
     let mut process_request = client.process_request();
     program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
     let process = process_request.send().promise.await?.get()?.get_result()?;

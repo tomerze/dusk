@@ -1,7 +1,7 @@
-use crate::client::client_hostname;
+use crate::client::{Created, client_hostname};
 use crate::entry::ProgramArgsBuilder;
 use crate::sh_capnp::DEFAULT_PID;
-use crate::{ShArgs, ShMode, bytecode};
+use crate::{ShArgs, ShMode};
 use clap::Parser as _;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow;
@@ -37,27 +37,31 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
         if let Some(server_pid) = cli.server {
-            let program_args = ShArgs::new(client, ShMode::Server)?.as_program_args()?;
+            let program_args = ShArgs::new(ShMode::Server)?.as_program_args()?;
             program_args.set_pid(Some(server_pid.unwrap_or(DEFAULT_PID)))?;
             return Ok(program_args);
         }
         if let Some(server_pid) = cli.prompt {
-            return Ok(ShArgs::new(
-                client,
-                ShMode::Prompt {
-                    client_hostname: client_hostname(),
-                    server_pid: server_pid.unwrap_or(DEFAULT_PID),
-                },
-            )?
-            .as_program_args()?);
+            let mut sh_args = ShArgs::new(ShMode::Prompt {
+                client_hostname: client_hostname(),
+            })?;
+            sh_args.created = Some(dusk_capnp::capnp_rpc::new_client(Created {
+                client: client.clone(),
+                server_pid: server_pid.unwrap_or(DEFAULT_PID),
+            }));
+            return Ok(sh_args.as_program_args()?);
         }
         let mode = match cli.command {
             None => anyhow::bail!("sh takes a command, --server or --prompt"),
-            Some(command) if cli.detach => {
-                ShMode::DetachedScript(bytecode::lower_from_source(&command)?)
+            Some(command) => {
+                let script = crate::client::args::compile(client.clone(), &command, &[]).await?;
+                if cli.detach {
+                    ShMode::DetachedScript(script)
+                } else {
+                    ShMode::Script(script)
+                }
             }
-            Some(command) => ShMode::Script(bytecode::lower_from_source(&command)?),
         };
-        Ok(ShArgs::new(client, mode)?.as_program_args()?)
+        Ok(ShArgs::new(mode)?.as_program_args()?)
     }
 }
