@@ -1,6 +1,8 @@
 @0xf5f34f381cd409b5;
 
-struct Script {
+using Dusk = import "/capnp/dusk.capnp";
+
+struct Bytecode {
   struct Statement {
     struct Expr {
       struct ExprPair {
@@ -8,14 +10,15 @@ struct Script {
         second @1: Expr;
       }
       union {
-        command @0: Text;
+        programArgs @0: Dusk.ProgramArgs(AnyPointer, AnyPointer);
         and @1: ExprPair;
         or @2: ExprPair;
+        call @3: Text;
       }
     }
     struct FunctionDefinition {
       symbol @0: Text;
-      body @1: Script;
+      body @1: Bytecode;
     }
     union {
       expr @0: Expr;
