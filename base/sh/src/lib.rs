@@ -40,7 +40,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
-pub use dusk_program_sh_compiler::bytecode_capnp::script;
+pub use dusk_program_sh_compiler::bytecode_capnp::bytecode;
 
 #[cfg(feature = "client")]
 pub mod client;
@@ -83,6 +83,7 @@ pub struct Process {
     state: Rc<RefCell<State>>,
 }
 impl Process {
+    #[allow(clippy::arc_with_non_send_sync)]
     async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,

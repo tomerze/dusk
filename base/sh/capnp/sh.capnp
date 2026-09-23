@@ -1,7 +1,7 @@
 @0xb25a041190c0e845;
 
 using Dusk = import "/capnp/dusk.capnp";
-using Bytecode = import "/capnp/bytecode.capnp";
+using Compiler = import "/capnp/bytecode.capnp";
 
 const programId :UInt64 = 0x8d0e0504ec994ea4;
 const defaultPid :UInt64 = 0xf2efce60e8c425d0;
@@ -10,8 +10,8 @@ struct ShArgs {
   struct Data {
     union {
       server @0: Void;
-      script @1: Bytecode.Script;
-      detachedScript @2: Bytecode.Script;
+      script @1: Compiler.Bytecode;
+      detachedScript @2: Compiler.Bytecode;
       prompt @3: Text;
     }
   }
@@ -27,6 +27,6 @@ interface ShStop {
 }
 
 interface ShPortal extends(Dusk.Portal, OutputPortal) {
-  sh @0 (script :Bytecode.Script, output :Dusk.Stream, stop :ShStop) -> ();
+  sh @0 (script :Compiler.Bytecode, output :Dusk.Stream, stop :ShStop) -> ();
   functions @1 () -> (symbols :List(Text));
 }
