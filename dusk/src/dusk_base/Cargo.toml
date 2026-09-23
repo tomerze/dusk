@@ -18,6 +18,7 @@ dusk_program_nightfall = { path = "../../../base/nightfall", public = true }
 dusk_program_programs = { path = "../../../base/programs", public = true }
 dusk_program_ps = { path = "../../../base/ps", public = true }
 dusk_program_sh = { path = "../../../base/sh", public = true }
+dusk_program_sh_compiler = { path = "../../../base/sh/compiler", public = true }
 dusk_program_sleep = { path = "../../../base/sleep", public = true }
 dusk_program_true = { path = "../../../base/true", public = true }
 
