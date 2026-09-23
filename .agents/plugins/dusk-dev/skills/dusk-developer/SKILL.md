@@ -94,8 +94,9 @@ vendor/        External libs submodules
 | `dusk_capnp` | The Cap'n Proto schemas (`dusk.capnp`, `stream.capnp`) - the wire format every client and node speaks. |
 | `dusk_program` | The SDK a program implements: the `ProcessMixin` / `LauncherMixin` traits, `Namespace`, `ProgramArgs`, `Signal`, `Ready`, and the stream helpers. |
 | `dusk_program_proc` | The proc macros that remove the boilerplate: `metadata!`, `derive(Args)`, `impl_args_rpc_server`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, `impl_portal_rpc_server`. |
-| `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. `dusk_program_sh_proc` also carries `sh_to_bytecode!`, which lowers source to bytecode at the calling crate's build time. |
-| `dusk_program_sh_bytecode` | Lowers source to bytecode - the first step of source to bytecode to instructions: the grammar, the AST, `bytecode.capnp`, the `Parser`, and the `bytecode` module every caller goes through. Its `parser` feature is off for a node, which needs only the schema. |
+| `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. `#[sh_entry]` is the whole of `dusk_program_sh_proc`. |
+| `dusk_program_sh_compiler` | Compiles source into bytecode - the first of source to bytecode to instructions: the tokenizer, the nom grammar, the `Ast`, the syntax error, `bytecode.capnp`'s `Bytecode`, `compile::read`, and `CompiledScript`, which owns a stored bytecode message together with its capability table. Its `parser` feature is off for a node, which needs only the schema. |
+| `dusk_program_sh_compiler_proc` | `compile_command!`, which compiles one command into bytecode while the calling crate is built, resolving it against `SH_ENTRIES` with a disconnected client. Nothing it links reaches the caller's binary. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, and enables `embassy-time/std`. |
 | `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
@@ -241,15 +242,16 @@ side. So data flows through a process in both directions:
 - **client → program** - the typed [portal](#portals-and-streams) and its streams.
 - **program → client** - the `Server` capability carried in the args.
 
-The shell is the clearest example. `ShArgs.Server` exposes `compiler()`, which
-hands back a `Compiler`; when the `sh` interpreter on a node compiles a command
-word, it calls that capability's `buildProgramArgs(command)` *back on the client*
-to build the command's `ProgramArgs` - because the program registry and each
-command's client-side capabilities live on the client. A `Script` running on the
-node therefore resolves every command against a connected client: the one whose
-args started the process, or - for `ShPortal.sh`, which takes a `Compiler` of its
-own - the one that sent the line. This callback channel is also why the
-connection has to stay live while a script runs.
+`logs` is the clearest example. `LogsArgs.Server` exposes `openStream()`, and the
+`logs` process calls it *back on the client* once it is already running, to get
+the stream it writes events into - the destination is the client's own terminal or
+file, so only the client can build it. `programs` does the same with
+`transpose()`, handing its rows to the client to shape.
+
+The shell is not an example: `ShArgs.Server` is empty. A command word is resolved
+into `ProgramArgs` on the client, before the bytecode is sent, so a script running on
+the node needs nothing from a client while it runs. See
+[The shell is a program](#the-shell-is-a-program).
 
 ## Driver registration (the extern-shim pattern)
 
@@ -339,11 +341,12 @@ process receives on its `signal_receiver`.
 `dusk_core::init::init` with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process is handed an init script - a
-`Bytecode.Script` - and starts a detached `sh` to run it, then waits for its own
+`Compiler.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate`, so nothing about the script's lifetime is init's business; for the
-node artifact that script is always `nightfall -l 9090`, compiled at build time
-with `sh_to_bytecode!`. `nightfall` binds the listener and accepts connections,
-running in the foreground of that script.
+node artifact that bytecode is always the one command `nightfall` on `0.0.0.0:9090`,
+compiled by `compile_command!` while the artifact is built. `nightfall`
+binds the listener and accepts connections, running in the foreground of that
+script.
 
 The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
 process) lives in `docs/docs/development/shell.md`.
@@ -354,10 +357,30 @@ process) lives in `docs/docs/development/shell.md`.
 mistake for "core" actually lives. **Daemonization** (a process that answers
 `output` with `daemonize`, and is left running instead of killed), the
 `output(stream)` portal method (`OutputPortal`), `sh -d` detached scripts, the
-shell language and its `Script`/function/interpreter machinery, `ShStop`, and
-the `SH_ENTRIES` registry are all part of `sh`, not of Dusk Core. When
-documenting or reasoning about the core process model, keep these on the shell
-side of the line.
+shell language and its bytecode, function and interpreter machinery,
+`ShStop`, and the `SH_ENTRIES` registry are all part of `sh`, not of Dusk Core.
+When documenting or reasoning about the core process model, keep these on the
+shell side of the line.
+
+**The shell's pipeline is source to bytecode to instructions**, and each stage is named
+for the doer, not the product:
+
+```
+Source (Text) -> Compiler (Bytecode) -> Codegen (Instructions)
+```
+
+A compiler compiles source into bytecode; codegen generates instructions from that
+bytecode. The compiler runs on the client (`compile` / `compile_into` in
+`base/sh/src/client/args.rs`), codegen and the interpreter run on the node
+(`base/sh/src/interpreter/`). **A command inside the bytecode is a
+`Dusk.ProgramArgs`, not the command's text** - the caller that holds the sh entry
+table builds it while it compiles, so nothing needs resolving once the bytecode
+reaches the node. A word that names a shell function becomes the `call` variant
+instead. The compiler takes the functions the caller knows are defined - `ShPortal.functions`
+returns them, and a one-shot caller passes none - and a bare word that is neither an
+sh entry nor one of those functions fails on the client. "Script" still means what a user wrote or asked to run
+(`ShMode::Script`, `ShMode::DetachedScript`, the init script); bytecode is only how it
+is represented.
 
 ## Artifacts and clients
 
@@ -378,11 +401,10 @@ buffer and prints none of them), and `dusk_impl::run` starts the node with an
 ```rust
 #[unsafe(no_mangle)]
 pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
-    dusk_base::link_anchors();
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let init_script = dusk_program_sh_proc::sh_to_bytecode!("nightfall -l 9090");
+    let init_script = dusk_program_sh_compiler_proc::compile_command!("nightfall -l 0.0.0.0:9090");
     let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
     else {
         return 2;
@@ -390,6 +412,10 @@ pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
     dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
 }
 ```
+
+There is no shell source in the binary: the macro resolved it at build time, so
+neither `init` nor the node artifact turns
+on `dusk_program_sh_compiler`'s `parser` feature or `sh`'s `client` feature.
 
 There is one entry point, and `user` is the only thing a caller gives it. The
 template ignores it, and `dusk_node_bin` passes a null pointer and reads no argv,
