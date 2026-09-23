@@ -11,6 +11,7 @@ pub use dusk_program_nightfall;
 pub use dusk_program_programs;
 pub use dusk_program_ps;
 pub use dusk_program_sh;
+pub use dusk_program_sh_compiler;
 pub use dusk_program_sleep;
 pub use dusk_program_true;
 
