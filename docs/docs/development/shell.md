@@ -12,33 +12,42 @@ travel back.
 | Crate | Side | Role |
 |-------|------|------|
 | `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
-| `base/sh/bytecode` | both | `dusk_program_sh_bytecode` - `capnp/bytecode.capnp` always; the grammar, the AST and the `Parser` that lowers source to bytecode behind its `parser` feature, so a node compiles only the schema |
-| `base/sh/proc` | client (`std`) | `#[sh_entry]`, and `sh_to_bytecode!`, which lowers source to bytecode at the calling crate's build time |
+| `base/sh/compiler` | both | `dusk_program_sh_compiler` - `capnp/bytecode.capnp` and the `compile` module always; the tokenizer, the nom grammar, the `Ast` and the syntax error behind its `parser` feature, so a node compiles only the schema |
+| `base/sh/proc` | client (`std`) | `#[sh_entry]` |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
 | `base/sh/src/client/shell/` | client (`std`) | `Shell` - drives the `sh` process a client was handed |
 | `dusk_connection` | client (`std`) | `Connection` - the TCP/RPC link |
 
 ## Representations at a glance
 
+Three stages, each named for what does the work, with what it produces beside it:
+
+```
+Source (Text)   ->   Compiler (Bytecode)   ->   Codegen (Instructions)
+```
+
+In full, with every intermediate form a line of shell passes through:
+
 ```
 raw text            "ps && date  # comment"           reedline buffer (client/prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
-   │ nom (bytecode/src/tokenize.rs)
-nom AST             Ast{ [Expr(And(Command "ps",       transient, client-side only
+   │ nom (compiler/src/tokenize.rs)
+Ast                 Ast{ [Expr(And(Command "ps",       transient, client-side only
                                    Command "date"))] }
-   │ Parser::parse  ─────────────────────────────────  CLIENT / SERVER BOUNDARY
-capnp Script        Script{ statements:[…] }           the wire format (script.capnp)
-   │ compiler::compile  (server-side)
-Frame (bytecode)    0000: program_args                 Vec<Inst>
+   │ compile_into - each command resolved to ProgramArgs
+capnp Bytecode      Bytecode{ statements:[…] }         the wire format (bytecode.capnp)
+   │  ──────────────────────────────────────────────   CLIENT / SERVER BOUNDARY
+   │ codegen::generate
+instructions        0000: program_args                 Vec<Inst>
                     0001: jump_if_error 0003
                     0002: program_args
    │ Interpreter::exec_inner
 execution           Dusk.process + Dusk.run per Inst   spawns real processes
 ```
 
-The first three rows live entirely in the client. The `Script` is the only thing
-that crosses the network. Compilation and execution happen server-side, inside
+The first four rows live entirely in the client. The `Bytecode` is the only thing
+that crosses the network. Code generation and execution happen server-side, inside
 the `sh` process.
 
 ## Two entry paths
@@ -69,11 +78,12 @@ the callback this time, since the prompt it opened is still there - while the
 `Shell`'s own `auto_reconnect` brings the shell server back at `defaultPid` and keeps
 the open prompt working across the break.
 
-Each accepted line goes `Prompt::execute_command` → `Shell::sh`, which **parses
-the text on the client** into a `Script` and ships it via
-`ShPortal.sh(script, output, stop, compiler)`. One line = one `sh` RPC carrying
-a freshly-parsed `Script`. The shell server is left running when the client
-goes: it keeps its functions and is there for the next client.
+Each accepted line goes `Prompt::execute_command` → `Shell::sh`, which asks the
+server which functions are defined, **compiles the text on the client** into bytecode -
+resolving each command to its `ProgramArgs` and each word naming a function to a
+`call` - and ships it via `ShPortal.sh(script, output, stop)`. One line = one
+`sh` RPC carrying freshly compiled bytecode. The shell server is left running when the
+client goes: it keeps its functions and is there for the next client.
 
 **A prompt is a process.** `sh --prompt` runs `sh` in `ShMode::Prompt`, a mode
 whose process does nothing on the node: it is the view's lifetime, and the work
@@ -110,34 +120,36 @@ program it runs itself.
 
 **`sh` as a program.** When `sh <command>` (or `sh -d <command>`) runs as a
 program - nested in another script, or launched directly - the command string is
-parsed at args-build time (`ShArgs::new`, `base/sh/src/client/mod.rs`) into a
-`Script` baked into the program's args as `ShMode::Script` / `DetachedScript`.
+parsed at args-build time (`ShProgramArgsBuilder::build`,
+`base/sh/src/client/cli.rs`) into bytecode baked into the program's args as
+`ShMode::Script` / `DetachedScript`.
 The script then runs when the caller drives the process's `OutputPortal.output`
 (or, for a detached script, immediately in `Process::main` against a discard
 stream).
 
-Either way the server side is identical: a `Script` reader handed to
+Either way the server side is identical: a `Bytecode` reader handed to
 `Interpreter::exec`.
 
 ## Syntax
 
-The grammar is a nom parser in `base/sh/bytecode/`. It is deliberately tiny.
+The grammar is a nom parser in `base/sh/compiler/`. It is deliberately tiny.
 
-Source is lowered to bytecode before it goes anywhere else. `ShMode::Script`
+Source is parsed to bytecode before it goes anywhere else. `ShMode::Script`
 and `ShMode::DetachedScript` carry bytecode, never source, so every caller runs
-`bytecode::lower_from_source` first - the CLI, the `sh` entry, the prompt's
-`Shell::sh`, the node's init script when it is given an address - and there is
-one description of what a script lowers to.
+`compile` first - the CLI, the `sh` entry, the prompt's `Shell::sh`
+through `compile_into` straight into the outgoing message - and there is
+one description of what a script compiles to.
 
-That lowering can also happen at build time.
-`dusk_program_sh_proc::sh_to_bytecode!("echo hi")` - from the
-`dusk_program_sh_proc` crate, which a caller adds alongside `dusk_program_sh` -
-runs the same call while the calling crate is compiled and expands to the
-bytecode it produced, ready to hand to `ShMode::Script`; the node artifact's
-init script, `nightfall -l 9090`, is lowered this way. A syntax error is
-then a compile error. The parser is still linked, because every other caller lowers
-at run time; what build-time lowering buys is that that script is never parsed
-at run time.
+Compiling needs the `SH_ENTRIES` table and the command's clap parser to build that
+program's args, so it happens wherever the source is read. That is the client at a
+prompt, and it is the build for a script known in advance:
+`dusk_program_sh_compiler_proc::compile_command!` resolves a command and hands back
+the bytes while the calling crate compiles, which is how the node artifact gets its
+init script. Both capabilities in that path are disconnected - the `Dusk` client the
+entry builder is handed, and the args `Server` the bytes carry - because bytes cannot
+carry a capability. A program that wants either asks and finds it disconnected.
+`tests/common` picks its port at run time, so it compiles its line itself with a
+disconnected client rather than through the macro.
 
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
 to end of line, and only when the `#` starts a word - a `#` inside a word
@@ -159,9 +171,10 @@ ps && date || true
 `&&` and `||` share one precedence level and fold left - there is no
 parenthesised grouping, and the operators only join *commands*, not sub-chains.
 
-**A command** is a run of space-separated words; the parser stores the raw source
-slice (`recognize`), it does **not** split into argv here - that happens later,
-during compilation. A **word** is single-quoted, double-quoted, or bare. Quotes
+**A command** is a run of space-separated words; the grammar stores the raw source
+slice (`recognize`) in the `Ast`, it does **not** split into argv here - that
+happens in resolution, where `command_words` splits the slice and the program's
+entry builds its args. A **word** is single-quoted, double-quoted, or bare. Quotes
 use `is_not` - there is no escape character; a quote runs to the next matching
 quote. A bare word ends at any of `` \t\r\n;&|(){} ``.
 
@@ -175,20 +188,26 @@ greet() {
 }
 ```
 
-`Parser::parse` strips comments, runs the nom `ast` parser, and rejects the input
+`parser::parse` runs the nom `ast` parser and rejects the input
 as `"syntax error"` if anything fails, and as ``"syntax error at `…`"``, naming
-the line it stopped on, if non-whitespace remains unconsumed.
-On success it walks the AST straight into the capnp `Script` builder.
+the line it stopped on, if non-whitespace remains unconsumed. `compile_into` strips
+the comments before it, resolves every command the `Ast` holds, and then walks
+the `Ast` into the capnp `Bytecode` builder.
 
 ## The wire format
 
-`bytecode.capnp` mirrors the AST one-to-one:
+`bytecode.capnp` mirrors the `Ast`, with each command already resolved:
 
 ```capnp
-struct Script {
+struct Bytecode {
   struct Statement {
     struct Expr {
-      union { command @0 :Text;  and @1 :ExprPair;  or @2 :ExprPair; }
+      union {
+        programArgs @0 :Dusk.ProgramArgs(AnyPointer, AnyPointer);
+        and @1 :ExprPair;
+        or @2 :ExprPair;
+        call @3 :Text;
+      }
     }
     union { expr @0 :Expr;  functionDefinition @1 :FunctionDefinition; }
   }
@@ -196,16 +215,24 @@ struct Script {
 }
 ```
 
-`command` is still the raw text slice; argv resolution is the compiler's job.
+A command is a built `Dusk.ProgramArgs`, not a text slice for the server to
+resolve, and a word that names a function is the `call` variant - which word is
+which is settled while the bytecode is built. Other schemas import this one as
+`using Compiler = import "/capnp/bytecode.capnp";` and spell the field type
+`Compiler.Bytecode`: `ShArgs.Data`'s `script` and `detachedScript`, `ShPortal.sh`'s
+`script`, `InitArgs.Data`'s `initScript`. The generated Rust module is
+`bytecode_capnp`, re-exported by `base/sh/src/lib.rs` as `bytecode`, so Rust says
+`bytecode::Reader`.
 
-## Compilation
+## Code generation
 
-`compiler::compile` (`base/sh/src/interpreter/compiler.rs`) lowers a `Script`
-reader into a `Frame` - a flat `Vec<Inst>` walked by a program counter. It runs
+`codegen::generate` (`base/sh/src/interpreter/codegen.rs`) generates `Instructions`
+from a `Bytecode` reader - a flat `Vec<Inst>` walked by a program counter. It runs
 **every time a script executes** (`Interpreter::exec`), plus per-function via
-`compile_function` (see [Functions](#functions)).
+`generate_function` (see [Functions](#functions)). Both dump the result at `debug`,
+under `script instruction disassembly` and `function instruction disassembly`.
 
-The instruction set (`inst.rs`):
+The instruction set (`instructions.rs`):
 
 | Inst | Meaning |
 |------|---------|
@@ -214,28 +241,25 @@ The instruction set (`inst.rs`):
 | `DefineFunction{ symbol, body }` | define / redefine / (empty body) undefine |
 | `JumpIfOk(target)` / `JumpIfError(target)` | conditional jump on the result register |
 
-**`&&` and `||` compile to jumps.** For `a && b` the compiler emits `a`, a
+**`&&` and `||` become jumps.** For `a && b` codegen emits `a`, a
 `JumpIfError` placeholder, then `b`, and back-patches the jump target to just
 past `b` - so if `a` leaves an error in the result register, `b` is skipped.
 `||` is the mirror image with `JumpIfOk`. The "exit status" of a command is
 simply whether its `Inst` left `Ok` or `Err` in the register.
 
-**Each command word round-trips to the client.** This is the part worth
-internalising. For a command, the compiler looks at the first word. If it names a
-known function it emits `Call`. Otherwise it calls
-`compiler.build_program_args(text)` - an **RPC back to the client**, on the
-`Compiler` capability the script arrived with - which resolves the program name
-against the `SH_ENTRIES` table and returns a fully-built `ProgramArgs` capability
-(itself wrapping client-side capabilities). That becomes `Inst::ProgramArgs`. So
-compilation is *not* a local server operation: every external program in a script
-requires the client that sent it to be connected and answering. (A line sent over
-`ShPortal.sh` carries its own `Compiler`; a script that arrived in the process's
-args gets one from `ShArgs.Server.compiler()`, hosted wherever the `ProgramArgs`
-were created.)
+**Nothing is resolved here.** This is the part worth internalising. Codegen
+reads the union tag and nothing else: a `programArgs` becomes `Inst::ProgramArgs`
+around the `ProgramArgs` the bytecode already carries, a `call` becomes `Inst::Call`
+on that symbol. Which of the two a word is was decided where the source was
+parsed, against the `SH_ENTRIES` table and the functions the server reported, so
+generating instructions is a purely local server operation that asks the client nothing. What
+the `ProgramArgs` wrap is still client-side - the capabilities inside them are
+hosted wherever they were built - so *running* a program needs that host, even
+though generating its instructions does not.
 
-**Tail-call optimisation.** If a frame's last instruction is `Call`, it is
-rewritten to `TailCall`, which the interpreter executes by reusing the current
-frame rather than recursing - so `foo() { foo }` loops forever without growing
+**Tail-call optimisation.** If the last instruction is `Call`, it is
+rewritten to `TailCall`, which the interpreter executes by swapping the running
+instructions rather than recursing - so `foo() { foo }` loops forever without growing
 the stack.
 
 ## Execution
@@ -258,8 +282,8 @@ the stack.
   `dusk_core::local_client` - an **in-process, server-local** `Dusk` client - so
   spawning/killing does not touch the network. (The launched program may still
   hold the *remote* client embedded in its args.)
-- **`Call`** resolves the function's frame and runs it as a nested `exec_inner`;
-  **`TailCall`** swaps the current frame and resets `pc` to 0.
+- **`Call`** resolves the function's instructions and runs them as a nested
+  `exec_inner`; **`TailCall`** swaps those instructions in and resets `pc` to 0.
 - **`DefineFunction`** mutates the function table (see below).
 - **Jumps** set `pc` from the result register.
 
@@ -271,27 +295,28 @@ finished, error or not (a failure to close is logged at `warn`).
 
 Functions are the one piece of shell state that outlives a single line.
 
-**Storage.** The `function_table` (`Arc<Mutex<HashMap<String, ScriptWrapper>>>`)
+**Storage.** The `function_table` (`Arc<Mutex<HashMap<String, CompiledScript>>>`)
 belongs to the `sh` `Process`, made when the process is. Each `sh` has its own:
 a function defined at a prompt lives in the shell server that prompt is attached
 to, where the next client attaching to it finds it, and a `sh <command>` or
 `sh -d` elsewhere on the node - its own process - does not have it.
 
-**Definition.** `name() { … }` compiles to `DefineFunction`, which at runtime
+**Definition.** `name() { … }` becomes `DefineFunction`, which at runtime
 inserts the body (an owned capnp message) into the table, drops any stale
-compiled frame, and eagerly recompiles. Redefining overwrites (logged at `info`).
+instructions, and generates them again. Redefining overwrites (logged at `info`).
 Defining with an **empty body** removes the function - that is how you undefine
 one.
 
-**Compilation & caching.** Function bodies are compiled by `compile_function`
-into a per-`Interpreter` `compiled_functions` cache. Compilation is lazy on first
-`Call`, eager on definition (and eagerly chases the dependencies a body calls).
-Recursion is handled by inserting an empty placeholder frame under the symbol
-*before* compiling the body, so a self-reference short-circuits instead of
-looping the compiler.
+**Generation & caching.** A function body's instructions are generated by
+`generate_function` into a per-`Interpreter` `generated_functions` cache, lazily on
+first `Call` and eagerly on definition (which also chases the dependencies a body
+calls). Recursion is handled by inserting empty placeholder instructions under the
+symbol *before* generating the body, so a self-reference short-circuits instead of
+looping.
 
 **No arguments.** A function call is a bare word. Passing arguments to a function
-(`greet foo`) is a compile error - functions take no parameters.
+(`greet foo`) fails while the bytecode is built, with ``function `greet` cannot take
+arguments`` - functions take no parameters.
 
 **Listing.** `ShPortal.functions()` returns the table's keys. The prompt calls
 this *before every prompt render* to feed the syntax highlighter (and the
@@ -303,10 +328,11 @@ RPC to the server on the hot path, and is the first thing to fail (silently, at
 
 | Operation | Needs the live client connection? |
 |-----------|-----------------------------------|
-| Parsing text → `Script` | No - runs entirely client-side, before anything is sent |
+| **Compiling** text into bytecode | Client-side, but **yes** at the prompt - `Shell::sh` asks `ShPortal.functions` first, to tell a function call from a program |
 | Submitting a line / awaiting its output | Yes - `ShPortal.sh`, then await `done` |
-| **Compiling** each external program | **Yes** - `build_program_args` RPCs *back* to the client, on the line's `Compiler`, per program |
+| **Generating** instructions from bytecode | No - the union tag says what each expression is; nothing is resolved server-side |
 | Spawning / killing the resulting process | No network - uses the server-local `dusk_core::local_client` |
+| Running a program whose args the client built | Yes for any capability inside those args - they are hosted wherever the args were built |
 | Listing functions (highlighter, `functions` builtin) | Yes - `ShPortal.functions`, once per prompt |
 
 The connection itself is resilient, and so is the shell on top of it.
@@ -325,12 +351,17 @@ dies with the connection.
 Errors are values, not panics, and they travel back along the same path the
 script came in on.
 
-- **Syntax errors** surface client-side from `Parser::parse` as `"syntax
+- **Syntax errors** surface client-side from `parser::parse` as `"syntax
   error"`. On the interactive path `Shell::sh` returns the error and
   `execute_command` logs it at `error` - the prompt survives.
-- **Compile errors** - an unknown program (`no sh entry found for …`), a
-  malformed command, a function given arguments, or an unknown function - abort
-  `compile`, which fails `exec`, which the `sh_exec_task` reports through its
+- **Resolution errors** are client-side too, raised while the bytecode is built: an
+  unknown program (`no sh entry found for …`), a malformed command (`invalid
+  command …`), a function given arguments, and a word that names neither a program nor a
+  function the caller passed in (`call to unknown symbol: …`). They fail the call that was building the
+  message, so nothing is sent at all.
+- **Codegen errors** - bytecode codegen cannot read, or a `Call` whose function
+  has no body (`call to unknown symbol: …`) - fail
+  `codegen::generate`, which fails `exec`, which the `sh_exec_task` reports through its
   completion signal; `ShPortal.sh` then returns a capnp error that the client
   `await`s and logs.
 - **Execution errors** are split into `ExecutionError::Runtime` (infrastructure:
