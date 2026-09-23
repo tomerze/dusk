@@ -5,13 +5,9 @@ use alloc::vec::Vec;
 use core::fmt::Write;
 use dusk_program::program_args::ProgramArgs;
 
-pub type Frame = Vec<Inst>;
+pub type Instructions = Vec<Inst>;
 
-pub struct ScriptWrapper(pub capnp::message::Builder<capnp::message::HeapAllocator>);
-// Safety: HeapAllocator owns its segments via Vec; the internal pointers point into
-// that owned heap data, which stays valid across thread moves.
-unsafe impl Send for ScriptWrapper {}
-unsafe impl Sync for ScriptWrapper {}
+pub use dusk_program_sh_compiler::compiled_script::CompiledScript;
 
 pub enum Inst {
     ProgramArgs(Rc<ProgramArgs>),
@@ -19,7 +15,7 @@ pub enum Inst {
     TailCall(String),
     DefineFunction {
         symbol: String,
-        body: Arc<ScriptWrapper>,
+        body: Arc<CompiledScript>,
     },
     JumpIfOk(usize),
     JumpIfError(usize),

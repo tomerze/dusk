@@ -1,5 +1,4 @@
 use crate::interpreter::{Interpreter, Stop};
-use crate::sh_capnp;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -20,14 +19,13 @@ async fn sh_exec_task(
     pid: u64,
     namespace_id: u64,
     interpreter: Interpreter,
-    script_msg: capnp::message::Builder<capnp::message::HeapAllocator>,
+    script: dusk_program_sh_compiler::compiled_script::CompiledScript,
     output: dusk_capnp::dusk_capnp::stream::Client,
     stop: Rc<Stop>,
     state: Rc<RefCell<State>>,
     completion: Rc<
         dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>,
     >,
-    compiler: sh_capnp::compiler::Client,
 ) {
     use tracing::Instrument;
     let span = tracing::info_span!(
@@ -37,11 +35,8 @@ async fn sh_exec_task(
         namespace_id
     );
     async move {
-        let result: anyhow::Result<()> = async {
-            let reader = script_msg.get_root_as_reader::<crate::script::Reader>()?;
-            interpreter.exec(reader, output, &stop, compiler).await
-        }
-        .await;
+        let result: anyhow::Result<()> =
+            async { interpreter.exec(script.root()?, output, &stop).await }.await;
         state
             .borrow_mut()
             .active_stops
@@ -55,16 +50,14 @@ async fn sh_exec_task(
 pub(crate) fn spawn_sh_exec_task(
     ctx: &ProcessContext,
     interpreter: Interpreter,
-    script: crate::script::Reader<'_>,
+    script: crate::bytecode::Reader<'_>,
     output: dusk_capnp::dusk_capnp::stream::Client,
     state: Rc<RefCell<State>>,
     stop: Rc<Stop>,
-    compiler: sh_capnp::compiler::Client,
 ) -> capnp::Result<
     Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 > {
-    let mut script_msg = capnp::message::Builder::new_default();
-    script_msg.set_root::<crate::script::Owned>(script)?;
+    let script = dusk_program_sh_compiler::compiled_script::CompiledScript::from_reader(script)?;
 
     state.borrow_mut().active_stops.push(stop.clone());
 
@@ -78,12 +71,11 @@ pub(crate) fn spawn_sh_exec_task(
         ctx.pid,
         ctx.namespace.id,
         interpreter,
-        script_msg,
+        script,
         output,
         stop,
         state,
         completion.clone(),
-        compiler,
     )
     .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
     task_id.set(token.id());

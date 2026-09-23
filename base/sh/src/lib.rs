@@ -113,10 +113,6 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let sh_args_client = self
-            .ctx
-            .program_args
-            .server_as::<sh_capnp::sh_args::server::Client>()?;
         let client = dusk_core::local_client(self.namespace().clone()).await;
 
         let (name_suffix, is_detached) = self
@@ -143,13 +139,6 @@ impl dusk_program::process::ProcessMixin for Process {
             Some(Interpreter::new(client, self.function_table.clone()));
 
         if is_detached {
-            let compiler = sh_args_client
-                .compiler_request()
-                .send()
-                .promise
-                .await?
-                .get()?
-                .get_result()?;
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
             let noop: dusk_capnp::dusk_capnp::stream::Client =
                 capnp_rpc::new_client(NoopStream::new());
@@ -164,7 +153,6 @@ impl dusk_program::process::ProcessMixin for Process {
                             noop.clone(),
                             self.state.clone(),
                             Rc::new(Stop::new()),
-                            compiler.clone(),
                         )?;
                     }
                     Ok(())
@@ -207,7 +195,6 @@ impl Portal {
         let script = pry!(params.get_script());
         let output = pry!(params.get_output());
         let stop_client = pry!(params.get_stop());
-        let compiler = pry!(params.get_compiler());
 
         let stop = Rc::new(Stop::new());
         let completion = pry!(spawn_sh_exec_task(
@@ -217,7 +204,6 @@ impl Portal {
             output.clone(),
             self.process.state.clone(),
             stop.clone(),
-            compiler,
         ));
         Promise::from_future(async move {
             let listen = async {
@@ -288,15 +274,6 @@ impl sh_capnp::output_portal::Server for Portal {
                     results.get().set_daemonize(false);
                 }
                 sh_capnp::sh_args::data::Which::Script(script) => {
-                    let compiler = ctx
-                        .program_args
-                        .server_as::<sh_capnp::sh_args::server::Client>()?
-                        .compiler_request()
-                        .send()
-                        .promise
-                        .await?
-                        .get()?
-                        .get_result()?;
                     let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
                     let completion = spawn_sh_exec_task(
                         &ctx,
@@ -305,7 +282,6 @@ impl sh_capnp::output_portal::Server for Portal {
                         stream,
                         state_cell.clone(),
                         Rc::new(Stop::new()),
-                        compiler,
                     )?;
                     completion
                         .wait()

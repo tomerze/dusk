@@ -3,35 +3,29 @@ use alloc::sync::Arc;
 use core::future::Future;
 use core::pin::Pin;
 use dusk_program::anyhow::{Result, anyhow};
+use dusk_program::program_args::ProgramArgs;
 use hashbrown::HashSet;
 
-use crate::script;
-use crate::sh_capnp;
+use crate::bytecode;
 
-use super::inst::{self, Frame, Inst, ScriptWrapper};
-use super::{CompiledFunctions, FunctionTable};
+use super::instructions::{CompiledScript, Inst, Instructions};
+use super::{FunctionTable, GeneratedFunctions};
 
-pub(super) async fn compile(
-    script: script::Reader<'_>,
-    compiler: sh_capnp::compiler::Client,
-    mut functions: HashSet<String>,
-) -> Result<Frame> {
-    let mut output_frame = Frame::new();
-    compile_script(script, &compiler, &mut functions, &mut output_frame).await?;
-    optimize_tail_call(&mut output_frame);
-    Ok(output_frame)
+pub(super) fn generate(script: bytecode::Reader<'_>) -> Result<Instructions> {
+    let mut output_instructions = Instructions::new();
+    generate_script(script, &mut output_instructions)?;
+    optimize_tail_call(&mut output_instructions);
+    Ok(output_instructions)
 }
 
-pub(super) async fn compile_function(
+pub(super) async fn generate_function(
     function_table: &FunctionTable,
-    compiled_functions: &CompiledFunctions,
-    compiler: sh_capnp::compiler::Client,
+    generated_functions: &GeneratedFunctions,
     symbol: &str,
-) -> Result<Arc<Frame>> {
-    compile_function_once(
+) -> Result<Arc<Instructions>> {
+    generate_function_once(
         function_table,
-        compiled_functions,
-        compiler,
+        generated_functions,
         symbol,
         &mut HashSet::new(),
     )
@@ -39,38 +33,35 @@ pub(super) async fn compile_function(
 }
 
 #[allow(clippy::arc_with_non_send_sync)]
-fn compile_function_once<'a>(
+fn generate_function_once<'a>(
     function_table: &'a FunctionTable,
-    compiled_functions: &'a CompiledFunctions,
-    compiler: sh_capnp::compiler::Client,
+    generated_functions: &'a GeneratedFunctions,
     symbol: &'a str,
-    compiling: &'a mut HashSet<String>,
-) -> Pin<Box<dyn Future<Output = Result<Arc<Frame>>> + 'a>> {
+    generating: &'a mut HashSet<String>,
+) -> Pin<Box<dyn Future<Output = Result<Arc<Instructions>>> + 'a>> {
     Box::pin(async move {
-        if let Some(frame) = compiled_functions.borrow().get(symbol).cloned() {
-            return Ok(frame);
+        if let Some(instructions) = generated_functions.borrow().get(symbol).cloned() {
+            return Ok(instructions);
         }
-        if !compiling.insert(symbol.to_string()) {
-            return Ok(Arc::new(Frame::new()));
+        if !generating.insert(symbol.to_string()) {
+            return Ok(Arc::new(Instructions::new()));
         }
         let body = function_table
             .lock()
             .await
             .get(symbol)
             .cloned()
-            .ok_or_else(|| anyhow!("unknown function: {}", symbol))?;
+            .ok_or_else(|| anyhow!("call to unknown symbol: {}", symbol))?;
 
-        let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
-        let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
-        let frame = compile(script, compiler.clone(), symbols).await?;
+        let instructions = generate(body.root()?)?;
         tracing::debug!(
-            dump = %inst::format_instructions(&frame),
+            dump = %super::instructions::format_instructions(&instructions),
             symbol = symbol,
-            "function frame disassembly"
+            "function instruction disassembly"
         );
 
         // Eagerly compile every function this body calls.
-        let dep_symbols: alloc::vec::Vec<String> = frame
+        let dep_symbols: alloc::vec::Vec<String> = instructions
             .iter()
             .filter_map(|i| match i {
                 Inst::Call(s) | Inst::TailCall(s) => Some(s.clone()),
@@ -79,33 +70,27 @@ fn compile_function_once<'a>(
             .collect();
         for dep in dep_symbols {
             // Ignore errors / missing bodies - runtime resolve will surface them.
-            let _ = compile_function_once(
-                function_table,
-                compiled_functions,
-                compiler.clone(),
-                &dep,
-                compiling,
-            )
-            .await;
+            let _ =
+                generate_function_once(function_table, generated_functions, &dep, generating).await;
         }
 
-        let frame = Arc::new(frame);
+        let instructions = Arc::new(instructions);
         let still_defined = function_table
             .lock()
             .await
             .get(symbol)
             .is_some_and(|current| Arc::ptr_eq(current, &body));
         if still_defined {
-            compiled_functions
+            generated_functions
                 .borrow_mut()
-                .insert(symbol.to_string(), frame.clone());
+                .insert(symbol.to_string(), instructions.clone());
         }
-        Ok(frame)
+        Ok(instructions)
     })
 }
 
-fn optimize_tail_call(frame: &mut Frame) {
-    if let Some(last) = frame.last_mut()
+fn optimize_tail_call(instructions: &mut Instructions) {
+    if let Some(last) = instructions.last_mut()
         && let Inst::Call(symbol) = last
     {
         let symbol = core::mem::take(symbol);
@@ -113,115 +98,68 @@ fn optimize_tail_call(frame: &mut Frame) {
     }
 }
 
-fn compile_script<'a>(
-    script: script::Reader<'a>,
-    compiler: &'a sh_capnp::compiler::Client,
-    functions: &'a mut HashSet<String>,
-    output_frame: &'a mut Frame,
-) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
-    Box::pin(async move {
-        for statement in script.get_statements()?.iter() {
-            compile_statement(statement, compiler, functions, output_frame).await?;
-        }
-        Ok(())
-    })
+fn generate_script(
+    script: bytecode::Reader<'_>,
+    output_instructions: &mut Instructions,
+) -> Result<()> {
+    for statement in script.get_statements()?.iter() {
+        generate_statement(statement, output_instructions)?;
+    }
+    Ok(())
 }
 
-async fn compile_statement<'a>(
-    statement: script::statement::Reader<'a>,
-    compiler: &sh_capnp::compiler::Client,
-    functions: &mut HashSet<String>,
-    output_frame: &mut Frame,
+#[allow(clippy::arc_with_non_send_sync)]
+fn generate_statement(
+    statement: bytecode::statement::Reader<'_>,
+    output_instructions: &mut Instructions,
 ) -> Result<()> {
-    use script::statement::Which;
+    use bytecode::statement::Which;
     match statement.which()? {
-        Which::Expr(expr) => compile_expr(expr?, compiler, functions, output_frame).await,
+        Which::Expr(expr) => generate_expr(expr?, output_instructions),
         Which::FunctionDefinition(def) => {
             let def = def?;
             let symbol = def.get_symbol()?.to_str()?.to_string();
-            functions.insert(symbol.clone());
-            let mut message = capnp::message::Builder::new(capnp::message::HeapAllocator::new());
-            message.set_root(def.get_body()?)?;
-            output_frame.push(Inst::DefineFunction {
+            output_instructions.push(Inst::DefineFunction {
                 symbol,
-                body: Arc::new(ScriptWrapper(message)),
+                body: Arc::new(CompiledScript::from_reader(def.get_body()?)?),
             });
             Ok(())
         }
     }
 }
 
-fn compile_expr<'a>(
-    expr: script::statement::expr::Reader<'a>,
-    compiler: &'a sh_capnp::compiler::Client,
-    functions: &'a mut HashSet<String>,
-    output_frame: &'a mut Frame,
-) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
-    Box::pin(async move {
-        use script::statement::expr::Which;
-        match expr.which()? {
-            Which::Command(Ok(text)) => {
-                let text = text.to_str()?;
-                let first_word = text.split_whitespace().next().unwrap_or("");
-                if functions.contains(first_word) {
-                    if text.split_whitespace().nth(1).is_some() {
-                        return Err(anyhow!("function `{}` cannot take arguments", first_word));
-                    }
-                    output_frame.push(Inst::Call(first_word.to_string()));
-                } else {
-                    let mut request = compiler.build_program_args_request();
-                    request.get().set_command(text);
-                    let reply = request.send().promise.await?;
-                    let program_args = dusk_program::program_args::ProgramArgs::from_reader(
-                        reply.get()?.get_program_args()?,
-                    )?;
-                    output_frame.push(Inst::ProgramArgs(program_args));
-                }
-                Ok(())
-            }
-            Which::And(Ok(pair)) => {
-                compile_expr(
-                    pair.reborrow().get_first()?,
-                    compiler,
-                    functions,
-                    output_frame,
-                )
-                .await?;
-                let jump_idx = output_frame.len();
-                output_frame.push(Inst::JumpIfError(0)); // patched below
-                compile_expr(
-                    pair.reborrow().get_second()?,
-                    compiler,
-                    functions,
-                    output_frame,
-                )
-                .await?;
-                let target = output_frame.len();
-                output_frame[jump_idx] = Inst::JumpIfError(target);
-                Ok(())
-            }
-            Which::Or(Ok(pair)) => {
-                compile_expr(
-                    pair.reborrow().get_first()?,
-                    compiler,
-                    functions,
-                    output_frame,
-                )
-                .await?;
-                let jump_idx = output_frame.len();
-                output_frame.push(Inst::JumpIfOk(0)); // patched below
-                compile_expr(
-                    pair.reborrow().get_second()?,
-                    compiler,
-                    functions,
-                    output_frame,
-                )
-                .await?;
-                let target = output_frame.len();
-                output_frame[jump_idx] = Inst::JumpIfOk(target);
-                Ok(())
-            }
-            _ => Err(anyhow!("error compiling expression")),
+fn generate_expr(
+    expr: bytecode::statement::expr::Reader<'_>,
+    output_instructions: &mut Instructions,
+) -> Result<()> {
+    use bytecode::statement::expr::Which;
+    match expr.which()? {
+        Which::ProgramArgs(Ok(program_args)) => {
+            output_instructions.push(Inst::ProgramArgs(ProgramArgs::from_reader(program_args)?));
+            Ok(())
         }
-    })
+        Which::Call(Ok(symbol)) => {
+            output_instructions.push(Inst::Call(symbol.to_str()?.to_string()));
+            Ok(())
+        }
+        Which::And(Ok(pair)) => {
+            generate_expr(pair.reborrow().get_first()?, output_instructions)?;
+            let jump_idx = output_instructions.len();
+            output_instructions.push(Inst::JumpIfError(0)); // patched below
+            generate_expr(pair.reborrow().get_second()?, output_instructions)?;
+            let target = output_instructions.len();
+            output_instructions[jump_idx] = Inst::JumpIfError(target);
+            Ok(())
+        }
+        Which::Or(Ok(pair)) => {
+            generate_expr(pair.reborrow().get_first()?, output_instructions)?;
+            let jump_idx = output_instructions.len();
+            output_instructions.push(Inst::JumpIfOk(0)); // patched below
+            generate_expr(pair.reborrow().get_second()?, output_instructions)?;
+            let target = output_instructions.len();
+            output_instructions[jump_idx] = Inst::JumpIfOk(target);
+            Ok(())
+        }
+        _ => Err(anyhow!("error generating an expression")),
+    }
 }
