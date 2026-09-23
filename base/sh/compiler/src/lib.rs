@@ -5,7 +5,7 @@ extern crate alloc;
 #[cfg(feature = "parser")]
 pub mod ast;
 #[cfg(feature = "parser")]
-pub mod bytecode;
+pub mod compile;
 #[cfg(feature = "parser")]
 pub mod parser;
 #[cfg(feature = "parser")]
