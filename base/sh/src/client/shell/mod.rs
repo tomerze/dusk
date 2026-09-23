@@ -1,12 +1,12 @@
 use crate::entry::ShEntriesBuilder;
-use crate::sh_capnp::{compiler, sh_portal, sh_stop};
-use crate::{ShArgs, ShCompiler, ShMode};
+use crate::entry::ShEntry;
+use crate::sh_capnp::{sh_portal, sh_stop};
+use crate::{ShArgs, ShMode};
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program::anyhow::Result;
-use dusk_program_sh_bytecode::bytecode;
 use std::format;
 use std::future::Future;
 use std::rc::Rc;
@@ -40,19 +40,19 @@ pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 pub struct Shell {
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
-    compiler: compiler::Client,
+    client: dusk::Client,
+    entries: Vec<ShEntry>,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
 }
 
 impl Shell {
-    pub async fn recreate_sh_process<S: ShEntriesBuilder>(
+    pub async fn recreate_sh_process(
         client: dusk::Client,
-        sh_entries_builder: S,
         pid: u64,
     ) -> capnp::Result<process::Client> {
-        let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
+        let sh_args = ShArgs::new(ShMode::Server)
             .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
         let program_args = sh_args.as_program_args()?;
         program_args.set_pid(Some(pid))?;
@@ -122,19 +122,14 @@ impl Shell {
             .get()?
             .get_result();
 
-        let compiler = capnp_rpc::new_client(ShCompiler {
-            client: client.clone(),
-            sh_entries_builder: sh_entries_builder.clone(),
-        });
-
         let mut served = Some(served);
+        let reconnect_client = client.clone();
         let (sh_process, _) = capnp_rpc::auto_reconnect(move || {
             if let Some(served) = served.take() {
                 return Ok(served);
             }
             Ok(capnp_rpc::new_future_client(Self::recreate_sh_process(
-                client.clone(),
-                sh_entries_builder.clone(),
+                reconnect_client.clone(),
                 sh_pid,
             )))
         })?;
@@ -144,7 +139,8 @@ impl Shell {
 
         Ok(Shell {
             sh_process,
-            compiler,
+            client: client.clone(),
+            entries: sh_entries_builder.get_entries(),
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -174,15 +170,26 @@ impl Shell {
             notify: stop_signal,
         });
 
-        let mut sh_request = sh_portal.sh_request();
-        let lowered = bytecode::lower_from_source(script)?;
-        let message = bytecode::read(&lowered)?;
-        sh_request.get().set_script(message.get_root()?)?;
-        sh_request.get().set_output(stream);
-        sh_request.get().set_stop(stop_cap);
-        sh_request.get().set_compiler(self.compiler.clone());
+        let client = self.client.clone();
+        let entries = crate::entry::DynamicShEntriesBuilder {
+            entries: self.entries.clone(),
+        };
+        let script = String::from(script);
+        let functions_of = self.sh_process.clone();
 
         Ok(async move {
+            let defined_functions = defined_functions(functions_of).await?;
+            let mut sh_request = sh_portal.sh_request();
+            crate::client::args::compile_into(
+                client,
+                entries,
+                &script,
+                &defined_functions,
+                sh_request.get().init_script(),
+            )
+            .await?;
+            sh_request.get().set_output(stream);
+            sh_request.get().set_stop(stop_cap);
             sh_request.send().promise.await?;
             let _ = done_receiver.await;
             Ok(())
@@ -191,22 +198,25 @@ impl Shell {
 
     /// Returns the names of functions currently defined in the sh process.
     pub async fn functions(&self) -> Result<Vec<String>> {
-        let sh_process = self.sh_process.clone();
-        let sh_portal = capnp_rpc::new_future_client(async move {
-            let portal_reply = sh_process.portal_request().send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_portal::Client>())
-        });
-        let reply = sh_portal.functions_request().send().promise.await?;
-        let symbols = reply.get()?.get_symbols()?;
-        let mut out = Vec::with_capacity(symbols.len() as usize);
-        for symbol in symbols.iter() {
-            out.push(symbol?.to_str()?.to_string());
-        }
-        Ok(out)
+        defined_functions(self.sh_process.clone()).await
     }
+}
+
+async fn defined_functions(sh_process: process::Client) -> Result<Vec<String>> {
+    let sh_portal = capnp_rpc::new_future_client(async move {
+        let portal_reply = sh_process.portal_request().send().promise.await?;
+        Ok(portal_reply
+            .get()?
+            .get_result()?
+            .cast_to::<sh_portal::Client>())
+    });
+    let reply = sh_portal.functions_request().send().promise.await?;
+    let symbols = reply.get()?.get_symbols()?;
+    let mut symbol_names = Vec::with_capacity(symbols.len() as usize);
+    for symbol in symbols.iter() {
+        symbol_names.push(symbol?.to_str()?.to_string());
+    }
+    Ok(symbol_names)
 }
 
 impl Drop for Shell {

@@ -158,8 +158,7 @@ async fn prompt<S: ShEntriesBuilder>(
     server_pid: u64,
 ) -> anyhow::Result<()> {
     let stop_signal = StopSignal::new();
-    let server =
-        Shell::recreate_sh_process(client.clone(), sh_entries_builder.clone(), server_pid).await?;
+    let server = Shell::recreate_sh_process(client.clone(), server_pid).await?;
     let mut shell = Shell::new(client.clone(), sh_entries_builder.clone(), server).await?;
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
         StreamRequest::Raw => {
@@ -194,15 +193,9 @@ pub async fn open_prompt<S: ShEntriesBuilder>(
     let mut last_report = tokio::time::Instant::now();
     loop {
         let program_args = if view_opened {
-            let mut sh_args = ShArgs::new(
-                client.clone(),
-                sh_entries_builder.clone(),
-                ShMode::Prompt {
-                    client_hostname: client_hostname(),
-                    server_pid,
-                },
-            )?;
-            sh_args.created = None;
+            let sh_args = ShArgs::new(ShMode::Prompt {
+                client_hostname: client_hostname(),
+            })?;
             sh_args.as_program_args()?
         } else {
             program_args_for_command(

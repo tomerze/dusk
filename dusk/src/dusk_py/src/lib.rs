@@ -229,11 +229,7 @@ impl Dusk {
                 return Ok(());
             }
             let shell = async {
-                let process = Shell::recreate_sh_process(
-                    client.clone(),
-                    StaticShEntriesBuilder::default(),
-                    server_pid,
-                )
+                let process = Shell::recreate_sh_process(client.clone(), server_pid)
                 .await?;
                 Shell::new(
                     client.clone(),
