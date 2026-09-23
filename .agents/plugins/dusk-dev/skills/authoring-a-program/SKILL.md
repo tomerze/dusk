@@ -11,7 +11,7 @@ The five reference programs are `base/init`, `base/nightfall`, `base/sh`, `base/
 
 | Existing program | Best example for | Distinctive idiom |
 |---|---|---|
-| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Bytecode.Script`) in its `Args.Data`, builds `ShArgs` itself with the node's local client, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
+| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Compiler.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
 | `nightfall` | Daemon / TCP listener; `std`-only program | `futures::select!` between `listener.accept()` and the signal channel; spawns `dusk_core::session` tasks per connection |
 | `kill` | One-shot RPC, then sit and wait for `Terminate` | Reads `(pid, signal)` from args, calls `client.kill_request()`, signals `ready`, loops on the signal receiver |
 | `ps` | Snapshot the namespace, emit a typed `Record` into a `Stream` from a portal method | Walks `client.ps_request()` results in `main`, materialises a `PsResult` into `Rc<RefCell<…>>`, and in `output()` builds `Record::with_fields(RESULT_TYPE_ID, …)`, writes it with `stream.send_request()` and answers `set_daemonize(false)` |
@@ -110,7 +110,7 @@ base/<name>/
     └── client.rs        # optional, gated by feature "client"
 ```
 
-Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/bytecode`, for the part something outside `base/sh` has to reach. Keep `lib.rs` as the program's public surface and push internals into modules.
+Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/compiler`, for the part something outside `base/sh` has to reach - the `Bytecode` schema and the `compile` module that `init` and the node artifact build an init script with. Keep `lib.rs` as the program's public surface and push internals into modules.
 
 ---
 
@@ -134,7 +134,7 @@ struct <Name>Args {
   }
   interface Server {
     # Usually empty. Used only when the program needs to call back to the
-    # spawner *after* launch - `sh` uses it to hand out a `Compiler`.
+    # spawner *after* launch - `logs` asks the client for a stream through it.
   }
 }
 
@@ -372,7 +372,7 @@ impl Portal {
 
 - **`metadata!("<name>", VERSION, <name>_capnp::PROGRAM_ID)`** - declares the `<name>_capnp` module (via `include!`), brings the capnp prelude into scope, exports `PROGRAM_NAME` and `PROGRAM_ID` constants, and registers private helper macros used by the derives below it. **It must come before the derives.**
 - **`#[derive(dusk_program_proc::Args)]` + `#[data]`** - generates `Args::as_program_args(self) -> capnp::Result<Rc<ProgramArgs>>`. The `#[data]` field must be `capnp::message::TypedBuilder<...>::Owned`. The struct may carry additional fields (e.g. a `client: dusk::Client`) - they become part of the `Server` capability the launcher sees, accessible via `program_args.server_as::<…>()`. Missing or duplicated `#[data]` is a compile-time error.
-- **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** - wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. `sh` is the one program with a non-empty body - a `compiler` method handing back the `Compiler` that translates shell commands into program args.
+- **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** - wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. Two programs have a non-empty body: `logs`, whose `open_stream` hands back the stream the client wants its events written into, and `programs`, whose `transpose` lets the client shape the rows the node collected. `sh`'s is empty.
 - **`#[derive(dusk_program_proc::Launcher)]`** - implements `Launcher::program_id()` returning `PROGRAM_ID`. You still write `impl LauncherMixin` by hand.
 - **`#[derive(Clone, dusk_program_proc::Process)]` + `#[process_context]`** - implements the `Process` trait's metadata methods (`program_id`, `name`, `version`, `clone_box`, `namespace`, `pid`). The `#[process_context]` field must be `pub ctx: ProcessContext`. You still write `impl ProcessMixin` by hand.
 - **`#[derive(dusk_program_proc::Portal)]`** - implements `Dusk.Portal.programId()` for your portal type.
