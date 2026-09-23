@@ -83,6 +83,7 @@ pub struct Process {
     state: Rc<RefCell<State>>,
 }
 impl Process {
+    #[allow(clippy::arc_with_non_send_sync)]
     async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,
