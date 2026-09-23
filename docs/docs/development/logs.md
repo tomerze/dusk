@@ -303,8 +303,8 @@ it holds *how* to make the stream, not a made one. The node calls it from the
 `logs` process's `main`, before the process signals ready. Everything the client
 opens - the pager's alternate screen, a file, a collector connection - is opened
 inside that call, so building a program's args opens nothing: `hi () { logs }`
-defines a function, and the shell compiles the word `logs` into `ProgramArgs`
-through the client callback right then, long before `hi` is ever run.
+defines a function, and the word `logs` is resolved into `ProgramArgs` as the
+client compiles that line, long before `hi` is ever run.
 
 What `openStream` returns is the stream itself, and there the node side is
 deliberately dumb. `LogsArgs.Stream` has two methods -

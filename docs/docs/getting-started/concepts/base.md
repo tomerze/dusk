@@ -121,8 +121,8 @@ shell conditionals.
 ## `init`
 
 The first process started on a node. It is handed an init script - a
-`Bytecode.Script` - and starts a detached `sh` to run it; for the node
-artifact the script is `nightfall -l 9090`, which starts
+`Compiler.Bytecode` message - and starts a detached `sh` to run it; for the node
+artifact the script is `nightfall -l 0.0.0.0:9090`, which starts
 [`nightfall`](#nightfall). You don't run `init` by hand - the node starts it at
 boot. See [Run a standalone node](../guides/run-a-node.md).
 
