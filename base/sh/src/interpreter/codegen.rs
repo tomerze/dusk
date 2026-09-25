@@ -1,9 +1,8 @@
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
-use core::future::Future;
-use core::pin::Pin;
 use dusk_program::anyhow::{Result, anyhow};
 use dusk_program::program_args::ProgramArgs;
+use hashbrown::HashMap;
 
 use crate::bytecode;
 
@@ -17,60 +16,66 @@ pub(super) fn generate(script: bytecode::Reader<'_>) -> Result<Instructions> {
     Ok(output_instructions)
 }
 
+pub(super) async fn generate_function(
+    function_table: &FunctionTable,
+    generated_functions: &GeneratedFunctions,
+    symbol: &str,
+) -> Result<Arc<Instructions>> {
+    if let Some(instructions) = generated_functions.borrow().get(symbol).cloned() {
+        return Ok(instructions);
+    }
+    let bodies = function_table.lock().await;
+    generate_function_from(&bodies, generated_functions, symbol)
+}
+
 #[allow(clippy::arc_with_non_send_sync)]
-pub(super) fn generate_function<'a>(
-    function_table: &'a FunctionTable,
-    generated_functions: &'a GeneratedFunctions,
-    symbol: &'a str,
-) -> Pin<Box<dyn Future<Output = Result<Arc<Instructions>>> + 'a>> {
-    Box::pin(async move {
-        if let Some(instructions) = generated_functions.borrow().get(symbol).cloned() {
-            return Ok(instructions);
+fn generate_function_from(
+    bodies: &HashMap<String, Arc<CompiledScript>>,
+    generated_functions: &GeneratedFunctions,
+    symbol: &str,
+) -> Result<Arc<Instructions>> {
+    if let Some(instructions) = generated_functions.borrow().get(symbol).cloned() {
+        return Ok(instructions);
+    }
+    let body = bodies
+        .get(symbol)
+        .ok_or_else(|| anyhow!("call to unknown symbol: {}", symbol))?;
+    // Empty placeholder so recursive calls back to `symbol` short-circuit.
+    generated_functions
+        .borrow_mut()
+        .insert(symbol.to_string(), Arc::new(Instructions::new()));
+
+    let instructions = match generate(body.root()?) {
+        Ok(f) => f,
+        Err(e) => {
+            generated_functions.borrow_mut().remove(symbol);
+            return Err(e);
         }
-        let body = function_table
-            .lock()
-            .await
-            .get(symbol)
-            .cloned()
-            .ok_or_else(|| anyhow!("call to unknown symbol: {}", symbol))?;
-        // Empty placeholder so recursive calls back to `symbol` short-circuit.
-        generated_functions
-            .borrow_mut()
-            .insert(symbol.to_string(), Arc::new(Instructions::new()));
+    };
+    tracing::debug!(
+        dump = %super::instructions::format_instructions(&instructions),
+        symbol = symbol,
+        "function instruction disassembly"
+    );
 
-        let script = body.root()?;
-        let instructions = match generate(script) {
-            Ok(f) => f,
-            Err(e) => {
-                generated_functions.borrow_mut().remove(symbol);
-                return Err(e);
-            }
-        };
-        tracing::debug!(
-            dump = %super::instructions::format_instructions(&instructions),
-            symbol = symbol,
-            "function instruction disassembly"
-        );
+    // Eagerly compile every function this body calls.
+    let dep_symbols: alloc::vec::Vec<String> = instructions
+        .iter()
+        .filter_map(|i| match i {
+            Inst::Call(s) | Inst::TailCall(s) => Some(s.clone()),
+            _ => None,
+        })
+        .collect();
+    for dep in dep_symbols {
+        // Ignore errors / missing bodies - runtime resolve will surface them.
+        let _ = generate_function_from(bodies, generated_functions, &dep);
+    }
 
-        // Eagerly compile every function this body calls.
-        let dep_symbols: alloc::vec::Vec<String> = instructions
-            .iter()
-            .filter_map(|i| match i {
-                Inst::Call(s) | Inst::TailCall(s) => Some(s.clone()),
-                _ => None,
-            })
-            .collect();
-        for dep in dep_symbols {
-            // Ignore errors / missing bodies - runtime resolve will surface them.
-            let _ = generate_function(function_table, generated_functions, &dep).await;
-        }
-
-        let instructions = Arc::new(instructions);
-        generated_functions
-            .borrow_mut()
-            .insert(symbol.to_string(), instructions.clone());
-        Ok(instructions)
-    })
+    let instructions = Arc::new(instructions);
+    generated_functions
+        .borrow_mut()
+        .insert(symbol.to_string(), instructions.clone());
+    Ok(instructions)
 }
 
 fn optimize_tail_call(instructions: &mut Instructions) {
