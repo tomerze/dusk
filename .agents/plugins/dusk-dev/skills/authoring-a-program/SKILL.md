@@ -110,7 +110,7 @@ base/<name>/
     └── client.rs        # optional, gated by feature "client"
 ```
 
-Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/compiler`, for the part something outside `base/sh` has to reach - the `Bytecode` schema and the `compile` module that `init` and the node artifact build an init script with. Keep `lib.rs` as the program's public surface and push internals into modules.
+Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/compiler`, for the part only its client side needs - the shell grammar - so a node never links it. The `Bytecode` schema that `init`'s args carry its init script in stays in `sh` itself, `capnp/bytecode.capnp`. Keep `lib.rs` as the program's public surface and push internals into modules.
 
 ---
 
