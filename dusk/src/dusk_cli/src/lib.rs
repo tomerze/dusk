@@ -38,7 +38,14 @@ async fn kill(client: &dusk::Client, pid: u64) {
 
 async fn script(client: dusk::Client, command: String) -> Result<()> {
     let stop_signal = StopSignal::new();
-    let script = dusk_base::dusk_program_sh::compile(client.clone(), &command).await?;
+    let stop = stop_signal.signal();
+    let stopped = stop.notified();
+    tokio::pin!(stopped);
+    stopped.as_mut().enable();
+    let script = tokio::select! {
+        script = dusk_base::dusk_program_sh::compile(client.clone(), &command) => script?,
+        () = &mut stopped => return Ok(()),
+    };
     let program_args = ShArgs::new(ShMode::Script(script))?.as_program_args()?;
     let mut process_request = client.process_request();
     program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
@@ -71,10 +78,9 @@ async fn script(client: dusk::Client, command: String) -> Result<()> {
         .set_stream(capnp_rpc::new_client(json_stream));
     let output_promise = output_request.send().promise;
     tokio::pin!(output_promise);
-    let stop = stop_signal.signal();
     let output_reply = tokio::select! {
         reply = &mut output_promise => reply,
-        _ = stop.notified() => {
+        () = &mut stopped => {
             kill(&client, pid).await;
             output_promise.await
         }

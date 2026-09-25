@@ -159,7 +159,7 @@ impl Shell {
         });
 
         let stop_cap: sh_stop::Client = capnp_rpc::new_client(Stop {
-            notify: stop_signal,
+            notify: stop_signal.clone(),
         });
 
         let client = self.client.clone();
@@ -167,15 +167,24 @@ impl Shell {
         let functions_of = self.sh_process.clone();
 
         Ok(async move {
-            let defined_functions = functions_inner(functions_of).await?;
+            let stopped = stop_signal.notified();
+            tokio::pin!(stopped);
+            stopped.as_mut().enable();
             let mut sh_request = sh_portal.sh_request();
-            crate::client::args::compile_into(
-                client,
-                &script,
-                &defined_functions,
-                sh_request.get().init_script(),
-            )
-            .await?;
+            let compiled = async {
+                let defined_functions = functions_inner(functions_of).await?;
+                crate::client::args::compile_into(
+                    client,
+                    &script,
+                    &defined_functions,
+                    sh_request.get().init_script(),
+                )
+                .await
+            };
+            tokio::select! {
+                compiled = compiled => compiled?,
+                () = &mut stopped => return Ok(()),
+            }
             sh_request.get().set_output(stream);
             sh_request.get().set_stop(stop_cap);
             sh_request.send().promise.await?;
