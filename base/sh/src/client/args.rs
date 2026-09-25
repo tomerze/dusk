@@ -1,10 +1,8 @@
 use crate::client::Created;
 use crate::entry::sh_entries;
-use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
+use crate::{ArgsDataBuilder, PROGRAM_ID};
 use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::{created, dusk};
-use dusk_capnp::pry;
-use dusk_program::IntoCapnp;
 use dusk_program::anyhow::{self, Context};
 use dusk_program::program_args::ProgramArgs;
 use std::rc::Rc;
@@ -94,40 +92,4 @@ pub async fn program_args_for_command(
         .build(client, &arg_refs)
         .await
         .context("program args builder failed")
-}
-
-#[dusk_program_proc::impl_args_rpc_server]
-impl ShArgs {
-    fn compiler(
-        &mut self,
-        _params: sh_capnp::sh_args::server::CompilerParams,
-        mut results: sh_capnp::sh_args::server::CompilerResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        results.get().set_result(capnp_rpc::new_client(ShCompiler {
-            client: self.client.clone(),
-        }));
-        capnp::capability::Promise::ok(())
-    }
-}
-
-pub struct ShCompiler {
-    pub client: dusk::Client,
-}
-
-impl sh_capnp::compiler::Server for ShCompiler {
-    fn build_program_args(
-        &mut self,
-        params: sh_capnp::compiler::BuildProgramArgsParams,
-        mut results: sh_capnp::compiler::BuildProgramArgsResults,
-    ) -> capnp::capability::Promise<(), capnp::Error> {
-        let command = pry!(pry!(pry!(params.get()).get_command()).to_str()).to_string();
-        let client = self.client.clone();
-        capnp::capability::Promise::from_future(async move {
-            let program_args = program_args_for_command(client, &command)
-                .await
-                .into_capnp()?;
-            program_args.with_reader(|reader| results.get().set_program_args(reader))?;
-            Ok(())
-        })
-    }
 }
