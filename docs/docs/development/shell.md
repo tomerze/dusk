@@ -371,9 +371,11 @@ script came in on.
   `execute_command` logs it at `error` - the prompt survives.
 - **Resolution errors** are client-side too, raised while the bytecode is built: an
   unknown program (`no sh entry found for …`), a malformed command (`invalid
-  command …`), a function given arguments, and a word that names neither a program nor a
-  function the caller passed in (`call to unknown symbol: …`). They fail the call that was building the
-  message, so nothing is sent at all.
+  command …`) and a function given arguments. They fail the call that was
+  building the message, so nothing is sent at all. A function is known from its
+  definition on, so a word used before it is defined runs the program of that
+  name. Inside a function body, a bare word that names neither a program nor a
+  known function compiles to a call and is looked up when the function runs.
 - **Codegen errors** - bytecode codegen cannot read, or a `Call` whose function
   has no body (`call to unknown symbol: …`) - fail
   `codegen::generate`, which fails `exec`, which the `sh_exec_task` reports through its
