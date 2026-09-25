@@ -154,6 +154,15 @@ each command's capabilities in a table beside the message, so `ShMode::Script` a
 `ShMode::DetachedScript` hand them to the node. `tests/common` picks its port at run
 time, so it calls `compile_to_words` itself rather than going through the macro.
 
+`compile_to_words` compiles with `compile`, then copies the bytecode into a plain
+message command by command, leaving each command's `Server` and `created` behind.
+An `sh` command's args data is itself a script - `sh`'s entry compiles `ps` in
+`compile_sh!("sh -d ps")` with `compile` - so its script or detached script is
+copied the same way, and `sh <command>` and `sh -d <command>` compile at build
+time. Any other program whose args data itself holds a capability cannot go into
+bytes: the compile fails with an error naming the program, and `compile_sh!`
+turns it into a compile error where the macro was called.
+
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
 to end of line, and only when the `#` starts a word - a `#` inside a word
 (`http://host/page#section`) is just a character. Text inside `'…'` / `"…"` is
