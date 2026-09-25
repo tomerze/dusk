@@ -52,7 +52,7 @@ The server side of every program is `no_std`. This is the **first** thing you pu
    extern crate alloc;
    extern crate capnp;
    ```
-   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl - the workspace `cargo check` still passes, but you've broken the portability contract. The exceptions are `nightfall`, which is unconditionally `std` because it binds a `std::net::TcpListener`, and `init`, which links `sh`'s client side to run its init script. If you are unsure whether your program needs `std` unconditionally, it doesn't - write the `cfg_attr`.
+   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl - the workspace `cargo check` still passes, but you've broken the portability contract. The exception is `nightfall`, which is unconditionally `std` because it binds a `std::net::TcpListener`. If you are unsure whether your program needs `std` unconditionally, it doesn't - write the `cfg_attr`.
 
 2. **Every dep in the unconditional `[dependencies]` block must be no_std-clean.** That means:
    - The crate ships a `no_std` mode (check its docs / `[features]` block).
@@ -1229,7 +1229,7 @@ See [[adding-a-driver-method]] for the analogous wiring on the driver side when 
 
 Most programs are `#![cfg_attr(not(feature = "client"), no_std)]`. This means the runtime (`Process`, `Launcher`, RPC handlers) is `no_std`, and the client-side wiring (`clap`, `linkme`, shell entry) is std-only.
 
-`nightfall` is the exception: it binds a `std::net::TcpListener` through `async_io::Async`, which requires `std`, so its `lib.rs` does **not** start with the `no_std` cfg attribute. `init`'s `lib.rs` does not start with it either - it links `sh`'s client side (the shell entries, clap and the rest) to run its init script - so both are unconditionally `std`.
+`nightfall` is the exception: it binds a `std::net::TcpListener` through `async_io::Async`, which requires `std`, so its `lib.rs` does **not** start with the `no_std` cfg attribute.
 
 When adding new `extern crate` lines to your `lib.rs`, mirror what kill/ps does:
 
