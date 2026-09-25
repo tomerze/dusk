@@ -216,7 +216,7 @@ client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
 
 `public = true` on the dusk-* deps matters: downstream crates (e.g. `ps` re-exporting types from `sh`) need to see them. Don't omit it.
 
-If your program does **not** need to be runnable from a shell prompt (e.g. it's spawned only by other programs internally), skip `linkme`, `clap`, `dusk_program_sh_proc` and the shell-entry `client` feature entirely. `init` is the canonical example of a program with no shell entry - its `client` feature only turns on `dusk_program_kvs_internal/client`, for the known kvs keys it sets (it depends on `dusk_program_sh` with `client` unconditionally, since it runs its init script through `sh`).
+If your program does **not** need to be runnable from a shell prompt (e.g. it's spawned only by other programs internally), skip `linkme`, `clap`, `dusk_program_sh_proc` and the shell-entry `client` feature entirely. `init` is the canonical example of a program with no shell entry - its `client` feature only turns on `dusk_program_kvs_internal/client`, for the known kvs keys it sets. It depends on `dusk_program_sh` without `client`: `ShArgs` and `ShMode`, which it builds to run its init script through `sh`, are outside that feature.
 
 ---
 
