@@ -5,7 +5,7 @@ use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program::anyhow::Result;
-use dusk_program_sh_bytecode::bytecode;
+use dusk_program_sh_compiler::compile;
 use std::format;
 use std::future::Future;
 use std::rc::Rc;
@@ -167,8 +167,8 @@ impl Shell {
         });
 
         let mut sh_request = sh_portal.sh_request();
-        let lowered = bytecode::lower_from_source(script)?;
-        let message = bytecode::read(&lowered)?;
+        let bytecode = compile::compile(script)?;
+        let message = dusk_program_sh_compiler::read(&bytecode)?;
         sh_request.get().set_script(message.get_root()?)?;
         sh_request.get().set_output(stream);
         sh_request.get().set_stop(stop_cap);

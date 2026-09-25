@@ -7,7 +7,6 @@ use dusk_capnp::pry;
 use dusk_program::IntoCapnp;
 use dusk_program::anyhow::{self, Context};
 use dusk_program::program_args::ProgramArgs;
-use dusk_program_sh_bytecode::bytecode;
 use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
@@ -25,7 +24,7 @@ pub enum ShMode {
 fn read_bytecode(
     bytecode: &[u8],
 ) -> anyhow::Result<capnp::message::Reader<dusk_capnp::capnp::serialize::OwnedSegments>> {
-    bytecode::read(bytecode).context("a script's bytecode is not a Script message")
+    dusk_program_sh_compiler::read(bytecode).context("a script's bytecode is not a Script message")
 }
 
 #[derive(dusk_program_proc::Args)]
