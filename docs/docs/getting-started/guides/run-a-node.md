@@ -31,16 +31,17 @@ Bringing a node up follows a fixed sequence:
 3. Spawn the first process, `init`, into the namespace via an in-process `Dusk`
    client (`Dusk.process` + `Dusk.run`).
 
-The `init` process is handed an init script - a `Bytecode.Script` - and starts a
-detached `sh` to run it, then waits for its own `Terminate`. For the node
-artifact that script is `nightfall -l 9090`, compiled at build time.
-[`nightfall`](../concepts/base.md#nightfall)
+The `init` process is handed an init script - a `Bytecode.Script` - and runs it
+through `sh` in Script mode. For the node artifact that script is `nightfall -l
+9090`, compiled at build time, or `nightfall -l <ip:port>` compiled at run time
+when the node is given an address. [`nightfall`](../concepts/base.md#nightfall)
 binds the node's network listener and accepts connections, running in the
 foreground of that script.
 
 ## Sessions
 
-The node listens over plain TCP, on [port 9090](#the-listen-address).
+The node listens over plain TCP, on the address
+[chosen at startup](#choosing-the-listen-address).
 For each incoming connection, `nightfall` spawns a **session** that shares the node's
 single [namespace](../concepts/namespaces.md), so every connected client sees the
 same processes. A session wraps a `DuskServer` as a Cap'n Proto bootstrap

@@ -50,7 +50,7 @@ to undo. The registry lives in `dusk_core`, not in the driver.
 
 Finally, run the Embassy executor, create the node's
 [namespace](../concepts/namespaces.md), and spawn `init` with an init script -
-a `Bytecode.Script` it runs through `sh`. Hand it `nightfall -l 9090` and
+a `Bytecode.Script` it runs through `sh`. Hand it `nightfall -l <ip:port>` and
 the node accepts client sessions. This is the
 [startup sequence](run-a-node.md#what-happens-at-startup)
 the nix impl follows. Keep the impl lean: anything that isn't a forced platform primitive

@@ -126,14 +126,15 @@ The grammar is a nom parser in `base/sh/compiler/`. It is deliberately tiny.
 Source is compiled to bytecode before it goes anywhere else. `ShMode::Script`
 and `ShMode::DetachedScript` carry bytecode, never source, so every caller runs
 `compile::compile` first - the CLI, the `sh` entry, the prompt's
-`Shell::sh` - and there is one description of what a script compiles to.
+`Shell::sh`, the node's init script when it is given an address - and there is
+one description of what a script compiles to.
 
 Compiling can also happen at build time.
 `dusk_program_sh_proc::sh_to_bytecode!("echo hi")` - from the
 `dusk_program_sh_proc` crate, which a caller adds alongside `dusk_program_sh` -
 runs the same call while the calling crate is compiled and expands to the
 bytecode it produced, ready to hand to `ShMode::Script`; the node artifact's
-init script, `nightfall -l 9090`, is compiled this way. A syntax error is
+default init script, `nightfall -l 9090`, is compiled this way. A syntax error is
 then a compile error. The parser is still linked, because every other caller compiles
 at run time; what build-time compiling buys is that that script is never parsed
 at run time.
