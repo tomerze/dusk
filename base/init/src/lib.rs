@@ -31,7 +31,7 @@ pub struct Args {
 
 impl Args {
     pub fn new(init_script: &[u8]) -> anyhow::Result<Self> {
-        let message = dusk_program_sh_compiler::compile::read(init_script)
+        let message = dusk_program_sh_compiler::read(init_script)
             .context("the init script is not compiled bytecode")?;
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_init_script(message.get_root()?)?;
