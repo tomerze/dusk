@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 
 use dusk_capnp::dusk_capnp::created;
 use dusk_program::anyhow::{self, Context};
-use dusk_program_sh_compiler::compile;
 
 use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
 
@@ -30,13 +29,13 @@ impl ShArgs {
             match mode {
                 ShMode::Server => data_builder.set_server(()),
                 ShMode::Script(script) => {
-                    let message =
-                        compile::read(&script).context("a script is not compiled bytecode")?;
+                    let message = dusk_program_sh_compiler::read(&script)
+                        .context("a script is not compiled bytecode")?;
                     data_builder.set_script(message.get_root()?)?;
                 }
                 ShMode::DetachedScript(script) => {
-                    let message =
-                        compile::read(&script).context("a script is not compiled bytecode")?;
+                    let message = dusk_program_sh_compiler::read(&script)
+                        .context("a script is not compiled bytecode")?;
                     data_builder.set_detached_script(message.get_root()?)?;
                 }
                 ShMode::Prompt { client_hostname } => {
