@@ -166,16 +166,17 @@ human, never ahead of them.
 Running the thing beats reasoning about it, and it is not the test suite, so it
 is available even when tests are not. Build with
 `cargo build --bin dusk_node --bin dusk`, start the node, and drive it with
-one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9191 "ps"`).
+one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
 
-- **The `dusk_node` binary takes its `ip:port` as its first argument**, and only
-  falls back to `DEFAULT_LISTEN_ADDRESS` (`0.0.0.0:9090`) when given none -
-  `artifacts/dusk_node/bin/src/main.rs` hands argv[1] straight to
-  `dusk_node_run`. So check `pgrep -af dusk_node` before starting one: another
-  session's node may already hold 9090, in which case yours exits and your CLI
-  silently talks to *theirs*. Do not kill a node you did not start. Start your
-  own on a port of its own - `./target/debug/dusk_node 127.0.0.1:9191` - rather
-  than editing any source to move it.
+- **The `dusk_node` binary takes no arguments and always listens on 9090**, on
+  every address - the init script is the one command `nightfall -l 0.0.0.0:9090`,
+  compiled into the artifact while it is built, and
+  `artifacts/dusk_node/bin/src/main.rs` passes a null pointer and reads no argv.
+  So only one node from this binary runs per machine: check `pgrep -af dusk_node`
+  and `ss -ltn | grep 9090` before starting one. If another session's node holds
+  9090, you cannot start your own from the `dusk_node` binary - yours fails to
+  bind and exits, and a CLI pointed at 9090 silently talks to *theirs*. Do not
+  kill a node you did not start.
 - **The node writes nothing to its own stdout**, so redirecting it to a file
   gets you an empty file rather than its logs. Read them through the node:
   `./target/debug/dusk <address> "logs dump --replay-only"` returns the buffered

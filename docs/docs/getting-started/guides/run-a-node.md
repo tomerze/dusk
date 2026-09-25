@@ -6,27 +6,19 @@ running one beyond the quickstart binary.
 ## The `dusk_node` binary
 
 A node ships as **`dusk_node`** - the server binary under `artifacts/`, run with
-`cargo run --bin dusk_node` (its `main` just passes its argument, if it has one,
-to `dusk_node::dusk_node_run()`).
+`cargo run --bin dusk_node` (its `main` just calls
+`dusk_node::dusk_node_run()`).
 It links the portable core, a set of programs, and one impl - by default the
 **nix** impl (`impls/nix/`, a library, not a binary) for Unix-like systems. You make a node
 your own by linking in your programs and, if needed, swapping the underlying impl.
 See [Build a custom impl](custom-impl.md).
 
-## Choosing the listen address
+## The listen address
 
-`dusk_node` takes one optional argument - the `ip:port` it listens on. With no
-argument it binds `0.0.0.0:9090`, every interface:
-
-```bash
-cargo run --bin dusk_node                       # 0.0.0.0:9090
-cargo run --bin dusk_node -- 127.0.0.1:9090     # loopback only
-cargo run --bin dusk_node -- '[::1]:9090'       # IPv6 loopback
-```
-
-The argument is a literal IP address and a port; a hostname is not resolved. An
-argument that is not one exits with status `64` (`EX_USAGE`) without starting the
-node.
+The listen address is fixed: every node built from this template listens on port
+`9090`, on every address, and `dusk_node` takes no arguments. Moving it means
+editing the init script in the template - see
+[Node artifacts](../../embedding/node-artifacts.md).
 
 ## What happens at startup
 
@@ -39,14 +31,19 @@ Bringing a node up follows a fixed sequence:
 3. Spawn the first process, `init`, into the namespace via an in-process `Dusk`
    client (`Dusk.process` + `Dusk.run`).
 
-The `init` process then binds the node's network listener and accepts
-connections.
+The `init` process is handed an init script - a `Compiler.Bytecode` message - and starts
+a detached `sh` to run it, then waits for its own `Terminate`. For the node
+artifact that script is the single command `nightfall -l 0.0.0.0:9090`, compiled
+while the artifact itself is built, so nothing is compiled at boot.
+[`nightfall`](../concepts/base.md#nightfall)
+binds the node's network listener and accepts connections, running in the
+foreground of that script.
 
 ## Sessions
 
 The node listens over plain TCP, on the address
 [chosen at startup](#choosing-the-listen-address).
-For each incoming connection, `init` spawns a **session** that shares the node's
+For each incoming connection, `nightfall` spawns a **session** that shares the node's
 single [namespace](../concepts/namespaces.md), so every connected client sees the
 same processes. A session wraps a `DuskServer` as a Cap'n Proto bootstrap
 capability and runs an RPC system over the stream, so the client ends up holding
