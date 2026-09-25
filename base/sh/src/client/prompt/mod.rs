@@ -7,7 +7,7 @@ mod highlighter;
 pub mod stream;
 pub mod ui;
 
-use crate::entry::{EntryInfo, GetAvailableProgramsInfo};
+use crate::entry::{EntryInfo, sh_entries};
 use dusk_program::anyhow::Result;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -66,14 +66,13 @@ where
 {
     pub async fn new(
         shell: &'a mut Shell,
-        get_available_programs_info: impl GetAvailableProgramsInfo,
         display_engine: D,
         stream_factory: F,
         stop_signal: Rc<Notify>,
     ) -> Result<Self> {
         let mut available_programs_info = builtins::BUILTINS.to_vec();
 
-        available_programs_info.extend(get_available_programs_info.get_available_programs_info()?);
+        available_programs_info.extend(sh_entries().iter().map(|entry| entry.info));
 
         Ok(Prompt {
             shell,

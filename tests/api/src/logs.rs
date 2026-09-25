@@ -29,7 +29,6 @@ use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
-use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_program_sh::sh_capnp;
 use dusk_program_sh::{ShArgs, ShMode, bytecode};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
@@ -104,7 +103,6 @@ async fn drive_logs_stream(
     let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
     let program_args = ShArgs::new(
         client.clone(),
-        StaticShEntriesBuilder::default(),
         ShMode::Script(bytecode::lower_from_source(command)?),
     )?
     .as_program_args()?;

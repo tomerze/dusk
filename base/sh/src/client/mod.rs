@@ -5,7 +5,7 @@ pub mod shell;
 pub mod stop;
 
 use crate::VERSION;
-use crate::entry::{EntryInfo, ShEntriesBuilder, ShEntry};
+use crate::entry::{EntryInfo, ShEntry};
 use crate::sh_capnp;
 use crate::{ShArgs, ShMode};
 use args::program_args_for_command;
@@ -68,9 +68,8 @@ is refused at a prompt.
     }
 }
 
-pub struct Created<S: ShEntriesBuilder> {
+pub struct Created {
     pub client: dusk::Client,
-    pub sh_entries_builder: S,
     pub server_pid: u64,
 }
 
@@ -104,7 +103,7 @@ fn refuse_a_prompt() -> Option<String> {
     None
 }
 
-impl<S: ShEntriesBuilder> created::Server for Created<S> {
+impl created::Server for Created {
     fn created(
         &mut self,
         params: created::CreatedParams,
@@ -120,11 +119,10 @@ impl<S: ShEntriesBuilder> created::Server for Created<S> {
             });
             return Promise::err(capnp::Error::failed(refusal));
         }
-        let sh_entries_builder = self.sh_entries_builder.clone();
         let server_pid = self.server_pid;
         PROMPT_OPEN.set(true);
         tokio::task::spawn_local(async move {
-            if let Err(error) = prompt(client.clone(), sh_entries_builder, server_pid).await {
+            if let Err(error) = prompt(client.clone(), server_pid).await {
                 tracing::error!(error = %format!("{error:#}"), "the prompt failed");
             }
             PROMPT_OPEN.set(false);
@@ -152,15 +150,10 @@ async fn kill(client: &dusk::Client, process: &process::Client, signal: u64) -> 
     Ok(())
 }
 
-async fn prompt<S: ShEntriesBuilder>(
-    client: dusk::Client,
-    sh_entries_builder: S,
-    server_pid: u64,
-) -> anyhow::Result<()> {
+async fn prompt(client: dusk::Client, server_pid: u64) -> anyhow::Result<()> {
     let stop_signal = StopSignal::new();
-    let server =
-        Shell::recreate_sh_process(client.clone(), sh_entries_builder.clone(), server_pid).await?;
-    let mut shell = Shell::new(client.clone(), sh_entries_builder.clone(), server).await?;
+    let server = Shell::recreate_sh_process(client.clone(), server_pid).await?;
+    let mut shell = Shell::new(client.clone(), server).await?;
     let stream_factory = |request: StreamRequest<DefaultDisplayEngine>| match request {
         StreamRequest::Raw => {
             let (json_stream, done_receiver) = json_stream::JsonStream::new_with_receiver(true);
@@ -174,7 +167,6 @@ async fn prompt<S: ShEntriesBuilder>(
     };
     let prompt = Prompt::new(
         &mut shell,
-        sh_entries_builder,
         DefaultDisplayEngine::default(),
         stream_factory,
         stop_signal.signal(),
@@ -183,11 +175,7 @@ async fn prompt<S: ShEntriesBuilder>(
     prompt.run().await
 }
 
-pub async fn open_prompt<S: ShEntriesBuilder>(
-    client: dusk::Client,
-    sh_entries_builder: S,
-    server_pid: u64,
-) -> anyhow::Result<()> {
+pub async fn open_prompt(client: dusk::Client, server_pid: u64) -> anyhow::Result<()> {
     let connecting_stop = StopSignal::new();
     let mut view_opened = false;
     let mut refusals = 0u64;
@@ -196,7 +184,6 @@ pub async fn open_prompt<S: ShEntriesBuilder>(
         let program_args = if view_opened {
             let mut sh_args = ShArgs::new(
                 client.clone(),
-                sh_entries_builder.clone(),
                 ShMode::Prompt {
                     client_hostname: client_hostname(),
                     server_pid,
@@ -205,12 +192,7 @@ pub async fn open_prompt<S: ShEntriesBuilder>(
             sh_args.created = None;
             sh_args.as_program_args()?
         } else {
-            program_args_for_command(
-                client.clone(),
-                sh_entries_builder.clone(),
-                &format!("sh --prompt {server_pid}"),
-            )
-            .await?
+            program_args_for_command(client.clone(), &format!("sh --prompt {server_pid}")).await?
         };
         let attempt = async {
             let mut process_request = client.process_request();

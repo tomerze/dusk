@@ -1,5 +1,5 @@
 use crate::client::Created;
-use crate::entry::ShEntriesBuilder;
+use crate::entry::sh_entries;
 use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
 use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::{created, dusk};
@@ -29,17 +29,16 @@ fn read_bytecode(
 }
 
 #[derive(dusk_program_proc::Args)]
-pub struct ShArgs<S: ShEntriesBuilder> {
+pub struct ShArgs {
     #[data]
     pub data: ArgsDataBuilder,
     #[created]
     pub created: Option<created::Client>,
     pub client: dusk::Client,
-    pub sh_entries_builder: S,
 }
 
-impl<S: ShEntriesBuilder> ShArgs<S> {
-    pub fn new(client: dusk::Client, sh_entries_builder: S, mode: ShMode) -> anyhow::Result<Self> {
+impl ShArgs {
+    pub fn new(client: dusk::Client, mode: ShMode) -> anyhow::Result<Self> {
         let mut data = ArgsDataBuilder::new_default();
         let mut created = None;
         {
@@ -61,7 +60,6 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
                     data_builder.set_prompt(&client_hostname);
                     created = Some(capnp_rpc::new_client(Created {
                         client: client.clone(),
-                        sh_entries_builder: sh_entries_builder.clone(),
                         server_pid,
                     }));
                 }
@@ -71,14 +69,12 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
             data,
             created,
             client,
-            sh_entries_builder,
         })
     }
 }
 
-pub async fn program_args_for_command<S: ShEntriesBuilder>(
+pub async fn program_args_for_command(
     client: dusk::Client,
-    sh_entries_builder: S,
     command: &str,
 ) -> anyhow::Result<Rc<ProgramArgs>> {
     let (remaining, words) = crate::parser::command_words(command)
@@ -89,11 +85,10 @@ pub async fn program_args_for_command<S: ShEntriesBuilder>(
     let program = words
         .first()
         .ok_or_else(|| anyhow::anyhow!("empty command"))?;
-    let builder = sh_entries_builder
-        .get_entries()
-        .into_iter()
+    let builder = sh_entries()
+        .iter()
         .find(|entry| entry.info.name == *program)
-        .map(|entry| entry.program_args_builder)
+        .map(|entry| entry.program_args_builder.clone())
         .ok_or_else(|| anyhow::anyhow!("no sh entry found for `{program}`"))?;
     let arg_refs: Vec<&str> = words[1..].to_vec();
     builder
@@ -103,7 +98,7 @@ pub async fn program_args_for_command<S: ShEntriesBuilder>(
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
-impl<S: ShEntriesBuilder> ShArgs<S> {
+impl ShArgs {
     fn compiler(
         &mut self,
         _params: sh_capnp::sh_args::server::CompilerParams,
@@ -111,18 +106,16 @@ impl<S: ShEntriesBuilder> ShArgs<S> {
     ) -> capnp::capability::Promise<(), capnp::Error> {
         results.get().set_result(capnp_rpc::new_client(ShCompiler {
             client: self.client.clone(),
-            sh_entries_builder: self.sh_entries_builder.clone(),
         }));
         capnp::capability::Promise::ok(())
     }
 }
 
-pub struct ShCompiler<S: ShEntriesBuilder> {
+pub struct ShCompiler {
     pub client: dusk::Client,
-    pub sh_entries_builder: S,
 }
 
-impl<S: ShEntriesBuilder + 'static> sh_capnp::compiler::Server for ShCompiler<S> {
+impl sh_capnp::compiler::Server for ShCompiler {
     fn build_program_args(
         &mut self,
         params: sh_capnp::compiler::BuildProgramArgsParams,
@@ -130,9 +123,8 @@ impl<S: ShEntriesBuilder + 'static> sh_capnp::compiler::Server for ShCompiler<S>
     ) -> capnp::capability::Promise<(), capnp::Error> {
         let command = pry!(pry!(pry!(params.get()).get_command()).to_str()).to_string();
         let client = self.client.clone();
-        let sh_entries_builder = self.sh_entries_builder.clone();
         capnp::capability::Promise::from_future(async move {
-            let program_args = program_args_for_command(client, sh_entries_builder, &command)
+            let program_args = program_args_for_command(client, &command)
                 .await
                 .into_capnp()?;
             program_args.with_reader(|reader| results.get().set_program_args(reader))?;

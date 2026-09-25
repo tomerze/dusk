@@ -1,4 +1,3 @@
-use crate::entry::ShEntriesBuilder;
 use crate::sh_capnp::{compiler, sh_portal, sh_stop};
 use crate::{ShArgs, ShCompiler, ShMode};
 use capnp::capability::{FromClientHook, Promise};
@@ -47,12 +46,11 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub async fn recreate_sh_process<S: ShEntriesBuilder>(
+    pub async fn recreate_sh_process(
         client: dusk::Client,
-        sh_entries_builder: S,
         pid: u64,
     ) -> capnp::Result<process::Client> {
-        let sh_args = ShArgs::new(client.clone(), sh_entries_builder, ShMode::Server)
+        let sh_args = ShArgs::new(client.clone(), ShMode::Server)
             .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
         let program_args = sh_args.as_program_args()?;
         program_args.set_pid(Some(pid))?;
@@ -106,11 +104,7 @@ impl Shell {
         })
     }
 
-    pub async fn new<S: ShEntriesBuilder>(
-        client: dusk::Client,
-        sh_entries_builder: S,
-        served: process::Client,
-    ) -> Result<Self> {
+    pub async fn new(client: dusk::Client, served: process::Client) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
@@ -124,7 +118,6 @@ impl Shell {
 
         let compiler = capnp_rpc::new_client(ShCompiler {
             client: client.clone(),
-            sh_entries_builder: sh_entries_builder.clone(),
         });
 
         let mut served = Some(served);
@@ -134,7 +127,6 @@ impl Shell {
             }
             Ok(capnp_rpc::new_future_client(Self::recreate_sh_process(
                 client.clone(),
-                sh_entries_builder.clone(),
                 sh_pid,
             )))
         })?;
