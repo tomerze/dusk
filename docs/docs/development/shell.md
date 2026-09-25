@@ -143,13 +143,16 @@ one description of what a script compiles to.
 Compiling needs the `SH_ENTRIES` table and the command's clap parser to build that
 program's args, so it happens wherever the source is read. That is the client at a
 prompt, and it is the build for a script known in advance:
-`dusk_program_sh_compiler_proc::compile_sh!` resolves a command and hands back
-the bytes while the calling crate compiles, which is how the node artifact gets its
-init script. Both capabilities in that path are disconnected - the `Dusk` client the
-entry builder is handed, and the args `Server` the bytes carry - because bytes cannot
-carry a capability. A program that wants either asks and finds it disconnected.
-`tests/common` picks its port at run time, so it compiles its line itself with a
-disconnected client rather than through the macro.
+`dusk_program_sh_compiler_proc::compile_sh!` resolves a command through
+`compile_to_words` and hands back the bytes while the calling crate compiles, which
+is how the node artifact gets its init script. Bytes cannot carry a capability, so
+the `Dusk` client the entry builder is handed is disconnected, and each command's
+args `Server` and `created` are left out: a program in such a script that asks for
+its `Server` fails with `Message contains null capability pointer`. Every other caller
+gets its script from `compile` as a `BytecodeMessage` (a `capnp_rpc::ImbuedMessageBuilder`), which keeps
+each command's capabilities in a table beside the message, so `ShMode::Script` and
+`ShMode::DetachedScript` hand them to the node. `tests/common` picks its port at run
+time, so it calls `compile_to_words` itself rather than going through the macro.
 
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
 to end of line, and only when the `#` starts a word - a `#` inside a word
