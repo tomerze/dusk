@@ -91,7 +91,11 @@ impl DuskNixImpl {
 
         let node_address = address.clone();
         std::thread::spawn(move || {
-            let init_program_args = InitArgs::new(&node_address, port)
+            let init_script =
+                dusk_program_sh::compile::compile(&format!("nightfall -l {node_address}:{port}"))
+                    .expect("compile the init script");
+            let init_program_args = InitArgs::new(&init_script)
+                .expect("build init args")
                 .as_program_args()
                 .expect("build init program_args");
             let launcher_set =
