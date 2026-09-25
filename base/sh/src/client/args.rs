@@ -1,5 +1,5 @@
 use crate::bytecode;
-use crate::entry::{ShEntriesBuilder, ShEntry};
+use crate::entry::{ShEntry, sh_entries};
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow::{self, Context};
 use dusk_program::program_args::ProgramArgs;
@@ -9,16 +9,14 @@ use std::rc::Rc;
 use std::string::String;
 use std::vec::Vec;
 
-pub async fn compile<S: ShEntriesBuilder>(
+pub async fn compile(
     client: dusk::Client,
-    sh_entries_builder: S,
     source: &str,
     defined_functions: &[String],
 ) -> anyhow::Result<Vec<u8>> {
     let mut message = capnp::message::Builder::new(capnp::message::HeapAllocator::new());
     write(
         client,
-        sh_entries_builder,
         source,
         defined_functions,
         message.init_root::<bytecode::Builder<'_>>(),
@@ -34,16 +32,14 @@ enum Capabilities {
     Disconnected,
 }
 
-pub async fn compile_into<S: ShEntriesBuilder>(
+pub async fn compile_into(
     client: dusk::Client,
-    sh_entries_builder: S,
     source: &str,
     defined_functions: &[String],
     builder: bytecode::Builder<'_>,
 ) -> anyhow::Result<()> {
     write(
         client,
-        sh_entries_builder,
         source,
         defined_functions,
         builder,
@@ -52,9 +48,8 @@ pub async fn compile_into<S: ShEntriesBuilder>(
     .await
 }
 
-async fn write<S: ShEntriesBuilder>(
+async fn write(
     client: dusk::Client,
-    sh_entries_builder: S,
     source: &str,
     defined_functions: &[String],
     builder: bytecode::Builder<'_>,
@@ -62,7 +57,7 @@ async fn write<S: ShEntriesBuilder>(
 ) -> anyhow::Result<()> {
     let stripped = tokenize::strip_comments(source);
     let parsed = parser::parse(&stripped)?;
-    let entries = sh_entries_builder.get_entries();
+    let entries = sh_entries();
     let mut resolved = Vec::new();
     let enclosing: HashSet<String> = defined_functions.iter().cloned().collect();
     resolve_ast(&parsed, &client, &entries, &enclosing, &mut resolved).await?;

@@ -6,7 +6,7 @@ use dusk_connection::Connection;
 use dusk_program::anyhow::Result;
 use dusk_program_sh::client::open_prompt;
 use dusk_program_sh::client::shell::Shell;
-use dusk_program_sh::entry::{EntryInfo, GetAvailableProgramsInfo, StaticShEntriesBuilder};
+use dusk_program_sh::entry::{EntryInfo, sh_entries};
 use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -158,9 +158,7 @@ impl Dusk {
     #[staticmethod]
     #[pyo3(signature = (program_name = String::new()))]
     fn help(py: Python<'_>, program_name: String) -> PyResult<Bound<'_, PyAny>> {
-        let programs = StaticShEntriesBuilder::default()
-            .get_available_programs_info()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let programs: Vec<EntryInfo> = sh_entries().iter().map(|entry| entry.info).collect();
 
         if program_name.is_empty() {
             let dicts = programs
@@ -233,7 +231,6 @@ impl Dusk {
                 .await?;
                 Shell::new(
                     client.clone(),
-                    StaticShEntriesBuilder::default(),
                     process,
                 )
                 .await
@@ -263,7 +260,6 @@ impl Dusk {
                         tokio::task::spawn_local(async move {
                             let result = stop_on_ctrl_c(open_prompt(
                                 client,
-                                StaticShEntriesBuilder::default(),
                                 server_pid,
                             ))
                             .await;

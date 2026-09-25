@@ -1,5 +1,3 @@
-use crate::entry::ShEntriesBuilder;
-use crate::entry::ShEntry;
 use crate::sh_capnp::{sh_portal, sh_stop};
 use crate::{ShArgs, ShMode};
 use capnp::capability::{FromClientHook, Promise};
@@ -41,7 +39,6 @@ pub struct Shell {
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
     client: dusk::Client,
-    entries: Vec<ShEntry>,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
@@ -106,11 +103,7 @@ impl Shell {
         })
     }
 
-    pub async fn new<S: ShEntriesBuilder>(
-        client: dusk::Client,
-        sh_entries_builder: S,
-        served: process::Client,
-    ) -> Result<Self> {
+    pub async fn new(client: dusk::Client, served: process::Client) -> Result<Self> {
         let hostname_reply = client.hostname_request().send().promise.await?;
         let hostname = hostname_reply.get()?.get_result()?.to_str()?;
 
@@ -140,7 +133,6 @@ impl Shell {
         Ok(Shell {
             sh_process,
             client: client.clone(),
-            entries: sh_entries_builder.get_entries(),
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -171,9 +163,6 @@ impl Shell {
         });
 
         let client = self.client.clone();
-        let entries = crate::entry::DynamicShEntriesBuilder {
-            entries: self.entries.clone(),
-        };
         let script = String::from(script);
         let functions_of = self.sh_process.clone();
 
@@ -182,7 +171,6 @@ impl Shell {
             let mut sh_request = sh_portal.sh_request();
             crate::client::args::compile_into(
                 client,
-                entries,
                 &script,
                 &defined_functions,
                 sh_request.get().init_script(),

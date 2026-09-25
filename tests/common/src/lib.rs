@@ -99,7 +99,6 @@ impl DuskNixImpl {
                 });
             let init_script = futures::executor::block_on(dusk_program_sh::compile(
                 disconnected,
-                dusk_program_sh::entry::StaticShEntriesBuilder::default(),
                 &format!("nightfall -l {node_address}:{port}"),
                 &[],
             ))

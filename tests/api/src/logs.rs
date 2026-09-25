@@ -29,7 +29,6 @@ use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
 use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
-use dusk_program_sh::entry::StaticShEntriesBuilder;
 use dusk_program_sh::sh_capnp;
 use dusk_program_sh::{ShArgs, ShMode};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
@@ -102,13 +101,7 @@ async fn drive_logs_stream(
     // `logs stream` runs until torn down, so its done long-poll never fires and
     // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
     let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
-    let script = dusk_program_sh::compile(
-        client.clone(),
-        StaticShEntriesBuilder::default(),
-        command,
-        &[],
-    )
-    .await?;
+    let script = dusk_program_sh::compile(client.clone(), command, &[]).await?;
     let program_args = ShArgs::new(ShMode::Script(script))?.as_program_args()?;
     let drive = async {
         let mut process_request = client.process_request();

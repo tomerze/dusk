@@ -1119,7 +1119,7 @@ resolves, the caller runs the process, and the spawned task's `portal()`
 resolves as it does:
 
 ```rust
-impl<S: ShEntriesBuilder> created::Server for Created<S> {
+impl created::Server for Created {
     fn created(
         &mut self,
         params: created::CreatedParams,

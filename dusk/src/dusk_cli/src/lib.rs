@@ -9,7 +9,6 @@ use dusk_base::dusk_program_sh::{
         prompt::stream::json_stream::JsonStream,
         stop::{StopSignal, stop_innermost},
     },
-    entry::StaticShEntriesBuilder,
     sh_capnp::{DEFAULT_PID, output_portal},
 };
 use dusk_connection::Connection;
@@ -39,13 +38,7 @@ async fn kill(client: &dusk::Client, pid: u64) {
 
 async fn script(client: dusk::Client, command: String) -> Result<()> {
     let stop_signal = StopSignal::new();
-    let script = dusk_base::dusk_program_sh::compile(
-        client.clone(),
-        StaticShEntriesBuilder::default(),
-        &command,
-        &[],
-    )
-    .await?;
+    let script = dusk_base::dusk_program_sh::compile(client.clone(), &command, &[]).await?;
     let program_args = ShArgs::new(ShMode::Script(script))?.as_program_args()?;
     let mut process_request = client.process_request();
     program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
@@ -105,7 +98,7 @@ async fn run_sh(connection: &Connection, command: Option<String>) -> Result<()> 
     let client = connection.client().await;
     match command {
         Some(command) => script(client, command).await,
-        None => open_prompt(client, StaticShEntriesBuilder::default(), DEFAULT_PID).await,
+        None => open_prompt(client, DEFAULT_PID).await,
     }
 }
 
