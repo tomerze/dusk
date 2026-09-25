@@ -7,8 +7,9 @@ pty behind a websocket, and drive that websocket the way a person drives a
 keyboard. A bare pty is not enough: nothing in it answers the cursor-position
 query, and the prompt gives up.
 
-Each test gets its own node (a real ``dusk_node`` process on its own port) and
-its own terminal, so tests never share shell state.
+Each test gets its own node (a real ``dusk_node`` process, which always listens
+on port 9090, so the tests run one at a time) and its own terminal, so tests
+never share shell state.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ REPOSITORY = pathlib.Path(__file__).resolve().parents[2]
 NODE_BINARY = REPOSITORY / "target/debug/dusk_node"
 CLI_BINARY = REPOSITORY / "target/debug/dusk"
 ADDRESS = "127.0.0.1"
+NODE_PORT = 9090
 
 
 def free_port() -> int:
@@ -59,9 +61,12 @@ class Node:
     """A dusk_node of this test's own, plus the client commands to poke it."""
 
     def __init__(self) -> None:
-        self.port = free_port()
+        self.port = NODE_PORT
+        with socket.socket() as probe:
+            if probe.connect_ex((ADDRESS, self.port)) == 0:
+                raise AssertionError(f"something already listens on {ADDRESS}:{self.port}")
         self.process = subprocess.Popen(
-            [str(NODE_BINARY), f"{ADDRESS}:{self.port}"],
+            [str(NODE_BINARY)],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
