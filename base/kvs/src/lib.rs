@@ -123,11 +123,15 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let data = self
+        let mut data = self
             .ctx
             .program_args
             .data_owned::<kvs_capnp::kvs_args::data::Owned>()?;
-        match data.get_root_as_reader()?.which()? {
+        match data
+            .get_root::<kvs_capnp::kvs_args::data::Builder>()?
+            .into_reader()
+            .which()?
+        {
             kvs_capnp::kvs_args::data::Which::Get(key) => {
                 let value = self
                     .kvs

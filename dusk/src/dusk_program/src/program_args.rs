@@ -112,18 +112,12 @@ impl ProgramArgs {
         f(data.get_as::<<T as Owned>::Reader<'_>>()?)
     }
 
-    pub fn data_owned<T: Owned>(&self) -> capnp::Result<capnp::message::TypedBuilder<T>> {
-        let mut message_builder = self.inner.borrow_mut();
-        let root: program_args::Builder<'_, any_pointer::Owned, any_pointer::Owned> =
-            message_builder.get_root()?;
-        let data_reader = root
-            .into_reader()
-            .get_args()
-            .get_data()?
-            .get_as::<<T as Owned>::Reader<'_>>()?;
-        let mut owned = capnp::message::TypedBuilder::<T>::new_default();
-        owned.set_root(data_reader)?;
-        Ok(owned)
+    pub fn data_owned<T: Owned>(&self) -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>> {
+        self.with_data::<T, _, _>(|data| {
+            let mut owned = ImbuedMessageBuilder::new(HeapAllocator::new());
+            owned.set_root::<T>(data)?;
+            Ok(owned)
+        })
     }
 
     /// Extract `args.server` as the capability type `T`.
