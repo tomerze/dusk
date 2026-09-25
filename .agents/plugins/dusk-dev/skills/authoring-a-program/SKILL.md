@@ -516,17 +516,17 @@ Use `select!` whenever `main` has to *concurrently* watch the signal channel and
 
 ### Pattern D - Multi-mode args + daemonized fire-and-forget
 
-This is the `sh` pattern (`base/sh/src/lib.rs:276-340`). See **Daemonization** below for the full breakdown.
+This is the `sh` pattern (`base/sh/src/lib.rs`). See **Daemonization** below for the full breakdown.
 
 ### Reading from `program_args`
 
 There are three accessors on `ProgramArgs`, all in `dusk_program::program_args`:
 
 - **`with_data::<T, _, _>(|reader| …)`** - synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure.
-- **`data_owned::<T>() -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>>`** - copies the data, capabilities included, into an owned message; read it with `get_root::<T::Builder>()?.into_reader()`. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this (`base/sh/src/lib.rs:420-423`) because the script needs to outlive the closure.
+- **`data_owned::<T>() -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>>`** - copies the data, capabilities included, into an owned message; read it with `get_root::<T::Builder>()?.into_reader()`. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this because the script needs to outlive the closure.
 - **`reader_owned() -> capnp::Result<Rc<ProgramArgs>>`** - clone the whole args message. Rare; reach for it when you need the untyped reader to outlive the closure.
 
-To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. The `sh` process does this at `base/sh/src/lib.rs:281-284` to retrieve `sh_args::server::Client`.
+To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. `logs` does this in `main` to get its `logs_args::server::Client`, and asks it for the stream to write its events into with `open_stream`.
 
 ### When to call `ready.sender().send(true)`
 
@@ -691,7 +691,7 @@ Promise::from_future(async move {
 })
 ```
 
-See `base/sh/src/lib.rs:350-389`. The `pending` future after signalling `stop` is intentional: we only want to surface the *completion* result, not "you cancelled" as the return.
+See `Portal::sh` in `base/sh/src/lib.rs`. The `pending` future after signalling `stop` is intentional: we only want to surface the *completion* result, not "you cancelled" as the return.
 
 ---
 
@@ -751,7 +751,7 @@ See `base/logs/src/lib.rs` for the live example.
 
 A "daemonized" Dusk program is one whose `Process::main` spawns a background Embassy task that outlives any single RPC call. The process itself stays parked on the signal channel; the work happens in the spawned task.
 
-The pattern, distilled from `base/sh/src/lib.rs:194-228, 307-340`:
+The pattern, distilled from `base/sh/src/lib.rs` and `base/sh/src/exec.rs`:
 
 ### 1. A `Stop` type for cancellation
 
@@ -986,7 +986,7 @@ async move {
 }.instrument(span).await;
 ```
 
-`task_id` is always the **first** span field. Domain-specific fields follow - common ones: `pid`, `namespace_id`, `program_id`, `program_name`. See `base/sh/src/lib.rs:177` for the canonical example.
+`task_id` is always the **first** span field. Domain-specific fields follow - common ones: `pid`, `namespace_id`, `program_id`, `program_name`. See `sh_exec_task` in `base/sh/src/exec.rs` for the canonical example.
 
 ### Log levels
 
