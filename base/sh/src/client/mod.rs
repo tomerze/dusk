@@ -8,7 +8,6 @@ use crate::VERSION;
 use crate::entry::{EntryInfo, ShEntry};
 use crate::sh_capnp;
 use crate::{ShArgs, ShMode};
-use args::program_args_for_command;
 use capnp::capability::Promise;
 use cli::ShProgramArgsBuilder;
 use dusk_capnp::capnp_rpc;
@@ -181,19 +180,17 @@ pub async fn open_prompt(client: dusk::Client, server_pid: u64) -> anyhow::Resul
     let mut refusals = 0u64;
     let mut last_report = tokio::time::Instant::now();
     loop {
-        let program_args = if view_opened {
-            let mut sh_args = ShArgs::new(
-                client.clone(),
-                ShMode::Prompt {
-                    client_hostname: client_hostname(),
-                    server_pid,
-                },
-            )?;
+        let mut sh_args = ShArgs::new(
+            client.clone(),
+            ShMode::Prompt {
+                client_hostname: client_hostname(),
+                server_pid,
+            },
+        )?;
+        if view_opened {
             sh_args.created = None;
-            sh_args.as_program_args()?
-        } else {
-            program_args_for_command(client.clone(), &format!("sh --prompt {server_pid}")).await?
-        };
+        }
+        let program_args = sh_args.as_program_args()?;
         let attempt = async {
             let mut process_request = client.process_request();
             program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
