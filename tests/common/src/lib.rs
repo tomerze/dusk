@@ -91,9 +91,18 @@ impl DuskNixImpl {
 
         let node_address = address.clone();
         std::thread::spawn(move || {
-            let init_script =
-                dusk_program_sh::compile::compile(&format!("nightfall -l {node_address}:{port}"))
-                    .expect("compile the init script");
+            let disconnected: dusk_capnp::dusk_capnp::dusk::Client =
+                capnp_rpc::new_future_client(async {
+                    Err(capnp::Error::disconnected(
+                        "the test harness has no node to talk to yet".to_string(),
+                    ))
+                });
+            let init_script = futures::executor::block_on(dusk_program_sh::compile(
+                disconnected,
+                &format!("nightfall -l {node_address}:{port}"),
+                &[],
+            ))
+            .expect("compile the init script");
             let init_program_args = InitArgs::new(&init_script)
                 .expect("build init args")
                 .as_program_args()
