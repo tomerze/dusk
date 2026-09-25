@@ -295,7 +295,7 @@ finished, error or not (a failure to close is logged at `warn`).
 
 Functions are the one piece of shell state that outlives a single line.
 
-**Storage.** The `function_table` (`Arc<Mutex<HashMap<String, CompiledScript>>>`)
+**Storage.** The `function_table` (`Arc<Mutex<HashMap<String, Rc<RefCell<BytecodeMessage>>>>>`)
 belongs to the `sh` `Process`, made when the process is. Each `sh` has its own:
 a function defined at a prompt lives in the shell server that prompt is attached
 to, where the next client attaching to it finds it, and a `sh <command>` or
