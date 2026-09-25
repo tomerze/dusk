@@ -103,7 +103,7 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                 impl $($impl_generics)* $($self_ty)* $($where_clause)* {
                     #[allow(unused_qualifications)]
                     pub fn as_program_args(
-                        self,
+                        mut self,
                     ) -> dusk_program::dusk_capnp::capnp::Result<
                         alloc::rc::Rc<dusk_program::program_args::ProgramArgs>,
                     > {
@@ -116,8 +116,9 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                         owned.with_root_builder(|mut root| {
                             root.set_program_id(PROGRAM_ID);
                             let mut data_dest = root.init_args().init_data();
-                            let data_reader = self.$data_field.get_root_as_reader()?;
-                            data_dest.set_as::<#data_owned>(data_reader)
+                            let data_builder: <#data_owned as dusk_program::dusk_capnp::capnp::traits::Owned>::Builder<'_> =
+                                self.$data_field.get_root()?;
+                            data_dest.set_as::<#data_owned>(data_builder.into_reader())
                         })?;
                         $(
                             if let Some(created) = self.$created_field.clone() {
