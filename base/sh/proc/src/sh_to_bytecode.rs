@@ -1,9 +1,9 @@
-use dusk_program_sh_bytecode::bytecode;
+use dusk_program_sh_compiler::compile;
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 
 pub(crate) fn expand(source: &str) -> Result<TokenStream, String> {
-    let lowered = bytecode::lower_from_source(source).map_err(|error| error.to_string())?;
-    let lowered = Literal::byte_string(&lowered);
-    Ok(quote! { #lowered.to_vec() })
+    let bytecode = compile::compile(source).map_err(|error| error.to_string())?;
+    let bytecode = Literal::byte_string(&bytecode);
+    Ok(quote! { #bytecode.to_vec() })
 }

@@ -109,7 +109,7 @@ base/<name>/
     └── client.rs        # optional, gated by feature "client"
 ```
 
-Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/bytecode`, for the part something outside `base/sh` has to reach. Keep `lib.rs` as the program's public surface and push internals into modules.
+Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/compiler`, for the part something outside `base/sh` has to reach. Keep `lib.rs` as the program's public surface and push internals into modules.
 
 ---
 

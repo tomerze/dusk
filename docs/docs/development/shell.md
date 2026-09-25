@@ -12,8 +12,8 @@ travel back.
 | Crate | Side | Role |
 |-------|------|------|
 | `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
-| `base/sh/bytecode` | both | `dusk_program_sh_bytecode` - `capnp/bytecode.capnp` always; the grammar, the AST and the `Parser` that lowers source to bytecode behind its `parser` feature, so a node compiles only the schema |
-| `base/sh/proc` | client (`std`) | `#[sh_entry]`, and `sh_to_bytecode!`, which lowers source to bytecode at the calling crate's build time |
+| `base/sh/compiler` | both | `dusk_program_sh_compiler` - `capnp/bytecode.capnp` always; the grammar, the AST and the `Parser` that compiles source to bytecode behind its `parser` feature, so a node compiles only the schema |
+| `base/sh/proc` | client (`std`) | `#[sh_entry]`, and `sh_to_bytecode!`, which compiles source to bytecode at the calling crate's build time |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
 | `base/sh/src/client/shell/` | client (`std`) | `Shell` - drives the `sh` process a client was handed |
 | `dusk_connection` | client (`std`) | `Connection` - the TCP/RPC link |
@@ -24,12 +24,12 @@ travel back.
 raw text            "ps && date  # comment"           reedline buffer (client/prompt)
    │ strip_comments
 stripped text       "ps && date  "                    quote-aware comment removal
-   │ nom (bytecode/src/tokenize.rs)
+   │ nom (compiler/src/tokenize.rs)
 nom AST             Ast{ [Expr(And(Command "ps",       transient, client-side only
                                    Command "date"))] }
    │ Parser::parse  ─────────────────────────────────  CLIENT / SERVER BOUNDARY
 capnp Script        Script{ statements:[…] }           the wire format (script.capnp)
-   │ compiler::compile  (server-side)
+   │ codegen::codegen  (server-side)
 Frame (bytecode)    0000: program_args                 Vec<Inst>
                     0001: jump_if_error 0003
                     0002: program_args
@@ -121,20 +121,20 @@ Either way the server side is identical: a `Script` reader handed to
 
 ## Syntax
 
-The grammar is a nom parser in `base/sh/bytecode/`. It is deliberately tiny.
+The grammar is a nom parser in `base/sh/compiler/`. It is deliberately tiny.
 
-Source is lowered to bytecode before it goes anywhere else. `ShMode::Script`
+Source is compiled to bytecode before it goes anywhere else. `ShMode::Script`
 and `ShMode::DetachedScript` carry bytecode, never source, so every caller runs
-`bytecode::lower_from_source` first - the CLI, the `sh` entry, the prompt's
-`Shell::sh` - and there is one description of what a script lowers to.
+`compile::compile` first - the CLI, the `sh` entry, the prompt's
+`Shell::sh` - and there is one description of what a script compiles to.
 
-That lowering can also happen at build time.
+Compiling can also happen at build time.
 `dusk_program_sh_proc::sh_to_bytecode!("echo hi")` - from the
 `dusk_program_sh_proc` crate, which a caller adds alongside `dusk_program_sh` -
 runs the same call while the calling crate is compiled and expands to the
 bytecode it produced, ready to hand to `ShMode::Script`. A syntax error is then
-a compile error. The parser is still linked, because every other caller lowers
-at run time; what build-time lowering buys is that that script is never parsed
+a compile error. The parser is still linked, because every other caller compiles
+at run time; what build-time compiling buys is that that script is never parsed
 at run time.
 
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
@@ -198,12 +198,12 @@ struct Script {
 
 ## Compilation
 
-`compiler::compile` (`base/sh/src/interpreter/compiler.rs`) lowers a `Script`
+`codegen::codegen` (`base/sh/src/interpreter/codegen.rs`) turns a `Script`
 reader into a `Frame` - a flat `Vec<Inst>` walked by a program counter. It runs
 **every time a script executes** (`Interpreter::exec`), plus per-function via
-`compile_function` (see [Functions](#functions)).
+`codegen_function` (see [Functions](#functions)).
 
-The instruction set (`inst.rs`):
+The instruction set (`instructions.rs`):
 
 | Inst | Meaning |
 |------|---------|
@@ -281,11 +281,11 @@ compiled frame, and eagerly recompiles. Redefining overwrites (logged at `info`)
 Defining with an **empty body** removes the function - that is how you undefine
 one.
 
-**Compilation & caching.** Function bodies are compiled by `compile_function`
+**Compilation & caching.** Function bodies are compiled by `codegen_function`
 into a per-`Interpreter` `compiled_functions` cache. Compilation is lazy on first
 `Call`, eager on definition (and eagerly chases the dependencies a body calls).
 Recursion is handled by a set of the symbols being compiled, local to one
-`compile_function` call, so a self-reference short-circuits instead of looping
+`codegen_function` call, so a self-reference short-circuits instead of looping
 the compiler. Nothing enters the cache until its frame is complete, and a frame
 compiled from a body that was redefined meanwhile is not cached at all - every
 script the `sh` process runs shares the cache, so a half-built entry would be

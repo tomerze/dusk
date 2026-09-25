@@ -8,27 +8,27 @@ use hashbrown::HashSet;
 use crate::script;
 use crate::sh_capnp;
 
-use super::inst::{self, Frame, Inst, ScriptWrapper};
+use super::instructions::{self, Frame, Inst, ScriptWrapper};
 use super::{CompiledFunctions, FunctionTable};
 
-pub(super) async fn compile(
+pub(super) async fn codegen(
     script: script::Reader<'_>,
     compiler: sh_capnp::compiler::Client,
     mut functions: HashSet<String>,
 ) -> Result<Frame> {
     let mut output_frame = Frame::new();
-    compile_script(script, &compiler, &mut functions, &mut output_frame).await?;
+    codegen_script(script, &compiler, &mut functions, &mut output_frame).await?;
     optimize_tail_call(&mut output_frame);
     Ok(output_frame)
 }
 
-pub(super) async fn compile_function(
+pub(super) async fn codegen_function(
     function_table: &FunctionTable,
     compiled_functions: &CompiledFunctions,
     compiler: sh_capnp::compiler::Client,
     symbol: &str,
 ) -> Result<Arc<Frame>> {
-    compile_function_once(
+    codegen_function_once(
         function_table,
         compiled_functions,
         compiler,
@@ -39,7 +39,7 @@ pub(super) async fn compile_function(
 }
 
 #[allow(clippy::arc_with_non_send_sync)]
-fn compile_function_once<'a>(
+fn codegen_function_once<'a>(
     function_table: &'a FunctionTable,
     compiled_functions: &'a CompiledFunctions,
     compiler: sh_capnp::compiler::Client,
@@ -62,9 +62,9 @@ fn compile_function_once<'a>(
 
         let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
         let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
-        let frame = compile(script, compiler.clone(), symbols).await?;
+        let frame = codegen(script, compiler.clone(), symbols).await?;
         tracing::debug!(
-            dump = %inst::format_instructions(&frame),
+            dump = %instructions::format_instructions(&frame),
             symbol = symbol,
             "function frame disassembly"
         );
@@ -79,7 +79,7 @@ fn compile_function_once<'a>(
             .collect();
         for dep in dep_symbols {
             // Ignore errors / missing bodies - runtime resolve will surface them.
-            let _ = compile_function_once(
+            let _ = codegen_function_once(
                 function_table,
                 compiled_functions,
                 compiler.clone(),
@@ -113,7 +113,7 @@ fn optimize_tail_call(frame: &mut Frame) {
     }
 }
 
-fn compile_script<'a>(
+fn codegen_script<'a>(
     script: script::Reader<'a>,
     compiler: &'a sh_capnp::compiler::Client,
     functions: &'a mut HashSet<String>,
@@ -121,13 +121,13 @@ fn compile_script<'a>(
 ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>> {
     Box::pin(async move {
         for statement in script.get_statements()?.iter() {
-            compile_statement(statement, compiler, functions, output_frame).await?;
+            codegen_statement(statement, compiler, functions, output_frame).await?;
         }
         Ok(())
     })
 }
 
-async fn compile_statement<'a>(
+async fn codegen_statement<'a>(
     statement: script::statement::Reader<'a>,
     compiler: &sh_capnp::compiler::Client,
     functions: &mut HashSet<String>,
@@ -135,7 +135,7 @@ async fn compile_statement<'a>(
 ) -> Result<()> {
     use script::statement::Which;
     match statement.which()? {
-        Which::Expr(expr) => compile_expr(expr?, compiler, functions, output_frame).await,
+        Which::Expr(expr) => codegen_expr(expr?, compiler, functions, output_frame).await,
         Which::FunctionDefinition(def) => {
             let def = def?;
             let symbol = def.get_symbol()?.to_str()?.to_string();
@@ -151,7 +151,7 @@ async fn compile_statement<'a>(
     }
 }
 
-fn compile_expr<'a>(
+fn codegen_expr<'a>(
     expr: script::statement::expr::Reader<'a>,
     compiler: &'a sh_capnp::compiler::Client,
     functions: &'a mut HashSet<String>,
@@ -180,7 +180,7 @@ fn compile_expr<'a>(
                 Ok(())
             }
             Which::And(Ok(pair)) => {
-                compile_expr(
+                codegen_expr(
                     pair.reborrow().get_first()?,
                     compiler,
                     functions,
@@ -189,7 +189,7 @@ fn compile_expr<'a>(
                 .await?;
                 let jump_idx = output_frame.len();
                 output_frame.push(Inst::JumpIfError(0)); // patched below
-                compile_expr(
+                codegen_expr(
                     pair.reborrow().get_second()?,
                     compiler,
                     functions,
@@ -201,7 +201,7 @@ fn compile_expr<'a>(
                 Ok(())
             }
             Which::Or(Ok(pair)) => {
-                compile_expr(
+                codegen_expr(
                     pair.reborrow().get_first()?,
                     compiler,
                     functions,
@@ -210,7 +210,7 @@ fn compile_expr<'a>(
                 .await?;
                 let jump_idx = output_frame.len();
                 output_frame.push(Inst::JumpIfOk(0)); // patched below
-                compile_expr(
+                codegen_expr(
                     pair.reborrow().get_second()?,
                     compiler,
                     functions,

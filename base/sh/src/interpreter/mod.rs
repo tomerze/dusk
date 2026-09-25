@@ -16,11 +16,11 @@ use dusk_capnp::dusk_capnp::stream;
 
 use execution::ExecutionError;
 pub use execution::Stop;
-use inst::{Frame, Inst, ScriptWrapper};
+use instructions::{Frame, Inst, ScriptWrapper};
 
-mod compiler;
+mod codegen;
 mod execution;
-mod inst;
+mod instructions;
 
 pub(crate) type FunctionTable =
     Arc<Mutex<CriticalSectionRawMutex, HashMap<String, Arc<ScriptWrapper>>>>;
@@ -51,7 +51,7 @@ impl Interpreter {
         if let Some(frame) = self.compiled_functions.borrow().get(symbol).cloned() {
             return Ok(frame);
         }
-        compiler::compile_function(
+        codegen::codegen_function(
             &self.function_table,
             &self.compiled_functions,
             compiler.clone(),
@@ -69,9 +69,9 @@ impl Interpreter {
         compiler: sh_capnp::compiler::Client,
     ) -> Result<()> {
         let symbols: HashSet<String> = self.function_table.lock().await.keys().cloned().collect();
-        let frame = compiler::compile(script, compiler.clone(), symbols).await?;
+        let frame = codegen::codegen(script, compiler.clone(), symbols).await?;
         tracing::debug!(
-            dump = %inst::format_instructions(&frame),
+            dump = %instructions::format_instructions(&frame),
             "script frame disassembly"
         );
         let frame = Arc::new(frame);
@@ -157,10 +157,10 @@ impl Interpreter {
                             if previous.is_some() {
                                 tracing::info!(symbol = %symbol, "overwriting existing function");
                             }
-                            // Drop any stale compiled frame so compile_function
+                            // Drop any stale compiled frame so codegen_function
                             // recompiles against the new body.
                             self.compiled_functions.borrow_mut().remove(&symbol);
-                            if let Err(e) = compiler::compile_function(
+                            if let Err(e) = codegen::codegen_function(
                                 &self.function_table,
                                 &self.compiled_functions,
                                 compiler.clone(),
