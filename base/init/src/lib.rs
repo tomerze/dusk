@@ -1,5 +1,6 @@
 #![allow(internal_features)]
 #![feature(prelude_import)]
+#![cfg_attr(not(feature = "client"), no_std)]
 
 extern crate alloc;
 extern crate capnp;
