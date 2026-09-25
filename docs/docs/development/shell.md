@@ -56,8 +56,8 @@ There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
 **Interactive prompt.** `dusk <address>` with no command runs one command:
-`sh --prompt`. It builds the args through the `sh` entry, exactly as a script
-would, and calls `Dusk.process` then `process.run()`. The node calls the args'
+`sh --prompt`. `open_prompt` builds those args itself rather than through the
+`sh` entry, and calls `Dusk.process` then `process.run()`. The node calls the args'
 `created` callback with the prompt process, and everything else is the
 callback's: `Created` (`base/sh/src/client/mod.rs`) spawns a task that builds a
 `Shell` around the node's default shell server, at `sh.capnp`'s `defaultPid` -
