@@ -1,6 +1,6 @@
 @0xf5f34f381cd409b5;
 
-struct Script {
+struct Bytecode {
   struct Statement {
     struct Expr {
       struct ExprPair {
@@ -15,7 +15,7 @@ struct Script {
     }
     struct FunctionDefinition {
       symbol @0: Text;
-      body @1: Script;
+      body @1: Bytecode;
     }
     union {
       expr @0: Expr;

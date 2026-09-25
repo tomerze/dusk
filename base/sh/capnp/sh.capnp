@@ -10,8 +10,8 @@ struct ShArgs {
   struct Data {
     union {
       server @0: Void;
-      script @1: Bytecode.Script;
-      detachedScript @2: Bytecode.Script;
+      script @1: Bytecode.Bytecode;
+      detachedScript @2: Bytecode.Bytecode;
       prompt @3: Text;
     }
   }
@@ -27,6 +27,6 @@ interface ShStop {
 }
 
 interface ShPortal extends(Dusk.Portal, OutputPortal) {
-  sh @0 (script :Bytecode.Script, output :Dusk.Stream, stop :ShStop) -> ();
+  sh @0 (script :Bytecode.Bytecode, output :Dusk.Stream, stop :ShStop) -> ();
   functions @1 () -> (symbols :List(Text));
 }
