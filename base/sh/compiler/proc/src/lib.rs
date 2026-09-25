@@ -26,6 +26,6 @@ fn compile(source: &str) -> Result<Vec<u8>, String> {
                 "a command compiled at build time has no node to talk to".to_string(),
             ))
         });
-    futures::executor::block_on(dusk_program_sh::compile(disconnected, source, &[]))
+    futures::executor::block_on(dusk_program_sh::compile_to_words(disconnected, source))
         .map_err(|error| format!("{error:#}"))
 }

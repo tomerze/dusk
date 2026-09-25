@@ -53,6 +53,9 @@ pub type BytecodeMessage =
 #[cfg(feature = "client")]
 pub mod client;
 
+#[cfg(feature = "client")]
+pub use client::args::{compile, compile_to_words};
+
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
 
