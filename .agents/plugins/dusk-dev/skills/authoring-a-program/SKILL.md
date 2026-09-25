@@ -523,7 +523,7 @@ This is the `sh` pattern (`base/sh/src/lib.rs:276-340`). See **Daemonization** b
 There are three accessors on `ProgramArgs`, all in `dusk_program::program_args`:
 
 - **`with_data::<T, _, _>(|reader| …)`** - synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure.
-- **`data_owned::<T>() -> capnp::Result<capnp::message::TypedBuilder<T>>`** - copies the data into an owned typed builder. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this (`base/sh/src/lib.rs:420-423`) because the script needs to outlive the closure.
+- **`data_owned::<T>() -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>>`** - copies the data, capabilities included, into an owned message; read it with `get_root::<T::Builder>()?.into_reader()`. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this (`base/sh/src/lib.rs:420-423`) because the script needs to outlive the closure.
 - **`reader_owned() -> capnp::Result<Rc<ProgramArgs>>`** - clone the whole args message. Rare; reach for it when you need the untyped reader to outlive the closure.
 
 To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. The `sh` process does this at `base/sh/src/lib.rs:281-284` to retrieve `sh_args::server::Client`.
