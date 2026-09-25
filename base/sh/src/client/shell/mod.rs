@@ -5,7 +5,6 @@ use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
 use dusk_capnp::dusk_capnp::{dusk, process};
 use dusk_program::anyhow::Result;
-use dusk_program_sh_compiler::compile;
 use std::format;
 use std::future::Future;
 use std::rc::Rc;
@@ -39,6 +38,7 @@ pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 pub struct Shell {
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
+    client: dusk::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
@@ -116,12 +116,13 @@ impl Shell {
             .get_result();
 
         let mut served = Some(served);
+        let reconnect_client = client.clone();
         let (sh_process, _) = capnp_rpc::auto_reconnect(move || {
             if let Some(served) = served.take() {
                 return Ok(served);
             }
             Ok(capnp_rpc::new_future_client(Self::recreate_sh_process(
-                client.clone(),
+                reconnect_client.clone(),
                 sh_pid,
             )))
         })?;
@@ -131,6 +132,7 @@ impl Shell {
 
         Ok(Shell {
             sh_process,
+            client: client.clone(),
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -160,14 +162,22 @@ impl Shell {
             notify: stop_signal,
         });
 
-        let mut sh_request = sh_portal.sh_request();
-        let bytecode = compile::compile(script)?;
-        let message = dusk_program_sh_compiler::read(&bytecode)?;
-        sh_request.get().set_script(message.get_root()?)?;
-        sh_request.get().set_output(stream);
-        sh_request.get().set_stop(stop_cap);
+        let client = self.client.clone();
+        let script = String::from(script);
+        let functions_of = self.sh_process.clone();
 
         Ok(async move {
+            let defined_functions = functions_inner(functions_of).await?;
+            let mut sh_request = sh_portal.sh_request();
+            crate::client::args::compile_into(
+                client,
+                &script,
+                &defined_functions,
+                sh_request.get().init_script(),
+            )
+            .await?;
+            sh_request.get().set_output(stream);
+            sh_request.get().set_stop(stop_cap);
             sh_request.send().promise.await?;
             let _ = done_receiver.await;
             Ok(())
@@ -176,22 +186,25 @@ impl Shell {
 
     /// Returns the names of functions currently defined in the sh process.
     pub async fn functions(&self) -> Result<Vec<String>> {
-        let sh_process = self.sh_process.clone();
-        let sh_portal = capnp_rpc::new_future_client(async move {
-            let portal_reply = sh_process.portal_request().send().promise.await?;
-            Ok(portal_reply
-                .get()?
-                .get_result()?
-                .cast_to::<sh_portal::Client>())
-        });
-        let reply = sh_portal.functions_request().send().promise.await?;
-        let symbols = reply.get()?.get_symbols()?;
-        let mut out = Vec::with_capacity(symbols.len() as usize);
-        for symbol in symbols.iter() {
-            out.push(symbol?.to_str()?.to_string());
-        }
-        Ok(out)
+        functions_inner(self.sh_process.clone()).await
     }
+}
+
+async fn functions_inner(sh_process: process::Client) -> Result<Vec<String>> {
+    let sh_portal = capnp_rpc::new_future_client(async move {
+        let portal_reply = sh_process.portal_request().send().promise.await?;
+        Ok(portal_reply
+            .get()?
+            .get_result()?
+            .cast_to::<sh_portal::Client>())
+    });
+    let reply = sh_portal.functions_request().send().promise.await?;
+    let symbols = reply.get()?.get_symbols()?;
+    let mut symbol_names = Vec::with_capacity(symbols.len() as usize);
+    for symbol in symbols.iter() {
+        symbol_names.push(symbol?.to_str()?.to_string());
+    }
+    Ok(symbol_names)
 }
 
 impl Drop for Shell {
