@@ -15,14 +15,7 @@ struct ShArgs {
       prompt @3: Text;
     }
   }
-  interface Server {
-    compiler @0 () -> (result :Compiler);
-  }
-}
-
-interface Compiler {
-  buildProgramArgs @0 (command :Text)
-    -> (programArgs :Dusk.ProgramArgs(AnyPointer, AnyPointer));
+  interface Server {}
 }
 
 interface OutputPortal extends(Dusk.Portal) {
@@ -34,6 +27,6 @@ interface ShStop {
 }
 
 interface ShPortal extends(Dusk.Portal, OutputPortal) {
-  sh @0 (script :Bytecode.Script, output :Dusk.Stream, stop :ShStop, compiler :Compiler) -> ();
+  sh @0 (script :Bytecode.Script, output :Dusk.Stream, stop :ShStop) -> ();
   functions @1 () -> (symbols :List(Text));
 }

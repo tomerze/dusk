@@ -25,16 +25,12 @@ pub const DEFAULT_LISTEN_ADDRESS: SocketAddr =
 /// `user` is either null, or a pointer to a NUL-terminated string that stays
 /// valid for the duration of the call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
-    let Some(listen_address) = (unsafe { listen_address(user.cast::<c_char>()) }) else {
-        eprintln!("dusk_node: not a valid ip:port");
-        return 64;
-    };
+pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let Ok(init_args) =
-        InitArgs::new(&listen_address.ip().to_string(), listen_address.port()).as_program_args()
+    let init_script = dusk_program_sh_compiler_proc::compile_sh!("nightfall -l 0.0.0.0:9090");
+    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
     else {
         return 2;
     };

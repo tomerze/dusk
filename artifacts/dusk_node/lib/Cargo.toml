@@ -20,4 +20,5 @@ dusk_windows = { path = "../../../impls/windows", optional = true }
 dusk_capnp = { path = "../../../dusk/src/dusk_capnp/", public = true }
 dusk_program = { path = "../../../dusk/src/dusk_program/" }
 dusk_base = { path = "../../../dusk/src/dusk_base" }
+dusk_program_sh_compiler_proc = { path = "../../../base/sh/compiler/proc" }
 dusk_program_logs = { path = "../../../base/logs" }
