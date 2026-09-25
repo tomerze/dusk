@@ -58,7 +58,7 @@ fn generate_function_from(
         "function instruction disassembly"
     );
 
-    // Eagerly compile every function this body calls.
+    // Eagerly generate every function this body calls.
     let dep_symbols: alloc::vec::Vec<String> = instructions
         .iter()
         .filter_map(|i| match i {
