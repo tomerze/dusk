@@ -8,8 +8,6 @@ use capnp::serialize::OwnedSegments;
 #[cfg(feature = "parser")]
 pub mod ast;
 #[cfg(feature = "parser")]
-pub mod compile;
-#[cfg(feature = "parser")]
 pub mod parser;
 #[cfg(feature = "parser")]
 pub mod syntax_error;
