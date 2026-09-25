@@ -4,9 +4,10 @@
 extern crate alloc;
 extern crate capnp;
 
-use alloc::rc::Rc;
-use core::cell::Cell;
+use dusk_capnp::capnp::message::HeapAllocator;
+use dusk_capnp::capnp_rpc::ImbuedMessageBuilder;
 use dusk_program::{ready::Ready, signal::SignalReceiver};
+use dusk_program_sh::{BytecodeMessage, bytecode};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -24,21 +25,22 @@ mod known_keys {
     dusk_program_kvs_internal::known_key!(NAMESPACE_ID, "dusk.namespace_id");
 }
 
+pub type InitArgsDataMessage = ImbuedMessageBuilder<HeapAllocator>;
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
-    pub data: ArgsDataBuilder,
+    pub data: InitArgsDataMessage,
 }
 
 impl Args {
-    pub fn new(address: &str, port: u16) -> Self {
-        let mut data = ArgsDataBuilder::new_default();
-        {
-            let mut root = data.init_root();
-            root.set_address(address);
-            root.set_port(port);
-        }
-        Args { data }
+    pub fn new(init_script: &[u8]) -> capnp::Result<Self> {
+        let message =
+            capnp::serialize::read_message(init_script, capnp::message::ReaderOptions::new())?;
+        let mut data = InitArgsDataMessage::new(HeapAllocator::new());
+        data.get_root::<init_capnp::init_args::data::Builder>()?
+            .set_init_script(message.get_root::<bytecode::Reader>()?)?;
+        Ok(Args { data })
     }
 }
 
@@ -90,19 +92,6 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let (address, port) = self
-            .ctx
-            .program_args
-            .with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
-                let address = data.get_address()?.to_string()?;
-                let port = data.get_port();
-                Ok((address, port))
-            })?;
-        let ip_address: std::net::IpAddr = address.parse()?;
-        let listener = async_io::Async::<std::net::TcpListener>::bind(std::net::SocketAddr::new(
-            ip_address, port,
-        ))?;
-
         let namespace_id = self.ctx.namespace.id;
         let kvs = dusk_program_kvs_internal::get_kvs(namespace_id);
         kvs.set(
@@ -131,44 +120,30 @@ impl dusk_program::process::ProcessMixin for Process {
             );
         }
 
-        loop {
-            futures::select! {
-                accept_result = listener.accept().fuse() => {
-                    let (stream, _) = match accept_result {
-                        Ok(accepted) => accepted,
-                        Err(error) => {
-                            tracing::error!(error = %error, "couldn't accept a connection");
-                            continue;
-                        }
-                    };
-                    if let Err(error) = stream.get_ref().set_nodelay(true) {
-                        tracing::error!(error = %error, "couldn't set nodelay on a connection");
-                        continue;
-                    }
-                    let (reader, writer) = stream.split();
+        let init_script = self
+            .ctx
+            .program_args
+            .with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
+                let mut init_script = BytecodeMessage::new(HeapAllocator::new());
+                init_script.set_root::<bytecode::Owned>(data.get_init_script()?)?;
+                Ok(init_script)
+            })?;
+        let sh_args =
+            dusk_program_sh::ShArgs::new(dusk_program_sh::ShMode::DetachedScript(init_script))?
+                .as_program_args()?;
 
-                    let task_id = Rc::new(Cell::new(0));
-                    let session_task = match dusk_core::session(
-                        task_id.clone(),
-                        self.namespace().clone(),
-                        Box::pin(reader),
-                        Box::pin(writer),
-                    ) {
-                        Ok(session_task) => session_task,
-                        Err(error) => {
-                            tracing::error!(
-                                error = %error,
-                                "couldn't take a connection: every session slot is in use"
-                            );
-                            continue;
-                        }
-                    };
-                    task_id.set(session_task.id());
-                    self.ctx.namespace.spawner.spawn(session_task);
-                }
-                signal = signal_receiver.receive().fuse() => {
-                    if let Signal::Terminate = signal { return Ok(()) }
-                }
+        let mut process_request = dusk_client.process_request();
+        sh_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
+        let process_response = process_request.send().promise.await?;
+        let mut run_request = dusk_client.run_request();
+        run_request
+            .get()
+            .set_process(process_response.get()?.get_result()?);
+        run_request.send().promise.await?;
+
+        loop {
+            if let Signal::Terminate = signal_receiver.receive().await {
+                return Ok(());
             }
         }
     }
