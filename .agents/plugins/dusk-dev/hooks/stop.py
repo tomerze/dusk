@@ -148,6 +148,8 @@ def main():
     if not branch:
         return
     session_path, session = session_state(hook_input.get("session_id", ""))
+    if "harness" not in session["loaded_skills"]:
+        return
     branch = session.get("handed") or branch
     drive_path, drive = drive_state(branch, cwd)
     problems = []

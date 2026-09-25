@@ -16,7 +16,7 @@
         }
     },
     "enabledPlugins": {
-        "dusk-dev@dusk": false
+        "dusk-dev@dusk": true
     },
     "statusLine": {
         "type": "command",
