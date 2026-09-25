@@ -216,9 +216,14 @@ port 9090, on every address:
 ./dusk_node
 ```
 
-The address is built in: the init script the template compiles is
-`nightfall -l 9090`. To listen somewhere else, change that script in your copy of
-`artifacts/dusk_node/lib/src/lib.rs`. Two nodes from the same template cannot run
+The address is built in: the init script is the single command
+`nightfall -l 0.0.0.0:9090`, compiled into the artifact by `compile_sh!` while
+it is built. To listen somewhere else, change that command in your copy of
+`artifacts/dusk_node/lib/src/lib.rs` and rebuild. The macro resolves the command
+against the sh entries linked into `dusk_program_sh_compiler_proc`, which are the
+Base programs from `dusk_base`: to name a program of your own there, add its crate
+to `base/sh/compiler/proc/Cargo.toml` and reference its `sh_entry` beside the
+`dusk_base::link_anchors()` call in `base/sh/compiler/proc/src/lib.rs`. Two nodes from the same template cannot run
 on one machine - the second fails to bind.
 
 ## Reference
