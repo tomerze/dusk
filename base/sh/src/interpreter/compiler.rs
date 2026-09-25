@@ -22,16 +22,36 @@ pub(super) async fn compile(
     Ok(output_frame)
 }
 
+pub(super) async fn compile_function(
+    function_table: &FunctionTable,
+    compiled_functions: &CompiledFunctions,
+    compiler: sh_capnp::compiler::Client,
+    symbol: &str,
+) -> Result<Arc<Frame>> {
+    compile_function_once(
+        function_table,
+        compiled_functions,
+        compiler,
+        symbol,
+        &mut HashSet::new(),
+    )
+    .await
+}
+
 #[allow(clippy::arc_with_non_send_sync)]
-pub(super) fn compile_function<'a>(
+fn compile_function_once<'a>(
     function_table: &'a FunctionTable,
     compiled_functions: &'a CompiledFunctions,
     compiler: sh_capnp::compiler::Client,
     symbol: &'a str,
+    compiling: &'a mut HashSet<String>,
 ) -> Pin<Box<dyn Future<Output = Result<Arc<Frame>>> + 'a>> {
     Box::pin(async move {
         if let Some(frame) = compiled_functions.borrow().get(symbol).cloned() {
             return Ok(frame);
+        }
+        if !compiling.insert(symbol.to_string()) {
+            return Ok(Arc::new(Frame::new()));
         }
         let body = function_table
             .lock()
@@ -39,20 +59,10 @@ pub(super) fn compile_function<'a>(
             .get(symbol)
             .cloned()
             .ok_or_else(|| anyhow!("unknown function: {}", symbol))?;
-        // Empty placeholder so recursive calls back to `symbol` short-circuit.
-        compiled_functions
-            .borrow_mut()
-            .insert(symbol.to_string(), Arc::new(Frame::new()));
 
         let symbols: HashSet<String> = function_table.lock().await.keys().cloned().collect();
         let script = body.0.get_root_as_reader::<script::Reader<'_>>()?;
-        let frame = match compile(script, compiler.clone(), symbols).await {
-            Ok(f) => f,
-            Err(e) => {
-                compiled_functions.borrow_mut().remove(symbol);
-                return Err(e);
-            }
-        };
+        let frame = compile(script, compiler.clone(), symbols).await?;
         tracing::debug!(
             dump = %inst::format_instructions(&frame),
             symbol = symbol,
@@ -69,14 +79,27 @@ pub(super) fn compile_function<'a>(
             .collect();
         for dep in dep_symbols {
             // Ignore errors / missing bodies - runtime resolve will surface them.
-            let _ =
-                compile_function(function_table, compiled_functions, compiler.clone(), &dep).await;
+            let _ = compile_function_once(
+                function_table,
+                compiled_functions,
+                compiler.clone(),
+                &dep,
+                compiling,
+            )
+            .await;
         }
 
         let frame = Arc::new(frame);
-        compiled_functions
-            .borrow_mut()
-            .insert(symbol.to_string(), frame.clone());
+        let still_defined = function_table
+            .lock()
+            .await
+            .get(symbol)
+            .is_some_and(|current| Arc::ptr_eq(current, &body));
+        if still_defined {
+            compiled_functions
+                .borrow_mut()
+                .insert(symbol.to_string(), frame.clone());
+        }
         Ok(frame)
     })
 }

@@ -10,7 +10,6 @@ use dusk_base::dusk_program_sh::{
         prompt::stream::json_stream::JsonStream,
         stop::{StopSignal, stop_innermost},
     },
-    entry::StaticShEntriesBuilder,
     sh_capnp::{DEFAULT_PID, output_portal},
 };
 use dusk_connection::Connection;
@@ -42,7 +41,6 @@ async fn script(client: dusk::Client, command: String) -> Result<()> {
     let stop_signal = StopSignal::new();
     let program_args = ShArgs::new(
         client.clone(),
-        StaticShEntriesBuilder::default(),
         ShMode::Script(bytecode::lower_from_source(&command)?),
     )?
     .as_program_args()?;
@@ -104,7 +102,7 @@ async fn run_sh(connection: &Connection, command: Option<String>) -> Result<()> 
     let client = connection.client().await;
     match command {
         Some(command) => script(client, command).await,
-        None => open_prompt(client, StaticShEntriesBuilder::default(), DEFAULT_PID).await,
+        None => open_prompt(client, DEFAULT_PID).await,
     }
 }
 

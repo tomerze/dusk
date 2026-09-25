@@ -1,5 +1,5 @@
 use crate::client::client_hostname;
-use crate::entry::{ProgramArgsBuilder, StaticShEntriesBuilder};
+use crate::entry::ProgramArgsBuilder;
 use crate::sh_capnp::DEFAULT_PID;
 use crate::{ShArgs, ShMode, bytecode};
 use clap::Parser as _;
@@ -37,16 +37,13 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
         if let Some(server_pid) = cli.server {
-            let program_args =
-                ShArgs::new(client, StaticShEntriesBuilder::default(), ShMode::Server)?
-                    .as_program_args()?;
+            let program_args = ShArgs::new(client, ShMode::Server)?.as_program_args()?;
             program_args.set_pid(Some(server_pid.unwrap_or(DEFAULT_PID)))?;
             return Ok(program_args);
         }
         if let Some(server_pid) = cli.prompt {
             return Ok(ShArgs::new(
                 client,
-                StaticShEntriesBuilder::default(),
                 ShMode::Prompt {
                     client_hostname: client_hostname(),
                     server_pid: server_pid.unwrap_or(DEFAULT_PID),
@@ -61,6 +58,6 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
             }
             Some(command) => ShMode::Script(bytecode::lower_from_source(&command)?),
         };
-        Ok(ShArgs::new(client, StaticShEntriesBuilder::default(), mode)?.as_program_args()?)
+        Ok(ShArgs::new(client, mode)?.as_program_args()?)
     }
 }

@@ -47,8 +47,8 @@ There are two distinct ways a script reaches the interpreter, and they parse at
 different moments.
 
 **Interactive prompt.** `dusk <address>` with no command runs one command:
-`sh --prompt`. It builds the args through the `sh` entry, exactly as a script
-would, and calls `Dusk.process` then `process.run()`. The node calls the args'
+`sh --prompt`. `open_prompt` builds those args itself rather than through the
+`sh` entry, and calls `Dusk.process` then `process.run()`. The node calls the args'
 `created` callback with the prompt process, and everything else is the
 callback's: `Created` (`base/sh/src/client/mod.rs`) spawns a task that builds a
 `Shell` around the node's default shell server, at `sh.capnp`'s `defaultPid` -
@@ -284,9 +284,12 @@ one.
 **Compilation & caching.** Function bodies are compiled by `compile_function`
 into a per-`Interpreter` `compiled_functions` cache. Compilation is lazy on first
 `Call`, eager on definition (and eagerly chases the dependencies a body calls).
-Recursion is handled by inserting an empty placeholder frame under the symbol
-*before* compiling the body, so a self-reference short-circuits instead of
-looping the compiler.
+Recursion is handled by a set of the symbols being compiled, local to one
+`compile_function` call, so a self-reference short-circuits instead of looping
+the compiler. Nothing enters the cache until its frame is complete, and a frame
+compiled from a body that was redefined meanwhile is not cached at all - every
+script the `sh` process runs shares the cache, so a half-built entry would be
+run by whichever script called the function next.
 
 **No arguments.** A function call is a bare word. Passing arguments to a function
 (`greet foo`) is a compile error - functions take no parameters.
