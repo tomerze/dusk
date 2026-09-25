@@ -1,10 +1,12 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use dusk_capnp::capnp::message::HeapAllocator;
+use dusk_capnp::capnp_rpc::ImbuedMessageBuilder;
 use dusk_capnp::dusk_capnp::created;
 use dusk_program::anyhow::{self, Context};
 
-use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
+use crate::{PROGRAM_ID, sh_capnp};
 
 pub enum ShMode {
     Server,
@@ -16,19 +18,21 @@ pub enum ShMode {
     },
 }
 
+pub type ShArgsDataMessage = ImbuedMessageBuilder<HeapAllocator>;
+
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs {
     #[data]
-    pub data: ArgsDataBuilder,
+    pub data: ShArgsDataMessage,
     #[created]
     pub created: Option<created::Client>,
 }
 
 impl ShArgs {
     pub fn new(mode: ShMode) -> anyhow::Result<Self> {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data = ShArgsDataMessage::new(HeapAllocator::new());
         let created = {
-            let mut data_builder = data.init_root();
+            let mut data_builder: sh_capnp::sh_args::data::Builder = data.get_root()?;
             match mode {
                 ShMode::Server => {
                     data_builder.set_server(());
