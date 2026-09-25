@@ -50,7 +50,7 @@ impl Shell {
         client: dusk::Client,
         pid: u64,
     ) -> capnp::Result<process::Client> {
-        let sh_args = ShArgs::new(client.clone(), ShMode::Server)
+        let sh_args = ShArgs::new(ShMode::Server)
             .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
         let program_args = sh_args.as_program_args()?;
         program_args.set_pid(Some(pid))?;
