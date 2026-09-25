@@ -169,7 +169,8 @@ is available even when tests are not. Build with
 one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
 
 - **The `dusk_node` binary takes no arguments and always listens on 9090**, on
-  every address - the init script is compiled in as `nightfall -l 9090`, and
+  every address - the init script is the one command `nightfall -l 0.0.0.0:9090`,
+  compiled into the artifact while it is built, and
   `artifacts/dusk_node/bin/src/main.rs` passes a null pointer and reads no argv.
   So only one node from this binary runs per machine: check `pgrep -af dusk_node`
   and `ss -ltn | grep 9090` before starting one. If another session's node holds
