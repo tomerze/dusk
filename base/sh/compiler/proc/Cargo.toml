@@ -1,0 +1,16 @@
+[package]
+name = "dusk_program_sh_compiler_proc"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+proc-macro2 = "1.0"
+dusk_base = { path = "../../../../dusk/src/dusk_base", features = ["client"] }
+dusk_program_sh = { path = "../..", features = ["client"] }
+futures = "0.3"
+dusk_capnp = { path = "../../../../dusk/src/dusk_capnp" }

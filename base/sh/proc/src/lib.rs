@@ -1,21 +1,8 @@
 extern crate proc_macro;
 
-mod sh_to_bytecode;
-
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-
-#[proc_macro]
-pub fn sh_to_bytecode(item: TokenStream) -> TokenStream {
-    let source = syn::parse_macro_input!(item as syn::LitStr);
-    match sh_to_bytecode::expand(&source.value()) {
-        Ok(expanded) => expanded.into(),
-        Err(message) => syn::Error::new(source.span(), message)
-            .to_compile_error()
-            .into(),
-    }
-}
 
 #[proc_macro_attribute]
 pub fn sh_entry(attr: TokenStream, item: TokenStream) -> TokenStream {
