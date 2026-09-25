@@ -337,8 +337,12 @@ process receives on its `signal_receiver`.
 `impl_*` feature selected - which creates the `Namespace` and calls
 `dusk_core::init::init` with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
-when that namespace terminates. `init` binds the listener and accepts
-connections.
+when that namespace terminates. The `init` process is handed an init script - a
+`Bytecode.Script` - and starts a detached `sh` to run it, then waits for its own
+`Terminate`, so nothing about the script's lifetime is init's business; for the
+node artifact that script is always `nightfall -l 9090`, compiled at build time
+with `sh_to_bytecode!`. `nightfall` binds the listener and accepts connections,
+running in the foreground of that script.
 
 The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
 process) lives in `docs/docs/development/shell.md`.
@@ -368,19 +372,17 @@ its default configuration (building the logs launcher inside it also installs
 the global tracing subscriber, unconditionally - and nothing in the tree enables
 the logs program's `console` feature, so a node captures every event into its
 buffer and prints none of them), and `dusk_impl::run` starts the node with an
-`init` bound to the address it is given:
+`init` whose init script runs `nightfall` on port 9090:
 
 ```rust
-pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
-    let Some(listen_address) = (unsafe { listen_address(user.cast::<c_char>()) }) else {
-        eprintln!("dusk_node: not a valid ip:port");
-        return 64;
-    };
+#[unsafe(no_mangle)]
+pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
+    dusk_base::link_anchors();
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let Ok(init_args) =
-        InitArgs::new(&listen_address.ip().to_string(), listen_address.port()).as_program_args()
+    let init_script = dusk_program_sh_proc::sh_to_bytecode!("nightfall -l 9090");
+    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
     else {
         return 2;
     };
@@ -388,11 +390,12 @@ pub unsafe extern "C" fn dusk_node_run(user: *mut c_void) -> i32 {
 }
 ```
 
-There is one entry point, and `user` is the only thing a caller gives it. This
-template reads it as a NUL-terminated `ip:port`, falling back to
-`DEFAULT_LISTEN_ADDRESS` (`0.0.0.0:9090`) when it is null - a node built from
-the template can read the pointer as anything it likes. `dusk_node_bin`
-passes its own optional `ip:port` argument straight through.
+There is one entry point, and `user` is the only thing a caller gives it. The
+template ignores it, and `dusk_node_bin` passes a null pointer and reads no argv,
+so every node built from the template listens on 9090 on every address and
+nothing at run time can move it. `user` stays in the C signature as the extension
+point a node built from the template may define - it can read the pointer as
+anything it likes.
 
 For custom launcher arguments (e.g. a different `LogsConfig`), skip
 `default_launcher_set` and assemble the set yourself with
