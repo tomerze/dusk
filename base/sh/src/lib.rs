@@ -40,13 +40,12 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
+mod args;
+pub use args::{ShArgs, ShMode};
 pub use dusk_program_sh_compiler::bytecode_capnp::bytecode;
 
 #[cfg(feature = "client")]
 pub mod client;
-
-#[cfg(feature = "client")]
-pub use client::args::{ShArgs, ShMode};
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;

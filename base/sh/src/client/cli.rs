@@ -1,4 +1,4 @@
-use crate::client::client_hostname;
+use crate::client::{Created, client_hostname};
 use crate::entry::ProgramArgsBuilder;
 use crate::sh_capnp::DEFAULT_PID;
 use crate::{ShArgs, ShMode, compile};
@@ -37,18 +37,18 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
     async fn build(&self, client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = ShCli::try_parse_from(args)?;
         if let Some(server_pid) = cli.server {
-            let program_args = ShArgs::new(client, ShMode::Server)?.as_program_args()?;
+            let program_args = ShArgs::new(ShMode::Server)?.as_program_args()?;
             program_args.set_pid(Some(server_pid.unwrap_or(DEFAULT_PID)))?;
             return Ok(program_args);
         }
         if let Some(server_pid) = cli.prompt {
-            return Ok(ShArgs::new(
-                client,
-                ShMode::Prompt {
-                    client_hostname: client_hostname(),
+            return Ok(ShArgs::new(ShMode::Prompt {
+                client_hostname: client_hostname(),
+                created: dusk_capnp::capnp_rpc::new_client(Created {
+                    client: client.clone(),
                     server_pid: server_pid.unwrap_or(DEFAULT_PID),
-                },
-            )?
+                }),
+            })?
             .as_program_args()?);
         }
         let mode = match cli.command {
@@ -56,6 +56,6 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
             Some(command) if cli.detach => ShMode::DetachedScript(compile::compile(&command)?),
             Some(command) => ShMode::Script(compile::compile(&command)?),
         };
-        Ok(ShArgs::new(client, mode)?.as_program_args()?)
+        Ok(ShArgs::new(mode)?.as_program_args()?)
     }
 }
