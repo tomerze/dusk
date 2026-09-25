@@ -376,9 +376,11 @@ bytecode. The compiler runs on the client (`compile` / `compile_into` in
 `Dusk.ProgramArgs`, not the command's text** - the caller that holds the sh entry
 table builds it while it compiles, so nothing needs resolving once the bytecode
 reaches the node. A word that names a shell function becomes the `call` variant
-instead. The compiler takes the functions the caller knows are defined - `ShPortal.functions`
-returns them, and a one-shot caller passes none - and a bare word that is neither an
-sh entry nor one of those functions fails on the client. "Script" still means what a user wrote or asked to run
+instead. `compile_into` takes the functions the caller knows are defined - `ShPortal.functions`
+returns them - `compile` assumes none, and a function is known from its
+definition on. A bare word that is neither an sh entry nor a known function fails on
+the client with `no sh entry found`, except inside a function body, where it becomes a
+`call` looked up when the function runs. "Script" still means what a user wrote or asked to run
 (`ShMode::Script`, `ShMode::DetachedScript`, the init script); bytecode is only how it
 is represented.
 
