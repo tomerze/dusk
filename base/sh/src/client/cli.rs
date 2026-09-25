@@ -1,7 +1,7 @@
 use crate::client::{Created, client_hostname};
 use crate::entry::ProgramArgsBuilder;
 use crate::sh_capnp::DEFAULT_PID;
-use crate::{ShArgs, ShMode, compile};
+use crate::{ShArgs, ShMode};
 use clap::Parser as _;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow;
@@ -53,8 +53,14 @@ impl ProgramArgsBuilder for ShProgramArgsBuilder {
         }
         let mode = match cli.command {
             None => anyhow::bail!("sh takes a command, --server or --prompt"),
-            Some(command) if cli.detach => ShMode::DetachedScript(compile::compile(&command)?),
-            Some(command) => ShMode::Script(compile::compile(&command)?),
+            Some(command) => {
+                let script = crate::client::args::compile(client.clone(), &command).await?;
+                if cli.detach {
+                    ShMode::DetachedScript(script)
+                } else {
+                    ShMode::Script(script)
+                }
+            }
         };
         Ok(ShArgs::new(mode)?.as_program_args()?)
     }
