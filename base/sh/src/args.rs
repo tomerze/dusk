@@ -1,17 +1,17 @@
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use dusk_capnp::capnp::message::HeapAllocator;
 use dusk_capnp::capnp_rpc::ImbuedMessageBuilder;
 use dusk_capnp::dusk_capnp::created;
-use dusk_program::anyhow::{self, Context};
+use dusk_program::anyhow;
+use dusk_program_sh_compiler::BytecodeMessage;
 
-use crate::{PROGRAM_ID, sh_capnp};
+use crate::{PROGRAM_ID, bytecode, sh_capnp};
 
 pub enum ShMode {
     Server,
-    Script(Vec<u8>),
-    DetachedScript(Vec<u8>),
+    Script(BytecodeMessage),
+    DetachedScript(BytecodeMessage),
     Prompt {
         client_hostname: String,
         created: created::Client,
@@ -38,16 +38,15 @@ impl ShArgs {
                     data_builder.set_server(());
                     None
                 }
-                ShMode::Script(script) => {
-                    let message = dusk_program_sh_compiler::read(&script)
-                        .context("a script is not compiled bytecode")?;
-                    data_builder.set_script(message.get_root()?)?;
+                ShMode::Script(mut script) => {
+                    data_builder
+                        .set_script(script.get_root::<bytecode::Builder>()?.into_reader())?;
                     None
                 }
-                ShMode::DetachedScript(script) => {
-                    let message = dusk_program_sh_compiler::read(&script)
-                        .context("a script is not compiled bytecode")?;
-                    data_builder.set_detached_script(message.get_root()?)?;
+                ShMode::DetachedScript(mut script) => {
+                    data_builder.set_detached_script(
+                        script.get_root::<bytecode::Builder>()?.into_reader(),
+                    )?;
                     None
                 }
                 ShMode::Prompt {
