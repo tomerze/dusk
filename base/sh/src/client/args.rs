@@ -1,5 +1,5 @@
 use crate::bytecode;
-use crate::entry::ShEntriesBuilder;
+use crate::entry::{ShEntriesBuilder, ShEntry};
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_program::anyhow::{self, Context};
 use dusk_program::program_args::ProgramArgs;
@@ -62,22 +62,10 @@ async fn write<S: ShEntriesBuilder>(
 ) -> anyhow::Result<()> {
     let stripped = tokenize::strip_comments(source);
     let parsed = parser::parse(&stripped)?;
-    let entry_names: HashSet<String> = sh_entries_builder
-        .get_entries()
-        .into_iter()
-        .map(|entry| String::from(entry.info.name))
-        .collect();
+    let entries = sh_entries_builder.get_entries();
     let mut resolved = Vec::new();
     let enclosing: HashSet<String> = defined_functions.iter().cloned().collect();
-    resolve_ast(
-        &parsed,
-        &client,
-        &sh_entries_builder,
-        &entry_names,
-        &enclosing,
-        &mut resolved,
-    )
-    .await?;
+    resolve_ast(&parsed, &client, &entries, &enclosing, &mut resolved).await?;
     write_ast(&parsed, &mut resolved.into_iter(), builder, capabilities)?;
     Ok(())
 }
@@ -87,11 +75,10 @@ enum Resolved {
     Call(String),
 }
 
-fn resolve_ast<'a, S: ShEntriesBuilder>(
+fn resolve_ast<'a>(
     parsed: &'a ast::Ast<'a>,
     client: &'a dusk::Client,
-    sh_entries_builder: &'a S,
-    entry_names: &'a HashSet<String>,
+    entries: &'a [ShEntry],
     enclosing_functions: &'a HashSet<String>,
     resolved: &'a mut Vec<Resolved>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a>> {
@@ -105,26 +92,10 @@ fn resolve_ast<'a, S: ShEntriesBuilder>(
         for statement in &parsed.statements {
             match statement {
                 ast::Statement::Expr(expr) => {
-                    resolve_expr(
-                        expr,
-                        client,
-                        sh_entries_builder,
-                        entry_names,
-                        &functions,
-                        resolved,
-                    )
-                    .await?;
+                    resolve_expr(expr, client, entries, &functions, resolved).await?;
                 }
                 ast::Statement::FunctionDefinition { body, .. } => {
-                    resolve_ast(
-                        body,
-                        client,
-                        sh_entries_builder,
-                        entry_names,
-                        &functions,
-                        resolved,
-                    )
-                    .await?;
+                    resolve_ast(body, client, entries, &functions, resolved).await?;
                 }
             }
         }
@@ -132,11 +103,10 @@ fn resolve_ast<'a, S: ShEntriesBuilder>(
     })
 }
 
-fn resolve_expr<'a, S: ShEntriesBuilder>(
+fn resolve_expr<'a>(
     expr: &'a ast::Expr<'a>,
     client: &'a dusk::Client,
-    sh_entries_builder: &'a S,
-    entry_names: &'a HashSet<String>,
+    entries: &'a [ShEntry],
     functions: &'a HashSet<String>,
     resolved: &'a mut Vec<Resolved>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + 'a>> {
@@ -153,34 +123,17 @@ fn resolve_expr<'a, S: ShEntriesBuilder>(
                     resolved.push(Resolved::Call(String::from(program)));
                     return Ok(());
                 }
-                if !entry_names.contains(program) && !takes_arguments {
+                if !takes_arguments && !entries.iter().any(|entry| entry.info.name == program) {
                     anyhow::bail!("call to unknown symbol: {program}");
                 }
                 resolved.push(Resolved::Command(
-                    program_args_for_command(client.clone(), sh_entries_builder.clone(), command)
-                        .await?,
+                    program_args_for_command(client.clone(), entries, command).await?,
                 ));
                 Ok(())
             }
             ast::Expr::And(first, second) | ast::Expr::Or(first, second) => {
-                resolve_expr(
-                    first,
-                    client,
-                    sh_entries_builder,
-                    entry_names,
-                    functions,
-                    resolved,
-                )
-                .await?;
-                resolve_expr(
-                    second,
-                    client,
-                    sh_entries_builder,
-                    entry_names,
-                    functions,
-                    resolved,
-                )
-                .await
+                resolve_expr(first, client, entries, functions, resolved).await?;
+                resolve_expr(second, client, entries, functions, resolved).await
             }
         }
     })
@@ -250,9 +203,9 @@ fn write_expr(
     }
 }
 
-pub async fn program_args_for_command<S: ShEntriesBuilder>(
+async fn program_args_for_command(
     client: dusk::Client,
-    sh_entries_builder: S,
+    entries: &[ShEntry],
     command: &str,
 ) -> anyhow::Result<Rc<ProgramArgs>> {
     let (remaining, words) = crate::parser::command_words(command)
@@ -263,11 +216,10 @@ pub async fn program_args_for_command<S: ShEntriesBuilder>(
     let program = words
         .first()
         .ok_or_else(|| anyhow::anyhow!("empty command"))?;
-    let builder = sh_entries_builder
-        .get_entries()
-        .into_iter()
+    let builder = entries
+        .iter()
         .find(|entry| entry.info.name == *program)
-        .map(|entry| entry.program_args_builder)
+        .map(|entry| entry.program_args_builder.clone())
         .ok_or_else(|| anyhow::anyhow!("no sh entry found for `{program}`"))?;
     let arg_refs: Vec<&str> = words[1..].to_vec();
     builder
