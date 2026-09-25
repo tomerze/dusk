@@ -13,16 +13,17 @@ use crate::bytecode;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
+use dusk_program_sh_compiler::BytecodeMessage;
 use execution::ExecutionError;
 pub use execution::Stop;
-use instructions::{CompiledScript, Inst, Instructions};
+use instructions::{Inst, Instructions};
 
 mod codegen;
 mod execution;
 mod instructions;
 
 pub(crate) type FunctionTable =
-    Arc<Mutex<CriticalSectionRawMutex, HashMap<String, Arc<CompiledScript>>>>;
+    Arc<Mutex<CriticalSectionRawMutex, HashMap<String, Rc<RefCell<BytecodeMessage>>>>>;
 
 pub(crate) type GeneratedFunctions = Rc<RefCell<HashMap<String, Arc<Instructions>>>>;
 
@@ -124,7 +125,12 @@ impl Interpreter {
                     Inst::DefineFunction { symbol, body } => {
                         let symbol = symbol.clone();
                         let body = body.clone();
-                        let is_empty = body.root()?.get_statements()?.is_empty();
+                        let is_empty = body
+                            .borrow_mut()
+                            .get_root::<crate::bytecode::Builder>()?
+                            .into_reader()
+                            .get_statements()?
+                            .is_empty();
                         if is_empty {
                             self.function_table.lock().await.remove(&symbol);
                             self.generated_functions.borrow_mut().remove(&symbol);

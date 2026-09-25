@@ -1,5 +1,7 @@
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use core::cell::RefCell;
 use core::future::Future;
 use core::pin::Pin;
 use dusk_program::anyhow::{Result, anyhow};
@@ -8,8 +10,10 @@ use hashbrown::HashSet;
 
 use crate::bytecode;
 
-use super::instructions::{CompiledScript, Inst, Instructions};
+use super::instructions::{Inst, Instructions};
 use super::{FunctionTable, GeneratedFunctions};
+use dusk_capnp::capnp::message::HeapAllocator;
+use dusk_program_sh_compiler::BytecodeMessage;
 
 pub(super) fn generate(script: bytecode::Reader<'_>) -> Result<Instructions> {
     let mut output_instructions = Instructions::new();
@@ -53,7 +57,11 @@ fn generate_function_once<'a>(
             .cloned()
             .ok_or_else(|| anyhow!("call to unknown symbol: {}", symbol))?;
 
-        let instructions = generate(body.root()?)?;
+        let instructions = generate(
+            body.borrow_mut()
+                .get_root::<bytecode::Builder>()?
+                .into_reader(),
+        )?;
         tracing::debug!(
             dump = %super::instructions::format_instructions(&instructions),
             symbol = symbol,
@@ -79,7 +87,7 @@ fn generate_function_once<'a>(
             .lock()
             .await
             .get(symbol)
-            .is_some_and(|current| Arc::ptr_eq(current, &body));
+            .is_some_and(|current| Rc::ptr_eq(current, &body));
         if still_defined {
             generated_functions
                 .borrow_mut()
@@ -121,7 +129,11 @@ fn generate_statement(
             let symbol = def.get_symbol()?.to_str()?.to_string();
             output_instructions.push(Inst::DefineFunction {
                 symbol,
-                body: Arc::new(CompiledScript::from_reader(def.get_body()?)?),
+                body: {
+                    let mut body = BytecodeMessage::new(HeapAllocator::new());
+                    body.set_root::<bytecode::Owned>(def.get_body()?)?;
+                    Rc::new(RefCell::new(body))
+                },
             });
             Ok(())
         }
