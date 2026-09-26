@@ -45,7 +45,7 @@ foreground of that script.
 ## Sessions
 
 The node listens over plain TCP, on the address
-[chosen at startup](#choosing-the-listen-address).
+[set when it is built](#the-listen-address).
 For each incoming connection, `nightfall` spawns a **session** that shares the node's
 single [namespace](../concepts/namespaces.md), so every connected client sees the
 same processes. A session wraps a `DuskServer` as a Cap'n Proto bootstrap
