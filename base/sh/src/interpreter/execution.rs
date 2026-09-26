@@ -70,11 +70,19 @@ impl Execution {
             let portal_reply = match select(portal_promise, stop.wait()).await {
                 Either::First(Ok(reply)) => reply,
                 Either::First(Err(err)) => {
-                    tracing::error!(
-                        pid = pid,
-                        error = err.to_string(),
-                        "failed to get process portal"
-                    );
+                    if err.kind == capnp::ErrorKind::Disconnected {
+                        tracing::debug!(
+                            pid = pid,
+                            error = err.to_string(),
+                            "couldn't portal into process, it's already exited"
+                        );
+                    } else {
+                        tracing::error!(
+                            pid = pid,
+                            error = err.to_string(),
+                            "failed to get process portal"
+                        );
+                    }
                     break 'output (false, None);
                 }
                 Either::Second(()) => {

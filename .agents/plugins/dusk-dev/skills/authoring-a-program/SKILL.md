@@ -11,7 +11,7 @@ The five reference programs are `base/init`, `base/nightfall`, `base/sh`, `base/
 
 | Existing program | Best example for | Distinctive idiom |
 |---|---|---|
-| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Bytecode.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
+| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Bytecode.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between `waitpid` on it and `Terminate` |
 | `nightfall` | Daemon / TCP listener; `std`-only program | `futures::select!` between `listener.accept()` and the signal channel; spawns `dusk_core::session` tasks per connection |
 | `kill` | One-shot RPC, then sit and wait for `Terminate` | Reads `(pid, signal)` from args, calls `client.kill_request()`, signals `ready`, loops on the signal receiver |
 | `ps` | Snapshot the namespace, emit a typed `Record` into a `Stream` from a portal method | Walks `client.ps_request()` results in `main`, materialises a `PsResult` into `Rc<RefCell<…>>`, and in `output()` builds `Record::with_fields(RESULT_TYPE_ID, …)`, writes it with `stream.send_request()` and answers `set_daemonize(false)` |
@@ -415,7 +415,7 @@ async fn main(
 }
 ```
 
-Why sit on the signal channel after the RPC is done? Because the *caller* keeps the process alive (`Dusk.run` registered it) and chooses when to send `Terminate`. Returning from `main` immediately after the RPC would orphan whatever observer is waiting on `waitpid`.
+Why sit on the signal channel after the RPC is done? Because the *caller* keeps the process alive (`Dusk.run` registered it) and chooses when to send `Terminate`. Returning from `main` immediately after the RPC would race the caller: a `portal()` request that arrives after `main` has returned is refused, so the shell reaps the process without ever calling its `output`.
 
 ### Pattern B - Walk the namespace, materialise state, expose via portal
 
@@ -579,14 +579,24 @@ Two things you say, and both of them by returning:
 2. **"…but I keep running"** - `results.get().set_daemonize(true)` before you
    return. The caller then leaves your process alone instead of killing and
    reaping it. Two programs in the tree say it: `sh -d`
-   (`base/sh/src/lib.rs`, the `DetachedScript` arm) and `kvs bind`
-   (`base/kvs/src/lib.rs`), which answers it from a flag `main` set earlier.
+   (`base/sh/src/lib.rs`, the `DetachedScript` arm, unless its script is one
+   program) and `kvs bind` (`base/kvs/src/lib.rs`), which answers it from a
+   flag `main` set earlier.
+
+**By convention, a program does not daemonize itself.** `sh -d` runs any
+program in the background - a detached script that is one program leaves only
+that program running - so whether yours outlives its caller is the user's
+choice, not yours. A program that runs until it is stopped returns from
+`output` when it is stopped: `nightfall`'s `output` waits for its `Terminate`,
+and `sh -d "nightfall -l 0.0.0.0:9091"` is how a user runs it in the
+background.
 
 | Your program | what it does |
 |---|---|
 | Finishes its work | write values, `set_daemonize(false)`, return `Ok` |
+| Runs until it is stopped | return when it is stopped, `set_daemonize(false)` - `nightfall` |
 | Wants to fail | return `Err`; a failed program is finished by definition |
-| Wants to daemonize | `set_daemonize(true)`, return `Ok` |
+| Wants to daemonize | `set_daemonize(true)`, return `Ok` - by convention, don't |
 
 **Set the flag even when it is `false`.** Nothing forces you to: an unset
 `Bool` reads as `false`, so a program that forgets is treated as finished and
@@ -754,6 +764,8 @@ See `base/logs/src/lib.rs` for the live example.
 
 A "daemonized" Dusk program is one whose `Process::main` spawns a background Embassy task that outlives any single RPC call. The process itself stays parked on the signal channel; the work happens in the spawned task.
 
+This is not how a program runs in the background - `sh -d` does that for any program, and by convention a program leaves it to the user (see **What `output()` has to say**). It is how `sh` itself is built, and the pattern for a program whose work outlives the RPC call that started it.
+
 The pattern, distilled from `base/sh/src/lib.rs` and `base/sh/src/exec.rs`:
 
 ### 1. A `Stop` type for cancellation
@@ -830,7 +842,7 @@ Three load-bearing points:
 
 - `task_id = Rc::new(Cell::new(0u32))` then `task_id.set(token.id())` after spawn - required for the span field. See **Tracing** below.
 - `state.borrow_mut().active_stops.retain(|s| !Rc::ptr_eq(s, &stop))` at the end - cleans up the stop entry so the vec doesn't grow forever.
-- `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; the detached `sh` watches it in its signal loop and logs it.
+- `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; the detached `sh` watches it in its signal loop and logs it. A task nobody is left to watch - `sh`'s, for a detached script that is one program - is spawned with `logs_result` and logs its own result, with the same `log_detached_result` the loop uses.
 
 ### 5. Fire-and-forget from `Process::main`
 
@@ -841,28 +853,30 @@ if is_detached {
     let noop: dusk_capnp::dusk_capnp::stream::Client = capnp_rpc::new_client(NoopStream::new());
     detached_completion = self.ctx.program_args
         .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| match data.which()? {
-            sh_capnp::sh_args::data::Which::DetachedScript(script) => Ok(Some(spawn_sh_exec_task(
-                &self.ctx, interpreter.clone(), script?, noop.clone(),
-                self.state.clone(), Rc::new(Stop::new()),
-            )?)),
+            sh_capnp::sh_args::data::Which::DetachedScript(script) => {
+                let script = script?;
+                let folded = folds(script)?;
+                self.state.borrow_mut().folded = folded;
+                let completion = spawn_sh_exec_task(
+                    &self.ctx, interpreter.clone(), script, noop.clone(),
+                    self.state.clone(), Rc::new(Stop::new()), folded,
+                )?;
+                Ok((!folded).then_some(completion))
+            }
             _ => Ok(None),
         })?;
 }
 ready.sender().send(true);
+if self.state.borrow().folded {
+    return Ok(());
+}
 
 loop {
     let signal = match detached_completion.clone() {
         Some(completion) => match select(signal_receiver.receive(), completion.wait()).await {
             Either::First(signal) => signal,
             Either::Second(result) => {
-                match result {
-                    Ok(()) => tracing::info!(pid = self.ctx.pid, "detached script finished"),
-                    Err(error) => tracing::error!(
-                        pid = self.ctx.pid,
-                        error = %format!("{error:#}"),
-                        "detached script failed"
-                    ),
-                }
+                log_detached_result(self.ctx.pid, &result);
                 detached_completion = None;
                 continue;
             }
@@ -881,6 +895,7 @@ loop {
 - `NoopStream::new()` from `dusk_program::stream` is the canonical discard stream. Use it when the spawned work produces output that the caller will not consume.
 - Nobody awaits a detached task, so its result would be lost here: the interpreter logs only `ExecutionError::Runtime`, and a program's own failure (`ExecutionError::Program`) reaches the completion unlogged. So `main` keeps the completion and watches it beside the signal channel in the loop it already runs - the rule from the `dusk-developer` skill, "code must be diagnosable after the fact", is to log where the result would otherwise be lost, at the lightest-weight site that gets there. The whole anyhow chain (`{error:#}`) goes in the log, because the top context alone does not say what failed. Awaited callers (`Portal::sh`) return the result to their caller and do not log it.
 - On `Signal::Terminate`, fan out to every `active_stops` entry. The tasks observe their stop and unwind cleanly.
+- A script that `folds` - one statement, a `programArgs` expression - does not keep its `sh`: `main` spawns its task with `logs_result`, sends `ready` and returns, so the `sh` process exits at once and whoever ran it reaps it. The task runs on: it drives the program's `output` into the discard stream and kills and reaps the program when that returns, so `ps` shows the program alone. `main` records the decision in `State.folded`, and `output` answers `set_daemonize(!folded)`, so a caller that reaches `output` of the exited `sh` still reaps it.
 
 ### 6. Awaited variant
 
@@ -890,18 +905,16 @@ When an RPC caller is waiting on the work to finish (e.g. `Portal::sh`), the sam
 
 ## Signal handling
 
-Two variants exist:
+`dusk_program::signal::Signal` is `#[non_exhaustive]`, with five variants:
 
-```rust
-pub enum Signal {
-    Terminate,         // signal 15 - graceful shutdown
-    Unknown(u64),      // anything else
-}
-```
+- `Terminate` (15) - graceful shutdown.
+- `Rerun(args)` - `Dusk.process` was called again with the fixed pid this process holds; `args` are the new args.
+- `Sweep` (7) and `Reap` (8) - handled by the namespace inside `Dusk.kill`; a program never receives them.
+- `Unknown(u64)` - any other number.
 
-Match in `main`. `Terminate` should drain whatever cleanup the program needs and return `Ok(())`. `Unknown(_)` is a no-op for most programs - handle it explicitly only if your program has a use for additional signals.
+Match in `main`. `Terminate` should drain whatever cleanup the program needs and return `Ok(())`. The rest are no-ops for most programs - handle one explicitly only if your program has a use for it.
 
-Programs **must not** return prematurely from `main` unless they receive `Terminate` (or hit a fatal error). The process is registered in the namespace's `ps_map` for as long as `main` is running; an early return removes it and any callers holding the `process::Client` will see `Disconnected` on subsequent calls.
+Return from `main` before `Terminate` only when the program is over - its work done, or a fatal error. The process stays in the namespace after `main` returns, exited (`Z` in `ps`), until something reaps it with `waitpid` or `Reap`, but from then on `process.portal()` is refused with `process has exited, cannot get portal`, so a caller that has not yet asked for your portal can no longer call `output`. `sleep` returns when its time is up: it sends `ready` first, and the shell has been waiting on its portal since it ran it.
 
 ---
 

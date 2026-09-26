@@ -32,7 +32,7 @@ pub mod parser;
 mod exec;
 mod interpreter;
 
-use exec::{State, spawn_sh_exec_task};
+use exec::{State, log_detached_result, spawn_sh_exec_task};
 use interpreter::{FunctionTable, Interpreter, Stop};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -100,9 +100,24 @@ impl Process {
             state: Rc::new(RefCell::new(State {
                 interpreter: None,
                 active_stops: alloc::vec::Vec::new(),
+                folded: false,
             })),
         })
     }
+}
+
+fn folds(script: bytecode::Reader<'_>) -> capnp::Result<bool> {
+    let statements = script.get_statements()?;
+    if statements.len() != 1 {
+        return Ok(false);
+    }
+    let bytecode::statement::Which::Expr(expr) = statements.get(0).which()? else {
+        return Ok(false);
+    };
+    Ok(matches!(
+        expr?.which()?,
+        bytecode::statement::expr::Which::ProgramArgs(_)
+    ))
 }
 
 #[async_trait::async_trait(?Send)]
@@ -155,20 +170,28 @@ impl dusk_program::process::ProcessMixin for Process {
                 .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
                     match data.which()? {
                         sh_capnp::sh_args::data::Which::DetachedScript(script) => {
-                            Ok(Some(spawn_sh_exec_task(
+                            let script = script?;
+                            let folded = folds(script)?;
+                            self.state.borrow_mut().folded = folded;
+                            let completion = spawn_sh_exec_task(
                                 &self.ctx,
                                 interpreter.clone(),
-                                script?,
+                                script,
                                 noop.clone(),
                                 self.state.clone(),
                                 Rc::new(Stop::new()),
-                            )?))
+                                folded,
+                            )?;
+                            Ok((!folded).then_some(completion))
                         }
                         _ => Ok(None),
                     }
                 })?;
         }
         ready.sender().send(true);
+        if self.state.borrow().folded {
+            return Ok(());
+        }
 
         loop {
             let signal = match detached_completion.clone() {
@@ -176,16 +199,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     match select(signal_receiver.receive(), completion.wait()).await {
                         Either::First(signal) => signal,
                         Either::Second(result) => {
-                            match result {
-                                Ok(()) => {
-                                    tracing::info!(pid = self.ctx.pid, "detached script finished")
-                                }
-                                Err(error) => tracing::error!(
-                                    pid = self.ctx.pid,
-                                    error = %format!("{error:#}"),
-                                    "detached script failed"
-                                ),
-                            }
+                            log_detached_result(self.ctx.pid, &result);
                             detached_completion = None;
                             continue;
                         }
@@ -236,6 +250,7 @@ impl Portal {
             output.clone(),
             self.process.state.clone(),
             stop.clone(),
+            false,
         ));
         Promise::from_future(async move {
             let listen = async {
@@ -290,7 +305,9 @@ impl sh_capnp::output_portal::Server for Portal {
                     Ok(match data.which()? {
                         Which::Server(()) => Which::Server(()),
                         Which::Prompt(_) => Which::Prompt(()),
-                        Which::DetachedScript(_) => Which::DetachedScript(()),
+                        Which::DetachedScript(_) => {
+                            Which::DetachedScript(state_cell.borrow().folded)
+                        }
                         Which::Script(script) => {
                             let interpreter =
                                 state_cell.borrow().interpreter.as_ref().unwrap().clone();
@@ -301,6 +318,7 @@ impl sh_capnp::output_portal::Server for Portal {
                                 stream.clone(),
                                 state_cell.clone(),
                                 Rc::new(Stop::new()),
+                                false,
                             )?)
                         }
                     })
@@ -331,8 +349,8 @@ impl sh_capnp::output_portal::Server for Portal {
                         .map_err(|error| capnp::Error::failed(format!("{error:?}")))?;
                     results.get().set_daemonize(false);
                 }
-                sh_capnp::sh_args::data::Which::DetachedScript(_) => {
-                    results.get().set_daemonize(true);
+                sh_capnp::sh_args::data::Which::DetachedScript(folded) => {
+                    results.get().set_daemonize(!folded);
                 }
             }
             Ok(())
