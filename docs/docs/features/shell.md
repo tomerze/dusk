@@ -120,3 +120,5 @@ Daemonization is a shell concept, not a core process behaviour. When the shell r
 - A program that answers `daemonize` is left alive. It has daemonized.
 
 The program is not asked to close the shell's output, because one line of shell may run several programs into the same stream; the shell closes it when the line is finished. `sh -d` is the canonical daemon: it runs its command against a discard stream at startup and answers `daemonize`, so the `sh` process is left running. When the command is one program, the `sh` process starts the program and exits at once: the program runs on without it, and is reaped when it ends. Nothing in Dusk Core inspects or acts on this - the policy lives entirely in the shell.
+
+Because `sh -d` puts any program in the background, a program has no reason to daemonize itself, and by convention it does not: its `output` returns when its work is done - `nightfall`'s when it is terminated - and whoever wants it in the background runs it with `sh -d`. A program can still answer `daemonize`; `kvs bind` does.
