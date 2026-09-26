@@ -1,5 +1,5 @@
-use crate::sh_capnp::{compiler, sh_portal, sh_stop};
-use crate::{ShArgs, ShCompiler, ShMode};
+use crate::sh_capnp::{sh_portal, sh_stop};
+use crate::{ShArgs, ShMode};
 use capnp::capability::{FromClientHook, Promise};
 use dusk_capnp::capnp_rpc;
 use dusk_capnp::dusk_capnp::stream;
@@ -39,7 +39,6 @@ pub type RttHandle = Arc<Mutex<Option<Duration>>>;
 pub struct Shell {
     keepalive_task: JoinHandle<()>,
     sh_process: process::Client,
-    compiler: compiler::Client,
     pub rtt_handle: RttHandle,
     pub hostname: String,
     pub sh_pid: u64,
@@ -116,10 +115,6 @@ impl Shell {
             .get()?
             .get_result();
 
-        let compiler = capnp_rpc::new_client(ShCompiler {
-            client: client.clone(),
-        });
-
         let mut served = Some(served);
         let (sh_process, _) = capnp_rpc::auto_reconnect(move || {
             if let Some(served) = served.take() {
@@ -136,7 +131,6 @@ impl Shell {
 
         Ok(Shell {
             sh_process,
-            compiler,
             hostname: hostname.into(),
             sh_pid,
             rtt_handle,
@@ -172,7 +166,6 @@ impl Shell {
         sh_request.get().set_script(message.get_root()?)?;
         sh_request.get().set_output(stream);
         sh_request.get().set_stop(stop_cap);
-        sh_request.get().set_compiler(self.compiler.clone());
 
         Ok(async move {
             sh_request.send().promise.await?;

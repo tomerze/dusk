@@ -3,10 +3,12 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
+use dusk_capnp::capnp::message::HeapAllocator;
 use dusk_program::anyhow;
 use dusk_program::embassy_executor;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::process::ProcessContext;
+use dusk_program_sh_compiler::BytecodeMessage;
 
 pub(crate) struct State {
     pub(crate) interpreter: Option<Interpreter>,
@@ -19,7 +21,7 @@ async fn sh_exec_task(
     pid: u64,
     namespace_id: u64,
     interpreter: Interpreter,
-    script: dusk_program_sh_compiler::compiled_script::CompiledScript,
+    mut script: BytecodeMessage,
     output: dusk_capnp::dusk_capnp::stream::Client,
     stop: Rc<Stop>,
     state: Rc<RefCell<State>>,
@@ -35,8 +37,16 @@ async fn sh_exec_task(
         namespace_id
     );
     async move {
-        let result: anyhow::Result<()> =
-            async { interpreter.exec(script.root()?, output, &stop).await }.await;
+        let result: anyhow::Result<()> = async {
+            interpreter
+                .exec(
+                    script.get_root::<crate::bytecode::Builder>()?.into_reader(),
+                    output,
+                    &stop,
+                )
+                .await
+        }
+        .await;
         state
             .borrow_mut()
             .active_stops
@@ -57,7 +67,8 @@ pub(crate) fn spawn_sh_exec_task(
 ) -> capnp::Result<
     Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 > {
-    let script = dusk_program_sh_compiler::compiled_script::CompiledScript::from_reader(script)?;
+    let mut owned_script = BytecodeMessage::new(HeapAllocator::new());
+    owned_script.set_root::<crate::bytecode::Owned>(script)?;
 
     state.borrow_mut().active_stops.push(stop.clone());
 
@@ -71,7 +82,7 @@ pub(crate) fn spawn_sh_exec_task(
         ctx.pid,
         ctx.namespace.id,
         interpreter,
-        script,
+        owned_script,
         output,
         stop,
         state,

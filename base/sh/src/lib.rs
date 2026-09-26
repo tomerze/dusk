@@ -40,15 +40,12 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
-pub use dusk_program_sh_compiler::bytecode_capnp::script;
+mod args;
+pub use args::{ShArgs, ShMode};
+pub use dusk_program_sh_compiler::bytecode_capnp::bytecode;
 
 #[cfg(feature = "client")]
 pub mod client;
-
-#[cfg(feature = "client")]
-pub use client::args::{ShArgs, ShCompiler, ShMode};
-#[cfg(feature = "client")]
-pub use dusk_program_sh_compiler::compile;
 
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher;
@@ -83,6 +80,7 @@ pub struct Process {
     state: Rc<RefCell<State>>,
 }
 impl Process {
+    #[allow(clippy::arc_with_non_send_sync)]
     async fn with_context(ctx: ProcessContext) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -250,10 +248,14 @@ impl sh_capnp::output_portal::Server for Portal {
         let state_cell = self.process.state.clone();
         let ctx = self.process.ctx.clone();
         Promise::from_future(async move {
-            let data = ctx
+            let mut data = ctx
                 .program_args
                 .data_owned::<sh_capnp::sh_args::data::Owned>()?;
-            match data.get_root_as_reader()?.which()? {
+            match data
+                .get_root::<sh_capnp::sh_args::data::Builder>()?
+                .into_reader()
+                .which()?
+            {
                 sh_capnp::sh_args::data::Which::Server(_) => {
                     let mut request = stream.send_request();
                     let value_builder = request.get().init_value();

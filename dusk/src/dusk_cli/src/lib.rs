@@ -39,8 +39,7 @@ async fn kill(client: &dusk::Client, pid: u64) {
 
 async fn script(client: dusk::Client, command: String) -> Result<()> {
     let stop_signal = StopSignal::new();
-    let program_args = ShArgs::new(client.clone(), ShMode::Script(compile::compile(&command)?))?
-        .as_program_args()?;
+    let program_args = ShArgs::new(ShMode::Script(compile::compile(&command)?))?.as_program_args()?;
     let mut process_request = client.process_request();
     program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
     let process = process_request.send().promise.await?.get()?.get_result()?;

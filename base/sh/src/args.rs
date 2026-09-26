@@ -1,49 +1,52 @@
 use alloc::string::String;
-use alloc::vec::Vec;
 
+use dusk_capnp::capnp::message::HeapAllocator;
+use dusk_capnp::capnp_rpc::ImbuedMessageBuilder;
 use dusk_capnp::dusk_capnp::created;
-use dusk_program::anyhow::{self, Context};
+use dusk_program::anyhow;
+use dusk_program_sh_compiler::BytecodeMessage;
 
-use crate::{ArgsDataBuilder, PROGRAM_ID, sh_capnp};
+use crate::{PROGRAM_ID, bytecode, sh_capnp};
 
 pub enum ShMode {
     Server,
-    Script(Vec<u8>),
-    DetachedScript(Vec<u8>),
+    Script(BytecodeMessage),
+    DetachedScript(BytecodeMessage),
     Prompt {
         client_hostname: String,
         created: created::Client,
     },
 }
 
+pub type ShArgsDataMessage = ImbuedMessageBuilder<HeapAllocator>;
+
 #[derive(dusk_program_proc::Args)]
 pub struct ShArgs {
     #[data]
-    pub data: ArgsDataBuilder,
+    pub data: ShArgsDataMessage,
     #[created]
     pub created: Option<created::Client>,
 }
 
 impl ShArgs {
     pub fn new(mode: ShMode) -> anyhow::Result<Self> {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data = ShArgsDataMessage::new(HeapAllocator::new());
         let created = {
-            let mut data_builder = data.init_root();
+            let mut data_builder: sh_capnp::sh_args::data::Builder = data.get_root()?;
             match mode {
                 ShMode::Server => {
                     data_builder.set_server(());
                     None
                 }
-                ShMode::Script(script) => {
-                    let message = dusk_program_sh_compiler::read(&script)
-                        .context("a script is not compiled bytecode")?;
-                    data_builder.set_script(message.get_root()?)?;
+                ShMode::Script(mut script) => {
+                    data_builder
+                        .set_script(script.get_root::<bytecode::Builder>()?.into_reader())?;
                     None
                 }
-                ShMode::DetachedScript(script) => {
-                    let message = dusk_program_sh_compiler::read(&script)
-                        .context("a script is not compiled bytecode")?;
-                    data_builder.set_detached_script(message.get_root()?)?;
+                ShMode::DetachedScript(mut script) => {
+                    data_builder.set_detached_script(
+                        script.get_root::<bytecode::Builder>()?.into_reader(),
+                    )?;
                     None
                 }
                 ShMode::Prompt {

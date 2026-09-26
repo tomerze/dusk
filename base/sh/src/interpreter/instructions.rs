@@ -1,13 +1,12 @@
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use core::fmt::Write;
 use dusk_program::program_args::ProgramArgs;
+use dusk_program_sh_compiler::BytecodeMessage;
 
 pub type Instructions = Vec<Inst>;
-
-pub use dusk_program_sh_compiler::compiled_script::CompiledScript;
 
 pub enum Inst {
     ProgramArgs(Rc<ProgramArgs>),
@@ -15,7 +14,7 @@ pub enum Inst {
     TailCall(String),
     DefineFunction {
         symbol: String,
-        body: Arc<CompiledScript>,
+        body: Rc<RefCell<BytecodeMessage>>,
     },
     JumpIfOk(usize),
     JumpIfError(usize),
