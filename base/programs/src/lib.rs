@@ -204,36 +204,101 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
         let process = self.process.clone();
         Promise::from_future(async move {
-            let server: programs_capnp::programs_args::server::Client =
-                process.ctx.program_args.server_as()?;
+            let transposed: ::capnp::Result<()> = async {
+                let server: programs_capnp::programs_args::server::Client =
+                    process.ctx.program_args.server_as()?;
 
-            let mut request = server.transpose_request();
-            {
-                let result = process.result.borrow();
-                let mut builder = request.get();
-                let mut program_ids = builder
-                    .reborrow()
-                    .init_program_ids(result.program_ids.len() as u32);
-                for (index, program_id) in result.program_ids.iter().enumerate() {
-                    program_ids.set(index as u32, *program_id);
+                let mut request = server.transpose_request();
+                {
+                    let result = process.result.borrow();
+                    let mut builder = request.get();
+                    let mut program_ids = builder
+                        .reborrow()
+                        .init_program_ids(result.program_ids.len() as u32);
+                    for (index, program_id) in result.program_ids.iter().enumerate() {
+                        program_ids.set(index as u32, *program_id);
+                    }
+                    let mut versions = builder
+                        .reborrow()
+                        .init_versions(result.versions.len() as u32);
+                    for (index, version) in result.versions.iter().enumerate() {
+                        versions.set(index as u32, version.as_str());
+                    }
+                    let mut git_revisions = builder
+                        .reborrow()
+                        .init_git_revisions(result.git_revisions.len() as u32);
+                    for (index, git_revision) in result.git_revisions.iter().enumerate() {
+                        git_revisions.set(index as u32, git_revision.as_str());
+                    }
+                    builder.set_output(stream.clone());
                 }
-                let mut versions = builder
-                    .reborrow()
-                    .init_versions(result.versions.len() as u32);
-                for (index, version) in result.versions.iter().enumerate() {
-                    versions.set(index as u32, version.as_str());
-                }
-                let mut git_revisions = builder
-                    .reborrow()
-                    .init_git_revisions(result.git_revisions.len() as u32);
-                for (index, git_revision) in result.git_revisions.iter().enumerate() {
-                    git_revisions.set(index as u32, git_revision.as_str());
-                }
-                builder.set_output(stream.clone());
+                request.send().promise.await?;
+                Ok(())
             }
-            let transposed = request.send().promise.await;
+            .await;
             results.get().set_daemonize(false);
-            transposed.map(|_| ())
+            let error = match transposed {
+                Err(error)
+                    if matches!(
+                        error.kind,
+                        ::capnp::ErrorKind::MessageContainsNullCapabilityPointer
+                            | ::capnp::ErrorKind::Disconnected
+                            | ::capnp::ErrorKind::PrematureEndOfFile
+                    ) =>
+                {
+                    error
+                }
+                transposed => return transposed,
+            };
+            tracing::warn!(
+                pid = process.ctx.pid,
+                error = %error,
+                "listing programs without their shell entries"
+            );
+
+            let fields = {
+                let result = process.result.borrow();
+                Record::with_fields(
+                    programs_capnp::RESULT_TYPE_ID,
+                    [
+                        (
+                            b"Version On Node".to_vec(),
+                            Value::List(
+                                result
+                                    .versions
+                                    .iter()
+                                    .map(|version| Value::String(version.clone()))
+                                    .collect(),
+                            ),
+                        ),
+                        (
+                            b"Program ID".to_vec(),
+                            Value::List(
+                                result
+                                    .program_ids
+                                    .iter()
+                                    .copied()
+                                    .map(Value::Uint)
+                                    .collect(),
+                            ),
+                        ),
+                        (
+                            b"Git Revision".to_vec(),
+                            Value::List(
+                                result
+                                    .git_revisions
+                                    .iter()
+                                    .map(|git_revision| Value::String(git_revision.clone()))
+                                    .collect(),
+                            ),
+                        ),
+                    ],
+                )
+            };
+            let mut send_request = stream.send_request();
+            Value::Record(fields).write_to_builder(send_request.get().init_value())?;
+            send_request.send().await?;
+            Ok(())
         })
     }
 }

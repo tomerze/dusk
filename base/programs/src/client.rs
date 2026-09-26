@@ -43,7 +43,10 @@ pub fn sh_entry() -> ShEntry {
 The node identifies a program by its id and has no name for it, so the node
 sends the list back to this client to be named and rendered. A program this
 client has no shell entry for shows `N/A`, and a program with more than one
-shell entry shows all of them.
+shell entry shows all of them. If the client the command was typed on has
+disconnected by the time the node has the list - the command ran in a detached
+script, or in a function another client calls - or the command was compiled into
+the node, the node sends the list without the Shell Entry column.
 
 Note:
 The set of programs the node was compilied with might be different, or in different versions,
