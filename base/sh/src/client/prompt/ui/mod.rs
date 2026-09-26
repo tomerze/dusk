@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use dusk_program::anyhow::{Result, anyhow};
+use dusk_program::anyhow::{Context, Result};
 
 use crossterm::{
     cursor::SetCursorStyle,
@@ -150,7 +150,7 @@ pub(crate) fn get_line_editor(
 ) -> Result<Reedline> {
     let history = Box::new(
         reedline::SqliteBackedHistory::with_file("history.sqlite3".into(), None, None)
-            .map_err(|_err| anyhow!("failed to open history db"))?,
+            .context("failed to open history db")?,
     );
 
     let completer = Box::new(DefaultCompleter::new_with_wordlen(commands.clone(), 2));
