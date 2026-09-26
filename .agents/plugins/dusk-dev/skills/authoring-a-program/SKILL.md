@@ -520,10 +520,11 @@ This is the `sh` pattern (`base/sh/src/lib.rs`). See **Daemonization** below for
 
 ### Reading from `program_args`
 
-There are three accessors on `ProgramArgs`, all in `dusk_program::program_args`:
+There are four accessors on `ProgramArgs`, all in `dusk_program::program_args`: two that lend a reader to a closure, and their two owned counterparts.
 
-- **`with_data::<T, _, _>(|reader| …)`** - synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure.
-- **`data_owned::<T>() -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>>`** - copies the data, capabilities included, into an owned message; read it with `get_root::<T::Builder>()?.into_reader()`. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this because the script needs to outlive the closure.
+- **`with_data::<T, _, _>(|reader| …)`** - synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure. `kvs`, `date` and `sh`'s `output()` read through it: each returns its schema's own `Which` carrying the values it needs, and awaits after.
+- **`data_owned::<T>() -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>>`** - copies the data, capabilities included, into an owned message; read it with `get_root::<T::Builder>()?.into_reader()`. Use when you need the data itself to survive across an `.await`; the copy is read through `get_root(&mut self)`, so it is bound `mut`.
+- **`with_reader(|reader| …)`** - the whole args message as a reader inside a closure. Use it to feed the args into an outgoing request's `program_args`.
 - **`reader_owned() -> capnp::Result<Rc<ProgramArgs>>`** - clone the whole args message. Rare; reach for it when you need the untyped reader to outlive the closure.
 
 To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. `logs` does this in `main` to get its `logs_args::server::Client`, and asks it for the stream to write its events into with `open_stream`.
