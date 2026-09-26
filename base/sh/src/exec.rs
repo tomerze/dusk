@@ -1,3 +1,4 @@
+use crate::BytecodeMessage;
 use crate::interpreter::{Interpreter, Stop};
 use alloc::format;
 use alloc::rc::Rc;
@@ -8,7 +9,6 @@ use dusk_program::anyhow;
 use dusk_program::embassy_executor;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::process::ProcessContext;
-use dusk_program_sh_compiler::BytecodeMessage;
 
 pub(crate) struct State {
     pub(crate) interpreter: Option<Interpreter>,

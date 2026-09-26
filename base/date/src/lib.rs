@@ -89,17 +89,13 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let mut data = self
+        let action = self
             .ctx
             .program_args
-            .data_owned::<date_capnp::date_args::data::Owned>()?;
+            .with_data::<date_capnp::date_args::data::Owned, _, _>(|data| Ok(data.which()?))?;
         let client = dusk_core::local_client(self.namespace().clone()).await;
 
-        match data
-            .get_root::<date_capnp::date_args::data::Builder>()?
-            .into_reader()
-            .which()?
-        {
+        match action {
             date_capnp::date_args::data::Which::Show(()) => {
                 let reply = client.time_request().send().promise.await?;
                 let unix_time_ms = reply.get()?.get_unix_time_ms();

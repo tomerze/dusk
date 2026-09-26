@@ -1,10 +1,10 @@
 use alloc::string::String;
 
+use crate::BytecodeMessage;
 use dusk_capnp::capnp::message::HeapAllocator;
 use dusk_capnp::capnp_rpc::ImbuedMessageBuilder;
 use dusk_capnp::dusk_capnp::created;
 use dusk_program::anyhow;
-use dusk_program_sh_compiler::BytecodeMessage;
 
 use crate::{PROGRAM_ID, bytecode, sh_capnp};
 

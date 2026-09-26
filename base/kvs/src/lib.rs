@@ -123,15 +123,22 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let mut data = self
+        use kvs_capnp::kvs_args::data::Which;
+        let action = self
             .ctx
             .program_args
-            .data_owned::<kvs_capnp::kvs_args::data::Owned>()?;
-        match data
-            .get_root::<kvs_capnp::kvs_args::data::Builder>()?
-            .into_reader()
-            .which()?
-        {
+            .with_data::<kvs_capnp::kvs_args::data::Owned, _, _>(|data| {
+                Ok(match data.which()? {
+                    Which::Get(key) => Which::Get(key),
+                    Which::Set(set) => {
+                        Which::Set((set.get_key(), Value::from_reader(set.get_value()?)?))
+                    }
+                    Which::Delete(key) => Which::Delete(key),
+                    Which::Exists(key) => Which::Exists(key),
+                    Which::Bind(()) => Which::Bind(()),
+                })
+            })?;
+        match action {
             kvs_capnp::kvs_args::data::Which::Get(key) => {
                 let value = self
                     .kvs
@@ -140,9 +147,8 @@ impl dusk_program::process::ProcessMixin for Process {
                     .ok_or_else(|| anyhow::anyhow!("key {key:#018x} not found"))?;
                 *self.result.borrow_mut() = Some(value);
             }
-            kvs_capnp::kvs_args::data::Which::Set(set) => {
-                let value = Value::from_reader(set.get_value()?)?;
-                self.kvs.set(set.get_key(), value).await;
+            kvs_capnp::kvs_args::data::Which::Set((key, value)) => {
+                self.kvs.set(key, value).await;
             }
             kvs_capnp::kvs_args::data::Which::Delete(key) => {
                 let deleted = self.kvs.delete(key).await;

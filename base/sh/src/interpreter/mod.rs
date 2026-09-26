@@ -13,7 +13,7 @@ use crate::bytecode;
 use dusk_capnp::dusk_capnp::dusk;
 use dusk_capnp::dusk_capnp::stream;
 
-use dusk_program_sh_compiler::BytecodeMessage;
+use crate::BytecodeMessage;
 use execution::ExecutionError;
 pub use execution::Stop;
 use instructions::{Inst, Instructions};

@@ -15,8 +15,7 @@ pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
         return 1;
     };
     let init_script = dusk_program_sh_compiler_proc::compile_sh!("nightfall -l 0.0.0.0:9090");
-    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
-    else {
+    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| args.as_program_args()) else {
         return 2;
     };
     dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
