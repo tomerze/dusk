@@ -579,8 +579,9 @@ Two things you say, and both of them by returning:
 2. **"…but I keep running"** - `results.get().set_daemonize(true)` before you
    return. The caller then leaves your process alone instead of killing and
    reaping it. Two programs in the tree say it: `sh -d`
-   (`base/sh/src/lib.rs`, the `DetachedScript` arm) and `kvs bind`
-   (`base/kvs/src/lib.rs`), which answers it from a flag `main` set earlier.
+   (`base/sh/src/lib.rs`, the `DetachedScript` arm, unless its script is one
+   program) and `kvs bind` (`base/kvs/src/lib.rs`), which answers it from a
+   flag `main` set earlier.
 
 | Your program | what it does |
 |---|---|
@@ -830,7 +831,7 @@ Three load-bearing points:
 
 - `task_id = Rc::new(Cell::new(0u32))` then `task_id.set(token.id())` after spawn - required for the span field. See **Tracing** below.
 - `state.borrow_mut().active_stops.retain(|s| !Rc::ptr_eq(s, &stop))` at the end - cleans up the stop entry so the vec doesn't grow forever.
-- `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; the detached `sh` watches it in its signal loop and logs it.
+- `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; the detached `sh` watches it in its signal loop and logs it. A task nobody is left to watch - `sh`'s, for a detached script that is one program - is spawned with `logs_result` and logs its own result, with the same `log_detached_result` the loop uses.
 
 ### 5. Fire-and-forget from `Process::main`
 
@@ -841,14 +842,23 @@ if is_detached {
     let noop: dusk_capnp::dusk_capnp::stream::Client = capnp_rpc::new_client(NoopStream::new());
     detached_completion = self.ctx.program_args
         .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| match data.which()? {
-            sh_capnp::sh_args::data::Which::DetachedScript(script) => Ok(Some(spawn_sh_exec_task(
-                &self.ctx, interpreter.clone(), script?, noop.clone(),
-                self.state.clone(), Rc::new(Stop::new()),
-            )?)),
+            sh_capnp::sh_args::data::Which::DetachedScript(script) => {
+                let script = script?;
+                let folded = folds(script)?;
+                self.state.borrow_mut().folded = folded;
+                let completion = spawn_sh_exec_task(
+                    &self.ctx, interpreter.clone(), script, noop.clone(),
+                    self.state.clone(), Rc::new(Stop::new()), folded,
+                )?;
+                Ok((!folded).then_some(completion))
+            }
             _ => Ok(None),
         })?;
 }
 ready.sender().send(true);
+if self.state.borrow().folded {
+    return Ok(());
+}
 
 loop {
     let signal = match detached_completion.clone() {
@@ -874,6 +884,7 @@ loop {
 - `NoopStream::new()` from `dusk_program::stream` is the canonical discard stream. Use it when the spawned work produces output that the caller will not consume.
 - Nobody awaits a detached task, so its result would be lost here: the interpreter logs only `ExecutionError::Runtime`, and a program's own failure (`ExecutionError::Program`) reaches the completion unlogged. So `main` keeps the completion and watches it beside the signal channel in the loop it already runs - the rule from the `dusk-developer` skill, "code must be diagnosable after the fact", is to log where the result would otherwise be lost, at the lightest-weight site that gets there. The whole anyhow chain (`{error:#}`) goes in the log, because the top context alone does not say what failed. Awaited callers (`Portal::sh`) return the result to their caller and do not log it.
 - On `Signal::Terminate`, fan out to every `active_stops` entry. The tasks observe their stop and unwind cleanly.
+- A script that `folds` - one statement, a `programArgs` expression - does not keep its `sh`: `main` spawns its task with `logs_result`, sends `ready` and returns, so the `sh` process exits at once and whoever ran it reaps it. The task runs on: it drives the program's `output` into the discard stream and kills and reaps the program when that returns, so `ps` shows the program alone. `main` records the decision in `State.folded`, and `output` answers `set_daemonize(!folded)`, so a caller that reaches `output` of the exited `sh` still reaps it.
 
 ### 6. Awaited variant
 
