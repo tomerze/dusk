@@ -341,7 +341,7 @@ process receives on its `signal_receiver`.
 `dusk_core::init::init` with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process is handed an init script - a
-`Compiler.Bytecode` - and starts a detached `sh` to run it, then waits for its own
+`Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate`, so nothing about the script's lifetime is init's business; for the
 node artifact that bytecode is always the one command `nightfall` on `0.0.0.0:9090`,
 compiled by `compile_sh!` while the artifact is built. `nightfall`

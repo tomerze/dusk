@@ -11,7 +11,7 @@ The five reference programs are `base/init`, `base/nightfall`, `base/sh`, `base/
 
 | Existing program | Best example for | Distinctive idiom |
 |---|---|---|
-| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Compiler.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
+| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Bytecode.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
 | `nightfall` | Daemon / TCP listener; `std`-only program | `futures::select!` between `listener.accept()` and the signal channel; spawns `dusk_core::session` tasks per connection |
 | `kill` | One-shot RPC, then sit and wait for `Terminate` | Reads `(pid, signal)` from args, calls `client.kill_request()`, signals `ready`, loops on the signal receiver |
 | `ps` | Snapshot the namespace, emit a typed `Record` into a `Stream` from a portal method | Walks `client.ps_request()` results in `main`, materialises a `PsResult` into `Rc<RefCell<…>>`, and in `output()` builds `Record::with_fields(RESULT_TYPE_ID, …)`, writes it with `stream.send_request()` and answers `set_daemonize(false)` |
