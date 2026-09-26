@@ -32,7 +32,7 @@ pub mod parser;
 mod exec;
 mod interpreter;
 
-use exec::{State, spawn_sh_exec_task};
+use exec::{State, log_detached_result, spawn_sh_exec_task};
 use interpreter::{FunctionTable, Interpreter, Stop};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -176,16 +176,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     match select(signal_receiver.receive(), completion.wait()).await {
                         Either::First(signal) => signal,
                         Either::Second(result) => {
-                            match result {
-                                Ok(()) => {
-                                    tracing::info!(pid = self.ctx.pid, "detached script finished")
-                                }
-                                Err(error) => tracing::error!(
-                                    pid = self.ctx.pid,
-                                    error = %format!("{error:#}"),
-                                    "detached script failed"
-                                ),
-                            }
+                            log_detached_result(self.ctx.pid, &result);
                             detached_completion = None;
                             continue;
                         }

@@ -15,6 +15,17 @@ pub(crate) struct State {
     pub(crate) active_stops: Vec<Rc<Stop>>,
 }
 
+pub(crate) fn log_detached_result(pid: u64, result: &anyhow::Result<()>) {
+    match result {
+        Ok(()) => tracing::info!(pid, "detached script finished"),
+        Err(error) => tracing::error!(
+            pid,
+            error = %format!("{error:#}"),
+            "detached script failed"
+        ),
+    }
+}
+
 #[embassy_executor::task(pool_size = 16)]
 async fn sh_exec_task(
     task_id: Rc<Cell<u32>>,
