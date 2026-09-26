@@ -127,6 +127,18 @@ The script then runs when the caller drives the process's `OutputPortal.output`
 (or, for a detached script, immediately in `Process::main` against a discard
 stream).
 
+A detached script that is one program - one statement, a `programArgs`
+expression (`folds`, `base/sh/src/lib.rs`) - leaves the `sh` process out of it.
+`Process::main` spawns the exec task, sends `ready` and returns, so the `sh`
+process exits at once and whoever ran it reaps it: `init` with `waitpid`, the
+interpreter through the portal refusal described under errors below. The exec
+task runs the program the way any statement runs - `output` into the discard
+stream, then kill and `waitpid` - so `ps` shows the program alone, and it is
+reaped when it ends. `main` records the decision in `State.folded`, and `output`
+answers `daemonize = !folded`, so a caller that reaches `output` of the exited
+`sh` still reaps it. Any other detached script keeps its `sh` process, which
+answers `daemonize` and stops the script when it is terminated.
+
 Either way the server side is identical: a `Bytecode` reader handed to
 `Interpreter::exec`.
 
@@ -390,7 +402,9 @@ script came in on.
   `sh`'s `Process::main` keeps the completion `spawn_sh_exec_task` returns and
   watches it beside its signal channel: a failed script is logged at `error` with
   the error's whole chain, a finished one at `info`. The process keeps running
-  until `Terminate` either way.
+  until `Terminate` either way. A detached script that is one program has no
+  `sh` left to watch it, so its exec task is spawned with `logs_result` and logs
+  its own result the same way (`log_detached_result`, `base/sh/src/exec.rs`).
 - **A portal refused because the process is gone** - it exited before anyone
   asked for it, as a detached `sh` whose script is one program always has - is
   logged at `debug`, not `error`, and the process is killed and reaped the same

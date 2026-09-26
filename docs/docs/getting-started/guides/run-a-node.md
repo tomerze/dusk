@@ -32,9 +32,12 @@ Bringing a node up follows a fixed sequence:
    client (`Dusk.process` + `Dusk.run`).
 
 The `init` process is handed an init script - a `Bytecode.Bytecode` message - and starts
-a detached `sh` to run it, then waits for its own `Terminate`. For the node
+a detached `sh` to run it, then waits for its own `Terminate`, reaping that `sh`
+with `waitpid` when it exits. When the script is one program, that `sh` exits as
+soon as it has started the program. For the node
 artifact that script is the single command `nightfall -l 0.0.0.0:9090`, compiled
-while the artifact itself is built, so nothing is compiled at boot.
+while the artifact itself is built, so nothing is compiled at boot, and `ps`
+shows `init` and `nightfall` with no `sh` between them.
 [`nightfall`](../concepts/base.md#nightfall)
 binds the node's network listener and accepts connections, running in the
 foreground of that script.
