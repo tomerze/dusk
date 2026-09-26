@@ -7,3 +7,6 @@ rustflags = ["--cfg", "tokio_unstable", "-Zmacro-backtrace", "-C", "link-arg=-st
 
 [unstable]
 public-dependency = true
+
+[env]
+DUSK_NODE_INIT_SCRIPT = "nightfall -l 9090"
