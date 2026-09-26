@@ -262,8 +262,10 @@ hold it. `sh` is the exception - its `Data` is bytecode, rebuilt command by
 command.
 
 The shell is not an example: `ShArgs.Server` is empty. A command word is resolved
-into `ProgramArgs` on the client, before the bytecode is sent, so a script running on
-the node needs nothing from a client while it runs. See
+into `ProgramArgs` on the client, before the bytecode is sent, and those
+`ProgramArgs` carry that client's `Server` and `created`. So `logs` or `programs` in
+a script call back into the client that compiled it, and a function body calls
+back into the client that defined it for as long as the function is defined. See
 [The shell is a program](#the-shell-is-a-program).
 
 ## Driver registration (the extern-shim pattern)
