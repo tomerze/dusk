@@ -117,6 +117,25 @@ The cargo profile, empty to follow `CMAKE_BUILD_TYPE`: `Debug` takes cargo's
 `dev`, `MinSizeRel` takes `prod`, and anything else takes `release`. You can
 set it to name a profile directly.
 
+#### DUSK_NODE_RUSTFLAGS
+
+Extra flags for `rustc`, separated by spaces as in cargo's `RUSTFLAGS`, e.g.
+`-DDUSK_NODE_RUSTFLAGS="-C target-cpu=native"`. Empty by default. A flag that
+contains a space can be quoted: CMake splits the value by Windows command-line
+rules on a Windows host, and by Unix shell rules elsewhere, except that a
+backslash escapes the next character inside single quotes too.
+
+They are passed after the flags in the repository's `.cargo/config.toml`, and
+only to the crates built for `DUSK_NODE_CARGO_TARGET` - not to build scripts or
+proc macros.
+
+Cargo takes its flags from the first source it finds, so either of these
+replaces both this variable and `.cargo/config.toml`:
+
+- `CARGO_ENCODED_RUSTFLAGS` or `RUSTFLAGS` in the environment the build runs in.
+- `target.<triple>.rustflags` or `target.<cfg>.rustflags` in any cargo config
+  file, such as `~/.cargo/config.toml`.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
