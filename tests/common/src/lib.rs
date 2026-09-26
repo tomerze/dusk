@@ -97,10 +97,9 @@ impl DuskNixImpl {
                         "the test harness has no node to talk to yet".to_string(),
                     ))
                 });
-            let init_script = futures::executor::block_on(dusk_program_sh::compile(
+            let init_script = futures::executor::block_on(dusk_program_sh::compile_to_words(
                 disconnected,
                 &format!("nightfall -l {node_address}:{port}"),
-                &[],
             ))
             .expect("compile the init script");
             let init_program_args = InitArgs::new(&init_script)

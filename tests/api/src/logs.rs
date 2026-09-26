@@ -101,7 +101,7 @@ async fn drive_logs_stream(
     // `logs stream` runs until torn down, so its done long-poll never fires and
     // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
     let output: stream::Client = capnp_rpc::new_client(Stream::new(OutputSink));
-    let script = dusk_program_sh::compile(client.clone(), command, &[]).await?;
+    let script = dusk_program_sh::compile(client.clone(), command).await?;
     let program_args = ShArgs::new(ShMode::Script(script))?.as_program_args()?;
     let drive = async {
         let mut process_request = client.process_request();
