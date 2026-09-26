@@ -415,7 +415,7 @@ async fn main(
 }
 ```
 
-Why sit on the signal channel after the RPC is done? Because the *caller* keeps the process alive (`Dusk.run` registered it) and chooses when to send `Terminate`. Returning from `main` immediately after the RPC would orphan whatever observer is waiting on `waitpid`.
+Why sit on the signal channel after the RPC is done? Because the *caller* keeps the process alive (`Dusk.run` registered it) and chooses when to send `Terminate`. Returning from `main` immediately after the RPC would race the caller: a `portal()` request that arrives after `main` has returned is refused, so the shell reaps the process without ever calling its `output`.
 
 ### Pattern B - Walk the namespace, materialise state, expose via portal
 
@@ -914,7 +914,7 @@ When an RPC caller is waiting on the work to finish (e.g. `Portal::sh`), the sam
 
 Match in `main`. `Terminate` should drain whatever cleanup the program needs and return `Ok(())`. The rest are no-ops for most programs - handle one explicitly only if your program has a use for it.
 
-Programs **must not** return prematurely from `main` unless they receive `Terminate` (or hit a fatal error). The process is registered in the namespace's `ps_map` for as long as `main` is running; an early return removes it and any callers holding the `process::Client` will see `Disconnected` on subsequent calls.
+Return from `main` before `Terminate` only when the program is over - its work done, or a fatal error. The process stays in the namespace after `main` returns, exited (`Z` in `ps`), until something reaps it with `waitpid` or `Reap`, but from then on `process.portal()` is refused with `process has exited, cannot get portal`, so a caller that has not yet asked for your portal can no longer call `output`. `sleep` returns when its time is up: it sends `ready` first, and the shell has been waiting on its portal since it ran it.
 
 ---
 
