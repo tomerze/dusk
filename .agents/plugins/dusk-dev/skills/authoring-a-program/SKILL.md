@@ -828,42 +828,56 @@ Three load-bearing points:
 
 - `task_id = Rc::new(Cell::new(0u32))` then `task_id.set(token.id())` after spawn - required for the span field. See **Tracing** below.
 - `state.borrow_mut().active_stops.retain(|s| !Rc::ptr_eq(s, &stop))` at the end - cleans up the stop entry so the vec doesn't grow forever.
-- `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; fire-and-forget callers discard it.
+- `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; the detached `sh` watches it in its signal loop and logs it.
 
 ### 5. Fire-and-forget from `Process::main`
 
 ```rust
+let mut detached_completion = None;
 if is_detached {
     let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
     let noop: dusk_capnp::dusk_capnp::stream::Client = capnp_rpc::new_client(NoopStream::new());
-    self.ctx.program_args
-        .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
-            if let sh_capnp::sh_args::data::Which::DetachedScript(script) = data.which()? {
-                spawn_sh_exec_task(
-                    &self.ctx, interpreter.clone(), script?, noop.clone(),
-                    self.state.clone(), Rc::new(Stop::new()),
-                )?;
-            }
-            Ok(())
+    detached_completion = self.ctx.program_args
+        .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| match data.which()? {
+            sh_capnp::sh_args::data::Which::DetachedScript(script) => Ok(Some(spawn_sh_exec_task(
+                &self.ctx, interpreter.clone(), script?, noop.clone(),
+                self.state.clone(), Rc::new(Stop::new()),
+            )?)),
+            _ => Ok(None),
         })?;
 }
 ready.sender().send(true);
 
 loop {
-    match signal_receiver.receive().await {
-        Signal::Terminate => {
-            for stop in self.state.borrow().active_stops.iter() {
-                stop.signal(());
+    let signal = match detached_completion.clone() {
+        Some(completion) => match select(signal_receiver.receive(), completion.wait()).await {
+            Either::First(signal) => signal,
+            Either::Second(result) => {
+                match result {
+                    Ok(()) => tracing::info!(pid = self.ctx.pid, "detached script finished"),
+                    Err(error) => tracing::error!(
+                        pid = self.ctx.pid,
+                        error = %format!("{error:#}"),
+                        "detached script failed"
+                    ),
+                }
+                detached_completion = None;
+                continue;
             }
-            return Ok(());
+        },
+        None => signal_receiver.receive().await,
+    };
+    if let Signal::Terminate = signal {
+        for stop in self.state.borrow().active_stops.iter() {
+            stop.signal(());
         }
-        _ => {}
+        return Ok(());
     }
 }
 ```
 
 - `NoopStream::new()` from `dusk_program::stream` is the canonical discard stream. Use it when the spawned work produces output that the caller will not consume.
-- The completion `Rc<Signal>` is discarded - errors inside the task surface through whatever logging the task itself emits. **Do not** double-log here: the rule from the `dusk-developer` skill, "code must be diagnosable after the fact", says to log where the result would otherwise be lost; if the task already logs its own errors (as `sh_exec_task` does via the interpreter's `tracing::error!`), the spawn site stays quiet.
+- Nobody awaits a detached task, so its result would be lost here: the interpreter logs only `ExecutionError::Runtime`, and a program's own failure (`ExecutionError::Program`) reaches the completion unlogged. So `main` keeps the completion and watches it beside the signal channel in the loop it already runs - the rule from the `dusk-developer` skill, "code must be diagnosable after the fact", is to log where the result would otherwise be lost, at the lightest-weight site that gets there. The whole anyhow chain (`{error:#}`) goes in the log, because the top context alone does not say what failed. Awaited callers (`Portal::sh`) return the result to their caller and do not log it.
 - On `Signal::Terminate`, fan out to every `active_stops` entry. The tasks observe their stop and unwind cleanly.
 
 ### 6. Awaited variant
