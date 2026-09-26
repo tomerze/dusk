@@ -99,8 +99,7 @@ def restates_standing(message):
 
 
 def marks_dilemma(message):
-    lines = [line for line in message.strip().splitlines() if line.strip()]
-    return bool(lines) and bool(DILEMMA_MARK.match(lines[0])) and "?" in message
+    return bool(DILEMMA_MARK.search(message)) and "?" in message
 
 
 def claims_ready(message):
@@ -156,8 +155,9 @@ def main():
     allowed_standing = None
 
     pending = [title for title in drive.get("pending_questions", []) if not answered(decisions_path(cwd, branch), title)]
-    if pending and not marks_dilemma(message):
-        problems.append(problem("dilemma-triage said these need the user: " + "; ".join(pending) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision."))
+    unasked = [title for title in pending if title not in session.get("asked", [])]
+    if unasked and not marks_dilemma(message):
+        problems.append(problem("dilemma-triage said these need the user: " + "; ".join(unasked) + f". Ask it under a `{DILEMMA_LINE}` line, with a question mark, and record the answer as `- answer:` under the decision."))
 
     claimed, last = claims_ready(message)
     asked = session["asked"] if "asked" in session else drive.get("pending_questions", [])
