@@ -386,6 +386,11 @@ script came in on.
   `ExecutionError::Program` (the spawned program itself reported failure via its
   portal or non-zero `waitpid`). Both land in the result register, where `&&` /
   `||` read them as exit status.
+- **A detached script's result** has no caller to return to, so the detached
+  `sh`'s `Process::main` keeps the completion `spawn_sh_exec_task` returns and
+  watches it beside its signal channel: a failed script is logged at `error` with
+  the error's whole chain, a finished one at `info`. The process keeps running
+  until `Terminate` either way.
 - **Eager dependency compilation** deliberately swallows errors - a missing or
   broken function body is left for the runtime `Call` to surface, so defining a
   function that references a not-yet-defined one is not itself an error.

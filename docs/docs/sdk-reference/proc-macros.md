@@ -38,7 +38,9 @@ impl Args {}
 
 Hosts the program's `Server` interface on the client side. This is what lets a
 running program [call back into the client](../getting-started/concepts/portals-and-streams.md)
-through the `server` capability in its args.
+through the `server` capability in its args. Serialized args carry no `Server`,
+and a disconnected client's `Server` fails every call - see
+[the `Server` is what serializing drops](../getting-started/concepts/programs.md#the-server-is-what-serializing-drops).
 
 ## `#[derive(Launcher)]`
 

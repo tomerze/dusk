@@ -47,7 +47,9 @@ programs      # list every program the node can launch
 The node identifies a program by its id and holds no name for it, so the list is
 sent back to the client, which names each id from its own shell entries. A
 program this client has no entry for shows `N/A`; a program with more than one
-entry shows all of them, separated by ` | `.
+entry shows all of them, separated by ` | `. If that client has disconnected by
+the time the node has the list, or the command was compiled into the node, the
+node sends the list without the `Shell Entry` column.
 
 ## `logs`
 
