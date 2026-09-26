@@ -19,6 +19,8 @@ set(DUSK_NODE_CARGO_PROFILE "" CACHE STRING
     "Cargo profile to build the node with; empty follows CMAKE_BUILD_TYPE")
 set(DUSK_NODE_IMPL "" CACHE STRING
     "Which impl the node links; required. See docs/docs/embedding/node-artifacts.md")
+set(DUSK_NODE_RUSTFLAGS "" CACHE STRING
+    "Extra flags for rustc, separated by spaces as in RUSTFLAGS. See docs/docs/embedding/node-artifacts.md")
 
 # Per-build-dir cargo output: builds with different impls, triples or profiles
 # never overwrite each other's final artifacts, and removing the build dir
@@ -89,6 +91,20 @@ endif()
 set(DUSK_NODE_FEATURE_ARGUMENTS
     --no-default-features --features "impl_${DUSK_NODE_IMPL}")
 
+set(DUSK_NODE_RUSTFLAGS_ARGUMENTS "")
+if(NOT DUSK_NODE_RUSTFLAGS STREQUAL "")
+    separate_arguments(DUSK_NODE_RUSTFLAGS_LIST NATIVE_COMMAND "${DUSK_NODE_RUSTFLAGS}")
+    set(DUSK_NODE_RUSTFLAGS_TOML "")
+    foreach(flag IN LISTS DUSK_NODE_RUSTFLAGS_LIST)
+        string(REPLACE "\\" "\\\\" flag "${flag}")
+        string(REPLACE "\"" "\\\"" flag "${flag}")
+        list(APPEND DUSK_NODE_RUSTFLAGS_TOML "\"${flag}\"")
+    endforeach()
+    list(JOIN DUSK_NODE_RUSTFLAGS_TOML ", " DUSK_NODE_RUSTFLAGS_TOML)
+    set(DUSK_NODE_RUSTFLAGS_ARGUMENTS
+        --config "build.rustflags=[${DUSK_NODE_RUSTFLAGS_TOML}]")
+endif()
+
 if(DUSK_NODE_TRIPLE MATCHES "windows-msvc")
     set(DUSK_NODE_SYSTEM_LIBRARIES bcrypt advapi32 kernel32 ntdll userenv ws2_32 dbghelp)
     set(DUSK_NODE_LIBRARY_PREFIX "")
@@ -138,6 +154,7 @@ add_custom_target(dusk_node
             --package dusk_node
             ${DUSK_NODE_FEATURE_ARGUMENTS}
             ${DUSK_NODE_TARGET_ARGUMENTS}
+            ${DUSK_NODE_RUSTFLAGS_ARGUMENTS}
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${DUSK_NODE_OUTPUT_DIRECTORY}/${DUSK_NODE_LIBRARY_PREFIX}dusk_node${DUSK_NODE_LIBRARY_SUFFIX}"
             "${DUSK_NODE_LIBRARY_PATH}"
@@ -161,6 +178,7 @@ add_custom_target(dusk_node_bin
             --package dusk_node_bin
             ${DUSK_NODE_FEATURE_ARGUMENTS}
             ${DUSK_NODE_TARGET_ARGUMENTS}
+            ${DUSK_NODE_RUSTFLAGS_ARGUMENTS}
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${DUSK_NODE_OUTPUT_DIRECTORY}/dusk_node${DUSK_NODE_EXECUTABLE_SUFFIX}"
             "${DUSK_NODE_EXECUTABLE_PATH}"

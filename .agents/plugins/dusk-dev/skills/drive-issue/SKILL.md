@@ -236,6 +236,15 @@ git checkout <branch>
 A returning worktree is a new one, so Step 2 applies to it again - submodule,
 lockfile - and its first build is cold. Measure from the second.
 
+Its review folder is gone too, and the hooks read the decisions from
+`<cwd>/review/<branch>/`. Copy the folder back in before anything else, or the
+harness counts every `ask-human` decision as unanswered and refuses the turn:
+
+```
+mkdir -p review/<branch>
+cp -r ../../../review/<branch>/. review/<branch>/
+```
+
 ## Step 6 - After the merge
 
 The merge happens as `harness` says, on explicit approval only. Afterwards

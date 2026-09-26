@@ -267,11 +267,13 @@ open, more work means: commit onto the same branch, push, and
 `update_pull_request` the body to cover it. If a second PR has already been
 opened, fold its commits onto the one branch and close it as superseded.
 
-**Re-check `origin/master` before you push, and re-run the build after you
+**Re-check `origin/master` before the split, and re-run the build after you
 rebase.** Dusk work takes hours and the user merges their own PRs in the
 meantime. Master does not only change code - it can delete the build
 infrastructure the work was set up around, so treat a rebase as invalidating the
-whole environment, not just the numbers.
+whole environment, not just the numbers. It invalidates the split as well: a
+rebase rewrites every commit the `atomic-commit` agent signed off, and the
+hand-off is refused until the agent has run again over the new tip.
 
 ```
 git push -u origin <branch>
@@ -469,7 +471,7 @@ next agent is a defect exactly like a wrong comment.
 ☐ Worked in one commit; split once by the `atomic-commit` agent just before pushing
 ☐ Committed in the foreground with a long timeout
 ☐ No issue number in any commit subject
-☐ `origin/master` re-checked before pushing; rebased, then the build re-run
+☐ `origin/master` re-checked before the split; rebased, then the build re-run
 ☐ Pushed; **one** PR opened over the MCP
 ☐ PR body written in the first person, addressed to no one, carrying `## Decisions`
 ☐ The review folder copied into the PR body under `## Decisions`, `## Terminology`, `## Strings`, `## Comments` - never committed
