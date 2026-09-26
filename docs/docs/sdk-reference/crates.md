@@ -24,9 +24,10 @@ Each Base program is its own crate, named `dusk_program_<name>` - `dusk_program_
 `dusk_program_hostname`, `dusk_program_true`, `dusk_program_false`,
 `dusk_program_init`, `dusk_program_nightfall`, `dusk_program_logs`. See
 [Base programs](../getting-started/concepts/base.md). `dusk_program_sh_compiler`
-(`base/sh/compiler/`) sits under the shell: it holds `bytecode.capnp` - the bytecode a script
-compiles into, which `init` and `sh` both take in their args - and, behind its
-`parser` feature, the grammar it parses with. See [The shell](../development/shell.md).
+(`base/sh/compiler/`) sits under the shell's client side: it holds the grammar a
+script is parsed with, and a node never links it. The bytecode a script compiles
+into, which `init` and `sh` both take in their args, is `sh`'s own `bytecode.capnp`.
+See [The shell](../development/shell.md).
 
 `dusk_base` ties them together: it re-exports the programs and provides
 `default_launcher_set()`, the set a node links.

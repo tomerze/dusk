@@ -11,7 +11,7 @@ travel back.
 
 | Crate | Side | Role |
 |-------|------|------|
-| `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
+| `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract and `capnp/bytecode.capnp` the bytecode a script compiles into |
 | `base/sh/compiler` | client | `dusk_program_sh_compiler` - the tokenizer, the nom grammar, the `Ast` and the syntax error; `sh` depends on it only under its `client` feature, so a node never links it |
 | `base/sh/proc` | client (`std`) | `#[sh_entry]` |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
