@@ -135,18 +135,35 @@ impl dusk_program::process::ProcessMixin for Process {
 
         let mut process_request = dusk_client.process_request();
         sh_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
-        let process_response = process_request.send().promise.await?;
+        let process = process_request.send().promise.await?.get()?.get_result()?;
         let mut run_request = dusk_client.run_request();
-        run_request
-            .get()
-            .set_process(process_response.get()?.get_result()?);
+        run_request.get().set_process(process.clone());
         run_request.send().promise.await?;
+        let pid = process
+            .pid_request()
+            .send()
+            .promise
+            .await?
+            .get()?
+            .get_result();
 
-        loop {
-            if let Signal::Terminate = signal_receiver.receive().await {
-                return Ok(());
+        let mut waitpid_request = dusk_client.waitpid_request();
+        waitpid_request.get().set_pid(pid);
+        let reap = async {
+            if let Err(error) = waitpid_request.send().promise.await {
+                tracing::warn!(pid, error = %error, "waitpid on the sh running the init script failed");
             }
-        }
+            core::future::pending::<()>().await
+        };
+        let terminate = async {
+            loop {
+                if let Signal::Terminate = signal_receiver.receive().await {
+                    return;
+                }
+            }
+        };
+        embassy_futures::select::select(reap, terminate).await;
+        Ok(())
     }
 }
 
