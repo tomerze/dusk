@@ -59,6 +59,38 @@ impl Args {}
 `ProgramArgs`; `#[impl_args_rpc_server]` hosts the `Server` interface so the node
 can call those callbacks back on the client.
 
+### The `Server` is what serializing drops
+
+A capability is a live object on a connection, and bytes cannot carry one. So
+when a command's args are serialized to bytes - `compile_sh!` does it through
+`compile_to_words` to compile a command into a binary, and the same holds for
+bytes written to a file - their `Data` is kept and their `Server` is dropped. A
+program launched from those args finds no `Server`: `program_args.server_as()`
+fails with `Message contains null capability pointer`. Bytecode sent to a node
+over a connection is not serialized this way, and each of its commands keeps its
+`Server`.
+
+The `Server` can also be there and dead. It is hosted by the client that built
+the args, so once that client disconnects, every call to it fails - with
+`Disconnected`, or `Premature end of file` if the connection died in the middle
+of a message. That is what a command in a function defined over another
+connection, or in a detached script, meets after the client that typed it has
+gone.
+
+Either way the program is running where no client is listening. A program that
+calls its `Server` should, where it can, fall back to working without it when
+the `Server` is missing or disconnected, and return every other error.
+`programs` does: its `Server` names each program from the client's shell entries,
+and without it the node sends the list without names.
+
+A capability belongs in the `Server`, never in `Data`. Serializing refuses a
+command whose `Data` holds one - `compile_sh!` fails with an error naming the
+program - so a program that keeps a capability in its `Data` can never run from
+serialized args. `ArgsDataBuilder` has no capability table either, so setting a
+capability in it panics before it gets that far. `sh` is the one exception: its
+`Data` is itself bytecode, and serializing rebuilds it command by command, dropping
+each command's `Server`.
+
 ## 3. Launcher
 
 The factory that builds a process from args. Derive its identity and write the
