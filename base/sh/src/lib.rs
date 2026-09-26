@@ -144,30 +144,56 @@ impl dusk_program::process::ProcessMixin for Process {
         self.state.borrow_mut().interpreter =
             Some(Interpreter::new(client, self.function_table.clone()));
 
+        let mut detached_completion = None;
         if is_detached {
             let interpreter = self.state.borrow().interpreter.as_ref().unwrap().clone();
             let noop: dusk_capnp::dusk_capnp::stream::Client =
                 capnp_rpc::new_client(NoopStream::new());
-            self.ctx
+            detached_completion = self
+                .ctx
                 .program_args
                 .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
-                    if let sh_capnp::sh_args::data::Which::DetachedScript(script) = data.which()? {
-                        spawn_sh_exec_task(
-                            &self.ctx,
-                            interpreter.clone(),
-                            script?,
-                            noop.clone(),
-                            self.state.clone(),
-                            Rc::new(Stop::new()),
-                        )?;
+                    match data.which()? {
+                        sh_capnp::sh_args::data::Which::DetachedScript(script) => {
+                            Ok(Some(spawn_sh_exec_task(
+                                &self.ctx,
+                                interpreter.clone(),
+                                script?,
+                                noop.clone(),
+                                self.state.clone(),
+                                Rc::new(Stop::new()),
+                            )?))
+                        }
+                        _ => Ok(None),
                     }
-                    Ok(())
                 })?;
         }
         ready.sender().send(true);
 
         loop {
-            if let Signal::Terminate = signal_receiver.receive().await {
+            let signal = match detached_completion.clone() {
+                Some(completion) => {
+                    match select(signal_receiver.receive(), completion.wait()).await {
+                        Either::First(signal) => signal,
+                        Either::Second(result) => {
+                            match result {
+                                Ok(()) => {
+                                    tracing::info!(pid = self.ctx.pid, "detached script finished")
+                                }
+                                Err(error) => tracing::error!(
+                                    pid = self.ctx.pid,
+                                    error = %format!("{error:#}"),
+                                    "detached script failed"
+                                ),
+                            }
+                            detached_completion = None;
+                            continue;
+                        }
+                    }
+                }
+                None => signal_receiver.receive().await,
+            };
+            if let Signal::Terminate = signal {
                 for stop in self.state.borrow().active_stops.iter() {
                     stop.signal(());
                 }
