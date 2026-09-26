@@ -11,6 +11,6 @@ make -C artifacts/dusk_node/build/nix-x64-linux dusk_node_bin # Build
 
 Build a Dusk CLI client for that node, and use it to connect to the running node.
 ```bash
-cargo build --release -p dusk_cli # Build
+cargo build --release -p dusk_cli_bin # Build
 ./target/release/dusk 127.0.0.1:9090 # Connect
 ```
