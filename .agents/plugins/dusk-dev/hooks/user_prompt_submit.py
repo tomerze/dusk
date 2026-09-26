@@ -32,9 +32,10 @@ def main():
         session["activate_nudged"] = True
         save_json(session_path, session)
         context(
-            "The dusk working rules are not in force in this session. Invoke /dusk-dev:activate "
-            "before changing anything: it carries how decisions are recorded, how the branch is "
-            "committed and split, how it is handed over, and when it may be merged."
+            "Nothing about dusk is loaded in this session. Invoke /dusk-dev:activate before "
+            "changing anything: it carries what there is to know about the codebase and how it "
+            "is built. It sets no workflow; that comes only with /dusk-dev:harness or "
+            "/dusk-dev:drive-issue."
         )
 
 

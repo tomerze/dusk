@@ -8,15 +8,17 @@ description: Take a GitHub issue in this repository from "here is the issue numb
 The mechanics of shipping an **issue**: reading it, the worktree it is built in,
 the branch cut for it, and the pull request that closes it. Everything about how
 the work itself is done - decisions, commits, the split, the hand-off, the review
-agents, the merge - is the `activate` skill, and this one runs on top of it.
+agents, the merge - is the `harness` skill, and this one runs on top of it.
 
 This skill takes an issue. Without one there is nothing here to run: work on a
-branch the user is already on goes to `activate` instead.
+branch the user is already on goes to `activate`, and to `harness` when the user
+puts the session under it.
 
-## Step 0 - Activate the rules
+## Step 0 - Put the session under the harness
 
-Invoke the `dusk-dev:activate` skill before anything else. Every step below
-assumes its rules are in force, and none of them is repeated here.
+Invoke the `dusk-dev:activate` skill, then the `dusk-dev:harness` skill, before
+anything else. Every step below assumes the harness's rules are in force, and
+none of them is repeated here.
 
 ---
 
@@ -127,7 +129,7 @@ git log origin/master --oneline -3
 
 Branch from `origin/master`, not from whatever the worktree started on.
 
-`activate` says to re-check `origin/master` before the push and to re-run the
+`harness` says to re-check `origin/master` before the push and to re-run the
 build after the rebase. In a worktree that can invalidate the setup Step 2 made,
 not only the numbers: master can delete the build infrastructure the worktree
 was built around.
@@ -141,7 +143,7 @@ with an error that named neither the symlink nor the branch that removed it.
 
 ## Step 4 - What a pull request carries for an issue
 
-Open the pull request as `activate` says. For an issue the body also carries:
+Open the pull request as `harness` says. For an issue the body also carries:
 
 - **`Closes #N`**, so the merge closes the issue. The harness refuses a body
   without it. Exactly one pull request carries it: when a drive is
@@ -236,7 +238,7 @@ lockfile - and its first build is cold. Measure from the second.
 
 ## Step 6 - After the merge
 
-The merge happens as `activate` says, on explicit approval only. Afterwards
+The merge happens as `harness` says, on explicit approval only. Afterwards
 confirm the issue closed, and report the merge commit.
 
 ## `drive-issue continue` - resuming a drive already in flight
@@ -245,7 +247,7 @@ confirm the issue closed, and report the merge commit.
 has changed since, carry on. Usually the user has edited the tree themselves, or
 left review comments, or asked for something the last round missed.
 
-Everything in Steps 0–6, and everything in `activate`, still applies. What is different is that **nothing gets
+Everything in Steps 0–6, and everything in `harness`, still applies. What is different is that **nothing gets
 created except the worktree**. Step 5 removed it to free the branch, so make one
 again and check the branch out into it. The branch and the PR already exist; find
 them rather than opening new ones. The user's own edits may still be sitting
@@ -280,7 +282,7 @@ Then:
   out of this round, it belongs in the body's decisions section so the reviewer
   sees it in one place.
 
-Finish the same way `activate` does: hand back the PR URL and the branch to check
+Finish the same way `harness` does: hand back the PR URL and the branch to check
 out, then wait. `continue` never merges on its own either.
 
 ## Keeping this skill true
@@ -295,9 +297,9 @@ next agent is a defect exactly like a wrong comment.
 
 ## Checklist
 
-`activate` carries the checklist for the work itself. On top of it:
+`harness` carries the checklist for the work itself. On top of it:
 
-☐ `activate` invoked first
+☐ `activate` and `harness` invoked first
 ☐ Issue and comments read over MCP; definition of done written out
 ☐ Worktree entered; `vendor/capnproto` initialised, lockfile copied
 ☐ `origin/master` fetched; branch cut from it

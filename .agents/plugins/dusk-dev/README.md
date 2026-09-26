@@ -59,12 +59,14 @@ agents are Claude Code's; Codex reads the skills.
 | part | where |
 |---|---|
 | project instructions | `skills/dusk-developer` - the orientation map for the codebase and the working agreements every change is held to. The repository's root `AGENTS.md` carries none of it: it points here, which is how Codex and anything else without a skill loader find it |
-| skills | `skills/` - `activate` is the workflow on whatever branch is checked out, `drive-issue` is activate plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `fix-strings` and `fix-terminology` apply what the user edited into the review's tables; `authoring-a-program` and `adding-a-driver-method` for the code |
+| skills | `skills/` - `activate` loads what there is to know about dusk and sets no workflow, `harness` puts the workflow in force on whatever branch is checked out, `drive-issue` is the harness plus a GitHub issue; `atomic-commit`, `splice`, `what`, `honest-to-god`; `fix-strings` and `fix-terminology` apply what the user edited into the review's tables; `authoring-a-program` and `adding-a-driver-method` for the code |
 | agents | `agents/` - `atomic-commit`, `self-review`, `race-screen` (which dispatches `race-inspector`), `comment-review`, `terminology-review`, `string-review`, `dilemma-triage`, `dilemma-screen`, `decision-ranker` |
 | hooks | `hooks/` - one script per event; `python3 hooks/selftest.py` runs them against canned input |
 | status line | `hooks/statusline.py` - the session's state, wired from `.claude/settings.json` |
 
 ## What the hooks enforce
+
+In every session:
 
 - No comment line is added to a `.rs`, `.capnp`, `.py`, `.toml`, `.c` or `.h` file.
 - Nothing personal is written into any file: the git user's name, their email address and their home directory are refused, read fresh each time so the harness stores none of them.
@@ -75,7 +77,13 @@ agents are Claude Code's; Codex reads the skills.
 - `cargo test` and `cargo nextest` ask first.
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
 - `git push` never targets master and requires every commit on the branch to pass the subject checks. It never waits for the split; the hand-off does.
-- A pull request is one per drive, carries `Closes #N`, and carries the decisions; merging always asks.
+- A pull request body carries no watermark, and one for an issue carries `Closes #N`.
+- Merging always asks.
+
+Only once `/dusk-dev:harness` or `/dusk-dev:drive-issue` has been invoked in the session:
+
+- `comment-review` reads each commit that adds a comment line.
+- A pull request is one per drive and carries the decisions.
 - Once the session has committed or pushed, every turn is marked: it ends with `Ready for review.`, opens with a `DILEMMA:` line and a question, opens with `WAITING ON SUBAGENTS:` while an agent it dispatched is still running, is a `/what` report, or answers what the user asked and ends with `Still ready for review.` / `Still waiting for dilemma verdict.`; nothing else ends a turn.
 - A marked dilemma is put to `dilemma-screen` before the turn is allowed to end, and comes back refused if the screen says the question does not block the work. A decision `dilemma-triage` already marked `ask-human` is not screened.
 - The status line shows that state: working, waiting on named agents, handed over, or awaiting a verdict. Once a hand-off is accepted, `ready to review <pull request url>` is its first line - the url comes from the check that accepted the hand-off, so the line cannot name a pull request that was not verified open at the pushed tip.
@@ -83,6 +91,8 @@ agents are Claude Code's; Codex reads the skills.
 - `Ready for review.` goes out once per branch. After it, a fix is committed, pushed and said on the pull request, and the turn ends `Still ready for review.` - the branch is never handed over a second time, because the human is already reading it.
 
 ## Three phases
+
+Under the harness, work goes through three phases.
 
 **Writing.** The rules above are checked as each action is taken, `dilemma-triage`
 judges each decision as it is made, and `comment-review` reads each commit that

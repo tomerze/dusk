@@ -29,4 +29,4 @@ A table of what changed and nothing else before it:
 | Old | New | Where | Commit |
 ```
 
-Then any row that could not be applied, with the reason, and the activate skill's closing line for the state the branch is in.
+Then any row that could not be applied, with the reason, and, when the session is under the harness, the harness skill's closing line for the state the branch is in.

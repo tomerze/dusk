@@ -20,8 +20,9 @@ are about to do:
 
 | skill | for |
 |---|---|
-| `activate` | any change on the branch that is checked out: the decisions, the commits, the hand-off, the review |
-| `drive-issue` | `activate` plus a GitHub issue, from the issue number to the merged pull request |
+| `activate` | what there is to know about dusk before any change; it sets no workflow |
+| `harness` | the workflow for a change on the branch that is checked out: the decisions, the commits, the hand-off, the review - only once the user invokes it |
+| `drive-issue` | `harness` plus a GitHub issue, from the issue number to the merged pull request |
 | `atomic-commit` | splitting work into commits that are each one statement |
 | `splice` | cutting a pull request that grew past what one person can read |
 | `authoring-a-program` | writing a program under `base/` |

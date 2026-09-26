@@ -42,7 +42,7 @@ fn copy_vendor_capnp(capnp_root: &Path) {
         .expect("OUT_DIR path contains invalid UTF-8");
 
     let status = Command::new("cp")
-        .args(["-r", vendor, dest])
+        .args(["-rH", vendor, dest])
         .status()
         .expect("Failed to copy capnproto from vendor directory");
 

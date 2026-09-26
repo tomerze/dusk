@@ -122,9 +122,9 @@ else()
 endif()
 
 set(DUSK_NODE_LIBRARY_PATH
-    "${DUSK_NODE_OUTPUT_DIRECTORY}/${DUSK_NODE_LIBRARY_PREFIX}dusk_node${DUSK_NODE_LIBRARY_SUFFIX}")
+    "${CMAKE_CURRENT_BINARY_DIR}/lib/${DUSK_NODE_LIBRARY_PREFIX}dusk_node${DUSK_NODE_LIBRARY_SUFFIX}")
 set(DUSK_NODE_EXECUTABLE_PATH
-    "${DUSK_NODE_OUTPUT_DIRECTORY}/dusk_node${DUSK_NODE_EXECUTABLE_SUFFIX}")
+    "${CMAKE_CURRENT_BINARY_DIR}/bin/dusk_node${DUSK_NODE_EXECUTABLE_SUFFIX}")
 
 # `cmake --build <dir> --target clean` also removes the cargo output.
 set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
@@ -132,42 +132,44 @@ set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
 
 # ---- library ----
 
-add_custom_target(dusk_node_cargo_lib
+add_custom_target(dusk_node
     COMMAND "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node
             ${DUSK_NODE_FEATURE_ARGUMENTS}
             ${DUSK_NODE_TARGET_ARGUMENTS}
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${DUSK_NODE_OUTPUT_DIRECTORY}/${DUSK_NODE_LIBRARY_PREFIX}dusk_node${DUSK_NODE_LIBRARY_SUFFIX}"
+            "${DUSK_NODE_LIBRARY_PATH}"
     WORKING_DIRECTORY "${DUSK_NODE_WORKSPACE}"
     BYPRODUCTS "${DUSK_NODE_LIBRARY_PATH}"
     COMMENT "Building dusk_node with the ${DUSK_NODE_IMPL} impl"
     VERBATIM)
 
-add_library(dusk_node STATIC IMPORTED GLOBAL)
-add_dependencies(dusk_node dusk_node_cargo_lib)
-set_target_properties(dusk_node PROPERTIES
+add_library(dusk::node STATIC IMPORTED GLOBAL)
+add_dependencies(dusk::node dusk_node)
+set_target_properties(dusk::node PROPERTIES
     IMPORTED_LOCATION "${DUSK_NODE_LIBRARY_PATH}"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/lib/include"
     INTERFACE_LINK_LIBRARIES "${DUSK_NODE_SYSTEM_LIBRARIES}")
 
-add_library(dusk::node ALIAS dusk_node)
-
 # ---- executable ----
 
-add_custom_target(dusk_node_cargo_bin
+add_custom_target(dusk_node_bin
     COMMAND "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node_bin
             ${DUSK_NODE_FEATURE_ARGUMENTS}
             ${DUSK_NODE_TARGET_ARGUMENTS}
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${DUSK_NODE_OUTPUT_DIRECTORY}/dusk_node${DUSK_NODE_EXECUTABLE_SUFFIX}"
+            "${DUSK_NODE_EXECUTABLE_PATH}"
     WORKING_DIRECTORY "${DUSK_NODE_WORKSPACE}"
     BYPRODUCTS "${DUSK_NODE_EXECUTABLE_PATH}"
     COMMENT "Building dusk_node_bin with the ${DUSK_NODE_IMPL} impl"
     VERBATIM)
 
-add_executable(dusk_node_bin IMPORTED GLOBAL)
-add_dependencies(dusk_node_bin dusk_node_cargo_bin)
-set_target_properties(dusk_node_bin PROPERTIES
+add_executable(dusk::node_bin IMPORTED GLOBAL)
+add_dependencies(dusk::node_bin dusk_node_bin)
+set_target_properties(dusk::node_bin PROPERTIES
     IMPORTED_LOCATION "${DUSK_NODE_EXECUTABLE_PATH}")
-
-add_executable(dusk::node_bin ALIAS dusk_node_bin)

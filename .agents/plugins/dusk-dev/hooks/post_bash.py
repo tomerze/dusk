@@ -152,7 +152,7 @@ def main():
             changed = True
         sha = tip(cwd)
         _, subject = git(cwd, "log", "-1", "--format=%s")
-        if sha and not re.match(r"^WIP\b", subject, re.I):
+        if sha and {"harness", "drive-issue"} & set(session["loaded_skills"]) and not re.match(r"^WIP\b", subject, re.I):
             review_commit(cwd, branch, sha, subject)
     if re.search(r"\bgit\s+push\b", command):
         drive["phase"] = "pushed"

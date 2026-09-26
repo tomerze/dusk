@@ -36,14 +36,14 @@ Every supported operating system and its impl is in the
 cd artifacts/dusk_node
 cmake --list-presets                 # show available presets
 cmake --preset nix-x64-linux         # configure, once per build directory
-make -C build/nix-x64-linux dusk_node_cargo_lib dusk_node_cargo_bin
+make -C build/nix-x64-linux dusk_node dusk_node_bin
 ```
 
 Output:
 
 ```
-build/nix-x64-linux/cargo/x86_64-unknown-linux-gnu/release/libdusk_node.a
-build/nix-x64-linux/cargo/x86_64-unknown-linux-gnu/release/dusk_node
+build/nix-x64-linux/lib/libdusk_node.a
+build/nix-x64-linux/bin/dusk_node
 lib/include/dusk.h
 ```
 
@@ -95,7 +95,7 @@ cmake --preset nix-x64-linux -DDUSK_NODE_CARGO_PROFILE=dev
 # Build for a target that has no preset
 cmake -S . -B build/aarch64-linux \
   -DDUSK_NODE_IMPL=nix -DDUSK_NODE_CARGO_TARGET=aarch64-unknown-linux-gnu
-make -C build/aarch64-linux dusk_node_cargo_lib
+make -C build/aarch64-linux dusk_node
 ```
 
 #### DUSK_NODE_IMPL

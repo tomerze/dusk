@@ -111,6 +111,8 @@ def pull_request_problems(cwd, body, creating, hook_input):
             f"the PR body must carry `Closes #{issue}`, or `Part of #{issue}` "
             "when it is one of a stack and another pull request closes the issue"
         )
+    if not {"harness", "drive-issue"} & set(session["loaded_skills"]):
+        return problems
     if creating and drive.get("pr"):
         problems.append(f"one pull request per drive: update #{drive['pr']} instead of opening another")
     path = decisions_path(cwd, branch)
