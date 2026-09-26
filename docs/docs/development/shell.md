@@ -230,8 +230,8 @@ struct Bytecode {
 A command is a built `Dusk.ProgramArgs`, not a text slice for the server to
 resolve, and a word that names a function is the `call` variant - which word is
 which is settled while the bytecode is built. Other schemas import this one as
-`using Compiler = import "/capnp/bytecode.capnp";` and spell the field type
-`Compiler.Bytecode`: `ShArgs.Data`'s `script` and `detachedScript`, `ShPortal.sh`'s
+`using Bytecode = import "/capnp/bytecode.capnp";` and spell the field type
+`Bytecode.Bytecode`: `ShArgs.Data`'s `script` and `detachedScript`, `ShPortal.sh`'s
 `script`, `InitArgs.Data`'s `initScript`. The generated Rust module is
 `bytecode_capnp`, re-exported by `base/sh/src/lib.rs` as `bytecode`, so Rust says
 `bytecode::Reader`.

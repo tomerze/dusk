@@ -31,7 +31,7 @@ Bringing a node up follows a fixed sequence:
 3. Spawn the first process, `init`, into the namespace via an in-process `Dusk`
    client (`Dusk.process` + `Dusk.run`).
 
-The `init` process is handed an init script - a `Compiler.Bytecode` message - and starts
+The `init` process is handed an init script - a `Bytecode.Bytecode` message - and starts
 a detached `sh` to run it, then waits for its own `Terminate`. For the node
 artifact that script is the single command `nightfall -l 0.0.0.0:9090`, compiled
 while the artifact itself is built, so nothing is compiled at boot.
