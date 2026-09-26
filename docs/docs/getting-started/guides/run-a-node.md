@@ -15,10 +15,10 @@ See [Build a custom impl](custom-impl.md).
 
 ## The listen address
 
-The listen address is fixed: every node built from this template listens on port
-`9090`, on every address, and `dusk_node` takes no arguments. Moving it means
-editing the init script in the template - see
-[Node artifacts](../../embedding/node-artifacts.md).
+The listen address is set when the node is built: `dusk_node` takes no
+arguments, and built with the default init script it listens on port `9090`, on
+every address. Moving it means building with another init script - see
+[`DUSK_NODE_INIT_SCRIPT`](../../embedding/node-artifacts.md#dusk_node_init_script).
 
 ## What happens at startup
 
@@ -35,7 +35,7 @@ The `init` process is handed an init script - a `Bytecode.Bytecode` message - an
 a detached `sh` to run it, then waits for its own `Terminate`, reaping that `sh`
 with `waitpid` when it exits. When the script is one program, that `sh` exits as
 soon as it has started the program. For the node
-artifact that script is the single command `nightfall -l 0.0.0.0:9090`, compiled
+artifact that script is by default the single command `nightfall -l 9090`, compiled
 while the artifact itself is built, so nothing is compiled at boot, and `ps`
 shows `init` and `nightfall` with no `sh` between them.
 [`nightfall`](../concepts/base.md#nightfall)

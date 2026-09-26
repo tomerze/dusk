@@ -136,6 +136,17 @@ replaces both this variable and `.cargo/config.toml`:
 - `target.<triple>.rustflags` or `target.<cfg>.rustflags` in any cargo config
   file, such as `~/.cargo/config.toml`.
 
+#### DUSK_NODE_INIT_SCRIPT
+
+The shell script the node runs when it starts, e.g.
+`-DDUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091"`. The presets set it to
+`nightfall -l 9090`, which listens on port 9090 on every address. Empty leaves
+it to cargo, as in [Building with cargo](#building-with-cargo).
+
+The script is compiled into the node while it is built: a script that does not
+compile fails the build, and changing the variable rebuilds the node. A script of
+several commands separates them with `;`.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
@@ -168,6 +179,18 @@ windows), use `-p dusk_node_bin` instead of `-p dusk_node`.
   any impl, the same way as the std command.
 - Xtensa targets need the esp-rs fork of the compiler (`espup install`) and
   `cargo +esp`; the command is otherwise the same.
+
+The init script is the `DUSK_NODE_INIT_SCRIPT` environment variable. The
+repository's `.cargo/config.toml` sets it to `nightfall -l 9090`, and a value in
+the environment the build runs in takes its place. Cargo reads that file only for
+a build run inside the repository, so a build from another workspace - a Rust
+application that depends on `dusk_node` - sets the variable itself, in its
+environment or in the `[env]` table of its own `.cargo/config.toml`:
+
+```sh
+DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
+  --target <target> -p dusk_node --no-default-features --features impl_nix
+```
 
 ## 3. Link
 
@@ -228,22 +251,23 @@ int main(void)
 
 ### Executable
 
-Available with the nix and windows impls. It takes no arguments and listens on
-port 9090, on every address:
+Available with the nix and windows impls. It takes no arguments and, built with
+the default init script, listens on port 9090, on every address:
 
 ```sh
 ./dusk_node
 ```
 
-The address is built in: the init script is the single command
-`nightfall -l 0.0.0.0:9090`, compiled into the artifact by `compile_sh!` while
-it is built. To listen somewhere else, change that command in your copy of
-`artifacts/dusk_node/lib/src/lib.rs` and rebuild. The macro resolves the command
-against the sh entries linked into `dusk_program_sh_compiler_proc`, which are the
+The address is built in: the init script, `nightfall -l 9090` by default, is
+compiled into the artifact by `compile_sh!` while it is built. To listen somewhere
+else, set [`DUSK_NODE_INIT_SCRIPT`](#dusk_node_init_script) and rebuild. The macro
+resolves the script's commands against the sh entries linked into
+`dusk_program_sh_compiler_proc`, which are the
 Base programs from `dusk_base`: to name a program of your own there, add its crate
 to `base/sh/compiler/proc/Cargo.toml` and reference its `sh_entry` beside the
-`dusk_base::link_anchors()` call in `base/sh/compiler/proc/src/lib.rs`. Two nodes from the same template cannot run
-on one machine - the second fails to bind.
+`dusk_base::link_anchors()` call in `base/sh/compiler/proc/src/lib.rs`. On Linux, two nodes whose init scripts
+listen on the same port cannot run on one machine unless each listens on an
+address of its own rather than on every address - the second fails to bind.
 
 ## Reference
 
