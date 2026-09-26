@@ -257,14 +257,29 @@ impl sh_capnp::output_portal::Server for Portal {
         let state_cell = self.process.state.clone();
         let ctx = self.process.ctx.clone();
         Promise::from_future(async move {
-            let mut data = ctx
+            use sh_capnp::sh_args::data::Which;
+            let action = ctx
                 .program_args
-                .data_owned::<sh_capnp::sh_args::data::Owned>()?;
-            match data
-                .get_root::<sh_capnp::sh_args::data::Builder>()?
-                .into_reader()
-                .which()?
-            {
+                .with_data::<sh_capnp::sh_args::data::Owned, _, _>(|data| {
+                    Ok(match data.which()? {
+                        Which::Server(()) => Which::Server(()),
+                        Which::Prompt(_) => Which::Prompt(()),
+                        Which::DetachedScript(_) => Which::DetachedScript(()),
+                        Which::Script(script) => {
+                            let interpreter =
+                                state_cell.borrow().interpreter.as_ref().unwrap().clone();
+                            Which::Script(spawn_sh_exec_task(
+                                &ctx,
+                                interpreter,
+                                script?,
+                                stream.clone(),
+                                state_cell.clone(),
+                                Rc::new(Stop::new()),
+                            )?)
+                        }
+                    })
+                })?;
+            match action {
                 sh_capnp::sh_args::data::Which::Server(_) => {
                     let mut request = stream.send_request();
                     let value_builder = request.get().init_value();
@@ -283,16 +298,7 @@ impl sh_capnp::output_portal::Server for Portal {
                         .retain(|active| !Rc::ptr_eq(active, &stop));
                     results.get().set_daemonize(false);
                 }
-                sh_capnp::sh_args::data::Which::Script(script) => {
-                    let interpreter = state_cell.borrow().interpreter.as_ref().unwrap().clone();
-                    let completion = spawn_sh_exec_task(
-                        &ctx,
-                        interpreter,
-                        script?,
-                        stream,
-                        state_cell.clone(),
-                        Rc::new(Stop::new()),
-                    )?;
+                sh_capnp::sh_args::data::Which::Script(completion) => {
                     completion
                         .wait()
                         .await
