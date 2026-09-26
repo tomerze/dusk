@@ -39,6 +39,7 @@ async fn sh_exec_task(
     completion: Rc<
         dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>,
     >,
+    logs_result: bool,
 ) {
     use tracing::Instrument;
     let span = tracing::info_span!(
@@ -62,6 +63,9 @@ async fn sh_exec_task(
             .borrow_mut()
             .active_stops
             .retain(|s| !Rc::ptr_eq(s, &stop));
+        if logs_result {
+            log_detached_result(pid, &result);
+        }
         completion.signal(result);
     }
     .instrument(span)
@@ -75,6 +79,7 @@ pub(crate) fn spawn_sh_exec_task(
     output: dusk_capnp::dusk_capnp::stream::Client,
     state: Rc<RefCell<State>>,
     stop: Rc<Stop>,
+    logs_result: bool,
 ) -> capnp::Result<
     Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 > {
@@ -98,6 +103,7 @@ pub(crate) fn spawn_sh_exec_task(
         stop,
         state,
         completion.clone(),
+        logs_result,
     )
     .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
     task_id.set(token.id());

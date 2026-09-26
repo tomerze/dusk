@@ -227,6 +227,7 @@ impl Portal {
             output.clone(),
             self.process.state.clone(),
             stop.clone(),
+            false,
         ));
         Promise::from_future(async move {
             let listen = async {
@@ -292,6 +293,7 @@ impl sh_capnp::output_portal::Server for Portal {
                                 stream.clone(),
                                 state_cell.clone(),
                                 Rc::new(Stop::new()),
+                                false,
                             )?)
                         }
                     })
