@@ -11,8 +11,8 @@ travel back.
 
 | Crate | Side | Role |
 |-------|------|------|
-| `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract |
-| `base/sh/compiler` | both | `dusk_program_sh_compiler` - `capnp/bytecode.capnp` and the `compile` module always; the tokenizer, the nom grammar, the `Ast` and the syntax error behind its `parser` feature, so a node compiles only the schema |
+| `base/sh` | both | the `sh` program. `client/` is client-side; `interpreter/` is server-side; `capnp/sh.capnp` is the wire contract and `capnp/bytecode.capnp` the bytecode a script compiles into |
+| `base/sh/compiler` | client | `dusk_program_sh_compiler` - the tokenizer, the nom grammar, the `Ast` and the syntax error; `sh` depends on it only under its `client` feature, so a node never links it |
 | `base/sh/proc` | client (`std`) | `#[sh_entry]` |
 | `base/sh/src/client/prompt/` | client (`std`) | reedline UI, builtins, draws output |
 | `base/sh/src/client/shell/` | client (`std`) | `Shell` - drives the `sh` process a client was handed |
@@ -143,13 +143,25 @@ one description of what a script compiles to.
 Compiling needs the `SH_ENTRIES` table and the command's clap parser to build that
 program's args, so it happens wherever the source is read. That is the client at a
 prompt, and it is the build for a script known in advance:
-`dusk_program_sh_compiler_proc::compile_sh!` resolves a command and hands back
-the bytes while the calling crate compiles, which is how the node artifact gets its
-init script. Both capabilities in that path are disconnected - the `Dusk` client the
-entry builder is handed, and the args `Server` the bytes carry - because bytes cannot
-carry a capability. A program that wants either asks and finds it disconnected.
-`tests/common` picks its port at run time, so it compiles its line itself with a
-disconnected client rather than through the macro.
+`dusk_program_sh_compiler_proc::compile_sh!` resolves a command through
+`compile_to_words` and hands back the bytes while the calling crate compiles, which
+is how the node artifact gets its init script. Bytes cannot carry a capability, so
+the `Dusk` client the entry builder is handed is disconnected, and each command's
+args `Server` and `created` are left out: a program in such a script that asks for
+its `Server` fails with `Message contains null capability pointer`. Every other caller
+gets its script from `compile` as a `BytecodeMessage` (a `capnp_rpc::ImbuedMessageBuilder`), which keeps
+each command's capabilities in a table beside the message, so `ShMode::Script` and
+`ShMode::DetachedScript` hand them to the node. `tests/common` picks its port at run
+time, so it calls `compile_to_words` itself rather than going through the macro.
+
+`compile_to_words` compiles with `compile`, then copies the bytecode into a plain
+message command by command, leaving each command's `Server` and `created` behind.
+An `sh` command's args data is itself a script - `sh`'s entry compiles `ps` in
+`compile_sh!("sh -d ps")` with `compile` - so its script or detached script is
+copied the same way, and `sh <command>` and `sh -d <command>` compile at build
+time. Any other program whose args data itself holds a capability cannot go into
+bytes: the compile fails with an error naming the program, and `compile_sh!`
+turns it into a compile error where the macro was called.
 
 **Comments** are stripped before parsing (`strip_comments`, quote-aware): `#`
 to end of line, and only when the `#` starts a word - a `#` inside a word
@@ -218,8 +230,8 @@ struct Bytecode {
 A command is a built `Dusk.ProgramArgs`, not a text slice for the server to
 resolve, and a word that names a function is the `call` variant - which word is
 which is settled while the bytecode is built. Other schemas import this one as
-`using Compiler = import "/capnp/bytecode.capnp";` and spell the field type
-`Compiler.Bytecode`: `ShArgs.Data`'s `script` and `detachedScript`, `ShPortal.sh`'s
+`using Bytecode = import "/capnp/bytecode.capnp";` and spell the field type
+`Bytecode.Bytecode`: `ShArgs.Data`'s `script` and `detachedScript`, `ShPortal.sh`'s
 `script`, `InitArgs.Data`'s `initScript`. The generated Rust module is
 `bytecode_capnp`, re-exported by `base/sh/src/lib.rs` as `bytecode`, so Rust says
 `bytecode::Reader`.
@@ -295,7 +307,7 @@ finished, error or not (a failure to close is logged at `warn`).
 
 Functions are the one piece of shell state that outlives a single line.
 
-**Storage.** The `function_table` (`Arc<Mutex<HashMap<String, CompiledScript>>>`)
+**Storage.** The `function_table` (`Arc<Mutex<HashMap<String, Rc<RefCell<BytecodeMessage>>>>>`)
 belongs to the `sh` `Process`, made when the process is. Each `sh` has its own:
 a function defined at a prompt lives in the shell server that prompt is attached
 to, where the next client attaching to it finds it, and a `sh <command>` or
@@ -359,9 +371,11 @@ script came in on.
   `execute_command` logs it at `error` - the prompt survives.
 - **Resolution errors** are client-side too, raised while the bytecode is built: an
   unknown program (`no sh entry found for …`), a malformed command (`invalid
-  command …`), a function given arguments, and a word that names neither a program nor a
-  function the caller passed in (`call to unknown symbol: …`). They fail the call that was building the
-  message, so nothing is sent at all.
+  command …`) and a function given arguments. They fail the call that was
+  building the message, so nothing is sent at all. A function is known from its
+  definition on, so a word used before it is defined runs the program of that
+  name. Inside a function body, a bare word that names neither a program nor a
+  known function compiles to a call and is looked up when the function runs.
 - **Codegen errors** - bytecode codegen cannot read, or a `Call` whose function
   has no body (`call to unknown symbol: …`) - fail
   `codegen::generate`, which fails `exec`, which the `sh_exec_task` reports through its

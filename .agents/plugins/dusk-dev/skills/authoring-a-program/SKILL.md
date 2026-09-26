@@ -11,7 +11,7 @@ The five reference programs are `base/init`, `base/nightfall`, `base/sh`, `base/
 
 | Existing program | Best example for | Distinctive idiom |
 |---|---|---|
-| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Compiler.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
+| `init` | Running a script through `sh` from `main` | Is handed an init script (a `Bytecode.Bytecode`) in its `Args.Data`, builds `ShArgs` itself from that bytecode, runs that `sh` with `Dusk.process` + `Dusk.run`, and selects between its `OutputPortal.output` call and `Terminate` |
 | `nightfall` | Daemon / TCP listener; `std`-only program | `futures::select!` between `listener.accept()` and the signal channel; spawns `dusk_core::session` tasks per connection |
 | `kill` | One-shot RPC, then sit and wait for `Terminate` | Reads `(pid, signal)` from args, calls `client.kill_request()`, signals `ready`, loops on the signal receiver |
 | `ps` | Snapshot the namespace, emit a typed `Record` into a `Stream` from a portal method | Walks `client.ps_request()` results in `main`, materialises a `PsResult` into `Rc<RefCell<…>>`, and in `output()` builds `Record::with_fields(RESULT_TYPE_ID, …)`, writes it with `stream.send_request()` and answers `set_daemonize(false)` |
@@ -52,7 +52,7 @@ The server side of every program is `no_std`. This is the **first** thing you pu
    extern crate alloc;
    extern crate capnp;
    ```
-   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl - the workspace `cargo check` still passes, but you've broken the portability contract. The exceptions are `nightfall`, which is unconditionally `std` because it binds a `std::net::TcpListener`, and `init`, which links `sh`'s client side to run its init script. If you are unsure whether your program needs `std` unconditionally, it doesn't - write the `cfg_attr`.
+   Skipping the `cfg_attr` line means the crate silently compiles `std`-poisoned into the dusk impl - the workspace `cargo check` still passes, but you've broken the portability contract. The exception is `nightfall`, which is unconditionally `std` because it binds a `std::net::TcpListener`. If you are unsure whether your program needs `std` unconditionally, it doesn't - write the `cfg_attr`.
 
 2. **Every dep in the unconditional `[dependencies]` block must be no_std-clean.** That means:
    - The crate ships a `no_std` mode (check its docs / `[features]` block).
@@ -110,7 +110,7 @@ base/<name>/
     └── client.rs        # optional, gated by feature "client"
 ```
 
-Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/compiler`, for the part something outside `base/sh` has to reach - the `Bytecode` schema and the `compile` module that `init` and the node artifact build an init script with. Keep `lib.rs` as the program's public surface and push internals into modules.
+Larger programs grow `src/<subdir>/mod.rs` modules; only `sh` does this currently (`interpreter/`, `client/`). `sh` also shows the other way a program grows: a crate of its own beside it, `base/sh/compiler`, for the part only its client side needs - the shell grammar - so a node never links it. The `Bytecode` schema that `init`'s args carry its init script in stays in `sh` itself, `capnp/bytecode.capnp`. Keep `lib.rs` as the program's public surface and push internals into modules.
 
 ---
 
@@ -216,7 +216,7 @@ client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
 
 `public = true` on the dusk-* deps matters: downstream crates (e.g. `ps` re-exporting types from `sh`) need to see them. Don't omit it.
 
-If your program does **not** need to be runnable from a shell prompt (e.g. it's spawned only by other programs internally), skip `linkme`, `clap`, `dusk_program_sh_proc` and the shell-entry `client` feature entirely. `init` is the canonical example of a program with no shell entry - its `client` feature only turns on `dusk_program_kvs_internal/client`, for the known kvs keys it sets (it depends on `dusk_program_sh` with `client` unconditionally, since it runs its init script through `sh`).
+If your program does **not** need to be runnable from a shell prompt (e.g. it's spawned only by other programs internally), skip `linkme`, `clap`, `dusk_program_sh_proc` and the shell-entry `client` feature entirely. `init` is the canonical example of a program with no shell entry - its `client` feature only turns on `dusk_program_kvs_internal/client`, for the known kvs keys it sets. It depends on `dusk_program_sh` without `client`: `ShArgs` and `ShMode`, which it builds to run its init script through `sh`, are outside that feature.
 
 ---
 
@@ -371,7 +371,7 @@ impl Portal {
 ### What each macro produces
 
 - **`metadata!("<name>", VERSION, <name>_capnp::PROGRAM_ID)`** - declares the `<name>_capnp` module (via `include!`), brings the capnp prelude into scope, exports `PROGRAM_NAME` and `PROGRAM_ID` constants, and registers private helper macros used by the derives below it. **It must come before the derives.**
-- **`#[derive(dusk_program_proc::Args)]` + `#[data]`** - generates `Args::as_program_args(self) -> capnp::Result<Rc<ProgramArgs>>`. The `#[data]` field must be `capnp::message::TypedBuilder<...>::Owned`. The struct may carry additional fields (e.g. a `client: dusk::Client`) - they become part of the `Server` capability the launcher sees, accessible via `program_args.server_as::<…>()`. Missing or duplicated `#[data]` is a compile-time error.
+- **`#[derive(dusk_program_proc::Args)]` + `#[data]`** - generates `Args::as_program_args(mut self) -> capnp::Result<Rc<ProgramArgs>>`. The `#[data]` field is a `capnp::message::TypedBuilder<...::Owned>`, or a `capnp_rpc::ImbuedMessageBuilder<HeapAllocator>` when the data holds a capability - `sh`'s and `init`'s do, because a compiled script carries each command's `ProgramArgs`, capabilities included. A plain `TypedBuilder` has no capability table, and copying a capability into one panics. The struct may carry additional fields (e.g. a `client: dusk::Client`) - they become part of the `Server` capability the launcher sees, accessible via `program_args.server_as::<…>()`. Missing or duplicated `#[data]` is a compile-time error.
 - **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** - wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. Two programs have a non-empty body: `logs`, whose `open_stream` hands back the stream the client wants its events written into, and `programs`, whose `transpose` lets the client shape the rows the node collected. `sh`'s is empty.
 - **`#[derive(dusk_program_proc::Launcher)]`** - implements `Launcher::program_id()` returning `PROGRAM_ID`. You still write `impl LauncherMixin` by hand.
 - **`#[derive(Clone, dusk_program_proc::Process)]` + `#[process_context]`** - implements the `Process` trait's metadata methods (`program_id`, `name`, `version`, `clone_box`, `namespace`, `pid`). The `#[process_context]` field must be `pub ctx: ProcessContext`. You still write `impl ProcessMixin` by hand.
@@ -516,17 +516,18 @@ Use `select!` whenever `main` has to *concurrently* watch the signal channel and
 
 ### Pattern D - Multi-mode args + daemonized fire-and-forget
 
-This is the `sh` pattern (`base/sh/src/lib.rs:276-340`). See **Daemonization** below for the full breakdown.
+This is the `sh` pattern (`base/sh/src/lib.rs`). See **Daemonization** below for the full breakdown.
 
 ### Reading from `program_args`
 
-There are three accessors on `ProgramArgs`, all in `dusk_program::program_args`:
+There are four accessors on `ProgramArgs`, all in `dusk_program::program_args`: two that lend a reader to a closure, and their two owned counterparts.
 
-- **`with_data::<T, _, _>(|reader| …)`** - synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure.
-- **`data_owned::<T>() -> capnp::Result<capnp::message::TypedBuilder<T>>`** - copies the data into an owned typed builder. Use when you need the data to survive across an `.await`. The `sh` portal's `output()` uses this (`base/sh/src/lib.rs:420-423`) because the script needs to outlive the closure.
+- **`with_data::<T, _, _>(|reader| …)`** - synchronous typed read of the `data` slot. Use when you don't need to `await` between reads and the value lives only inside the closure. `kvs`, `date` and `sh`'s `output()` read through it: each returns its schema's own `Which` carrying the values it needs, and awaits after.
+- **`data_owned::<T>() -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>>`** - copies the data, capabilities included, into an owned message; read it with `get_root::<T::Builder>()?.into_reader()`. Use when you need the data itself to survive across an `.await`; the copy is read through `get_root(&mut self)`, so it is bound `mut`.
+- **`with_reader(|reader| …)`** - the whole args message as a reader inside a closure. Use it to feed the args into an outgoing request's `program_args`.
 - **`reader_owned() -> capnp::Result<Rc<ProgramArgs>>`** - clone the whole args message. Rare; reach for it when you need the untyped reader to outlive the closure.
 
-To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. The `sh` process does this at `base/sh/src/lib.rs:281-284` to retrieve `sh_args::server::Client`.
+To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `Args`), call `program_args.server_as::<...>()`. `logs` does this in `main` to get its `logs_args::server::Client`, and asks it for the stream to write its events into with `open_stream`.
 
 ### When to call `ready.sender().send(true)`
 
@@ -691,7 +692,7 @@ Promise::from_future(async move {
 })
 ```
 
-See `base/sh/src/lib.rs:350-389`. The `pending` future after signalling `stop` is intentional: we only want to surface the *completion* result, not "you cancelled" as the return.
+See `Portal::sh` in `base/sh/src/lib.rs`. The `pending` future after signalling `stop` is intentional: we only want to surface the *completion* result, not "you cancelled" as the return.
 
 ---
 
@@ -751,7 +752,7 @@ See `base/logs/src/lib.rs` for the live example.
 
 A "daemonized" Dusk program is one whose `Process::main` spawns a background Embassy task that outlives any single RPC call. The process itself stays parked on the signal channel; the work happens in the spawned task.
 
-The pattern, distilled from `base/sh/src/lib.rs:194-228, 307-340`:
+The pattern, distilled from `base/sh/src/lib.rs` and `base/sh/src/exec.rs`:
 
 ### 1. A `Stop` type for cancellation
 
@@ -986,7 +987,7 @@ async move {
 }.instrument(span).await;
 ```
 
-`task_id` is always the **first** span field. Domain-specific fields follow - common ones: `pid`, `namespace_id`, `program_id`, `program_name`. See `base/sh/src/lib.rs:177` for the canonical example.
+`task_id` is always the **first** span field. Domain-specific fields follow - common ones: `pid`, `namespace_id`, `program_id`, `program_name`. See `sh_exec_task` in `base/sh/src/exec.rs` for the canonical example.
 
 ### Log levels
 
@@ -1229,7 +1230,7 @@ See [[adding-a-driver-method]] for the analogous wiring on the driver side when 
 
 Most programs are `#![cfg_attr(not(feature = "client"), no_std)]`. This means the runtime (`Process`, `Launcher`, RPC handlers) is `no_std`, and the client-side wiring (`clap`, `linkme`, shell entry) is std-only.
 
-`nightfall` is the exception: it binds a `std::net::TcpListener` through `async_io::Async`, which requires `std`, so its `lib.rs` does **not** start with the `no_std` cfg attribute. `init`'s `lib.rs` does not start with it either - it links `sh`'s client side (the shell entries, clap and the rest) to run its init script - so both are unconditionally `std`.
+`nightfall` is the exception: it binds a `std::net::TcpListener` through `async_io::Async`, which requires `std`, so its `lib.rs` does **not** start with the `no_std` cfg attribute.
 
 When adding new `extern crate` lines to your `lib.rs`, mirror what kill/ps does:
 
@@ -1248,7 +1249,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 | Mistake | Fix |
 |---|---|
 | `metadata!` placed after a derive that references `<name>_capnp::PROGRAM_ID` | Move `metadata!` above all derives. The generated module name is only available after `metadata!` expands. |
-| `#[data]` missing or duplicated on the `Args` struct | Exactly one field, of type `capnp::message::TypedBuilder<...::Owned>`. The derive enforces this with a clear error. |
+| `#[data]` missing or duplicated on the `Args` struct | Exactly one field, of type `capnp::message::TypedBuilder<...::Owned>`, or `capnp_rpc::ImbuedMessageBuilder<HeapAllocator>` when the data holds a capability. The derive enforces this with a clear error. |
 | `#[process_context]` field not `pub ctx: ProcessContext` | The field must be `pub`, named `ctx`, and typed exactly `ProcessContext`. |
 | Returning early from `main` after the work is done | Keep `main` on the signal channel - the caller, not the program, decides when to terminate. The only exception is a fatal error. |
 | Calling `ready.sender().send(true)` before setup completes | Send `ready` only when the portal can answer calls. Callers will immediately ask for `portal()` and get a half-initialised handle otherwise. |

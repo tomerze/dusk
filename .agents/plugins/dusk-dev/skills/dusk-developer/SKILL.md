@@ -95,7 +95,7 @@ vendor/        External libs submodules
 | `dusk_program` | The SDK a program implements: the `ProcessMixin` / `LauncherMixin` traits, `Namespace`, `ProgramArgs`, `Signal`, `Ready`, and the stream helpers. |
 | `dusk_program_proc` | The proc macros that remove the boilerplate: `metadata!`, `derive(Args)`, `impl_args_rpc_server`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, `impl_portal_rpc_server`. |
 | `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. `#[sh_entry]` is the whole of `dusk_program_sh_proc`. |
-| `dusk_program_sh_compiler` | Compiles source into bytecode - the first of source to bytecode to instructions: the tokenizer, the nom grammar, the `Ast`, the syntax error, `bytecode.capnp`'s `Bytecode`, `read`, and `CompiledScript`, which owns a stored bytecode message together with its capability table. Its `parser` feature is off for a node, which needs only the schema. |
+| `dusk_program_sh_compiler` | The shell's grammar, client-side only: the tokenizer, the nom grammar, the `Ast` and the syntax error. `sh` depends on it only under its `client` feature, and a node never links it. Writing bytecode from an `Ast` is `compile` / `compile_into` in sh's client; the `Bytecode` schema and `BytecodeMessage` are in `sh` itself. |
 | `dusk_program_sh_compiler_proc` | `compile_sh!`, which compiles one command into bytecode while the calling crate is built, resolving it against `SH_ENTRIES` with a disconnected client. Nothing it links reaches the caller's binary. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, and enables `embassy-time/std`. |
@@ -341,7 +341,7 @@ process receives on its `signal_receiver`.
 `dusk_core::init::init` with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process is handed an init script - a
-`Compiler.Bytecode` - and starts a detached `sh` to run it, then waits for its own
+`Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate`, so nothing about the script's lifetime is init's business; for the
 node artifact that bytecode is always the one command `nightfall` on `0.0.0.0:9090`,
 compiled by `compile_sh!` while the artifact is built. `nightfall`
@@ -376,9 +376,11 @@ bytecode. The compiler runs on the client (`compile` / `compile_into` in
 `Dusk.ProgramArgs`, not the command's text** - the caller that holds the sh entry
 table builds it while it compiles, so nothing needs resolving once the bytecode
 reaches the node. A word that names a shell function becomes the `call` variant
-instead. The compiler takes the functions the caller knows are defined - `ShPortal.functions`
-returns them, and a one-shot caller passes none - and a bare word that is neither an
-sh entry nor one of those functions fails on the client. "Script" still means what a user wrote or asked to run
+instead. `compile_into` takes the functions the caller knows are defined - `ShPortal.functions`
+returns them - `compile` assumes none, and a function is known from its
+definition on. A bare word that is neither an sh entry nor a known function fails on
+the client with `no sh entry found`, except inside a function body, where it becomes a
+`call` looked up when the function runs. "Script" still means what a user wrote or asked to run
 (`ShMode::Script`, `ShMode::DetachedScript`, the init script); bytecode is only how it
 is represented.
 
@@ -415,7 +417,7 @@ pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
 
 There is no shell source in the binary: the macro resolved it at build time, so
 neither `init` nor the node artifact turns
-on `dusk_program_sh_compiler`'s `parser` feature or `sh`'s `client` feature.
+on `sh`'s `client` feature, so neither links `dusk_program_sh_compiler`.
 
 There is one entry point, and `user` is the only thing a caller gives it. The
 template ignores it, and `dusk_node_bin` passes a null pointer and reads no argv,

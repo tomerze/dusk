@@ -108,11 +108,6 @@ pub fn format_header(metadata: &Metadata) -> proc_macro2::TokenStream {
                         alloc::rc::Rc<dusk_program::program_args::ProgramArgs>,
                     > {
                         let owned = dusk_program::program_args::ProgramArgs::new();
-                        // Phase 1: write program_id and args.data by copying
-                        // the typed reader out of the `#[data]` field
-                        // (`capnp::message::TypedBuilder<#data_owned>`) into
-                        // the args.data slot. Borrows `&self.$data_field`;
-                        // the borrow ends with the closure.
                         owned.with_root_builder(|mut root| {
                             root.set_program_id(PROGRAM_ID);
                             let mut data_dest = root.init_args().init_data();
