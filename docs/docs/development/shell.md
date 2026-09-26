@@ -391,6 +391,10 @@ script came in on.
   watches it beside its signal channel: a failed script is logged at `error` with
   the error's whole chain, a finished one at `info`. The process keeps running
   until `Terminate` either way.
+- **A portal refused because the process is gone** - it exited before anyone
+  asked for it, as a detached `sh` whose script is one program always has - is
+  logged at `debug`, not `error`, and the process is killed and reaped the same
+  way; `waitpid` gives the statement its result.
 - **Eager dependency compilation** deliberately swallows errors - a missing or
   broken function body is left for the runtime `Call` to surface, so defining a
   function that references a not-yet-defined one is not itself an error.
