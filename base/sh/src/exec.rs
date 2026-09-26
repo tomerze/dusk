@@ -13,6 +13,7 @@ use dusk_program::process::ProcessContext;
 pub(crate) struct State {
     pub(crate) interpreter: Option<Interpreter>,
     pub(crate) active_stops: Vec<Rc<Stop>>,
+    pub(crate) folded: bool,
 }
 
 pub(crate) fn log_detached_result(pid: u64, result: &anyhow::Result<()>) {
