@@ -12,8 +12,8 @@ use crate::bytecode;
 
 use super::instructions::{Inst, Instructions};
 use super::{FunctionTable, GeneratedFunctions};
+use crate::BytecodeMessage;
 use dusk_capnp::capnp::message::HeapAllocator;
-use dusk_program_sh_compiler::BytecodeMessage;
 
 pub(super) fn generate(script: bytecode::Reader<'_>) -> Result<Instructions> {
     let mut output_instructions = Instructions::new();

@@ -6,7 +6,6 @@
 
 extern crate alloc;
 extern crate capnp;
-#[cfg(feature = "client")]
 extern crate self as dusk_program_sh;
 
 use alloc::rc::Rc;
@@ -42,7 +41,14 @@ dusk_program_proc::metadata!("sh", VERSION, sh_capnp::PROGRAM_ID);
 
 mod args;
 pub use args::{ShArgs, ShMode};
-pub use dusk_program_sh_compiler::bytecode_capnp::bytecode;
+#[allow(clippy::all)]
+pub mod bytecode_capnp {
+    include!(concat!(env!("OUT_DIR"), "/capnp/bytecode_capnp.rs"));
+}
+pub use bytecode_capnp::bytecode;
+
+pub type BytecodeMessage =
+    dusk_capnp::capnp_rpc::ImbuedMessageBuilder<capnp::message::HeapAllocator>;
 
 #[cfg(feature = "client")]
 pub mod client;
