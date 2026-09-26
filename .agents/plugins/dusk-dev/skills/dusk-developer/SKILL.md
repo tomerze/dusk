@@ -357,7 +357,9 @@ process receives on its `signal_receiver`.
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process is handed an init script - a
 `Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
-`Terminate`, so nothing about the script's lifetime is init's business; for the
+`Terminate` while it reaps that `sh` with `waitpid` - the `sh` running a detached
+script that is one program exits as soon as it has started the program - so nothing
+else about the script's lifetime is init's business; for the
 node artifact that bytecode is always the one command `nightfall` on `0.0.0.0:9090`,
 compiled by `compile_sh!` while the artifact is built. `nightfall`
 binds the listener and accepts connections, running in the foreground of that
