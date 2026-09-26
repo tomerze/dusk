@@ -583,11 +583,20 @@ Two things you say, and both of them by returning:
    program) and `kvs bind` (`base/kvs/src/lib.rs`), which answers it from a
    flag `main` set earlier.
 
+**By convention, a program does not daemonize itself.** `sh -d` runs any
+program in the background - a detached script that is one program leaves only
+that program running - so whether yours outlives its caller is the user's
+choice, not yours. A program that runs until it is stopped returns from
+`output` when it is stopped: `nightfall`'s `output` waits for its `Terminate`,
+and `sh -d "nightfall -l 0.0.0.0:9091"` is how a user runs it in the
+background.
+
 | Your program | what it does |
 |---|---|
 | Finishes its work | write values, `set_daemonize(false)`, return `Ok` |
+| Runs until it is stopped | return when it is stopped, `set_daemonize(false)` - `nightfall` |
 | Wants to fail | return `Err`; a failed program is finished by definition |
-| Wants to daemonize | `set_daemonize(true)`, return `Ok` |
+| Wants to daemonize | `set_daemonize(true)`, return `Ok` - by convention, don't |
 
 **Set the flag even when it is `false`.** Nothing forces you to: an unset
 `Bool` reads as `false`, so a program that forgets is treated as finished and
@@ -754,6 +763,8 @@ See `base/logs/src/lib.rs` for the live example.
 ## Daemonization
 
 A "daemonized" Dusk program is one whose `Process::main` spawns a background Embassy task that outlives any single RPC call. The process itself stays parked on the signal channel; the work happens in the spawned task.
+
+This is not how a program runs in the background - `sh -d` does that for any program, and by convention a program leaves it to the user (see **What `output()` has to say**). It is how `sh` itself is built, and the pattern for a program whose work outlives the RPC call that started it.
 
 The pattern, distilled from `base/sh/src/lib.rs` and `base/sh/src/exec.rs`:
 
