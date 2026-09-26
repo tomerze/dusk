@@ -248,6 +248,19 @@ the stream it writes events into - the destination is the client's own terminal 
 file, so only the client can build it. `programs` does the same with
 `transpose()`, handing its rows to the client to shape.
 
+**The `Server` is the part of the args that serializing drops.** Bytes cannot
+carry a capability, so `compile_to_words` - behind `compile_sh!` - copies each
+command's `data` and leaves its `server` and `created` out, and `server_as` fails
+with `MessageContainsNullCapabilityPointer` on the node. A `Server` that is there
+is only as alive as the client that built the args: once it disconnects, every
+call fails with `Disconnected` (or `PrematureEndOfFile`). A program that calls its
+`Server` falls back to working without it where it can when the `Server` is null
+or disconnected, and returns every other error - `programs` sends its list
+without names. A capability never goes in `Data`: `compile_to_words` refuses a
+command whose `Data` holds one, and `ArgsDataBuilder` has no capability table to
+hold it. `sh` is the exception - its `Data` is bytecode, rebuilt command by
+command.
+
 The shell is not an example: `ShArgs.Server` is empty. A command word is resolved
 into `ProgramArgs` on the client, before the bytecode is sent, so a script running on
 the node needs nothing from a client while it runs. See
