@@ -905,16 +905,14 @@ When an RPC caller is waiting on the work to finish (e.g. `Portal::sh`), the sam
 
 ## Signal handling
 
-Two variants exist:
+`dusk_program::signal::Signal` is `#[non_exhaustive]`, with five variants:
 
-```rust
-pub enum Signal {
-    Terminate,         // signal 15 - graceful shutdown
-    Unknown(u64),      // anything else
-}
-```
+- `Terminate` (15) - graceful shutdown.
+- `Rerun(args)` - `Dusk.process` was called again with the fixed pid this process holds; `args` are the new args.
+- `Sweep` (7) and `Reap` (8) - handled by the namespace inside `Dusk.kill`; a program never receives them.
+- `Unknown(u64)` - any other number.
 
-Match in `main`. `Terminate` should drain whatever cleanup the program needs and return `Ok(())`. `Unknown(_)` is a no-op for most programs - handle it explicitly only if your program has a use for additional signals.
+Match in `main`. `Terminate` should drain whatever cleanup the program needs and return `Ok(())`. The rest are no-ops for most programs - handle one explicitly only if your program has a use for it.
 
 Programs **must not** return prematurely from `main` unless they receive `Terminate` (or hit a fatal error). The process is registered in the namespace's `ps_map` for as long as `main` is running; an early return removes it and any callers holding the `process::Client` will see `Disconnected` on subsequent calls.
 
