@@ -18,9 +18,19 @@
         "DUSK_NODE_CARGO_TARGET": "x86_64-unknown-linux-gnu",
         "DUSK_NODE_IMPL": "nix"
       }
+    },
+    {
+      "name": "windows-x64-msvc",
+      "inherits": "base",
+      "cacheVariables": {
+        "DUSK_NODE_CARGO_TARGET": "x86_64-pc-windows-msvc",
+        "DUSK_NODE_IMPL": "windows",
+        "DUSK_NODE_CARGO_SUBCOMMAND": "xwin build"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "nix-x64-linux ", "configurePreset": "nix-x64-linux" }
+    { "name": "nix-x64-linux", "configurePreset": "nix-x64-linux" },
+    { "name": "windows-x64-msvc", "configurePreset": "windows-x64-msvc" }
   ]
 }

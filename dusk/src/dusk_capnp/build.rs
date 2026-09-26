@@ -74,7 +74,7 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
         .expect("OUT_DIR path contains invalid UTF-8");
 
     let command = format!(
-        "cmake -DCMAKE_INSTALL_PREFIX={} -DCMAKE_BUILD_TYPE=Release . || (autoreconf -i && ./configure --prefix={})",
+        "cmake -G 'Unix Makefiles' -DCMAKE_INSTALL_PREFIX={} -DCMAKE_BUILD_TYPE=Release . || (autoreconf -i && ./configure --prefix={})",
         prefix, prefix
     );
     let output = Command::new("sh")
