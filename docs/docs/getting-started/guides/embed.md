@@ -36,7 +36,9 @@ dusk_node_run(NULL);   // a node on port 9090; returns an exit code
 ```
 
 From Rust, link the `dusk_node` rlib and call
-`dusk_node::dusk_node_run()`. From any other language, bind the C function.
+`dusk_node::dusk_node_run()`, and set
+[`DUSK_NODE_INIT_SCRIPT`](../../embedding/node-artifacts.md#building-with-cargo)
+for the build. From any other language, bind the C function.
 That's the whole integration: one library, one call.
 
 Which impl you build it with depends on where your application runs - `impl_nix`

@@ -21,6 +21,8 @@ set(DUSK_NODE_IMPL "" CACHE STRING
     "Which impl the node links; required. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_RUSTFLAGS "" CACHE STRING
     "Extra flags for rustc, separated by spaces as in RUSTFLAGS. See docs/docs/embedding/node-artifacts.md")
+set(DUSK_NODE_INIT_SCRIPT "" CACHE STRING
+    "The shell script the node runs at boot; empty leaves it to cargo: DUSK_NODE_INIT_SCRIPT in the environment, else .cargo/config.toml. See docs/docs/embedding/node-artifacts.md")
 
 # Per-build-dir cargo output: builds with different impls, triples or profiles
 # never overwrite each other's final artifacts, and removing the build dir
@@ -105,6 +107,17 @@ if(NOT DUSK_NODE_RUSTFLAGS STREQUAL "")
         --config "build.rustflags=[${DUSK_NODE_RUSTFLAGS_TOML}]")
 endif()
 
+set(DUSK_NODE_ENVIRONMENT_ARGUMENTS "")
+if(NOT DUSK_NODE_INIT_SCRIPT STREQUAL "")
+    if(DUSK_NODE_INIT_SCRIPT MATCHES "\n")
+        message(FATAL_ERROR
+            "DUSK_NODE_INIT_SCRIPT holds a line break, which the build cannot pass to "
+            "cargo. Separate its commands with `;` instead.")
+    endif()
+    string(REPLACE ";" "$<SEMICOLON>" DUSK_NODE_INIT_SCRIPT_ESCAPED "${DUSK_NODE_INIT_SCRIPT}")
+    set(DUSK_NODE_ENVIRONMENT_ARGUMENTS "DUSK_NODE_INIT_SCRIPT=${DUSK_NODE_INIT_SCRIPT_ESCAPED}")
+endif()
+
 if(DUSK_NODE_TRIPLE MATCHES "windows-msvc")
     set(DUSK_NODE_SYSTEM_LIBRARIES bcrypt advapi32 kernel32 ntdll userenv ws2_32 dbghelp)
     set(DUSK_NODE_LIBRARY_PREFIX "")
@@ -149,7 +162,8 @@ set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
 # ---- library ----
 
 add_custom_target(dusk_node
-    COMMAND "${DUSK_NODE_CARGO}" build
+    COMMAND "${CMAKE_COMMAND}" -E env ${DUSK_NODE_ENVIRONMENT_ARGUMENTS}
+            "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node
             ${DUSK_NODE_FEATURE_ARGUMENTS}
@@ -173,7 +187,8 @@ set_target_properties(dusk::node PROPERTIES
 # ---- executable ----
 
 add_custom_target(dusk_node_bin
-    COMMAND "${DUSK_NODE_CARGO}" build
+    COMMAND "${CMAKE_COMMAND}" -E env ${DUSK_NODE_ENVIRONMENT_ARGUMENTS}
+            "${DUSK_NODE_CARGO}" build
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node_bin
             ${DUSK_NODE_FEATURE_ARGUMENTS}

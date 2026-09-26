@@ -90,15 +90,20 @@ is available even when tests are not. Build with
 `cargo build --bin dusk_node --bin dusk`, start the node, and drive it with
 one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
 
-- **The `dusk_node` binary takes no arguments and always listens on 9090**, on
-  every address - the init script is the one command `nightfall -l 0.0.0.0:9090`,
-  compiled into the artifact while it is built, and
-  `artifacts/dusk_node/bin/src/main.rs` passes a null pointer and reads no argv.
-  So only one node from this binary runs per machine: check `pgrep -af dusk_node`
-  and `ss -ltn | grep 9090` before starting one. If another session's node holds
-  9090, you cannot start your own from the `dusk_node` binary - yours fails to
-  bind and exits, and a CLI pointed at 9090 silently talks to *theirs*. Do not
-  kill a node you did not start.
+- **The `dusk_node` binary takes no arguments and, built by default, listens on
+  9090**, on every address - its init script is `DUSK_NODE_INIT_SCRIPT`, which
+  `.cargo/config.toml` sets to `nightfall -l 9090`, compiled into the artifact
+  while it is built, and `artifacts/dusk_node/bin/src/main.rs` passes a null
+  pointer and reads no argv. Check `pgrep -af dusk_node` and
+  `ss -ltn | grep 9090` before starting one. If another session's node holds
+  9090, yours fails to bind and exits, and a CLI pointed at 9090 silently talks
+  to *theirs*: build yours on another port instead, with
+  `DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --bin dusk_node`,
+  and point the CLI at that. That build replaces `target/debug/dusk_node` until
+  the next build without the variable, and `tests/prompt` fails meanwhile: with
+  `something already listens on 127.0.0.1:9090` while another node holds 9090,
+  otherwise with `nothing came up on 127.0.0.1:9090`, leaving the 9091 node it
+  started running. Do not kill a node you did not start.
 - **The node writes nothing to its own stdout**, so redirecting it to a file
   gets you an empty file rather than its logs. Read them through the node:
   `./target/debug/dusk <address> "logs dump --replay-only"` returns the buffered

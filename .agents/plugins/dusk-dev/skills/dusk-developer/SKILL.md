@@ -96,7 +96,7 @@ vendor/        External libs submodules
 | `dusk_program_proc` | The proc macros that remove the boilerplate: `metadata!`, `derive(Args)`, `impl_args_rpc_server`, `derive(Launcher)`, `derive(Process)`, `derive(Portal)`, `impl_portal_rpc_server`. |
 | `dusk_program_sh` / `dusk_program_sh_proc` | The shell-entry registry: `ShEntry`, the link-time `SH_ENTRIES` slice, and the `#[sh_entry]` attribute that makes a program shell-invocable. `#[sh_entry]` is the whole of `dusk_program_sh_proc`. |
 | `dusk_program_sh_compiler` | The shell's grammar, client-side only: the tokenizer, the nom grammar, the `Ast` and the syntax error. `sh` depends on it only under its `client` feature, and a node never links it. Writing bytecode from an `Ast` is `compile` / `compile_into` in sh's client; the `Bytecode` schema and `BytecodeMessage` are in `sh` itself. |
-| `dusk_program_sh_compiler_proc` | `compile_sh!`, which compiles one command into bytecode while the calling crate is built, resolving it against `SH_ENTRIES` with a disconnected client. Nothing it links reaches the caller's binary. |
+| `dusk_program_sh_compiler_proc` | `compile_sh!`, which compiles a script - a string literal, or the environment variable `env!("NAME")` names - into bytecode while the calling crate is built, resolving it against `SH_ENTRIES` with a disconnected client. Nothing it links reaches the caller's binary. |
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, and enables `embassy-time/std`. |
 | `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
@@ -360,10 +360,10 @@ when that namespace terminates. The `init` process is handed an init script - a
 `Terminate` while it reaps that `sh` with `waitpid` - the `sh` running a detached
 script that is one program exits as soon as it has started the program - so nothing
 else about the script's lifetime is init's business; for the
-node artifact that bytecode is always the one command `nightfall` on `0.0.0.0:9090`,
-compiled by `compile_sh!` while the artifact is built. `nightfall`
-binds the listener and accepts connections, running in the foreground of that
-script.
+node artifact that bytecode is the script in `DUSK_NODE_INIT_SCRIPT` - by default
+the one command `nightfall -l 9090` - compiled by `compile_sh!` while the artifact
+is built. `nightfall` binds the listener and accepts connections, running in the
+foreground of that script.
 
 The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
 process) lives in `docs/docs/development/shell.md`.
@@ -415,7 +415,7 @@ its default configuration (building the logs launcher inside it also installs
 the global tracing subscriber, unconditionally - and nothing in the tree enables
 the logs program's `console` feature, so a node captures every event into its
 buffer and prints none of them), and `dusk_impl::run` starts the node with an
-`init` whose init script runs `nightfall` on the address it is given:
+`init` whose init script is compiled from `DUSK_NODE_INIT_SCRIPT`:
 
 ```rust
 #[unsafe(no_mangle)]
@@ -423,9 +423,8 @@ pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
     let Ok(launcher_set) = dusk_base::default_launcher_set() else {
         return 1;
     };
-    let init_script = dusk_program_sh_compiler_proc::compile_sh!("nightfall -l 0.0.0.0:9090");
-    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| Ok(args.as_program_args()?))
-    else {
+    let init_script = dusk_program_sh_compiler_proc::compile_sh!(env!("DUSK_NODE_INIT_SCRIPT"));
+    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| args.as_program_args()) else {
         return 2;
     };
     dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
@@ -436,12 +435,19 @@ There is no shell source in the binary: the macro resolved it at build time, so
 neither `init` nor the node artifact turns
 on `sh`'s `client` feature, so neither links `dusk_program_sh_compiler`.
 
+`DUSK_NODE_INIT_SCRIPT` is read while `dusk_node` compiles, and a change to it
+rebuilds `dusk_node`. A CMake build takes it from the CMake variable of the same
+name, which the `base` preset sets to `nightfall -l 9090`; when that variable is
+empty - its default outside the presets - and in a plain cargo build, it comes
+from the environment, and `.cargo/config.toml`'s `[env]` sets the same default for
+when the environment does not.
+
 There is one entry point, and `user` is the only thing a caller gives it. The
 template ignores it, and `dusk_node_bin` passes a null pointer and reads no argv,
-so every node built from the template listens on 9090 on every address and
-nothing at run time can move it. `user` stays in the C signature as the extension
-point a node built from the template may define - it can read the pointer as
-anything it likes.
+so where a node listens is settled by the init script it was built with - 9090 on
+every address by default - and nothing at run time can move it. `user` stays in
+the C signature as the extension point a node built from the template may
+define - it can read the pointer as anything it likes.
 
 For custom launcher arguments (e.g. a different `LogsConfig`), skip
 `default_launcher_set` and assemble the set yourself with

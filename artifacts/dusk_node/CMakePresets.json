@@ -6,7 +6,10 @@
       "hidden": true,
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "DUSK_NODE_INIT_SCRIPT": "nightfall -l 9090"
+      }
     },
     {
       "name": "nix-x64-linux",
