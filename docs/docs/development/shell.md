@@ -157,7 +157,10 @@ program's args, so it happens wherever the source is read. That is the client at
 prompt, and it is the build for a script known in advance:
 `dusk_program_sh_compiler_proc::compile_sh!` resolves a command through
 `compile_to_words` and hands back the bytes while the calling crate compiles, which
-is how the node artifact gets its init script. Bytes cannot carry a capability, so
+is how the node artifact gets its init script. It takes the source as a string
+literal, or as `env!("NAME")` to read it from an environment variable at that
+moment - the node artifact reads `DUSK_NODE_INIT_SCRIPT` - and a change to the
+variable recompiles the calling crate. Bytes cannot carry a capability, so
 the `Dusk` client the entry builder is handed is disconnected, and each command's
 args `Server` and `created` are left out: a program in such a script that asks for
 its `Server` fails with `Message contains null capability pointer`. Every other caller
