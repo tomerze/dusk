@@ -417,7 +417,7 @@ pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
 
 There is no shell source in the binary: the macro resolved it at build time, so
 neither `init` nor the node artifact turns
-on `dusk_program_sh_compiler`'s `parser` feature or `sh`'s `client` feature.
+on `sh`'s `client` feature, so neither links `dusk_program_sh_compiler`.
 
 There is one entry point, and `user` is the only thing a caller gives it. The
 template ignores it, and `dusk_node_bin` passes a null pointer and reads no argv,
