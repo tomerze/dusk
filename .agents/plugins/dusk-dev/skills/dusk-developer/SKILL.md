@@ -453,12 +453,12 @@ For custom launcher arguments (e.g. a different `LogsConfig`), skip
 `default_launcher_set` and assemble the set yourself with
 `LauncherSet::from_launchers`.
 
-Because its crate type is `["rlib", "staticlib", "cdylib"]`, you can consume it
+Because its crate type is `["rlib", "staticlib"]`, you can consume it
 three ways:
 
 - **As a binary** - `dusk_node_bin` wraps it as the `dusk_node` executable
   (`cargo run --bin dusk_node`).
-- **As a C library** - the `staticlib`/`cdylib` expose one entry point, declared
+- **As a C library** - the `staticlib` exposes one entry point, declared
   in `artifacts/dusk_node/lib/include/dusk.h`:
   ```c
   int32_t dusk_node_run(void *user);
