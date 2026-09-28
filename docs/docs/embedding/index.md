@@ -14,7 +14,7 @@ and drive - at any scale, on anything from a microcontroller to a supercomputer.
 ## How you embed it
 
 The universal integration is a **C library**. Dusk's node compiles to a static
-or shared library with a single-call entry point, so it drops into an app written
+library with a single-call entry point, so it drops into an app written
 in practically any language. See [The C library](../getting-started/guides/embed.md).
 
 > **TODO - embedding is more than the C library.** The C lib is the first

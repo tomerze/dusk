@@ -5,6 +5,10 @@
 # free of any libgcc_s.so.1 dynamic dep.
 rustflags = ["--cfg", "tokio_unstable", "-Zmacro-backtrace", "-C", "link-arg=-static-libgcc"]
 
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"
+rustflags = ["--cfg", "tokio_unstable", "-Zmacro-backtrace"]
+
 [unstable]
 public-dependency = true
 

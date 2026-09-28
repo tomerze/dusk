@@ -23,6 +23,8 @@ set(DUSK_NODE_RUSTFLAGS "" CACHE STRING
     "Extra flags for rustc, separated by spaces as in RUSTFLAGS. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_INIT_SCRIPT "" CACHE STRING
     "The shell script the node runs at boot; empty leaves it to cargo: DUSK_NODE_INIT_SCRIPT in the environment, else .cargo/config.toml. See docs/docs/embedding/node-artifacts.md")
+set(DUSK_NODE_CARGO_SUBCOMMAND "build" CACHE STRING
+    "The cargo subcommand that builds the node. See docs/docs/embedding/node-artifacts.md")
 
 # Per-build-dir cargo output: builds with different impls, triples or profiles
 # never overwrite each other's final artifacts, and removing the build dir
@@ -92,6 +94,15 @@ endif()
 
 set(DUSK_NODE_FEATURE_ARGUMENTS
     --no-default-features --features "impl_${DUSK_NODE_IMPL}")
+
+separate_arguments(DUSK_NODE_CARGO_SUBCOMMAND_ARGUMENTS NATIVE_COMMAND
+    "${DUSK_NODE_CARGO_SUBCOMMAND}")
+
+if(NOT DUSK_NODE_CARGO_SUBCOMMAND_ARGUMENTS)
+    message(FATAL_ERROR
+        "DUSK_NODE_CARGO_SUBCOMMAND is empty. It names the cargo subcommand that "
+        "builds the node, `build` by default.")
+endif()
 
 set(DUSK_NODE_RUSTFLAGS_ARGUMENTS "")
 if(NOT DUSK_NODE_RUSTFLAGS STREQUAL "")
@@ -163,7 +174,7 @@ set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES
 
 add_custom_target(dusk_node
     COMMAND "${CMAKE_COMMAND}" -E env ${DUSK_NODE_ENVIRONMENT_ARGUMENTS}
-            "${DUSK_NODE_CARGO}" build
+            "${DUSK_NODE_CARGO}" ${DUSK_NODE_CARGO_SUBCOMMAND_ARGUMENTS}
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node
             ${DUSK_NODE_FEATURE_ARGUMENTS}
@@ -188,7 +199,7 @@ set_target_properties(dusk::node PROPERTIES
 
 add_custom_target(dusk_node_bin
     COMMAND "${CMAKE_COMMAND}" -E env ${DUSK_NODE_ENVIRONMENT_ARGUMENTS}
-            "${DUSK_NODE_CARGO}" build
+            "${DUSK_NODE_CARGO}" ${DUSK_NODE_CARGO_SUBCOMMAND_ARGUMENTS}
             --profile "${DUSK_NODE_CARGO_PROFILE}"
             --package dusk_node_bin
             ${DUSK_NODE_FEATURE_ARGUMENTS}

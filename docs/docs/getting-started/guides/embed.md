@@ -18,7 +18,7 @@ diagnosis, remote control) works against it. No rewrite, no separate service.
 
 ## Link the library
 
-`dusk_node` builds as both a static and a shared C library, with a one-function
+`dusk_node` builds as a static C library, with a one-function
 header (`artifacts/dusk_node/lib/include/dusk.h`):
 
 ```c

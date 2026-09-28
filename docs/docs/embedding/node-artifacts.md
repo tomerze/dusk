@@ -30,6 +30,13 @@ Every supported operating system and its impl is in the
 `cargo` with the Rust target installed, and CMake 3.23 or newer. To call
 `cargo` yourself instead, see [Building with cargo](#building-with-cargo).
 
+Dusk cannot be built on a windows host natively. To build dusk on a Windows host, use WSL.
+
+To build the windows target `cargo-xwin` is needed.
+```
+cargo install --locked cargo-xwin
+```
+
 ### Standalone
 
 ```sh
@@ -162,7 +169,7 @@ cargo build --profile prod --target <target> -p dusk_node \
   --no-default-features --features impl_nix
 
 # windows
-cargo build --profile prod --target <target> -p dusk_node \
+cargo xwin build --profile prod --target <target> -p dusk_node \
   --no-default-features --features impl_windows
 
 # std
@@ -471,3 +478,11 @@ address of its own rather than on every address - the second fails to bind.
 | armv7-sony-vita-newlibeabihf |
 | **VEXos** |
 | thumbv7a-vex-v5 |
+
+### Cross-compiling to Windows
+
+Build the Windows artifacts from a Unix host. 
+
+Linking needs an MSVC linker and the Microsoft CRT and Windows SDK import
+libraries, which a standard Unix host does not have. So install cargo xwin
+
