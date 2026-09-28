@@ -12,7 +12,7 @@ use capnp::message::{Builder, HeapAllocator};
 use dusk_program::embassy_time::Instant;
 
 pub(crate) fn build_log_record(
-    event_fields: &[(&'static str, FieldValue)],
+    event_fields: &[(&str, FieldValue)],
     span_id: Option<u64>,
     trace_id: Option<u64>,
 ) -> Builder<HeapAllocator> {
@@ -21,7 +21,7 @@ pub(crate) fn build_log_record(
         .find(|(name, _)| *name == MESSAGE_FIELD)
         .map(|(_, value)| value);
 
-    let attributes: Vec<(&'static str, &FieldValue)> = event_fields
+    let attributes: Vec<(&str, &FieldValue)> = event_fields
         .iter()
         .filter(|(name, _)| *name != MESSAGE_FIELD)
         .map(|(name, value)| (*name, value))

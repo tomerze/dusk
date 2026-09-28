@@ -124,6 +124,19 @@ impl BufferLayer {
         // counted the failure in drop_counts().write_failures.
         let _ = self.buffer.writer().write(span.level, &mut message);
     }
+
+    #[cfg(feature = "c_api")]
+    pub(crate) fn write_log(
+        &self,
+        level: Level,
+        fields: &[(&str, FieldValue)],
+    ) -> capnp::Result<()> {
+        if !self.routed[level_index(level)] {
+            return Ok(());
+        }
+        let mut message = build_log_record(fields, None, None);
+        self.buffer.writer().write(level, &mut message)
+    }
 }
 
 impl Subscriber for BufferLayer {

@@ -31,4 +31,10 @@ fn main() {
         ("capnp/otlp/span.capnp", &[COMMON]),
         ("capnp/logs.capnp", &[SH, LOG_RECORD, SPAN, COMMON]),
     ]);
+    if std::env::var_os("CARGO_FEATURE_C_API").is_some() {
+        println!(
+            "cargo::metadata=c_api_include={}",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/include")
+        );
+    }
 }

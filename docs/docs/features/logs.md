@@ -173,3 +173,54 @@ and where they surface depends on the destination:
 - streamed to **`file://`** or **`http(s)://`**, they appear as ordinary
   structured logs (without a severity);
 - streamed to **`otlp://`**, they appear as proper OTLP traces.
+
+## Write logs from C
+
+An application that runs a node writes its own records into the node's buffer
+with `dusk_logs_write`, declared in `dusk/logs.h`, which the node's
+[include directory](../embedding/node-artifacts.md) carries:
+
+```c
+#include <dusk/logs.h>
+
+dusk_logs_attribute attributes[] = {
+    {"sensor", "inlet"},
+    {"celsius", "41.7"},
+};
+int32_t status = dusk_logs_write(DUSK_LOGS_WARN, "thermal", "inlet above threshold",
+                                 attributes, 2);
+```
+
+The record lands in the same buffer as the node's own records, so `logs view`,
+`logs dump` and `logs stream` show it like any other.
+
+| Argument | Becomes |
+|----------|---------|
+| `severity` | the record's level: `DUSK_LOGS_TRACE`, `DUSK_LOGS_DEBUG`, `DUSK_LOGS_INFO`, `DUSK_LOGS_WARN` or `DUSK_LOGS_ERROR` |
+| `target` | the record's `target` attribute; `NULL` leaves it out |
+| `message` | the record's body |
+| `attributes`, `attribute_count` | the record's attributes, in order, every value a string; `NULL` and `0` for none |
+
+Every string is NUL-terminated UTF-8. The call copies what it needs and keeps no
+pointer once it returns. An attribute named `message` is dropped: the record's
+body is the `message` argument.
+
+`dusk_logs_write` returns one of:
+
+| Code | Meaning |
+|------|---------|
+| `DUSK_LOGS_WRITE_OK` | written - or dropped where the node drops its own records: at a level it keeps no lane for, or too large for its lane, counted in `logs.dropped_oversize` |
+| `DUSK_LOGS_WRITE_INVALID_SEVERITY` | `severity` is none of the five levels |
+| `DUSK_LOGS_WRITE_NULL_ARGUMENT` | `message`, an attribute's key or value, or `attributes` with a nonzero count, is `NULL` |
+| `DUSK_LOGS_WRITE_INVALID_UTF8` | a string is not UTF-8 |
+| `DUSK_LOGS_WRITE_NOT_INSTALLED` | the process has no log buffer to write into yet: `dusk_node_run` creates it as it starts |
+| `DUSK_LOGS_WRITE_FAILED` | the buffer refused the record; the node counts it in `logs.write_failures` |
+
+Call it from any thread of the application, while `dusk_node_run` runs on
+another. A record written from C belongs to no span: it carries no span id and no
+trace id, where a node's own record carries those of the task that wrote it.
+
+The [node template](../embedding/node-artifacts.md) exports `dusk_logs_write`
+because its `Cargo.toml` turns on the `c_api` feature of `dusk_program_logs`. A
+node that links the logs program without that feature exports neither the
+function nor `dusk/logs.h`.

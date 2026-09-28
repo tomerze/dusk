@@ -2,6 +2,7 @@
 name = "dusk_program_logs"
 version = "0.1.0"
 edition = "2024"
+links = "dusk_program_logs"
 
 [dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true }
@@ -61,3 +62,4 @@ client = [
 # event to stdout (INFO and above), rich-style. std-only (stdout, timestamps,
 # color).
 console = ["chrono", "nu-ansi-term"]
+c_api = []

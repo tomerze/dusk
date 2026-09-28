@@ -1186,6 +1186,55 @@ Consequences worth knowing before you write one:
 
 ---
 
+## Exporting a C API
+
+A program can hand C functions to the application that runs the node - `logs`
+exports `dusk_logs_write`, which writes the application's own records into the
+node's buffer. Five pieces, all in the program's crate, all behind a `c_api`
+feature so the CLI and Python builds of the same crate export nothing:
+
+1. **`Cargo.toml`** - `links = "dusk_program_<name>"` under `[package]`, and
+   `c_api = []` under `[features]`. `links` is what lets the build script hand
+   metadata to the crates that depend on it; no native library is linked.
+2. **`build.rs`** - publish the header directory, only with the feature on:
+   ```rust
+   if std::env::var_os("CARGO_FEATURE_C_API").is_some() {
+       println!(
+           "cargo::metadata=c_api_include={}",
+           concat!(env!("CARGO_MANIFEST_DIR"), "/include")
+       );
+   }
+   ```
+3. **The header** - hand-written, at `include/dusk/<name>.h`, C11, clean under
+   the repository's `.clang-format` and `.clang-tidy`. Add it to the clang-tidy
+   `args` in `.pre-commit-config.yaml` and to both C steps in
+   `.github/workflows/ci.yml`; the `files` patterns already match
+   `base/*/include/`.
+4. **The functions** - in a private module, `#[cfg(feature = "c_api")] mod c_api;`,
+   each `#[unsafe(no_mangle)] pub unsafe extern "C" fn dusk_<name>_<verb>(…)`.
+   `no_mangle` exports the symbol from the private module; keeping the module
+   private keeps clippy from asking for a `# Safety` section on a function no
+   Rust caller can reach. Return an `int32_t` status - `0` for success, one
+   code per failure, the codes an `enum` in the header - never swallow an error
+   at this boundary.
+5. **The node** - `artifacts/dusk_node/lib/Cargo.toml` depends on the program
+   **directly**, with `features = ["c_api"]`. Cargo hands the
+   `DEP_<LINKS>_C_API_INCLUDE` variable only to crates that depend on the program
+   themselves, so reaching it through `dusk_base` is not enough.
+   `dusk_node`'s build script copies every such directory, and its own
+   `include/`, into `DUSK_NODE_INCLUDE_DIRECTORY` by relative path; two headers
+   at the same path fail the build.
+
+**A C function runs on the application's thread, not the executor's.**
+`dusk_node_run` blocks the thread it runs on, so every caller is on another one.
+Nothing executor-local is reachable from there - no `Rc`, no namespace, no
+spawner - and the `BufferLayer`'s entered-span stack is the executor's, so a
+record built from a C call carries no span. `logs` reaches its buffer, which is
+`Sync`, through `tracing`'s global dispatcher:
+`tracing::dispatcher::get_default(|dispatch| dispatch.downcast_ref::<BufferLayer>())`.
+Before `dusk_node_run` has built the launchers there is nothing to reach, and the
+function says so with a status code.
+
 ## Step 8 - Register with the impl and the clients
 
 The base programs are aggregated by the `dusk_base` crate (`dusk/src/dusk_base`). That crate re-exports every base program, holds the canonical `default_launcher_set()`, and holds `link_anchors()` (the linker-keep-alive for shell entries). The deliverables (`artifacts/dusk_node/lib`, `artifacts/dusk_cli`, `artifacts/dusk_py`) depend on `dusk_base` rather than on individual program crates. Adding a program means editing `dusk_base`, and nothing else: the live server takes its launchers from `default_launcher_set()`.

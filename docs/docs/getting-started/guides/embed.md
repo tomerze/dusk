@@ -19,10 +19,10 @@ diagnosis, remote control) works against it. No rewrite, no separate service.
 ## Link the library
 
 `dusk_node` builds as a static C library, with a one-function
-header (`artifacts/dusk_node/lib/include/dusk.h`):
+header (`artifacts/dusk_node/lib/include/dusk/dusk.h`):
 
 ```c
-#include "dusk.h"
+#include <dusk/dusk.h>
 
 int32_t dusk_node_run(void *user);
 ```

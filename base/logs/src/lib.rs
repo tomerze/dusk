@@ -17,6 +17,8 @@ extern crate self as dusk_program_logs;
 extern crate std;
 
 mod buffer;
+#[cfg(feature = "c_api")]
+mod c_api;
 mod config;
 mod dump;
 mod enrich;

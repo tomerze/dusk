@@ -51,8 +51,12 @@ Output:
 ```
 build/nix-x64-linux/lib/libdusk_node.a
 build/nix-x64-linux/bin/dusk_node
-lib/include/dusk.h
+build/nix-x64-linux/include/dusk/dusk.h
+build/nix-x64-linux/include/dusk/logs.h
 ```
+
+`build/nix-x64-linux/include/` is the node's include directory: `dusk.h` and the
+header of every program the node links that exports a C API, each under `dusk/`.
 
 Clean:
 
@@ -199,6 +203,21 @@ DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
   --target <target> -p dusk_node --no-default-features --features impl_nix
 ```
 
+The headers go where the `DUSK_NODE_INCLUDE_DIRECTORY` environment variable
+points: the build copies `dusk/dusk.h`, and the header of every program the node
+links that exports a C API, into that directory, creating it if it is missing.
+Without the variable the build copies nothing, and the headers stay in the source
+tree - `artifacts/dusk_node/lib/include/` for `dusk.h`, and `include/` in each
+program's crate, `base/logs/include/` for `logs.h`:
+
+```sh
+DUSK_NODE_INCLUDE_DIRECTORY="$PWD/include" cargo build --profile prod \
+  --target <target> -p dusk_node --no-default-features --features impl_nix
+```
+
+The build never deletes anything from that directory. A header a program stopped
+exporting stays there until you remove it.
+
 ## 3. Link
 
 If you link `dusk::node` from CMake, skip this step: the target brings the
@@ -209,10 +228,14 @@ Rust's standard library needs. On Linux with glibc:
 
 ```sh
 gcc main.c \
-  -I path/to/dusk/artifacts/dusk_node/lib/include \
+  -I path/to/include/dir \
   -L path/to/lib/dir \
   -ldusk_node -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
 ```
+
+`path/to/include/dir` is the directory holding `dusk/dusk.h`:
+`artifacts/dusk_node/build/<preset>/include/` after a CMake build, the directory
+`DUSK_NODE_INCLUDE_DIRECTORY` named after a cargo build.
 
 `path/to/lib/dir` is the directory holding `libdusk_node.a`:
 `artifacts/dusk_node/build/<preset>/cargo/<target>/<profile>/` after a CMake
@@ -238,7 +261,7 @@ application's startup. With POSIX threads:
 
 ```c
 #include <pthread.h>
-#include "dusk.h"
+#include <dusk/dusk.h>
 
 static void *run_dusk_node(void *arg)
 {

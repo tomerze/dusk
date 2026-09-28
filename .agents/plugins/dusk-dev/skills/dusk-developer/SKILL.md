@@ -458,11 +458,16 @@ three ways:
 
 - **As a binary** - `dusk_node_bin` wraps it as the `dusk_node` executable
   (`cargo run --bin dusk_node`).
-- **As a C library** - the `staticlib` exposes one entry point, declared
-  in `artifacts/dusk_node/lib/include/dusk.h`:
+- **As a C library** - the `staticlib` exposes `dusk_node_run`, declared
+  in `artifacts/dusk_node/lib/include/dusk/dusk.h`:
   ```c
   int32_t dusk_node_run(void *user);
   ```
+  and the C API of every program the node links with its `c_api` feature -
+  `dusk_logs_write`, in `base/logs/include/dusk/logs.h`. The build copies every
+  header into the one directory `DUSK_NODE_INCLUDE_DIRECTORY` names, under
+  `dusk/`, and a C program adds only that directory to its include path. CMake
+  names it `<build>/include` and hands it to `dusk::node`.
   Link `libdusk_node` and call `dusk_node_run(NULL)` to run a node and get its
   exit code. Dusk drops into an existing C/C++ program with no Rust on the
   surface. `user` carries what the program running the node gives it at run
