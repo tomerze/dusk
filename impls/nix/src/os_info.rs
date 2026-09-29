@@ -141,5 +141,18 @@ fn set_kvs_apple_sysctls(kvs: &Kvs) {
             Err(error) => tracing::warn!(name, error = %error, "sysctl failed"),
         }
     }
+    #[cfg(target_os = "macos")]
+    match sysctl::Ctl::new("sysctl.proc_translated").and_then(|control| control.value_string()) {
+        Ok(value) => values.push((
+            String::from("dusk.os.macos.translated"),
+            Value::Bool(value == "1"),
+        )),
+        Err(sysctl::SysctlError::NotFound(_)) => {
+            values.push((String::from("dusk.os.macos.translated"), Value::Bool(false)))
+        }
+        Err(error) => {
+            tracing::warn!(name = "sysctl.proc_translated", error = %error, "sysctl failed")
+        }
+    }
     set_kvs_values(kvs, "sysctl", values);
 }
