@@ -5,6 +5,7 @@
 //! an external author could write (driven straight through the SDK, since a
 //! custom stream has no url).
 
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -229,6 +230,7 @@ async fn spawn_grpc_collector() -> (String, Arc<Mutex<Vec<OtlpLogRecord>>>) {
 /// records itself.
 struct CaptureStream {
     captured: Arc<Mutex<Vec<String>>>,
+    namespace_ids: Arc<Mutex<Vec<String>>>,
 }
 
 impl logs_args::stream::Server for CaptureStream {
@@ -247,10 +249,30 @@ impl logs_args::stream::Server for CaptureStream {
         };
         {
             let mut captured = self.captured.lock().unwrap();
+            let mut namespace_ids = self.namespace_ids.lock().unwrap();
             for entry in entries.iter() {
                 let Ok(signal::Which::LogRecord(Ok(log_record))) = entry.which() else {
                     continue;
                 };
+                for attribute in log_record.get_attributes().into_iter().flatten() {
+                    if attribute.get_key().ok().and_then(|key| key.to_str().ok())
+                        != Some("namespace_id")
+                    {
+                        continue;
+                    }
+                    let value = attribute
+                        .get_value()
+                        .ok()
+                        .and_then(|value| value.which().ok())
+                        .and_then(|which| match which {
+                            any_value::Which::StringValue(Ok(text)) => {
+                                text.to_str().ok().map(str::to_string)
+                            }
+                            any_value::Which::IntValue(number) => Some(number.to_string()),
+                            _ => None,
+                        });
+                    namespace_ids.extend(value);
+                }
                 let Ok(body) = log_record.get_body() else {
                     continue;
                 };
@@ -281,7 +303,83 @@ impl logs_args::stream::Server for CaptureStream {
     }
 }
 
+async fn replayed_namespace_ids(port: u16) -> anyhow::Result<BTreeSet<String>> {
+    let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse()?;
+    let connection = Connection::connect(address).await?;
+    let client = connection.client().await;
+
+    let namespace_ids = Arc::new(Mutex::new(Vec::new()));
+    let builder_namespace_ids = namespace_ids.clone();
+    let program_args = LogsArgs::new(None, FLAG_REPLAY, move || {
+        Ok(capnp_rpc::new_client(CaptureStream {
+            captured: Arc::new(Mutex::new(Vec::new())),
+            namespace_ids: builder_namespace_ids.clone(),
+        }))
+    })
+    .as_program_args()?;
+
+    let mut process_request = client.process_request();
+    program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
+    let process_reply = process_request.send().promise.await?;
+    let process = process_reply.get()?.get_result()?;
+    let mut run_request = client.run_request();
+    run_request.get().set_process(process.clone());
+    run_request.send().promise.await?;
+    let portal_reply = process.portal_request().send().promise.await?;
+    let portal = portal_reply
+        .get()?
+        .get_result()?
+        .cast_to::<sh_capnp::output_portal::Client>();
+    let mut output_request = portal.output_request();
+    output_request
+        .get()
+        .set_stream(capnp_rpc::new_client(Stream::new(OutputSink)));
+    output_request.send().promise.await?;
+    connection.disconnect().await?;
+
+    let namespace_ids = namespace_ids.lock().unwrap().iter().cloned().collect();
+    Ok(namespace_ids)
+}
+
 // ---- tests ----
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_each_node_in_a_process_streams_only_its_own_records() {
+    let first_port = gen_port();
+    let second_port = loop {
+        let port = gen_port();
+        if port != first_port {
+            break port;
+        }
+    };
+    let _first = DuskNixImpl::new(LISTEN_ADDRESS, first_port);
+    let _second = DuskNixImpl::new(LISTEN_ADDRESS, second_port);
+
+    LocalSet::new()
+        .run_until(async move {
+            let first =
+                tokio::time::timeout(ARRIVAL_TIMEOUT, replayed_namespace_ids(first_port)).await??;
+            let second = tokio::time::timeout(ARRIVAL_TIMEOUT, replayed_namespace_ids(second_port))
+                .await??;
+            assert_eq!(
+                first.len(),
+                1,
+                "the first node streamed records of namespaces {first:?}"
+            );
+            assert_eq!(
+                second.len(),
+                1,
+                "the second node streamed records of namespaces {second:?}"
+            );
+            assert_ne!(
+                first, second,
+                "both nodes streamed the same namespace's records"
+            );
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        .unwrap();
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn test_logs_stream_to_custom_stream() {
@@ -300,6 +398,7 @@ async fn test_logs_stream_to_custom_stream() {
             let program_args = LogsArgs::new(None, FLAG_REPLAY | FLAG_FOLLOW, move || {
                 Ok(capnp_rpc::new_client(CaptureStream {
                     captured: builder_captured.clone(),
+                    namespace_ids: Arc::new(Mutex::new(Vec::new())),
                 }))
             })
             .as_program_args()
