@@ -19,3 +19,6 @@ tracing = { version = "0.1.41", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 etc-os-release = "0.1.1"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_system_properties = "0.1.6"

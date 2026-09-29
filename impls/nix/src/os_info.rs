@@ -6,6 +6,8 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_uname(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_os_release(kvs);
+    #[cfg(target_os = "android")]
+    set_kvs_android_properties(kvs);
 }
 
 fn set_kvs_values(kvs: &Kvs, source: &str, values: Vec<(String, Value)>) {
@@ -77,4 +79,46 @@ fn set_kvs_os_release(kvs: &Kvs) {
     })
     .collect();
     set_kvs_values(kvs, "os-release", values);
+}
+
+#[cfg(target_os = "android")]
+fn set_kvs_android_properties(kvs: &Kvs) {
+    let properties = android_system_properties::AndroidSystemProperties::new();
+    let mut values = Vec::new();
+    for (name, property) in [
+        ("dusk.os.android.release", "ro.build.version.release"),
+        ("dusk.os.android.sdk", "ro.build.version.sdk"),
+        (
+            "dusk.os.android.security_patch",
+            "ro.build.version.security_patch",
+        ),
+        (
+            "dusk.os.android.incremental",
+            "ro.build.version.incremental",
+        ),
+        ("dusk.os.android.model", "ro.product.model"),
+        ("dusk.os.android.manufacturer", "ro.product.manufacturer"),
+        ("dusk.os.android.fingerprint", "ro.build.fingerprint"),
+        ("dusk.os.android.brand", "ro.product.brand"),
+        ("dusk.os.android.build_type", "ro.build.type"),
+        ("dusk.os.android.abi_list", "ro.product.cpu.abilist"),
+    ] {
+        let Some(value) = properties.get(property) else {
+            tracing::warn!(property, "Android system property not found");
+            continue;
+        };
+        let value = if property == "ro.build.version.sdk" {
+            match value.parse::<u64>() {
+                Ok(sdk) => Value::Uint(sdk),
+                Err(error) => {
+                    tracing::warn!(property, value, error = %error, "Android system property is not a number");
+                    continue;
+                }
+            }
+        } else {
+            Value::String(value)
+        };
+        values.push((String::from(name), value));
+    }
+    set_kvs_values(kvs, "Android system properties", values);
 }
