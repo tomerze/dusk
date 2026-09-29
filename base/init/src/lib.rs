@@ -18,12 +18,18 @@ dusk_program_proc::metadata!("init", VERSION, init_capnp::PROGRAM_ID);
 const VERSION_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.version");
 const GIT_REV_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.git_rev");
 const NAMESPACE_ID_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.namespace_id");
+const ARCH_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.target.arch");
+const OS_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.target.os");
+const BITS_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.target.bits");
 
 #[cfg(feature = "client")]
 mod known_keys {
     dusk_program_kvs_internal::known_key!(VERSION, "dusk.version");
     dusk_program_kvs_internal::known_key!(GIT_REV, "dusk.git_rev");
     dusk_program_kvs_internal::known_key!(NAMESPACE_ID, "dusk.namespace_id");
+    dusk_program_kvs_internal::known_key!(ARCH, "dusk.target.arch");
+    dusk_program_kvs_internal::known_key!(OS, "dusk.target.os");
+    dusk_program_kvs_internal::known_key!(BITS, "dusk.target.bits");
 }
 
 pub type InitArgsDataMessage = ImbuedMessageBuilder<HeapAllocator>;
@@ -106,6 +112,14 @@ impl dusk_program::process::ProcessMixin for Process {
         )
         .await;
         kvs.set(NAMESPACE_ID_KEY, Value::Uint(namespace_id)).await;
+
+        let arch = env!("DUSK_TARGET_ARCH");
+        let os = env!("DUSK_TARGET_OS");
+        let bits = u64::from(usize::BITS);
+        kvs.set(ARCH_KEY, Value::String(String::from(arch))).await;
+        kvs.set(OS_KEY, Value::String(String::from(os))).await;
+        kvs.set(BITS_KEY, Value::Uint(bits)).await;
+        tracing::info!(arch, os, bits, "dusk target");
 
         ready.sender().send(true);
 
