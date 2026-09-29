@@ -125,3 +125,51 @@ until their owner writes again.
 The `logs.*` counters are a snapshot taken by the `logs` program, so they are
 as fresh as the last time a `logs` command ran on the node. Run `logs dump
 --replay-only` to refresh them.
+
+## What the impl records
+
+The [impl](../getting-started/concepts/drivers-and-impls.md) writes these keys
+once, as the node starts, before `init` runs. Which of them a node has depends
+on its impl and on the platform it was built for; the table names the impls in
+Dusk's repository that write each one. The impl logs them at `info`: each source
+of `dusk.os.*` keys once, as `dusk os`, with a `source` field naming it -
+`process`, `time zone`, `uname`, `credentials`, `resource limits`, `os-release`,
+`boot id`, `pid 1`, `glibc`, `Android system properties`, `sysctl`,
+`windows version`, `windows emulation`, `computer name`, `windows session` - and
+a `values` field listing the keys and values it wrote; and the `dusk.device.*`
+keys together once, as `dusk device`, with a `values` field. A source that fails
+writes no keys, and the node logs why at `warn`. One that this system simply
+does not have - no os-release file, no device id, process 1 hidden from the
+node, a device that reports no vendor, model or CPU, a Windows or Android too
+old to carry a value - writes no keys either, and is logged at `info`.
+
+| Key | Written by | Value |
+|-----|------------|-------|
+| `dusk.impl` | `nix`, `std`, `windows` | The name of the impl the node was built with, e.g. `nix`, `std` or `windows`. |
+| `dusk.os.nix.uname.sysname` | `nix` | The `sysname` field of `uname(2)`, e.g. `Linux`. |
+| `dusk.os.nix.uname.nodename` | `nix` | The `nodename` field of `uname(2)`: the name of the device on the network. |
+| `dusk.os.nix.uname.release` | `nix` | The `release` field of `uname(2)`: the kernel release. |
+| `dusk.os.nix.uname.version` | `nix` | The `version` field of `uname(2)`: the kernel version. |
+| `dusk.os.nix.uname.machine` | `nix` | The `machine` field of `uname(2)`: the hardware the kernel reports. |
+| `dusk.os.nix.uname.domainname` | `nix`, on Linux and Android | The `domainname` field of `uname(2)`. |
+| `dusk.os.linux.os_release.<key>` | `nix`, on Linux | Seven entries of [os-release](https://www.freedesktop.org/software/systemd/man/latest/os-release.html) - `name`, `pretty_name`, `id`, `id_like`, `version`, `version_id` and `version_codename` - each `<key>` the entry's name in lower case and the value without its quotes, e.g. `dusk.os.linux.os_release.id` is `ubuntu`, `dusk.os.linux.os_release.version_id` is `24.04`. The file is `/etc/os-release`, or `/usr/lib/os-release` when that does not exist. |
+| `dusk.os.android.release` | `nix`, on Android | The `ro.build.version.release` system property: the Android version, e.g. `14`. |
+| `dusk.os.android.sdk` | `nix`, on Android | The `ro.build.version.sdk` system property, as a number: the API level, e.g. `34`. |
+| `dusk.os.android.security_patch` | `nix`, on Android | The `ro.build.version.security_patch` system property, e.g. `2024-05-05`. |
+| `dusk.os.android.incremental` | `nix`, on Android | The `ro.build.version.incremental` system property: the build's incremental version. |
+| `dusk.os.android.model` | `nix`, on Android | The `ro.product.model` system property: the device model, e.g. `Pixel 8`. |
+| `dusk.os.android.manufacturer` | `nix`, on Android | The `ro.product.manufacturer` system property, e.g. `Google`. |
+| `dusk.os.android.fingerprint` | `nix`, on Android | The `ro.build.fingerprint` system property: the one string that names the exact build the device runs. |
+| `dusk.os.android.brand` | `nix`, on Android | The `ro.product.brand` system property, e.g. `google`. |
+| `dusk.os.android.build_type` | `nix`, on Android | The `ro.build.type` system property: which kind of build the device runs - a release build, a debuggable one, or an engineering one (`eng`). |
+| `dusk.os.android.abi_list` | `nix`, on Android | The `ro.product.cpu.abilist` system property: the ABIs the device runs, e.g. `arm64-v8a,armeabi-v7a,armeabi`. |
+| `dusk.os.macos.product_version` | `nix`, on macOS | The `kern.osproductversion` sysctl, e.g. `14.5`. |
+| `dusk.os.macos.build_version` | `nix`, on macOS | The `kern.osversion` sysctl, e.g. `23F79`. |
+| `dusk.os.ios.product_version` | `nix`, on iOS | The `kern.osproductversion` sysctl. |
+| `dusk.os.ios.build_version` | `nix`, on iOS | The `kern.osversion` sysctl. |
+| `dusk.os.windows.major_version` | `windows` | The Windows major version, as a number, e.g. `10`. |
+| `dusk.os.windows.minor_version` | `windows` | The Windows minor version, as a number, e.g. `0`. |
+| `dusk.os.windows.build_number` | `windows` | The Windows build number, as a number, e.g. `22631`. |
+| `dusk.os.windows.revision` | `windows` | The update build revision (`UBR`), as a number: the `4169` in `22631.4169`, which says which cumulative update is installed. |
+| `dusk.os.windows.edition` | `windows` | The `EditionID`, e.g. `Professional`, `Core`, `ServerStandard`. |
+| `dusk.os.windows.display_version` | `windows` | The `DisplayVersion`, e.g. `23H2`. Windows before 20H2 has none. |
