@@ -66,7 +66,7 @@ the two names silently share one entry.
 table of `Key` and `Value`, one row per key, in name order:
 
 ```sh
-kvs get dusk            # dusk.git_rev, dusk.namespace_id and dusk.version
+kvs get dusk.target     # dusk.target.arch, dusk.target.bits and dusk.target.os
 kvs get dusk.version    # dusk.version alone
 ```
 
@@ -116,6 +116,9 @@ until their owner writes again.
 | `dusk.version` | `init`, at startup | The node's Dusk version, e.g. `0.1.0`. |
 | `dusk.git_rev` | `init`, at startup | The git revision the node's `init` program was built from. |
 | `dusk.namespace_id` | `init`, at startup | The node's namespace id, a random 64-bit number chosen at startup. |
+| `dusk.target.arch` | `init`, at startup | The CPU architecture the node was built for, as Rust names it, e.g. `x86_64`, `aarch64`. |
+| `dusk.target.os` | `init`, at startup | The operating system the node was built for, as Rust names it, e.g. `linux`, `windows`, `android`, `macos`. |
+| `dusk.target.bits` | `init`, at startup | The width of a pointer on that target, as a number, e.g. `64`. |
 | `logs.written` | `logs`, whenever a `logs` command starts and finishes | How many log records have been stored in the node's buffer since it started. Records dropped on the way in (the three `logs.dropped_*` counters) are not counted; records the buffer later overwrote are. |
 | `logs.dropped_no_lane` | `logs`, same | Records dropped because their level is routed to no lane of the buffer. |
 | `logs.dropped_oversize` | `logs`, same | Records dropped because they are bigger than their lane's whole arena. |
