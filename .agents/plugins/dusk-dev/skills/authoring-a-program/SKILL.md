@@ -1311,7 +1311,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] State: `Rc<RefCell<…>>` for per-process, `Arc<Mutex<…>>` (embassy_sync) for cross-task
 - [ ] Spawned tasks have `info_span!("task_name", task_id = …, …)` and `.instrument(span).await`
 - [ ] Errors that would otherwise be silent are logged via `tracing::warn!` / `tracing::error!`
-- [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES` and writes the sidecar JSON)
+- [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES`)
 - [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "dusk_program_sh_proc", "clap"]` feature if shell-invocable, with `dusk_program_sh_proc = { path = "../sh/proc", optional = true }` in `[dependencies]`. `linkme` stays as a dep - the attribute expands to `::linkme::distributed_slice(...)`, so it's load-bearing even though no source mentions it.
 - [ ] `dusk/src/dusk_base/Cargo.toml` lists the new crate as a path dep (`path = "../../../base/<name>"`, `public = true`)
 - [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `default_launcher_set()` (this is all that's needed - both `artifacts/dusk_node/lib` and `tests/common` call `default_launcher_set()`)
