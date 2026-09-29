@@ -14,6 +14,7 @@ async-trait = "*"
 
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
+dusk_program_kvs_internal = { path = "../../base/kvs/internal" }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 critical-section = { version = "1" }
 getrandom = "0.2"
