@@ -70,6 +70,7 @@ on it. See [Key-value store](../../features/kvs.md).
 
 ```sh
 kvs get dusk.version         # read a value
+kvs get dusk                 # read every key starting with dusk
 kvs set deploy.stage canary  # store a string
 kvs scan                     # list every key
 ```

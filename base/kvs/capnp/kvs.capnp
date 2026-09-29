@@ -12,7 +12,7 @@ const scanTypeId :UInt64 = 0x84e09148e9d394f3;
 struct KvsArgs {
   struct Data {
     union {
-      get @0 :UInt64;
+      get @0 :List(UInt64);
       set :group {
         key @1 :UInt64;
         value @2 :Dusk.Value;
@@ -24,7 +24,7 @@ struct KvsArgs {
     }
   }
   interface Server {
-    transpose @0 (keys :List(UInt64), output :Dusk.Stream) -> ();
+    transpose @0 (keys :List(UInt64), output :Dusk.Stream, values :List(Dusk.Value)) -> ();
   }
 }
 

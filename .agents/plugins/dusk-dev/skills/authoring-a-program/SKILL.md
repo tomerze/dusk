@@ -372,7 +372,7 @@ impl Portal {
 
 - **`metadata!("<name>", VERSION, <name>_capnp::PROGRAM_ID)`** - declares the `<name>_capnp` module (via `include!`), brings the capnp prelude into scope, exports `PROGRAM_NAME` and `PROGRAM_ID` constants, and registers private helper macros used by the derives below it. **It must come before the derives.**
 - **`#[derive(dusk_program_proc::Args)]` + `#[data]`** - generates `Args::as_program_args(mut self) -> capnp::Result<Rc<ProgramArgs>>`. The `#[data]` field is a `capnp::message::TypedBuilder<...::Owned>`, or a `capnp_rpc::ImbuedMessageBuilder<HeapAllocator>` when the data holds a capability - `sh`'s and `init`'s do, because a compiled script carries each command's `ProgramArgs`, capabilities included. A plain `TypedBuilder` has no capability table, and copying a capability into one panics. The struct may carry additional fields (e.g. a `client: dusk::Client`) - they become part of the `Server` capability the launcher sees, accessible via `program_args.server_as::<…>()`. Missing or duplicated `#[data]` is a compile-time error.
-- **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** - wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. Two programs have a non-empty body: `logs`, whose `open_stream` hands back the stream the client wants its events written into, and `programs`, whose `transpose` lets the client shape the rows the node collected. `sh`'s is empty.
+- **`#[dusk_program_proc::impl_args_rpc_server] impl Args {}`** - wires `Args` as the server side of `<name>_args::server::Server`. Almost always empty. Three programs have a non-empty body: `logs`, whose `open_stream` hands back the stream the client wants its events written into; `programs`, whose `transpose` lets the client shape the rows the node collected; and `kvs`, whose `transpose` names the key ids `kvs scan` and `kvs get` send it. `sh`'s is empty.
 - **`#[derive(dusk_program_proc::Launcher)]`** - implements `Launcher::program_id()` returning `PROGRAM_ID`. You still write `impl LauncherMixin` by hand.
 - **`#[derive(Clone, dusk_program_proc::Process)]` + `#[process_context]`** - implements the `Process` trait's metadata methods (`program_id`, `name`, `version`, `clone_box`, `namespace`, `pid`). The `#[process_context]` field must be `pub ctx: ProcessContext`. You still write `impl ProcessMixin` by hand.
 - **`#[derive(dusk_program_proc::Portal)]`** - implements `Dusk.Portal.programId()` for your portal type.
@@ -1059,8 +1059,9 @@ struct <Name>Cli {
 
 struct <Name>ProgramArgsBuilder {}
 
+#[dusk_program::async_trait::async_trait(?Send)]
 impl ProgramArgsBuilder for <Name>ProgramArgsBuilder {
-    fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
+    async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = <Name>Cli::try_parse_from(args)?;
         Ok(Args::new(cli.flag).as_program_args()?)
     }
@@ -1310,7 +1311,7 @@ Anything that's `std`-only goes inside `#[cfg(feature = "client")]` modules (typ
 - [ ] State: `Rc<RefCell<…>>` for per-process, `Arc<Mutex<…>>` (embassy_sync) for cross-task
 - [ ] Spawned tasks have `info_span!("task_name", task_id = …, …)` and `.instrument(span).await`
 - [ ] Errors that would otherwise be silent are logged via `tracing::warn!` / `tracing::error!`
-- [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES` and writes the sidecar JSON)
+- [ ] If the program should be a shell command: `src/client.rs` with a `clap::Parser`, a `ProgramArgsBuilder` impl, and a `#[dusk_program_sh_proc::sh_entry] pub fn sh_entry()` (the attribute auto-registers into `SH_ENTRIES`)
 - [ ] `Cargo.toml` has a `client = ["linkme", "dusk_program_sh/client", "dusk_program_sh_proc", "clap"]` feature if shell-invocable, with `dusk_program_sh_proc = { path = "../sh/proc", optional = true }` in `[dependencies]`. `linkme` stays as a dep - the attribute expands to `::linkme::distributed_slice(...)`, so it's load-bearing even though no source mentions it.
 - [ ] `dusk/src/dusk_base/Cargo.toml` lists the new crate as a path dep (`path = "../../../base/<name>"`, `public = true`)
 - [ ] `dusk/src/dusk_base/src/lib.rs` adds `pub use dusk_program_<name>;` and `Box::new(dusk_program_<name>::Launcher::new())` to `default_launcher_set()` (this is all that's needed - both `artifacts/dusk_node/lib` and `tests/common` call `default_launcher_set()`)
