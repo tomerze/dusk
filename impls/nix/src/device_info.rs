@@ -10,6 +10,7 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
         ("dusk.device.boot_time_ms", boot_time_ms()),
         ("dusk.device.vendor", vendor()),
         ("dusk.device.model", model()),
+        ("dusk.device.cpu", cpu()),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -203,6 +204,25 @@ fn model() -> Option<Value> {
     model.map(Value::String)
 }
 
+#[cfg(target_os = "linux")]
+fn cpu() -> Option<Value> {
+    let cpuinfo = match std::fs::read_to_string("/proc/cpuinfo") {
+        Ok(cpuinfo) => cpuinfo,
+        Err(error) => {
+            tracing::warn!(error = %error, "reading /proc/cpuinfo failed");
+            return None;
+        }
+    };
+    let model = cpuinfo.lines().find_map(|line| {
+        let (field, value) = line.split_once(':')?;
+        (field.trim() == "model name").then(|| String::from(value.trim()))
+    });
+    if model.is_none() {
+        tracing::info!("/proc/cpuinfo names no CPU model");
+    }
+    model.map(Value::String)
+}
+
 #[cfg(target_os = "android")]
 fn android_property(property: &str) -> Option<Value> {
     let value = android_system_properties::AndroidSystemProperties::new().get(property);
@@ -222,6 +242,11 @@ fn model() -> Option<Value> {
     android_property("ro.product.model")
 }
 
+#[cfg(target_os = "android")]
+fn cpu() -> Option<Value> {
+    android_property("ro.soc.model")
+}
+
 #[cfg(target_os = "macos")]
 fn model() -> Option<Value> {
     sysctl_string("hw.model")
@@ -230,6 +255,11 @@ fn model() -> Option<Value> {
 #[cfg(target_os = "ios")]
 fn model() -> Option<Value> {
     sysctl_string("hw.machine")
+}
+
+#[cfg(target_os = "macos")]
+fn cpu() -> Option<Value> {
+    sysctl_string("machdep.cpu.brand_string")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -244,5 +274,10 @@ fn vendor() -> Option<Value> {
     target_os = "ios"
 )))]
 fn model() -> Option<Value> {
+    None
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+fn cpu() -> Option<Value> {
     None
 }

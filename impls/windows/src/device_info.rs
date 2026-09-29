@@ -16,6 +16,13 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
             "dusk.device.model",
             registry_string("HARDWARE\\DESCRIPTION\\System\\BIOS", "SystemProductName"),
         ),
+        (
+            "dusk.device.cpu",
+            registry_string(
+                "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                "ProcessorNameString",
+            ),
+        ),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
