@@ -233,28 +233,58 @@ The list is on the `native-static-libs:` line of the output.
 
 ### Library
 
-`dusk_node_run` blocks, so start it on a dedicated thread, early in your
-application's startup. With POSIX threads:
+`dusk_spawn` starts a node on a thread of its own and returns its namespace id,
+or 0 if it could not draw an id or start a thread for the node. Call it early in
+your application's startup, and `dusk_join` the id when you want the node's
+result:
+
+```c
+#include <stddef.h>
+#include "dusk.h"
+
+static int64_t node;
+
+void start_dusk_node(void)
+{
+    node = dusk_spawn(NULL);
+}
+```
+
+`dusk_run` runs a node on the calling thread and blocks until it shuts down, so
+to choose the thread yourself, register an id with `dusk_new` - 0 if it cannot
+draw one - and hand it to `dusk_run` there. The result carries Dusk's status in
+its low bits and the node's exit code above them. With POSIX threads:
 
 ```c
 #include <pthread.h>
+#include <stdio.h>
 #include "dusk.h"
 
 static void *run_dusk_node(void *arg)
 {
-    (void)arg;
-    dusk_node_run(NULL);
+    int64_t namespace_id = *(int64_t *)arg;
+    int32_t result = dusk_run(namespace_id, NULL);
+    if ((result & DUSK_STATUS_MASK) != DUSK_RUN_OK) {
+        fprintf(stderr, "the dusk node did not run: status %d\n", result & DUSK_STATUS_MASK);
+    }
     return NULL;
 }
 
 int main(void)
 {
+    static int64_t namespace_id;
+    namespace_id = dusk_new();
     pthread_t dusk_thread;
-    pthread_create(&dusk_thread, NULL, run_dusk_node, NULL);
+    if (namespace_id != 0) {
+        pthread_create(&dusk_thread, NULL, run_dusk_node, &namespace_id);
+    }
 
     /* ... the rest of your application ... */
 }
 ```
+
+See [Embed Dusk in your app](../getting-started/guides/embed.md#link-the-library)
+for every status and how an id is registered and unregistered.
 
 ### Executable
 

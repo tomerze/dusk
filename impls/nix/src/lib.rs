@@ -15,19 +15,24 @@ mod driver;
 /// requested exit code so `run` can recover and return it.
 pub(crate) struct ExitCode(pub(crate) i32);
 
+static PANIC_HOOK: std::sync::Once = std::sync::Once::new();
+
 pub fn run(
+    namespace_id: u64,
     launcher_set: impl Fn() -> dusk_program::anyhow::Result<LauncherSet> + Send + Sync + 'static,
     init_program_args: Rc<ProgramArgs>,
 ) -> i32 {
     // Keep the exit-code panic out of the default panic output so a clean
     // exit() doesn't look like a crash. Real panics still print normally.
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        if panic_info.payload().is::<ExitCode>() {
-            return;
-        }
-        default_hook(panic_info);
-    }));
+    PANIC_HOOK.call_once(|| {
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            if panic_info.payload().is::<ExitCode>() {
+                return;
+            }
+            default_hook(panic_info);
+        }));
+    });
 
     // Box::leak gives the executor a 'static borrow, as Executor::run requires.
     let executor = Box::leak(Box::new(Executor::new()));
@@ -40,18 +45,23 @@ pub fn run(
             let mut seed = [0u8; 16];
             getrandom::getrandom(&mut seed).expect("the operating system's random source failed");
 
+            let random_seed = u128::from_le_bytes(seed);
+            let unix_time_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_millis() as u64)
+                .ok();
             let root = Rc::new(Namespace::new(
-                u128::from_le_bytes(seed),
+                namespace_id,
+                random_seed,
                 spawner,
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|duration| duration.as_millis() as u64)
-                    .ok(),
+                unix_time_ms,
             ));
 
             dusk_core::init::init(root, launcher_set, init_program_args);
         });
     }));
+
+    dusk_core::launchers::remove_launcher_set(namespace_id);
 
     match outcome {
         Ok(()) => unreachable!("executor.run() should never return"),

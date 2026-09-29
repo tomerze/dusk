@@ -22,3 +22,5 @@ dusk_program = { path = "../../../dusk/src/dusk_program/" }
 dusk_base = { path = "../../../dusk/src/dusk_base" }
 dusk_program_sh_compiler_proc = { path = "../../../base/sh/compiler/proc" }
 dusk_program_logs = { path = "../../../base/logs" }
+getrandom = "0.2"
+tracing = { version = "0.1.41", default-features = false }
