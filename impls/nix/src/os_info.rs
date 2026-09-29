@@ -10,6 +10,8 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_limits(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_os_release(kvs);
+    #[cfg(target_os = "linux")]
+    set_kvs_boot_id(kvs);
     #[cfg(target_os = "android")]
     set_kvs_android_properties(kvs);
     #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -164,6 +166,21 @@ fn set_kvs_os_release(kvs: &Kvs) {
     })
     .collect();
     set_kvs_values(kvs, "os-release", values);
+}
+
+#[cfg(target_os = "linux")]
+fn set_kvs_boot_id(kvs: &Kvs) {
+    match std::fs::read_to_string("/proc/sys/kernel/random/boot_id") {
+        Ok(boot_id) => set_kvs_values(
+            kvs,
+            "boot id",
+            vec![(
+                String::from("dusk.os.linux.boot_id"),
+                Value::String(String::from(boot_id.trim())),
+            )],
+        ),
+        Err(error) => tracing::warn!(error = %error, "reading the boot id failed"),
+    }
 }
 
 #[cfg(target_os = "android")]
