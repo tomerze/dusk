@@ -129,6 +129,12 @@ The `logs.*` counters are a snapshot taken by the `logs` program, so they are
 as fresh as the last time a `logs` command ran on the node. Run `logs dump
 --replay-only` to refresh them.
 
+`init` logs `dusk.target.arch`, `dusk.target.os` and `dusk.target.bits` once, at `info`, as
+`dusk target` with `arch`, `os` and `bits` fields, and then the impl the node was
+built with as `dusk impl` with a `name` field - the value of
+[`dusk.impl`](#what-the-impl-records). A node whose impl did not write
+`dusk.impl` logs that at `warn` instead.
+
 ## What the impl records
 
 The [impl](../getting-started/concepts/drivers-and-impls.md) writes these keys
