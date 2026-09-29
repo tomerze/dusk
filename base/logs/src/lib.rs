@@ -71,13 +71,23 @@ pub mod client;
 #[derive(dusk_program_proc::Launcher)]
 pub struct Launcher {
     pub buffer: SignalBuffer,
+    tid: u64,
+    layer: portable_atomic_util::Arc<BufferLayer>,
 }
 
 impl Launcher {
     pub fn new(config: LogsConfig) -> anyhow::Result<Self> {
         let buffer = SignalBuffer::new(config)?;
-        let _ = ::tracing::subscriber::set_global_default(BufferLayer::new(buffer.clone()));
-        Ok(Self { buffer })
+        let tid = dusk_core::driver::tid();
+        let layer = portable_atomic_util::Arc::new(BufferLayer::new(buffer.clone()));
+        crate::tracing::register(tid, layer.clone())?;
+        Ok(Self { buffer, tid, layer })
+    }
+}
+
+impl Drop for Launcher {
+    fn drop(&mut self) {
+        crate::tracing::unregister(self.tid, &self.layer);
     }
 }
 
