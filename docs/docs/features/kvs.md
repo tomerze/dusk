@@ -166,6 +166,8 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.os.nix.uname.version` | `nix` | The `version` field of `uname(2)`: the kernel version. |
 | `dusk.os.nix.uname.machine` | `nix` | The `machine` field of `uname(2)`: the hardware the kernel reports. |
 | `dusk.os.nix.uname.domainname` | `nix`, on Linux and Android | The `domainname` field of `uname(2)`. |
+| `dusk.os.nix.uid` | `nix` | The real UID the node runs as, from `getuid(2)`; `0` is root. |
+| `dusk.os.nix.euid` | `nix` | The effective UID the node runs as, from `geteuid(2)`: the one its permissions are checked against. |
 | `dusk.os.linux.os_release.<key>` | `nix`, on Linux | Seven entries of [os-release](https://www.freedesktop.org/software/systemd/man/latest/os-release.html) - `name`, `pretty_name`, `id`, `id_like`, `version`, `version_id` and `version_codename` - each `<key>` the entry's name in lower case and the value without its quotes, e.g. `dusk.os.linux.os_release.id` is `ubuntu`, `dusk.os.linux.os_release.version_id` is `24.04`. The file is `/etc/os-release`, or `/usr/lib/os-release` when that does not exist. |
 | `dusk.os.android.release` | `nix`, on Android | The `ro.build.version.release` system property: the Android version, e.g. `14`. |
 | `dusk.os.android.sdk` | `nix`, on Android | The `ro.build.version.sdk` system property, as a number: the API level, e.g. `34`. |
