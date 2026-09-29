@@ -154,6 +154,8 @@ writes no keys, and the node logs why at `warn`. One that this system simply
 does not have - no os-release file, no device id, process 1 hidden from the
 node, a device that reports no vendor, model or CPU, a Windows or Android too
 old to carry a value - writes no keys either, and is logged at `info`.
+[Collected information](../telemetry/collected-information.md) lists what these
+keys hold, platform by platform.
 
 | Key | Written by | Value |
 |-----|------------|-------|

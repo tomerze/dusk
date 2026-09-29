@@ -77,6 +77,8 @@ nav:
       - Ask Dusk: features/ask-dusk.md
       - MCP: features/gateway.md
       - Base programs: getting-started/concepts/base.md
+  - Telemetry:
+      - Collected information: telemetry/collected-information.md
   - Customize:
       - customize/index.md
       - Concepts:
