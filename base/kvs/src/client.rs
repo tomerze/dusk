@@ -4,7 +4,25 @@ use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
+use std::borrow::ToOwned;
 use std::rc::Rc;
+
+/// How a key id is shown to a user: the name the program that writes it
+/// registered, else `0x…` hex.
+#[must_use]
+pub fn key_display(id: u64) -> String {
+    crate::kvs::known_key_name(id).map_or_else(|| format!("{id:#018x}"), str::to_owned)
+}
+
+/// The id a user-typed key refers to: a `0x…` hex id as [`key_display`] shows
+/// one, else the hash of the name.
+#[must_use]
+pub fn key_parse(key: &str) -> u64 {
+    key.strip_prefix("0x")
+        .or_else(|| key.strip_prefix("0X"))
+        .and_then(|hex| u64::from_str_radix(hex, 16).ok())
+        .unwrap_or_else(|| key_id(key))
+}
 
 #[derive(clap::Parser)]
 #[command(name = "kvs", no_binary_name = true)]
@@ -34,6 +52,8 @@ enum KvsAction {
     },
     // Bind kvs on the client as a redis-compatible server
     Bind,
+    /// List every key, by name where a program registered one
+    Scan,
 }
 
 struct KvsProgramArgsBuilder {}
@@ -43,10 +63,11 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
     async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = KvsCli::try_parse_from(args)?;
         let args = match cli.action {
-            KvsAction::Get { key } => Args::get(key_id(&key)),
-            KvsAction::Set { key, value } => Args::set(key_id(&key), &Value::String(value))?,
-            KvsAction::Delete { key } => Args::delete(key_id(&key)),
-            KvsAction::Exists { key } => Args::exists(key_id(&key)),
+            KvsAction::Get { key } => Args::get(key_parse(&key)),
+            KvsAction::Set { key, value } => Args::set(key_parse(&key), &Value::String(value))?,
+            KvsAction::Delete { key } => Args::delete(key_parse(&key)),
+            KvsAction::Exists { key } => Args::exists(key_parse(&key)),
+            KvsAction::Scan => Args::scan(),
             KvsAction::Bind => Args::bind(),
         };
         Ok(args.as_program_args()?)
@@ -70,6 +91,9 @@ The key-value store is in-memory and shared across all programs on the node.
   prompt are stored as strings.
 * `kvs delete <key>` removes `<key>` and reports whether it was present.
 * `kvs exists <key>` reports whether `<key>` is present.
+* `kvs scan` lists every key: its name where the program that writes it
+  registered one, and the id it travels as. A `<key>` anywhere above may be
+  that id, as `0x…`, instead of a name.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.

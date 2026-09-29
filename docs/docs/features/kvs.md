@@ -18,6 +18,7 @@ kvs get <key>            # print the value under <key>; fails if there is none
 kvs set <key> <value>    # store <value> under <key>, replacing what was there
 kvs delete <key>         # remove <key>; prints whether it was there
 kvs exists <key>         # print whether <key> is there
+kvs scan                 # list every key
 ```
 
 A value typed at the prompt is stored as a string. Values written by programs
@@ -33,8 +34,28 @@ called.
 
 A program registers the names of the keys it writes - every key in the table
 below is registered by the program that sets it - so a client that has an id in
-hand can show it under the name it was hashed from. An id no program registered
-a name for has only its number.
+hand can show it under the name it was hashed from. The node cannot: it sends
+the ids back and the client names them.
+
+`kvs scan` is how you see them. Each row is a key's name and the id it hashes
+to, and a key no program registered a name for shows as its id:
+
+```console
+> kvs scan
+ Key                 ID
+ dusk.namespace_id   0x356cac24ff2e7205
+ dusk.git_rev        0x73f97df9dc6dba02
+ dusk.version        0x7520055bd5de6ac4
+ 0xbc316f8a9c3bae10  0xbc316f8a9c3bae10
+```
+
+Either column is a key you can type back: `kvs get 0x7520055bd5de6ac4` reads
+the same entry as `kvs get dusk.version`, because that id is what
+`dusk.version` hashes to.
+
+The list is the store at one instant - no key is repeated, and none that was
+there is missed - and it arrives as a stream, a page of rows at a time, so a
+store with many keys never has to answer in one reply.
 
 Two different names can hash to the same id. It is unlikely, and if it happens
 the two names silently share one entry.

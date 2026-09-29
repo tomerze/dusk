@@ -23,6 +23,9 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("kvs", VERSION, kvs_capnp::PROGRAM_ID);
 
+/// How many key ids travel in one value of a scan's stream.
+const SCAN_PAGE_SIZE: usize = 64;
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
@@ -63,10 +66,51 @@ impl Args {
         data.init_root().set_bind(());
         Args { data }
     }
+
+    pub fn scan() -> Self {
+        let mut data = ArgsDataBuilder::new_default();
+        data.init_root().set_scan(());
+        Args { data }
+    }
 }
 
+#[cfg(not(feature = "client"))]
 #[dusk_program_proc::impl_args_rpc_server]
 impl Args {}
+
+#[cfg(feature = "client")]
+#[dusk_program_proc::impl_args_rpc_server]
+impl Args {
+    fn transpose(
+        &mut self,
+        params: kvs_capnp::kvs_args::server::TransposeParams,
+        _results: kvs_capnp::kvs_args::server::TransposeResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let parameters = dusk_capnp::pry!(params.get());
+        let keys = dusk_capnp::pry!(parameters.get_keys());
+        let output = dusk_capnp::pry!(parameters.get_output());
+
+        let names = keys
+            .iter()
+            .map(|key| Value::String(client::key_display(key)))
+            .collect();
+        let ids = keys.iter().map(Value::Uint).collect();
+        let page = Record::with_fields(
+            kvs_capnp::SCAN_TYPE_ID,
+            [
+                (b"Key".to_vec(), Value::List(names)),
+                (b"ID".to_vec(), Value::List(ids)),
+            ],
+        );
+
+        Promise::from_future(async move {
+            let mut send_request = output.send_request();
+            Value::Record(page).write_to_builder(send_request.get().init_value())?;
+            send_request.send().await?;
+            Ok(())
+        })
+    }
+}
 
 #[derive(dusk_program_proc::Launcher, Default)]
 pub struct Launcher;
@@ -92,6 +136,7 @@ pub struct Process {
     /// What `output` streams; `None` streams nothing.
     result: Rc<RefCell<Option<Value>>>,
     bound: Rc<Cell<bool>>,
+    scanning: Rc<Cell<bool>>,
     kvs: alloc::sync::Arc<kvs::Kvs>,
     #[process_context]
     pub ctx: ProcessContext,
@@ -103,6 +148,7 @@ impl Process {
         Ok(Process {
             result: Rc::new(RefCell::new(None)),
             bound: Rc::new(Cell::new(false)),
+            scanning: Rc::new(Cell::new(false)),
             kvs,
             ctx,
         })
@@ -136,6 +182,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     Which::Delete(key) => Which::Delete(key),
                     Which::Exists(key) => Which::Exists(key),
                     Which::Bind(()) => Which::Bind(()),
+                    Which::Scan(()) => Which::Scan(()),
                 })
             })?;
         match action {
@@ -159,6 +206,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 *self.result.borrow_mut() = Some(Value::Bool(exists));
             }
             kvs_capnp::kvs_args::data::Which::Bind(()) => self.bound.set(true),
+            kvs_capnp::kvs_args::data::Which::Scan(()) => self.scanning.set(true),
         }
 
         ready.sender().send(true);
@@ -235,6 +283,26 @@ impl Portal {
             Ok(())
         })
     }
+
+    fn scan(
+        &mut self,
+        params: kvs_capnp::kvs_portal::ScanParams,
+        _results: kvs_capnp::kvs_portal::ScanResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let output = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_output());
+        let kvs = self.process.kvs.clone();
+        Promise::from_future(async move {
+            let keys = kvs.scan().await;
+            for page in keys.chunks(SCAN_PAGE_SIZE) {
+                let mut send_request = output.send_request();
+                Value::List(page.iter().copied().map(Value::Uint).collect())
+                    .write_to_builder(send_request.get().init_value())?;
+                send_request.send().await?;
+            }
+            output.done_request().send().promise.await?;
+            Ok(())
+        })
+    }
 }
 
 impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
@@ -250,7 +318,24 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
             return Promise::ok(());
         }
         let result = self.process.result.borrow_mut().take();
+        let process = self.process.clone();
         Promise::from_future(async move {
+            if process.scanning.get() {
+                let server: kvs_capnp::kvs_args::server::Client =
+                    process.ctx.program_args.server_as()?;
+                for page in process.kvs.scan().await.chunks(SCAN_PAGE_SIZE) {
+                    let mut request = server.transpose_request();
+                    let mut builder = request.get();
+                    builder.set_output(stream.clone());
+                    let mut keys = builder.init_keys(page.len() as u32);
+                    for (index, key) in page.iter().enumerate() {
+                        keys.set(index as u32, *key);
+                    }
+                    request.send().promise.await?;
+                }
+                results.get().set_daemonize(false);
+                return Ok(());
+            }
             if let Some(value) = result {
                 let mut send_request = stream.send_request();
                 let value_builder = send_request.get().init_value();
