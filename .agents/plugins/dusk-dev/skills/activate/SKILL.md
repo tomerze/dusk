@@ -1,6 +1,6 @@
 ---
 name: activate
-description: Load what there is to know about working in the dusk repository - the dusk-developer orientation map and working agreements, what the hooks refuse in every session, how the tree is built and measured, and how a node is driven by hand. It puts no workflow in force - the decision triage, the one commit and its split, the hand-off, the review agents and the marked turns are the harness skill's, and apply only once the user invokes /dusk-dev:harness or /dusk-dev:drive-issue. Use it at the start of any work in this repository.
+description: Load what there is to know about working in the dusk repository - the dusk-developer orientation map and working agreements, what the hooks refuse in every session, how the tree is built and measured, and how a node is driven by hand. Use it at the start of any work in this repository.
 ---
 
 # What there is to know about dusk
@@ -9,12 +9,6 @@ Load the `dusk-developer` skill now. It is the orientation map of the codebase
 and the working agreements every change is held to. The sections below are about
 what surrounds the code: what the hooks refuse, how the tree is built and
 measured, how a node is driven by hand.
-
-That is all this skill does. It puts no workflow in force - no triage agent on
-each decision, no split, no pull request, no review agents, no marked turns.
-Those are the `harness` skill's, and they apply only once the user invokes
-`/dusk-dev:harness` or `/dusk-dev:drive-issue`. Until then the work goes the way
-the user asks for it.
 
 ## Nothing personal goes in the repository
 
@@ -32,11 +26,11 @@ the user write it.
 
 The pre-edit hook enforces this against the git user's own name and address and
 their home directory, read fresh each time, so nothing personal is stored in the
-harness either.
+plugin either.
 
 ## What the hooks refuse in every session
 
-These hold whether or not the harness is on, checked as each action is taken:
+These are checked as each action is taken:
 
 - No comment line is written by me, in any file.
 - Nothing personal is written anywhere: no name, no email address, no home

@@ -259,7 +259,7 @@ commit that changes only files under `docs/` has a subject that begins
 `Update tests` when it changes tests that already exist rather than adding any.
 They are the low-stakes commits, and the reviewer skips them by their first two
 words without opening them, so the marker is exact: not "Document", not "Test
-the", not "Update the Python API docs". The harness refuses a split and a push
+the", not "Update the Python API docs". The pre-bash hook refuses a push
 whose docs or tests commits do not start that way.
 
 ### 8. Write the subject lines down, then build
@@ -354,8 +354,8 @@ nor what-breaks-if-I-split will find it. Only the statement will.
 ## Mechanics
 
 **Before rewriting any history, snapshot the final tree.** `git add -A && git
-commit --no-verify -m "WIP snapshot"`, then `git tag -f harness-snapshot HEAD`.
-Everything after that is recoverable, and `git diff harness-snapshot HEAD` at the
+commit --no-verify -m "WIP snapshot"`, then `git tag -f split-snapshot/<branch> HEAD` - one tag per branch, so two splits on two worktrees never share one.
+Everything after that is recoverable, and `git diff split-snapshot/<branch> HEAD` at the
 end must come back empty - that is the proof the rewrite lost nothing.
 
 **Unpick the commit, then commit forward out of the working tree.** Do not
@@ -367,7 +367,8 @@ git reset <base>                      # the whole change is now unstaged
 git add <the paths this statement owns>
 git commit --no-verify -m "<subject>" -m "<body>"
 …                                     # once per statement
-git diff harness-snapshot HEAD        # empty, or the split lost something
+git diff split-snapshot/<branch> HEAD # empty, or the split lost something
+git tag -d split-snapshot/<branch>   # once it is empty
 ```
 
 Reset against the base the split rebuilds from, not `HEAD^`. When the tree was
@@ -432,7 +433,7 @@ Force-push the rewritten branch; a pushed branch is not a reason to append.
 - ☐ Put the subject lines in the reply, in order, and build without waiting
 - ☐ Snapshot and tag, `git reset HEAD^`, then commit forward, staging named paths only
 - ☐ Every commit in the split is `--no-verify`; the hooks run once at the end
-- ☐ `git diff harness-snapshot HEAD` is empty
+- ☐ `git diff split-snapshot/<branch> HEAD` is empty, and the tag deleted
 
 ## I do not write comments
 

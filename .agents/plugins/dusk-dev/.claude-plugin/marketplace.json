@@ -8,7 +8,7 @@
         {
             "name": "dusk-dev",
             "source": "./",
-            "description": "The dusk development harness: the working agreements as hooks, the workflow as skills, the review as agents."
+            "description": "The dusk development plugin: the working agreements as hooks, the workflows as skills, a race inspection and a code review as agents."
         }
     ]
 }

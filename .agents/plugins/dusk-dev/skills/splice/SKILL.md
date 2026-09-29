@@ -128,7 +128,6 @@ the bottom of the stack up, so each one has a base to target.
 others leaves the issue unfinished, and a closing keyword in one of their bodies
 would close it anyway - the bottom of a stack targets master, so GitHub acts on
 it. Their bodies say **`Part of #N`** instead, and name the PR that closes it.
-The harness takes either keyword.
 
 **The original PR is now a different PR.** It carries a fraction of what it
 carried, so its title and body no longer describe it. Rewrite both: what these
