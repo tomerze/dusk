@@ -21,6 +21,7 @@ const NAMESPACE_ID_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.namespace_
 const ARCH_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.target.arch");
 const OS_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.target.os");
 const BITS_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.target.bits");
+const IMPL_KEY: u64 = dusk_program_kvs_internal::key_id("dusk.impl");
 
 #[cfg(feature = "client")]
 mod known_keys {
@@ -120,6 +121,11 @@ impl dusk_program::process::ProcessMixin for Process {
         kvs.set(OS_KEY, Value::String(String::from(os))).await;
         kvs.set(BITS_KEY, Value::Uint(bits)).await;
         tracing::info!(arch, os, bits, "dusk target");
+        match kvs.get(IMPL_KEY).await {
+            Some(Value::String(name)) => tracing::info!(name = name.as_str(), "dusk impl"),
+            Some(value) => tracing::warn!(value = ?value, "dusk.impl is not a string"),
+            None => tracing::warn!("dusk.impl is not set"),
+        }
 
         ready.sender().send(true);
 
