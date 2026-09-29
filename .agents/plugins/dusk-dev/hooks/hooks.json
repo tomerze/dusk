@@ -64,16 +64,6 @@
                         "timeout": 10
                     }
                 ]
-            },
-            {
-                "matcher": "Agent",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_agent.py\"",
-                        "timeout": 10
-                    }
-                ]
             }
         ],
         "PostToolUse": [
@@ -84,48 +74,6 @@
                         "type": "command",
                         "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_skill.py\"",
                         "timeout": 10
-                    }
-                ]
-            },
-            {
-                "matcher": "Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_bash.py\"",
-                        "timeout": 240
-                    }
-                ]
-            },
-            {
-                "matcher": "mcp__github__create_pull_request",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_pull_request.py\"",
-                        "timeout": 10
-                    }
-                ]
-            }
-        ],
-        "SubagentStop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_stop.py\"",
-                        "timeout": 60
-                    }
-                ]
-            }
-        ],
-        "Stop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop.py\"",
-                        "timeout": 240
                     }
                 ]
             }

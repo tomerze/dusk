@@ -6,17 +6,13 @@ from harness import (
     WATERMARKS,
     agent_type,
     ask,
-    decisions_path,
     deny,
-    drive_state,
     lint_branch,
     lint_message,
     read_input,
-    reviewed,
-    session_state,
 )
 
-READ_ONLY_AGENTS = {"self-review", "race-screen", "race-inspector", "dilemma-triage", "decision-ranker"}
+READ_ONLY_AGENTS = {"self-review", "race-screen", "race-inspector"}
 REDIRECT = re.compile(r"\d*>>?(.*)")
 MUTATING = re.compile(
     r"\bgit\s+(commit|push|reset|rebase|checkout|switch|stash|add|rm|mv|tag|cherry-pick|merge|am|apply)\b"
@@ -98,29 +94,10 @@ def gh_body(command, cwd):
     return ""
 
 
-def pull_request_problems(cwd, body, creating, hook_input):
-    problems = []
+def pull_request_problems(body):
     if any(mark in body for mark in WATERMARKS):
-        problems.append("the PR body carries a watermark; never")
-    branch = reviewed(cwd, hook_input)
-    _, drive = drive_state(branch, cwd)
-    _, session = session_state(hook_input.get("session_id", ""))
-    issue = drive.get("issue") or (session.get("drive") or {}).get("issue")
-    if issue and not re.search(rf"(Closes|Part of) #{issue}\b", body):
-        problems.append(
-            f"the PR body must carry `Closes #{issue}`, or `Part of #{issue}` "
-            "when it is one of a stack and another pull request closes the issue"
-        )
-    if not {"harness", "drive-issue"} & set(session["loaded_skills"]):
-        return problems
-    if creating and drive.get("pr"):
-        problems.append(f"one pull request per drive: update #{drive['pr']} instead of opening another")
-    path = decisions_path(cwd, branch)
-    if not path.exists():
-        problems.append(f"{path.relative_to(cwd)} does not exist: every decision goes through the dilemma-triage agent as it is made")
-    elif "## Decisions" not in body:
-        problems.append(f"the PR body must carry the decisions from {path.relative_to(cwd)} under `## Decisions`")
-    return problems
+        return ["the PR body carries a watermark; never"]
+    return []
 
 
 def main():
@@ -140,7 +117,7 @@ def main():
             "need to keep into a path outside the working directory."
         )
     if has(r"\b(until|while)\b[^\n]*\bsleep\b") or has(r"\bsleep\s+\d+[^\n]*\b(grep|tail|cat|test|ls)\b"):
-        deny("Never poll for a command you started: the harness re-invokes you when a background command exits (dusk-developer, Never poll for a command I started).")
+        deny("Never poll for a command you started: Claude Code re-invokes you when a background command exits (dusk-developer, Never poll for a command I started).")
     if has(r"\bcp\b[^\n;&|]*\btarget\b"):
         deny("Never copy a target directory; park it with mv and move it back (drive-issue, Step 2).")
     if has(r"\bgit\s+stash\b(?!\s+(push|list|show|apply|drop|branch)\b)"):
@@ -166,7 +143,7 @@ def main():
         if problems:
             deny("Fix these commits before pushing: " + "; ".join(problems))
     if has(r"\bgh\s+pr\s+create\b"):
-        problems = pull_request_problems(cwd, gh_body(command, cwd), True, hook_input)
+        problems = pull_request_problems(gh_body(command, cwd))
         if problems:
             deny("Pull request: " + "; ".join(problems))
     if has(r"\bgh\s+pr\s+merge\b") or (has(r"\bgh\s+api\b") and has(r"/merge\b")):

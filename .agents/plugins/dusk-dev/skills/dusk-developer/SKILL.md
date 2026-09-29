@@ -647,7 +647,7 @@ Past failure: asked to remove a `tracing::warn!("detached sh script failed")` in
 
 ## Never poll for a command I started - and never blame the build
 
-**The harness re-invokes me when a background command exits. Polling it is pure
+**Claude Code re-invokes me when a background command exits. Polling it is pure
 waste.** Never spawn a second command that greps my own output file in a
 `sleep` loop. If something must run in the background, I background it and then
 *wait for the notification* - nothing else.

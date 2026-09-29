@@ -17,9 +17,6 @@ def main():
         skill = slash.group(1)
         if skill not in session["loaded_skills"]:
             session["loaded_skills"].append(skill)
-        if skill == "drive-issue":
-            number = re.search(r"\d+", prompt[slash.end():])
-            session["drive"] = {"issue": int(number.group()) if number else None}
         save_json(session_path, session)
         return
     loaded = session["loaded_skills"]
@@ -34,8 +31,7 @@ def main():
         context(
             "Nothing about dusk is loaded in this session. Invoke /dusk-dev:activate before "
             "changing anything: it carries what there is to know about the codebase and how it "
-            "is built. It sets no workflow; that comes only with /dusk-dev:harness or "
-            "/dusk-dev:drive-issue."
+            "is built."
         )
 
 
