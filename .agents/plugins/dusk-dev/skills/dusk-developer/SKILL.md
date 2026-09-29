@@ -361,7 +361,9 @@ its `device_info::set_kvs_device_info`, which of them depending on the impl and
 the platform), and calls `dusk_core::init::init`
 with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
-when that namespace terminates. The `init` process is handed an init script - a
+when that namespace terminates. The `init` process writes `dusk.target.arch`,
+`dusk.target.os` and `dusk.target.bits` beside `dusk.version`, logs them as `dusk target` and the impl's
+name as `dusk impl`, and is handed an init script - a
 `Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate` while it reaps that `sh` with `waitpid` - the `sh` running a detached
 script that is one program exits as soon as it has started the program - so nothing
