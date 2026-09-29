@@ -6,6 +6,7 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
     set_kvs_time_zone(kvs);
     set_kvs_uname(kvs);
+    set_kvs_credentials(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_os_release(kvs);
     #[cfg(target_os = "android")]
@@ -85,6 +86,20 @@ fn set_kvs_uname(kvs: &Kvs) {
         })
         .collect();
     set_kvs_values(kvs, "uname", values);
+}
+
+fn set_kvs_credentials(kvs: &Kvs) {
+    let values = vec![
+        (
+            String::from("dusk.os.nix.uid"),
+            Value::Uint(u64::from(unsafe { nix::libc::getuid() })),
+        ),
+        (
+            String::from("dusk.os.nix.euid"),
+            Value::Uint(u64::from(unsafe { nix::libc::geteuid() })),
+        ),
+    ];
+    set_kvs_values(kvs, "credentials", values);
 }
 
 #[cfg(target_os = "linux")]
