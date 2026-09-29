@@ -18,6 +18,7 @@ tracing = { version = "0.1.41", default-features = false }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_WindowsProgramming",
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
 
 [target.'cfg(windows)'.dependencies]
