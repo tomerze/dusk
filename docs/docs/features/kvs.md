@@ -84,6 +84,18 @@ after that is left out.
 `kvs get` fails when no key matches, and names what you typed:
 ``no key matches `logs` ``.
 
+## When no client can name the keys
+
+The node cannot name a key; the client that ran the command does. A command
+whose client is gone cannot have its keys named: one in the node's init script,
+which is compiled before the node runs, or one in a detached script whose client
+has disconnected. `kvs scan` and `kvs get` still answer, without the `Key`
+column - `kvs scan` with `ID` alone, `kvs get` with `ID` and `Value` - and the
+node logs a warning that it did.
+
+A `kvs get` compiled into an init script cannot ask the node for its keys
+either, so it reads the one key you name, by its whole name or its id.
+
 ## What Dusk records
 
 These keys are written by Dusk itself. Read them; overwriting them only lasts
