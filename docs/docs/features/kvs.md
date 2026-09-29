@@ -155,6 +155,10 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | Key | Written by | Value |
 |-----|------------|-------|
 | `dusk.impl` | `nix`, `std`, `windows` | The name of the impl the node was built with, e.g. `nix`, `std` or `windows`. |
+| `dusk.os.process.pid` | `nix`, `std`, `windows` | The process id the operating system gave the node. |
+| `dusk.os.process.executable` | `nix`, `std`, `windows` | The path of the executable the node runs from. |
+| `dusk.os.process.working_directory` | `nix`, `std`, `windows` | The directory the node was started in. |
+| `dusk.os.process.parent_pid` | `nix`; `std` on Unix; `windows` | The process id of the process that started the node - e.g. `1` when init or systemd runs it. |
 | `dusk.os.nix.uname.sysname` | `nix` | The `sysname` field of `uname(2)`, e.g. `Linux`. |
 | `dusk.os.nix.uname.nodename` | `nix` | The `nodename` field of `uname(2)`: the name of the device on the network. |
 | `dusk.os.nix.uname.release` | `nix` | The `release` field of `uname(2)`: the kernel release. |
