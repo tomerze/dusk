@@ -289,8 +289,10 @@ the destination. Call the OS/hardware primitive directly.
 
 **Impls stay lean.** `dusk_core` owns every piece of policy that can be
 platform-agnostic. An impl owns only what the platform forces: the hostname, how
-to halt, the program set to launch, and the platform's `embassy-time` driver and
-`critical-section` implementation. A queue, scheduler, or state machine sneaking
+to halt, the program set to launch, its name and what its OS and device report
+about themselves, which it writes into the kvs as the node starts, and the
+platform's `embassy-time` driver
+and `critical-section` implementation. A queue, scheduler, or state machine sneaking
 into an impl is a sign the logic belongs in `dusk_core` behind a thinner
 primitive.
 
@@ -352,8 +354,12 @@ up the process's signal channel in the namespace and sends the signal, which the
 process receives on its `signal_receiver`.
 
 **Startup.** `dusk_node_run()` calls into `dusk_impl::run` - whichever impl the
-`impl_*` feature selected - which creates the `Namespace` and calls
-`dusk_core::init::init` with the launcher set and the init args. `init` registers
+`impl_*` feature selected - which creates the `Namespace`, writes `dusk.impl` into
+that namespace's kvs with `block_on` before any task exists (then its `dusk.os.*`
+keys through its `os_info::set_kvs_os_info` and its `dusk.device.*` keys through
+its `device_info::set_kvs_device_info`, which of them depending on the impl and
+the platform), and calls `dusk_core::init::init`
+with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process is handed an init script - a
 `Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
