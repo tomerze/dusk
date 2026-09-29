@@ -15,4 +15,12 @@ lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 critical-section = { version = "1", features = ["std"] }
 getrandom = "0.2"
 tracing = { version = "0.1.41", default-features = false }
-windows-sys = { version = "0.61", features = ["Win32_System_WindowsProgramming"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_WindowsProgramming",
+] }
+
+[target.'cfg(windows)'.dependencies]
+windows-version = "0.100.0"
+windows-registry = "0.100.0"
+windows-result = "0.100.0"

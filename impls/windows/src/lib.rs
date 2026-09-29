@@ -11,6 +11,8 @@ use std::time::UNIX_EPOCH;
 pub use dusk_program::launcher_set::LauncherSet;
 
 mod driver;
+#[cfg(windows)]
+mod os_info;
 
 /// Panic payload `Driver::exit` raises to unwind the executor, carrying the
 /// requested exit code so `run` can recover and return it.
@@ -55,6 +57,8 @@ pub fn run(
                 dusk_program_kvs_internal::key_id("dusk.impl"),
                 Value::String(String::from("windows")),
             ));
+            #[cfg(windows)]
+            os_info::set_kvs_os_info(&kvs);
 
             dusk_core::init::init(root, launcher_set, init_program_args);
         });
