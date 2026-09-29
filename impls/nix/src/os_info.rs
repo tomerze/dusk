@@ -8,6 +8,8 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_os_release(kvs);
     #[cfg(target_os = "android")]
     set_kvs_android_properties(kvs);
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    set_kvs_apple_sysctls(kvs);
 }
 
 fn set_kvs_values(kvs: &Kvs, source: &str, values: Vec<(String, Value)>) {
@@ -121,4 +123,23 @@ fn set_kvs_android_properties(kvs: &Kvs) {
         values.push((String::from(name), value));
     }
     set_kvs_values(kvs, "Android system properties", values);
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn set_kvs_apple_sysctls(kvs: &Kvs) {
+    use sysctl::Sysctl;
+    let mut values = Vec::new();
+    for (field, name) in [
+        ("product_version", "kern.osproductversion"),
+        ("build_version", "kern.osversion"),
+    ] {
+        match sysctl::Ctl::new(name).and_then(|control| control.value_string()) {
+            Ok(value) => values.push((
+                format!("dusk.os.{}.{field}", std::env::consts::OS),
+                Value::String(value),
+            )),
+            Err(error) => tracing::warn!(name, error = %error, "sysctl failed"),
+        }
+    }
+    set_kvs_values(kvs, "sysctl", values);
 }

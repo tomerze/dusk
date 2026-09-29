@@ -22,3 +22,6 @@ etc-os-release = "0.1.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_system_properties = "0.1.6"
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+sysctl = "0.7.1"
