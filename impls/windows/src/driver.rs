@@ -20,6 +20,6 @@ impl Driver for WindowsDriver {
     }
 
     fn exit(&self, exit_code: i32) {
-        std::panic::panic_any(crate::ExitCode(exit_code));
+        crate::exit(exit_code);
     }
 }

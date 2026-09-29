@@ -10,7 +10,8 @@ supercomputers - the programs and the policy are shared; only the driver changes
 `Driver` is a small `Send + Sync` trait of OS/hardware hooks:
 
 - **`hostname()`** - what this node calls itself,
-- **`exit(exit_code)`** - halt the node.
+- **`exit(exit_code)`** - stop the node: `init` calls it once every process has
+  exited, and the impl records the code and ends its executor loop.
 
 An impl implements `Driver` and registers it once with `dusk_driver_impl!`.
 

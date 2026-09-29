@@ -12,6 +12,6 @@ impl Driver for StdDriver {
 
     fn exit(&self, exit_code: i32) {
         tracing::info!(exit_code, "node exiting");
-        std::panic::panic_any(crate::ExitCode(exit_code));
+        crate::exit(exit_code);
     }
 }

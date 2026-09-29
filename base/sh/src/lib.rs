@@ -101,6 +101,8 @@ impl Process {
                 interpreter: None,
                 active_stops: alloc::vec::Vec::new(),
                 folded: false,
+                running_execs: 0,
+                execs_done: Rc::new(dusk_program::embassy_sync::signal::Signal::new()),
             })),
         })
     }
@@ -210,6 +212,16 @@ impl dusk_program::process::ProcessMixin for Process {
             if let Signal::Terminate = signal {
                 for stop in self.state.borrow().active_stops.iter() {
                     stop.signal(());
+                }
+                loop {
+                    let execs_done = {
+                        let state = self.state.borrow();
+                        if state.running_execs == 0 {
+                            break;
+                        }
+                        state.execs_done.clone()
+                    };
+                    execs_done.wait().await;
                 }
                 return Ok(());
             }

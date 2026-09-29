@@ -100,7 +100,7 @@ vendor/        External libs submodules
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, and enables `embassy-time/std`. |
 | `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
-| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and unwinds on `exit`, like the other impls, with an `ExitCode` panic that its `run` catches. Nothing in it is platform-specific, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
+| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and, like the other impls, ends its executor through `run_until` once `exit` has recorded the node's exit code. Nothing in it is platform-specific, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side - the prompt UI and the `Shell` that drives the shell server a client attaches to. |
 | `dusk_connection` | `Connection` - the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
@@ -185,7 +185,9 @@ Everything platform-specific lives behind the `Driver` trait
 (`Send + Sync`), which an impl implements:
 
 - `hostname()` - the node's hostname.
-- `exit(exit_code)` - halt the node.
+- `exit(exit_code)` - stop the node. `init` calls it once every process has
+  exited; the impl records the code and returns, and its executor loop
+  (`Executor::run_until`) ends at the next check. It never panics or blocks.
 
 An impl registers its driver once with `dusk_driver_impl!`. See
 [Driver registration](#driver-registration-the-extern-shim-pattern).

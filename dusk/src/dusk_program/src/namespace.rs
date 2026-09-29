@@ -28,6 +28,8 @@ use tracing::warn;
 
 pub type SignalChannel = Channel<NoopRawMutex, signal::Signal, 8>;
 
+const TERMINATE_GRACE: embassy_time::Duration = embassy_time::Duration::from_secs(5);
+
 pub type PsCapabilityServerSet = CapabilityServerSet<Box<dyn Process>, process::Client>;
 pub type ExitWatch = Rc<Watch<CriticalSectionRawMutex, Option<Result<(), String>>, 16>>;
 pub type Suspended = Rc<Watch<CriticalSectionRawMutex, bool, 16>>;
@@ -59,6 +61,7 @@ pub struct Namespace {
     pub spawner: Spawner,
     pub ps_server_set: Mutex<CriticalSectionRawMutex, PsCapabilityServerSet>,
     pub ps_map: Mutex<CriticalSectionRawMutex, PsMap>,
+    pub terminating: Watch<CriticalSectionRawMutex, bool, 16>,
 }
 
 impl Namespace {
@@ -90,6 +93,7 @@ impl Namespace {
             rng: Mutex::<_, _>::new(rng),
             ps_server_set,
             ps_map,
+            terminating: Watch::new_with(false),
         }
     }
 
@@ -262,15 +266,36 @@ impl Namespace {
     /// Send SIGTERM to every process in the namespace, yielding between each so
     /// the signalled processes get a chance to run their termination paths.
     pub async fn terminate(&self) {
-        let pids: Vec<u64> = self.ps_map.lock().await.keys().copied().collect();
-        for pid in pids {
-            if self.exited(pid).await == Some(true) {
+        self.terminating.sender().send(true);
+        let entries: Vec<(u64, PsEntry)> = self
+            .ps_map
+            .lock()
+            .await
+            .iter()
+            .map(|(pid, entry)| (*pid, entry.clone()))
+            .collect();
+        for (pid, entry) in &entries {
+            if entry.exit.try_get().flatten().is_some() {
                 continue;
             }
-            if let Err(error) = self.kill(pid, signal::Signal::Terminate).await {
+            if let Err(error) = self.kill(*pid, signal::Signal::Terminate).await {
                 warn!(pid, error = %error, "couldn't terminate process");
             }
-            embassy_futures::yield_now().await;
+        }
+        let deadline = embassy_time::Instant::now() + TERMINATE_GRACE;
+        for (pid, entry) in entries {
+            let Some(mut receiver) = entry.exit.receiver() else {
+                warn!(pid, "couldn't watch the process's exit");
+                continue;
+            };
+            let exited = async {
+                while receiver.get().await.is_none() {
+                    receiver.changed().await;
+                }
+            };
+            if embassy_time::with_deadline(deadline, exited).await.is_err() {
+                warn!(pid, "process didn't exit after Terminate");
+            }
         }
     }
 }

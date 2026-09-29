@@ -14,6 +14,9 @@ pub(crate) struct State {
     pub(crate) interpreter: Option<Interpreter>,
     pub(crate) active_stops: Vec<Rc<Stop>>,
     pub(crate) folded: bool,
+    pub(crate) running_execs: usize,
+    pub(crate) execs_done:
+        Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, ()>>,
 }
 
 pub(crate) fn log_detached_result(pid: u64, result: &anyhow::Result<()>) {
@@ -60,10 +63,15 @@ async fn sh_exec_task(
                 .await
         }
         .await;
-        state
-            .borrow_mut()
-            .active_stops
-            .retain(|s| !Rc::ptr_eq(s, &stop));
+        let execs_done = {
+            let mut state = state.borrow_mut();
+            state.active_stops.retain(|s| !Rc::ptr_eq(s, &stop));
+            state.running_execs -= 1;
+            (state.running_execs == 0).then(|| state.execs_done.clone())
+        };
+        if let Some(execs_done) = execs_done {
+            execs_done.signal(());
+        }
         if logs_result {
             log_detached_result(pid, &result);
         }
@@ -102,12 +110,13 @@ pub(crate) fn spawn_sh_exec_task(
         owned_script,
         output,
         stop,
-        state,
+        state.clone(),
         completion.clone(),
         logs_result,
     )
     .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
     task_id.set(token.id());
+    state.borrow_mut().running_execs += 1;
     ctx.namespace.spawner.spawn(token);
     Ok(completion)
 }

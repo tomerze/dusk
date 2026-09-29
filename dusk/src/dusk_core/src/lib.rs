@@ -19,6 +19,7 @@ use tracing::{error, info};
 use core::cell::Cell;
 use core::pin::Pin;
 use core::sync::atomic::Ordering;
+use dusk_program::embassy_futures::select::{Either, select};
 use futures_io::{AsyncRead, AsyncWrite};
 use portable_atomic::AtomicU64;
 use tracing::Instrument;
@@ -61,7 +62,7 @@ pub async fn session(
 
     span.in_scope(|| info!("session started"));
 
-    let dusk_client = local_client(namespace).await;
+    let dusk_client = local_client(namespace.clone()).await;
     let network = twoparty::VatNetwork::new(
         reader,
         writer,
@@ -71,8 +72,21 @@ pub async fn session(
 
     let rpc_system = RpcSystem::new(Box::new(network), Some(dusk_client.clone().client));
 
-    if let Err(err) = rpc_system.instrument(span.clone()).await {
-        error!("an error occured in an rpc system: `{err:#?}`");
+    let terminating = async {
+        let Some(mut receiver) = namespace.terminating.receiver() else {
+            return core::future::pending::<()>().await;
+        };
+        while !receiver.get().await {
+            receiver.changed().await;
+        }
+    };
+
+    match select(rpc_system.instrument(span.clone()), terminating).await {
+        Either::First(Err(err)) => error!("an error occured in an rpc system: `{err:#?}`"),
+        Either::First(Ok(())) => {}
+        Either::Second(()) => {
+            span.in_scope(|| info!("session closed: its namespace is terminating"))
+        }
     }
 
     span.in_scope(|| info!("session ended"));

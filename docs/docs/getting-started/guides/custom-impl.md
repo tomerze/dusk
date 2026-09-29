@@ -21,7 +21,10 @@ node built on it.
 ## Implement the `Driver`
 
 Provide the platform primitives Dusk asks for - `hostname()` and
-`exit(exit_code)` - and register them once with `dusk_driver_impl!`. The
+`exit(exit_code)` - and register them once with `dusk_driver_impl!`. `exit`
+records the exit code and returns; your impl runs its executor with
+`Executor::run_until` and stops when the code is set, as `impls/std` does. It
+must not panic or block. The
 macro defines the `#[no_mangle]` extern symbols `dusk_core` calls through; the
 linker connects the two.
 
