@@ -7,6 +7,7 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
     let values: Vec<(&str, Value)> = [
         ("dusk.device.cores", cores()),
         ("dusk.device.memory_bytes", memory_bytes()),
+        ("dusk.device.boot_time_ms", boot_time_ms()),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -35,4 +36,20 @@ fn memory_bytes() -> Option<Value> {
         return None;
     }
     Some(Value::Uint(status.ullTotalPhys))
+}
+
+fn boot_time_ms() -> Option<Value> {
+    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+    let uptime = std::time::Duration::from_millis(unsafe { GetTickCount64() });
+    let Some(boot_time) = std::time::SystemTime::now().checked_sub(uptime) else {
+        tracing::warn!(uptime = ?uptime, "the uptime is longer than the clock allows");
+        return None;
+    };
+    match boot_time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since_epoch) => Some(Value::Uint(since_epoch.as_millis() as u64)),
+        Err(error) => {
+            tracing::warn!(error = %error, "the device booted before 1970");
+            None
+        }
+    }
 }

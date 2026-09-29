@@ -7,6 +7,7 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
         ("dusk.device.cores", cores()),
         ("dusk.device.memory_bytes", memory_bytes()),
         ("dusk.device.swap_bytes", swap_bytes()),
+        ("dusk.device.boot_time_ms", boot_time_ms()),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -85,6 +86,45 @@ fn swap_bytes() -> Option<Value> {
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
 fn swap_bytes() -> Option<Value> {
+    None
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn boot_time_ms() -> Option<Value> {
+    let uptime = sysinfo()?.uptime();
+    let Some(boot_time) = std::time::SystemTime::now().checked_sub(uptime) else {
+        tracing::warn!(uptime = ?uptime, "the uptime is longer than the clock allows");
+        return None;
+    };
+    match boot_time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since_epoch) => Some(Value::Uint(since_epoch.as_millis() as u64)),
+        Err(error) => {
+            tracing::warn!(error = %error, "the device booted before 1970");
+            None
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn boot_time_ms() -> Option<Value> {
+    let boot_time: nix::libc::timeval = sysctl_struct("kern.boottime")?;
+    let (Ok(seconds), Ok(microseconds)) = (
+        u64::try_from(boot_time.tv_sec),
+        u64::try_from(boot_time.tv_usec),
+    ) else {
+        tracing::warn!(name = "kern.boottime", "sysctl holds a negative time");
+        return None;
+    };
+    Some(Value::Uint(seconds * 1000 + microseconds / 1000))
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+)))]
+fn boot_time_ms() -> Option<Value> {
     None
 }
 
