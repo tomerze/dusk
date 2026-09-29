@@ -17,6 +17,7 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_time_zone(kvs);
     set_kvs_windows_version(kvs);
     set_kvs_windows_emulation(kvs);
+    set_kvs_windows_computer_name(kvs);
 }
 
 pub(crate) fn is_not_found(error: &windows_result::Error) -> bool {
@@ -257,4 +258,24 @@ fn native_machine() -> Option<std::io::Result<IMAGE_FILE_MACHINE>> {
         return Some(Err(std::io::Error::last_os_error()));
     }
     Some(Ok(native_machine))
+}
+
+fn set_kvs_windows_computer_name(kvs: &Kvs) {
+    use windows_sys::Win32::System::WindowsProgramming::{
+        GetComputerNameW, MAX_COMPUTERNAME_LENGTH,
+    };
+    let mut name = [0u16; MAX_COMPUTERNAME_LENGTH as usize + 1];
+    let mut length = name.len() as u32;
+    if unsafe { GetComputerNameW(name.as_mut_ptr(), &mut length) } == 0 {
+        tracing::warn!(error = %std::io::Error::last_os_error(), "GetComputerNameW failed");
+        return;
+    }
+    set_kvs_values(
+        kvs,
+        "computer name",
+        vec![(
+            String::from("dusk.os.windows.computer_name"),
+            Value::String(String::from_utf16_lossy(&name[..length as usize])),
+        )],
+    );
 }
