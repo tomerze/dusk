@@ -206,3 +206,5 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.device.memory_bytes` | `nix` on Linux, Android, macOS and iOS; `windows` | The device's total physical memory, in bytes. |
 | `dusk.device.swap_bytes` | `nix` on Linux, Android and macOS | The device's total swap space, in bytes. |
 | `dusk.device.boot_time_ms` | `nix` on Linux, Android, macOS and iOS; `windows` | When the device last booted, in milliseconds since 1970 (UTC). |
+| `dusk.device.vendor` | `nix` on Linux and Android; `windows` | Who made the device, e.g. `Dell Inc.`, `QEMU`, `Amazon EC2`, `Google` - from the firmware (DMI) on Linux, `ro.product.manufacturer` on Android, the BIOS registry key on Windows. |
+| `dusk.device.model` | `nix` on Linux, Android, macOS and iOS; `windows` | The device's model, e.g. `MacBookPro18,3`, `iPhone14,2`, `Standard PC (Q35 + ICH9, 2009)` - from the firmware (DMI) or the device tree on Linux, `ro.product.model` on Android, `hw.model` on macOS, `hw.machine` on iOS, the BIOS registry key on Windows. |
