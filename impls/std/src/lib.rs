@@ -4,12 +4,15 @@ use alloc::rc::Rc;
 use dusk_program::embassy_executor::Executor;
 use dusk_program::namespace::Namespace;
 use dusk_program::program_args::ProgramArgs;
+use dusk_program::value::Value;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 pub use dusk_program::launcher_set::LauncherSet;
 
+mod device_info;
 mod driver;
+mod os_info;
 
 /// Panic payload `Driver::exit` raises to unwind the executor, carrying the
 /// requested exit code so `run` can recover and return it.
@@ -48,6 +51,14 @@ pub fn run(
                     .map(|duration| duration.as_millis() as u64)
                     .ok(),
             ));
+
+            let kvs = dusk_program_kvs_internal::get_kvs(root.id);
+            dusk_program::embassy_futures::block_on(kvs.set(
+                dusk_program_kvs_internal::key_id("dusk.impl"),
+                Value::String(String::from("std")),
+            ));
+            os_info::set_kvs_os_info(&kvs);
+            device_info::set_kvs_device_info(&kvs);
 
             dusk_core::init::init(root, launcher_set, init_program_args);
         });

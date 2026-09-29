@@ -100,7 +100,7 @@ vendor/        External libs submodules
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, and enables `embassy-time/std`. |
 | `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
-| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and aborts rather than unwinding on `exit`. Nothing in it is platform-specific, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
+| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and aborts rather than unwinding on `exit`. Nothing in it is platform-specific but the device id, which it reads through the `machine-uid` crate on the targets that crate supports - Linux, macOS, Windows, the BSDs and illumos - and the time zone, which it reads through the `iana-time-zone` crate everywhere but Windows, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side - the prompt UI and the `Shell` that drives the shell server a client attaches to. |
 | `dusk_connection` | `Connection` - the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
@@ -289,8 +289,10 @@ the destination. Call the OS/hardware primitive directly.
 
 **Impls stay lean.** `dusk_core` owns every piece of policy that can be
 platform-agnostic. An impl owns only what the platform forces: the hostname, how
-to halt, the program set to launch, and the platform's `embassy-time` driver and
-`critical-section` implementation. A queue, scheduler, or state machine sneaking
+to halt, the program set to launch, its name and what its OS and device report
+about themselves, which it writes into the kvs as the node starts, and the
+platform's `embassy-time` driver
+and `critical-section` implementation. A queue, scheduler, or state machine sneaking
 into an impl is a sign the logic belongs in `dusk_core` behind a thinner
 primitive.
 
@@ -352,10 +354,16 @@ up the process's signal channel in the namespace and sends the signal, which the
 process receives on its `signal_receiver`.
 
 **Startup.** `dusk_node_run()` calls into `dusk_impl::run` - whichever impl the
-`impl_*` feature selected - which creates the `Namespace` and calls
-`dusk_core::init::init` with the launcher set and the init args. `init` registers
+`impl_*` feature selected - which creates the `Namespace`, writes `dusk.impl` into
+that namespace's kvs with `block_on` before any task exists (then its `dusk.os.*`
+keys through its `os_info::set_kvs_os_info` and its `dusk.device.*` keys through
+its `device_info::set_kvs_device_info`, which of them depending on the impl and
+the platform), and calls `dusk_core::init::init`
+with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
-when that namespace terminates. The `init` process is handed an init script - a
+when that namespace terminates. The `init` process writes `dusk.target.arch`,
+`dusk.target.os` and `dusk.target.bits` beside `dusk.version`, logs them as `dusk target` and the impl's
+name as `dusk impl`, and is handed an init script - a
 `Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate` while it reaps that `sh` with `waitpid` - the `sh` running a detached
 script that is one program exits as soon as it has started the program - so nothing

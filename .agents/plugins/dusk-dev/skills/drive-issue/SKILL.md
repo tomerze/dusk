@@ -25,8 +25,12 @@ git remote get-url origin
 gh issue view <N> --comments
 ```
 
-or `mcp__github__issue_read` with `method="get"` and `method="get_comments"`
-when the GitHub MCP is connected.
+Without the MCP, `gh` reads the same, with the repository named and JSON asked
+for - `gh issue view N --comments` alone printed nothing, measured on gh 2.101.0:
+
+```
+gh issue view N --repo <owner>/<repo> --json number,title,state,body,comments
+```
 
 Write its definition of done out as a checklist. Every bullet is something the
 PR description has to answer for - if it asks for measurements you owe numbers,
