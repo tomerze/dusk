@@ -10,6 +10,7 @@ use std::time::UNIX_EPOCH;
 pub use dusk_program::launcher_set::LauncherSet;
 
 mod driver;
+mod fs;
 
 /// Panic payload `Driver::exit` raises to unwind the executor, carrying the
 /// requested exit code so `run` can recover and return it.

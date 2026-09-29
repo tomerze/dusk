@@ -1,4 +1,5 @@
-use dusk_core::driver::Driver;
+use crate::fs::WindowsFsDriver;
+use dusk_core::driver::{Driver, FsDriver};
 use dusk_program::anyhow::{Ok, Result, anyhow};
 use windows_sys::Win32::System::WindowsProgramming::GetComputerNameW;
 
@@ -17,6 +18,10 @@ impl Driver for WindowsDriver {
             ));
         }
         Ok(String::from_utf16(&name[..length as usize])?)
+    }
+
+    fn fs_driver(&self) -> Result<Box<dyn FsDriver>> {
+        Ok(Box::new(WindowsFsDriver))
     }
 
     fn exit(&self, exit_code: i32) {
