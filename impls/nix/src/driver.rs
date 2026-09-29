@@ -45,3 +45,17 @@ impl Driver for NixDriver {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tid_names_the_calling_thread() {
+        let here = NixDriver.tid();
+        assert_ne!(here, 0);
+        assert_eq!(NixDriver.tid(), here);
+        let there = std::thread::spawn(|| NixDriver.tid()).join().unwrap();
+        assert_ne!(there, 0);
+        assert_ne!(there, here);
+    }
+}

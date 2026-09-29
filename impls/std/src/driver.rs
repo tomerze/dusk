@@ -20,3 +20,17 @@ impl Driver for StdDriver {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tid_names_the_calling_thread() {
+        let here = StdDriver.tid();
+        assert_ne!(here, 0);
+        assert_eq!(StdDriver.tid(), here);
+        let there = std::thread::spawn(|| StdDriver.tid()).join().unwrap();
+        assert_ne!(there, 0);
+        assert_ne!(there, here);
+    }
+}
