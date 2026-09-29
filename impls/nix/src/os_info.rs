@@ -14,6 +14,8 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_boot_id(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_pid1(kvs);
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    set_kvs_glibc_version(kvs);
     #[cfg(target_os = "android")]
     set_kvs_android_properties(kvs);
     #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -206,6 +208,19 @@ fn set_kvs_pid1(kvs: &Kvs) {
         }
         Err(error) => tracing::warn!(error = %error, "reading the name of process 1 failed"),
     }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn set_kvs_glibc_version(kvs: &Kvs) {
+    let version = unsafe { std::ffi::CStr::from_ptr(nix::libc::gnu_get_libc_version()) };
+    set_kvs_values(
+        kvs,
+        "glibc",
+        vec![(
+            String::from("dusk.os.linux.glibc_version"),
+            Value::String(version.to_string_lossy().into_owned()),
+        )],
+    );
 }
 
 #[cfg(target_os = "android")]
