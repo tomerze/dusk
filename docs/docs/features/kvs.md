@@ -205,3 +205,4 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.device.cores` | `nix`, `std`, `windows` | How many CPUs the node may use: the device's logical cores, or fewer when an affinity mask or a container's CPU quota limits it. |
 | `dusk.device.memory_bytes` | `nix` on Linux, Android, macOS and iOS; `windows` | The device's total physical memory, in bytes. |
 | `dusk.device.swap_bytes` | `nix` on Linux, Android and macOS | The device's total swap space, in bytes. |
+| `dusk.device.boot_time_ms` | `nix` on Linux, Android, macOS and iOS; `windows` | When the device last booted, in milliseconds since 1970 (UTC). |
