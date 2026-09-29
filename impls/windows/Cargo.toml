@@ -31,3 +31,4 @@ windows-sys = { version = "0.61", features = [
 windows-version = "0.100.0"
 windows-registry = "0.100.0"
 windows-result = "0.100.0"
+machine-uid = "0.6.0"

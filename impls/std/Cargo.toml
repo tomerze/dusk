@@ -20,5 +20,8 @@ critical-section = { version = "1" }
 getrandom = "0.2"
 tracing = { version = "0.1.41", default-features = false }
 
+[target.'cfg(any(target_os = "linux", target_os = "macos", windows, target_os = "freebsd", target_os = "dragonfly", target_os = "openbsd", target_os = "netbsd", target_os = "illumos"))'.dependencies]
+machine-uid = "0.6.0"
+
 [target.'cfg(not(windows))'.dependencies]
 iana-time-zone = "0.1.65"

@@ -23,6 +23,7 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
                 "ProcessorNameString",
             ),
         ),
+        ("dusk.device.id", device_id()),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -94,6 +95,31 @@ fn registry_string(path: &str, name: &str) -> Option<Value> {
         }
         Err(error) => {
             tracing::warn!(path, name, error = %error, "reading a registry value failed");
+            None
+        }
+    }
+}
+
+fn device_id() -> Option<Value> {
+    match machine_uid::get() {
+        Ok(id) => {
+            let id = id.trim();
+            if id.is_empty() {
+                tracing::warn!("the device id is empty");
+                return None;
+            }
+            Some(Value::String(String::from(id)))
+        }
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            tracing::info!(error = %error, "this system has no device id");
+            None
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "reading the device id failed");
             None
         }
     }
