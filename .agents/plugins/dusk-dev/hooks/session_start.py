@@ -1,38 +1,13 @@
-from harness import context, current_branch, decisions_path, drive_state, read_input, session_state
+from harness import context, read_input
 
 PREAMBLE = """dusk-dev is loaded.
-- /dusk-dev:activate loads what there is to know about dusk - the dusk-developer orientation map and working agreements, building and measuring, driving a node by hand - and sets no workflow. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.
-- Hooks enforce, in every session, as the action happens: nothing personal written anywhere (no name, no email address, no home directory, no account handle); no comment lines written by me; commit subjects with no feat:-style prefix, no Say, no (#N), no watermark trailer; git commit in the foreground with timeout 600000; no polling loops; no cp of a target directory; no bare git stash; cargo test only after asking; no push to master; merging always asks.
-- The workflow is off until the user invokes /dusk-dev:harness or /dusk-dev:drive-issue: until then there is no dilemma-triage, no atomic-commit split, no pull request hand-off, no review agents and no marked turns."""
-
-HARNESS = """The harness is on in this session: /dusk-dev:harness or /dusk-dev:drive-issue was invoked, and the harness skill carries the workflow.
-- A commit whose diff adds a comment line is read by the comment-review agent; a comment it finds that belongs in the commit message comes back to be moved there. A commit that adds none is recorded as not reviewed, without the agent.
-- Work goes through three phases. Writing: the rules above, and the dilemma-triage agent on every decision. Getting ready to review: the atomic-commit agent splits the branch, which is what gates the hand-off, because a human reads commits and not a blob; pushing itself is never held up. Ready for review: the hand-off goes out and the review agents run alongside the human, never ahead of them.
-- The review agents are self-review, race-screen, terminology-review, string-review and decision-ranker. They gate nothing; what they find goes on the pull request as it lands, and the branch's review folder collects it: decisions.md, comments.md, terminology.md, strings.md and report.html, whose locations open in VS Code.
-- Once this session has committed or pushed, every turn is marked, one of five ways. A hand-off ends with `Ready for review.` on its own line and nothing after it. A dilemma opens with a `DILEMMA:` line and asks the one question that blocks the work; the dilemma-screen agent reads it first and sends back anything I could have decided and recorded, so do not stop for a name, a string, a commit split or permission I already have. A wait opens with `WAITING ON SUBAGENTS:` and names them, and is refused unless one this session dispatched is still running. A wait on a long command opens with `WAITING ON BACKGROUND WORK:` and names it, and is refused unless a background command this session started has not yet exited - a build is not an agent, and never say the other line for one. An answer to something the user asked ends with `Still ready for review.` or `Still waiting for dilemma verdict.`, whichever is standing. Nothing else ends a turn; the status line shows which state you are in. `Ready for review.` is verified: PR open at the pushed tip, worktree gone. It goes out once per branch - after it, a fix is committed, pushed and said on the PR, and the turn ends `Still ready for review.`; the branch is never sent to review a second time. Merging always asks."""
+- /dusk-dev:activate loads what there is to know about dusk - the dusk-developer orientation map and working agreements, building and measuring, driving a node by hand. /what reports where things stand; /honest-to-god before reporting a finding, a risk or a limitation.
+- Hooks enforce, in every session, as the action happens: nothing personal written anywhere (no name, no email address, no home directory, no account handle); no comment lines written by me; commit subjects with no feat:-style prefix, no Say, no (#N), no watermark trailer; git commit in the foreground with timeout 600000; no polling loops; no cp of a target directory; no bare git stash; cargo test only after asking; no push to master; merging always asks."""
 
 
 def main():
-    hook_input = read_input()
-    cwd = hook_input.get("cwd", ".")
-    branch = current_branch(cwd)
-    lines = [PREAMBLE]
-    _, session = session_state(hook_input.get("session_id", ""))
-    if {"harness", "drive-issue"} & set(session["loaded_skills"]):
-        lines.append(HARNESS)
-    if branch and branch not in ("master", "main"):
-        _, drive = drive_state(branch, cwd)
-        if drive:
-            parts = [f"Drive in flight on `{branch}`: phase {drive.get('phase', 'working')}"]
-            if drive.get("issue"):
-                parts.append(f"issue #{drive['issue']}")
-            if drive.get("pr"):
-                parts.append(f"PR #{drive['pr']}")
-            lines.append("; ".join(parts) + ".")
-        path = decisions_path(cwd, branch)
-        if path.exists():
-            lines.append(f"Decisions so far: {path.relative_to(cwd)}")
-    context("\n".join(lines))
+    read_input()
+    context(PREAMBLE)
 
 
 if __name__ == "__main__":

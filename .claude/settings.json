@@ -17,9 +17,5 @@
     },
     "enabledPlugins": {
         "dusk-dev@dusk": true
-    },
-    "statusLine": {
-        "type": "command",
-        "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/plugins/dusk-dev/hooks/statusline.py\""
     }
 }
