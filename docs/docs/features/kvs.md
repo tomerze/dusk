@@ -32,10 +32,13 @@ the name: the client hashes it to a 64-bit id and sends only that. So the store
 is a map from id to value, and nothing on the node can say what a key was
 called.
 
-A program registers the names of the keys it writes - every key in the table
-below is registered by the program that sets it - so a client that has an id in
-hand can show it under the name it was hashed from. The node cannot: it sends
-the ids back and the client names them.
+A program registers the names of the keys it writes - every key in the
+[What Dusk records](#what-dusk-records) table is registered by the program that
+sets it - so a client that has an id in hand can show it under the name it was
+hashed from. The node cannot: it sends the ids back and the client names them.
+The keys in [What the impl records](#what-the-impl-records) are written by the
+impl, not by a program, and `init` registers their names, so `kvs scan` shows
+them by name too.
 
 `kvs scan` is how you see them. Each row is a key's name and the id it hashes
 to, and a key no program registered a name for shows as its id:
