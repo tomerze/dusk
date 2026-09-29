@@ -53,7 +53,7 @@ the session) or `process.run()` runs it inside the calling session.
 Two seams are resolved by the linker rather than by data:
 
 - **The driver shim.** `dusk_core` calls `unsafe extern "Rust"` symbols
-  (`_dusk_hostname`, `_dusk_exit`) that the impl defines via
+  (`_dusk_hostname`, `_dusk_fs_driver`, `_dusk_exit`) that the impl defines via
   `dusk_driver_impl!`. `dusk_core` depends on no impl; the impl satisfies the
   symbols. See [Drivers & Impls](../getting-started/concepts/drivers-and-impls.md).
 - **The shell entry table.** Shell-invocable programs register into a

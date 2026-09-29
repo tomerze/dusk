@@ -1,4 +1,5 @@
 pub use dusk_program;
+pub use dusk_program_cp;
 pub use dusk_program_date;
 pub use dusk_program_echo;
 pub use dusk_program_false;
@@ -22,6 +23,7 @@ pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
         Box::new(dusk_program_logs::Launcher::new(
             dusk_program_logs::LogsConfig::default(),
         )?),
+        Box::new(dusk_program_cp::Launcher::new()),
         Box::new(dusk_program_date::Launcher::new()),
         Box::new(dusk_program_echo::Launcher::new()),
         Box::new(dusk_program_false::Launcher::new()),
@@ -47,6 +49,7 @@ pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
 pub fn link_anchors() {
     use std::hint::black_box;
     black_box(dusk_program_logs::client::sh_entry);
+    black_box(dusk_program_cp::client::sh_entry);
     black_box(dusk_program_date::client::sh_entry);
     black_box(dusk_program_echo::client::sh_entry);
     black_box(dusk_program_false::client::sh_entry);
