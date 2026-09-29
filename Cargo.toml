@@ -17,6 +17,7 @@ members = [
     "impls/nix",
     "impls/std",
     "impls/windows",
+    "base/cp",
     "base/kill",
     "base/init",
     "base/nightfall",
