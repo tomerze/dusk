@@ -39,8 +39,11 @@ inside the impl, call the underlying OS/hardware primitive directly.
 `dusk_core` owns every piece of policy that can be platform-agnostic - schedulers,
 queues, state machines all belong there, behind a thinner primitive exposed
 through `Driver`. An impl should own only what the platform forces: the hostname,
-how to halt the node, the program set to launch, plus the platform's
-`embassy-time` driver and `critical-section` implementation. If you find yourself
+how to halt the node, the program set to launch, the facts about itself, its
+platform and its device it writes into the
+[key-value store](../../features/kvs.md#what-the-impl-records) as the node starts,
+plus the platform's `embassy-time` driver and
+`critical-section` implementation. If you find yourself
 adding a non-trivial state machine to an impl, that is a sign the logic belongs in
 `dusk_core` instead.
 
