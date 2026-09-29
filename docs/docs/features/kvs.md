@@ -203,3 +203,4 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.os.windows.session_id` | `windows` | The Windows session the node runs in, as a number: `0` when it runs as a service. |
 | `dusk.os.windows.elevated` | `windows` | Whether the node runs elevated, with an administrator's rights. |
 | `dusk.device.cores` | `nix`, `std`, `windows` | How many CPUs the node may use: the device's logical cores, or fewer when an affinity mask or a container's CPU quota limits it. |
+| `dusk.device.memory_bytes` | `nix` on Linux, Android, macOS and iOS; `windows` | The device's total physical memory, in bytes. |
