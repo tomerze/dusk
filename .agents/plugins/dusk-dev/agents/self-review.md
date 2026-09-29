@@ -1,6 +1,6 @@
 ---
 name: self-review
-description: Reviews a branch against the dusk working agreements before it is pushed, commit by commit, and gives a verdict. Dispatched by drive-issue after the atomic-commit split; also for "review my branch" and "self review".
+description: Reviews a branch against the dusk working agreements before it is pushed, commit by commit, and gives a verdict. Dispatched by drive-issue before the pull request is opened; also for "review my branch" and "self review".
 model: opus
 effort: high
 maxTurns: 40

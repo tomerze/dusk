@@ -1,6 +1,6 @@
 ---
 name: race-screen
-description: Reads a branch's diff and says whether it could introduce a race; when it could, dispatches the race-inspector agent and relays its verdict. Dispatched by drive-issue before the push; also for "could this race".
+description: Reads a branch's diff and says whether it could introduce a race; when it could, dispatches the race-inspector agent and relays its verdict. Dispatched by drive-issue before the pull request is opened; also for "could this race".
 model: haiku
 effort: low
 maxTurns: 12
