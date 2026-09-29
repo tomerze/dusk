@@ -7,6 +7,7 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_time_zone(kvs);
     set_kvs_uname(kvs);
     set_kvs_credentials(kvs);
+    set_kvs_limits(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_os_release(kvs);
     #[cfg(target_os = "android")]
@@ -100,6 +101,34 @@ fn set_kvs_credentials(kvs: &Kvs) {
         ),
     ];
     set_kvs_values(kvs, "credentials", values);
+}
+
+fn set_kvs_limits(kvs: &Kvs) {
+    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    let mut values = Vec::new();
+    for (name, resource) in [
+        ("dusk.os.nix.limits.open_files", Resource::RLIMIT_NOFILE),
+        ("dusk.os.nix.limits.core_file_size", Resource::RLIMIT_CORE),
+    ] {
+        let (soft, hard) = match getrlimit(resource) {
+            Ok(limits) => limits,
+            Err(error) => {
+                tracing::warn!(resource = ?resource, error = %error, "getrlimit failed");
+                continue;
+            }
+        };
+        for (bound, limit) in [("soft", soft), ("hard", hard)] {
+            let value = if limit == RLIM_INFINITY {
+                Value::String(String::from("unlimited"))
+            } else {
+                #[allow(clippy::unnecessary_cast)]
+                let limit = limit as u64;
+                Value::Uint(limit)
+            };
+            values.push((format!("{name}.{bound}"), value));
+        }
+    }
+    set_kvs_values(kvs, "resource limits", values);
 }
 
 #[cfg(target_os = "linux")]
