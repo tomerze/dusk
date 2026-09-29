@@ -1,12 +1,22 @@
 use dusk_program::embassy_futures::block_on;
 use dusk_program::value::Value;
 use dusk_program_kvs_internal::{Kvs, key_id};
-use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HANDLE};
+use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+use windows_sys::Win32::System::SystemInformation::{
+    GetNativeSystemInfo, IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM64,
+    IMAGE_FILE_MACHINE_ARMNT, IMAGE_FILE_MACHINE_I386, PROCESSOR_ARCHITECTURE_AMD64,
+    PROCESSOR_ARCHITECTURE_ARM, PROCESSOR_ARCHITECTURE_ARM64, PROCESSOR_ARCHITECTURE_INTEL,
+    SYSTEM_INFO,
+};
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::core::BOOL;
 
 pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
     set_kvs_time_zone(kvs);
     set_kvs_windows_version(kvs);
+    set_kvs_windows_emulation(kvs);
 }
 
 pub(crate) fn is_not_found(error: &windows_result::Error) -> bool {
@@ -164,4 +174,87 @@ fn set_kvs_windows_version(kvs: &Kvs) {
         }
     }
     set_kvs_values(kvs, "windows version", values);
+}
+
+fn set_kvs_windows_emulation(kvs: &Kvs) {
+    let native_arch = match native_machine() {
+        Some(Ok(native_machine)) => match native_machine {
+            IMAGE_FILE_MACHINE_I386 => Some("x86"),
+            IMAGE_FILE_MACHINE_AMD64 => Some("x86_64"),
+            IMAGE_FILE_MACHINE_ARMNT => Some("arm"),
+            IMAGE_FILE_MACHINE_ARM64 => Some("aarch64"),
+            unknown => {
+                tracing::warn!(
+                    native_machine = unknown,
+                    "IsWow64Process2 reported a native machine Dusk does not know"
+                );
+                None
+            }
+        },
+        Some(Err(error)) => {
+            tracing::warn!(error = %error, "IsWow64Process2 failed");
+            None
+        }
+        None => {
+            let mut system_info: SYSTEM_INFO = unsafe { core::mem::zeroed() };
+            unsafe { GetNativeSystemInfo(&mut system_info) };
+            match unsafe { system_info.Anonymous.Anonymous.wProcessorArchitecture } {
+                PROCESSOR_ARCHITECTURE_INTEL => Some("x86"),
+                PROCESSOR_ARCHITECTURE_AMD64 => Some("x86_64"),
+                PROCESSOR_ARCHITECTURE_ARM => Some("arm"),
+                PROCESSOR_ARCHITECTURE_ARM64 => Some("aarch64"),
+                unknown => {
+                    tracing::warn!(
+                        processor_architecture = unknown,
+                        "GetNativeSystemInfo reported a processor architecture Dusk does not know"
+                    );
+                    None
+                }
+            }
+        }
+    };
+    let Some(native_arch) = native_arch else {
+        return;
+    };
+    set_kvs_values(
+        kvs,
+        "windows emulation",
+        vec![
+            (
+                String::from("dusk.os.windows.native_arch"),
+                Value::String(String::from(native_arch)),
+            ),
+            (
+                String::from("dusk.os.windows.emulated"),
+                Value::Bool(native_arch != std::env::consts::ARCH),
+            ),
+        ],
+    );
+}
+
+fn native_machine() -> Option<std::io::Result<IMAGE_FILE_MACHINE>> {
+    type IsWow64Process2 =
+        unsafe extern "system" fn(HANDLE, *mut IMAGE_FILE_MACHINE, *mut IMAGE_FILE_MACHINE) -> BOOL;
+    let kernel32: Vec<u16> = "kernel32.dll".encode_utf16().chain([0]).collect();
+    let module = unsafe { GetModuleHandleW(kernel32.as_ptr()) };
+    if module.is_null() {
+        return None;
+    }
+    let function = unsafe { GetProcAddress(module, c"IsWow64Process2".as_ptr().cast()) }?;
+    let is_wow64_process2 = unsafe {
+        core::mem::transmute::<unsafe extern "system" fn() -> isize, IsWow64Process2>(function)
+    };
+    let mut process_machine: IMAGE_FILE_MACHINE = 0;
+    let mut native_machine: IMAGE_FILE_MACHINE = 0;
+    if unsafe {
+        is_wow64_process2(
+            GetCurrentProcess(),
+            &mut process_machine,
+            &mut native_machine,
+        )
+    } == 0
+    {
+        return Some(Err(std::io::Error::last_os_error()));
+    }
+    Some(Ok(native_machine))
 }
