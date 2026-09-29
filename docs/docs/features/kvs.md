@@ -175,6 +175,7 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.os.linux.os_release.<key>` | `nix`, on Linux | Seven entries of [os-release](https://www.freedesktop.org/software/systemd/man/latest/os-release.html) - `name`, `pretty_name`, `id`, `id_like`, `version`, `version_id` and `version_codename` - each `<key>` the entry's name in lower case and the value without its quotes, e.g. `dusk.os.linux.os_release.id` is `ubuntu`, `dusk.os.linux.os_release.version_id` is `24.04`. The file is `/etc/os-release`, or `/usr/lib/os-release` when that does not exist. |
 | `dusk.os.linux.boot_id` | `nix`, on Linux | `/proc/sys/kernel/random/boot_id`: a random id the kernel picks at each boot, so it changes when the device reboots and not when the node restarts. |
 | `dusk.os.linux.pid1` | `nix`, on Linux | The name of process 1 - `systemd`, `init`, or in a container whatever the container runs first, e.g. `tini`. |
+| `dusk.os.linux.glibc_version` | `nix`, on Linux with glibc | The version of the GNU C library the node runs with, e.g. `2.39`. A node built for musl has none. |
 | `dusk.os.android.release` | `nix`, on Android | The `ro.build.version.release` system property: the Android version, e.g. `14`. |
 | `dusk.os.android.sdk` | `nix`, on Android | The `ro.build.version.sdk` system property, as a number: the API level, e.g. `34`. |
 | `dusk.os.android.security_patch` | `nix`, on Android | The `ro.build.version.security_patch` system property, e.g. `2024-05-05`. |
