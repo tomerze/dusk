@@ -78,7 +78,7 @@ dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
                dusk_program, dusk_program_proc, dusk_connection, dusk_llm,
                dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
-               true, false, init, nightfall, logs)
+               true, false, init, nightfall, logs, kvs, programs, echo, cp)
 impls/nix/     The Linux impl (Embassy executor, the NixDriver)
 impls/std/     The std impl (Embassy executor, the StdDriver)
 impls/windows/ The Windows impl (Embassy executor, the WindowsDriver)
