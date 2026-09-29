@@ -6,6 +6,7 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
     let values: Vec<(&str, Value)> = [
         ("dusk.device.cores", cores()),
         ("dusk.device.memory_bytes", memory_bytes()),
+        ("dusk.device.swap_bytes", swap_bytes()),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -69,4 +70,46 @@ fn memory_bytes() -> Option<Value> {
 )))]
 fn memory_bytes() -> Option<Value> {
     None
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn swap_bytes() -> Option<Value> {
+    Some(Value::Uint(sysinfo()?.swap_total()))
+}
+
+#[cfg(target_os = "macos")]
+fn swap_bytes() -> Option<Value> {
+    let usage: nix::libc::xsw_usage = sysctl_struct("vm.swapusage")?;
+    Some(Value::Uint(usage.xsu_total))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+fn swap_bytes() -> Option<Value> {
+    None
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn sysctl_struct<T: Copy>(name: &str) -> Option<T> {
+    use sysctl::{CtlValue, Sysctl};
+    let bytes = match sysctl::Ctl::new(name).and_then(|control| control.value()) {
+        Ok(CtlValue::Struct(bytes) | CtlValue::Node(bytes)) => bytes,
+        Ok(_) => {
+            tracing::warn!(name, "sysctl is not a struct");
+            return None;
+        }
+        Err(error) => {
+            tracing::warn!(name, error = %error, "sysctl failed");
+            return None;
+        }
+    };
+    if bytes.len() != size_of::<T>() {
+        tracing::warn!(
+            name,
+            length = bytes.len(),
+            expected = size_of::<T>(),
+            "sysctl has an unexpected size"
+        );
+        return None;
+    }
+    Some(unsafe { core::ptr::read_unaligned(bytes.as_ptr().cast::<T>()) })
 }
