@@ -4,12 +4,6 @@
 //! `logs stream <url>` shell path), plus a custom in-memory `LogsArgs.Stream`
 //! an external author could write (driven straight through the SDK, since a
 //! custom stream has no url).
-//!
-//! The node's launcher set installs the buffer-capture subscriber (always - the
-//! logs Launcher does it unconditionally), and that subscriber is process-global,
-//! so a `tracing::info!` emitted from the test lands in the node's buffer and
-//! streams out to the stream under test. Each test emits a unique marker and
-//! waits for it to arrive.
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -46,6 +40,8 @@ use tokio::task::LocalSet;
 /// How long to wait for a record to reach the destination before failing.
 const ARRIVAL_TIMEOUT: Duration = Duration::from_secs(15);
 
+const MARKER: &str = "logs stream opened";
+
 // ---- driving `logs stream` ----
 
 /// The sh result stream. `logs stream` never pushes command output here (it
@@ -76,27 +72,14 @@ async fn wait_until(mut predicate: impl FnMut() -> bool, timeout: Duration) -> b
     }
 }
 
-/// Run `command` (a `logs stream <url>`) against the node on `port` while
-/// continuously emitting `marker`, and return whether `predicate` (the
-/// destination having received the marker) became true before the timeout.
 async fn drive_logs_stream(
     port: u16,
     command: &str,
-    marker: &'static str,
     predicate: Box<dyn FnMut() -> bool>,
 ) -> anyhow::Result<bool> {
     let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
     let connection = Connection::connect(address).await?;
     let client = connection.client().await;
-
-    // Emit the marker on a loop so the live stream is guaranteed to carry it,
-    // independent of how much history the replay walks first.
-    let marker_task = tokio::task::spawn_local(async move {
-        loop {
-            tracing::info!(target: "dusk_logs_integ", "{marker}");
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    });
 
     // `logs stream` runs until torn down, so its done long-poll never fires and
     // nothing ever asks it to stop; we cancel it by dropping the `sh` future.
@@ -131,7 +114,6 @@ async fn drive_logs_stream(
         found = wait_until(predicate, ARRIVAL_TIMEOUT) => found,
     };
 
-    marker_task.abort();
     let _ = connection.disconnect().await;
     Ok(found)
 }
@@ -309,7 +291,6 @@ async fn test_logs_stream_to_custom_stream() {
     LocalSet::new()
         .run_until(async move {
             let captured = Arc::new(Mutex::new(Vec::<String>::new()));
-            let marker = "dusk-logs-stream-integ-custom";
 
             let address: SocketAddr = format!("{LISTEN_ADDRESS}:{port}").parse().unwrap();
             let connection = Connection::connect(address).await.unwrap();
@@ -372,15 +353,6 @@ async fn test_logs_stream_to_custom_stream() {
                 .get()
                 .set_stream(capnp_rpc::new_client(Stream::new(OutputSink)));
 
-            // Emit the marker on a loop so the live stream is guaranteed to
-            // carry it, independent of how much history the replay walks first.
-            let marker_task = tokio::task::spawn_local(async move {
-                loop {
-                    tracing::info!(target: "dusk_logs_integ", "{marker}");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            });
-
             let captured_for_predicate = captured.clone();
             let found = tokio::select! {
                 result = output_request.send().promise => {
@@ -394,13 +366,12 @@ async fn test_logs_stream_to_custom_stream() {
                             .lock()
                             .unwrap()
                             .iter()
-                            .any(|body| body.contains(marker))
+                            .any(|body| body.contains(MARKER))
                     },
                     ARRIVAL_TIMEOUT,
                 ) => found,
             };
 
-            marker_task.abort();
             let mut kill_request = client.kill_request();
             kill_request.get().set_pid(pid);
             kill_request.get().set_signal(15);
@@ -424,19 +395,17 @@ async fn test_logs_stream_to_http() {
     LocalSet::new()
         .run_until(async move {
             let (url, received) = spawn_http_collector().await;
-            let marker = "dusk-logs-stream-integ-http";
 
             let received_for_predicate = received.clone();
             let found = drive_logs_stream(
                 port,
                 &format!("logs stream {url}"),
-                marker,
                 Box::new(move || {
                     received_for_predicate
                         .lock()
                         .unwrap()
                         .iter()
-                        .any(|record| record.to_string().contains(marker))
+                        .any(|record| record.to_string().contains(MARKER))
                 }),
             )
             .await?;
@@ -460,19 +429,17 @@ async fn test_logs_stream_to_https() {
     LocalSet::new()
         .run_until(async move {
             let (url, received) = spawn_https_collector().await;
-            let marker = "dusk-logs-stream-integ-https";
 
             let received_for_predicate = received.clone();
             let found = drive_logs_stream(
                 port,
                 &format!("logs stream {url}"),
-                marker,
                 Box::new(move || {
                     received_for_predicate
                         .lock()
                         .unwrap()
                         .iter()
-                        .any(|record| record.to_string().contains(marker))
+                        .any(|record| record.to_string().contains(MARKER))
                 }),
             )
             .await?;
@@ -491,17 +458,15 @@ async fn test_logs_stream_to_grpc() {
     LocalSet::new()
         .run_until(async move {
             let (url, received) = spawn_grpc_collector().await;
-            let marker = "dusk-logs-stream-integ-grpc";
 
             let received_for_predicate = received.clone();
             let found = drive_logs_stream(
                 port,
                 &format!("logs stream {url}"),
-                marker,
                 Box::new(move || {
                     received_for_predicate.lock().unwrap().iter().any(|record| {
                         serde_json::to_string(record)
-                            .map(|json| json.contains(marker))
+                            .map(|json| json.contains(MARKER))
                             .unwrap_or(false)
                     })
                 }),
