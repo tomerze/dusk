@@ -19,3 +19,6 @@ lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 critical-section = { version = "1" }
 getrandom = "0.2"
 tracing = { version = "0.1.41", default-features = false }
+
+[target.'cfg(not(windows))'.dependencies]
+iana-time-zone = "0.1.65"

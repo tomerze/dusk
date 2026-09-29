@@ -4,6 +4,7 @@ use dusk_program_kvs_internal::{Kvs, key_id};
 
 pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
+    set_kvs_time_zone(kvs);
     set_kvs_uname(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_os_release(kvs);
@@ -44,6 +45,17 @@ fn set_kvs_process(kvs: &Kvs) {
         Value::Uint(u64::from(std::os::unix::process::parent_id())),
     ));
     set_kvs_values(kvs, "process", values);
+}
+
+fn set_kvs_time_zone(kvs: &Kvs) {
+    match iana_time_zone::get_timezone() {
+        Ok(time_zone) => set_kvs_values(
+            kvs,
+            "time zone",
+            vec![(String::from("dusk.os.time_zone"), Value::String(time_zone))],
+        ),
+        Err(error) => tracing::warn!(error = %error, "reading the time zone failed"),
+    }
 }
 
 fn set_kvs_uname(kvs: &Kvs) {

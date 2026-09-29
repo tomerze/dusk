@@ -16,6 +16,7 @@ lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
 critical-section = { version = "1", features = ["std"] }
 getrandom = "0.2"
 tracing = { version = "0.1.41", default-features = false }
+iana-time-zone = "0.1.65"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 etc-os-release = "0.1.1"

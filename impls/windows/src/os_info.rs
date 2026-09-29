@@ -5,6 +5,7 @@ use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 
 pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
+    set_kvs_time_zone(kvs);
     set_kvs_windows_version(kvs);
 }
 
@@ -79,6 +80,30 @@ fn parent_pid() -> Option<u32> {
         );
     }
     parent_pid
+}
+
+fn set_kvs_time_zone(kvs: &Kvs) {
+    use windows_sys::Win32::System::Time::{
+        DYNAMIC_TIME_ZONE_INFORMATION, GetDynamicTimeZoneInformation, TIME_ZONE_ID_INVALID,
+    };
+    let mut information: DYNAMIC_TIME_ZONE_INFORMATION = unsafe { core::mem::zeroed() };
+    if unsafe { GetDynamicTimeZoneInformation(&mut information) } == TIME_ZONE_ID_INVALID {
+        tracing::warn!(error = %std::io::Error::last_os_error(), "GetDynamicTimeZoneInformation failed");
+        return;
+    }
+    let name = &information.TimeZoneKeyName;
+    let length = name
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(name.len());
+    set_kvs_values(
+        kvs,
+        "time zone",
+        vec![(
+            String::from("dusk.os.time_zone"),
+            Value::String(String::from_utf16_lossy(&name[..length])),
+        )],
+    );
 }
 
 fn set_kvs_windows_version(kvs: &Kvs) {
