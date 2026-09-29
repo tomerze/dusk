@@ -182,6 +182,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     Which::Delete(key) => Which::Delete(key),
                     Which::Exists(key) => Which::Exists(key),
                     Which::Bind(()) => Which::Bind(()),
+                    Which::Scan(()) => Which::Scan(()),
                 })
             })?;
         match action {
