@@ -321,17 +321,59 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let process = self.process.clone();
         Promise::from_future(async move {
             if process.scanning.get() {
-                let server: kvs_capnp::kvs_args::server::Client =
-                    process.ctx.program_args.server_as()?;
-                for page in process.kvs.scan().await.chunks(SCAN_PAGE_SIZE) {
-                    let mut request = server.transpose_request();
-                    let mut builder = request.get();
-                    builder.set_output(stream.clone());
-                    let mut keys = builder.init_keys(page.len() as u32);
-                    for (index, key) in page.iter().enumerate() {
-                        keys.set(index as u32, *key);
+                let keys = process.kvs.scan().await;
+                let untransposed = |error: ::capnp::Error| {
+                    if !matches!(
+                        error.kind,
+                        ::capnp::ErrorKind::MessageContainsNullCapabilityPointer
+                            | ::capnp::ErrorKind::Disconnected
+                            | ::capnp::ErrorKind::PrematureEndOfFile
+                    ) {
+                        return Err(error);
                     }
-                    request.send().promise.await?;
+                    tracing::warn!(
+                        pid = process.ctx.pid,
+                        error = %error,
+                        "sending keys without their names"
+                    );
+                    Ok(())
+                };
+                let mut server = match process
+                    .ctx
+                    .program_args
+                    .server_as::<kvs_capnp::kvs_args::server::Client>()
+                {
+                    Ok(server) => Some(server),
+                    Err(error) => {
+                        untransposed(error)?;
+                        None
+                    }
+                };
+                for key_page in keys.chunks(SCAN_PAGE_SIZE) {
+                    if let Some(server) = &server {
+                        let mut request = server.transpose_request();
+                        {
+                            let mut builder = request.get();
+                            builder.set_output(stream.clone());
+                            let mut keys = builder.init_keys(key_page.len() as u32);
+                            for (index, key) in key_page.iter().enumerate() {
+                                keys.set(index as u32, *key);
+                            }
+                        }
+                        match request.send().promise.await {
+                            Ok(_) => continue,
+                            Err(error) => untransposed(error)?,
+                        }
+                    }
+                    server = None;
+                    let fields = alloc::vec![(
+                        b"ID".to_vec(),
+                        Value::List(key_page.iter().copied().map(Value::Uint).collect()),
+                    )];
+                    let mut send_request = stream.send_request();
+                    Value::Record(Record::with_fields(kvs_capnp::SCAN_TYPE_ID, fields))
+                        .write_to_builder(send_request.get().init_value())?;
+                    send_request.send().await?;
                 }
                 results.get().set_daemonize(false);
                 return Ok(());
