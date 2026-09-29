@@ -33,9 +33,14 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn get(key: u64) -> Self {
+    pub fn get(keys: &[u64]) -> Self {
         let mut data = ArgsDataBuilder::new_default();
-        data.init_root().set_get(key);
+        {
+            let mut list = data.init_root().init_get(keys.len() as u32);
+            for (index, key) in keys.iter().enumerate() {
+                list.set(index as u32, *key);
+            }
+        }
         Args { data }
     }
 
@@ -94,13 +99,23 @@ impl Args {
             .iter()
             .map(|key| Value::String(client::key_display(key)))
             .collect();
-        let ids = keys.iter().map(Value::Uint).collect();
+        let column = if parameters.has_values() {
+            let values = dusk_capnp::pry!(
+                dusk_capnp::pry!(parameters.get_values())
+                    .iter()
+                    .map(Value::from_reader)
+                    .collect::<::capnp::Result<Vec<_>>>()
+            );
+            (b"Value".to_vec(), Value::List(values))
+        } else {
+            (
+                b"ID".to_vec(),
+                Value::List(keys.iter().map(Value::Uint).collect()),
+            )
+        };
         let page = Record::with_fields(
             kvs_capnp::SCAN_TYPE_ID,
-            [
-                (b"Key".to_vec(), Value::List(names)),
-                (b"ID".to_vec(), Value::List(ids)),
-            ],
+            [(b"Key".to_vec(), Value::List(names)), column],
         );
 
         Promise::from_future(async move {
@@ -135,6 +150,7 @@ impl dusk_program::launcher::LauncherMixin for Launcher {
 pub struct Process {
     /// What `output` streams; `None` streams nothing.
     result: Rc<RefCell<Option<Value>>>,
+    found: Rc<RefCell<alloc::vec::Vec<(u64, Value)>>>,
     bound: Rc<Cell<bool>>,
     scanning: Rc<Cell<bool>>,
     kvs: alloc::sync::Arc<kvs::Kvs>,
@@ -147,6 +163,7 @@ impl Process {
         let kvs = kvs::get_kvs(ctx.namespace.id);
         Ok(Process {
             result: Rc::new(RefCell::new(None)),
+            found: Rc::new(RefCell::new(alloc::vec::Vec::new())),
             bound: Rc::new(Cell::new(false)),
             scanning: Rc::new(Cell::new(false)),
             kvs,
@@ -175,7 +192,7 @@ impl dusk_program::process::ProcessMixin for Process {
             .program_args
             .with_data::<kvs_capnp::kvs_args::data::Owned, _, _>(|data| {
                 Ok(match data.which()? {
-                    Which::Get(key) => Which::Get(key),
+                    Which::Get(keys) => Which::Get(keys?.iter().collect::<alloc::vec::Vec<_>>()),
                     Which::Set(set) => {
                         Which::Set((set.get_key(), Value::from_reader(set.get_value()?)?))
                     }
@@ -186,13 +203,23 @@ impl dusk_program::process::ProcessMixin for Process {
                 })
             })?;
         match action {
-            kvs_capnp::kvs_args::data::Which::Get(key) => {
-                let value = self
-                    .kvs
-                    .get(key)
-                    .await
-                    .ok_or_else(|| anyhow::anyhow!("key {key:#018x} not found"))?;
-                *self.result.borrow_mut() = Some(value);
+            kvs_capnp::kvs_args::data::Which::Get(keys) => {
+                anyhow::ensure!(!keys.is_empty(), "kvs get needs at least one key");
+                let mut found = alloc::vec::Vec::new();
+                for key in keys.iter().copied() {
+                    if let Some(value) = self.kvs.get(key).await {
+                        found.push((key, value));
+                    }
+                }
+                if found.is_empty() {
+                    let keys = keys
+                        .iter()
+                        .map(|key| alloc::format!("{key:#018x}"))
+                        .collect::<alloc::vec::Vec<_>>()
+                        .join(", ");
+                    anyhow::bail!("key {keys} not found");
+                }
+                *self.found.borrow_mut() = found;
             }
             kvs_capnp::kvs_args::data::Which::Set((key, value)) => {
                 self.kvs.set(key, value).await;
@@ -318,10 +345,19 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
             return Promise::ok(());
         }
         let result = self.process.result.borrow_mut().take();
+        let found = core::mem::take(&mut *self.process.found.borrow_mut());
         let process = self.process.clone();
         Promise::from_future(async move {
-            if process.scanning.get() {
-                let keys = process.kvs.scan().await;
+            let rows = if process.scanning.get() {
+                Some((process.kvs.scan().await, None))
+            } else if found.is_empty() {
+                None
+            } else {
+                let (keys, values): (alloc::vec::Vec<u64>, alloc::vec::Vec<Value>) =
+                    found.into_iter().unzip();
+                Some((keys, Some(values)))
+            };
+            if let Some((keys, values)) = rows {
                 let untransposed = |error: ::capnp::Error| {
                     if !matches!(
                         error.kind,
@@ -349,12 +385,23 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                         None
                     }
                 };
+                let mut value_pages = values
+                    .as_deref()
+                    .map(|values| values.chunks(SCAN_PAGE_SIZE));
                 for key_page in keys.chunks(SCAN_PAGE_SIZE) {
+                    let value_page = value_pages.as_mut().and_then(Iterator::next);
                     if let Some(server) = &server {
                         let mut request = server.transpose_request();
                         {
                             let mut builder = request.get();
                             builder.set_output(stream.clone());
+                            if let Some(value_page) = value_page {
+                                let mut values =
+                                    builder.reborrow().init_values(value_page.len() as u32);
+                                for (index, value) in value_page.iter().enumerate() {
+                                    value.write_to_builder(values.reborrow().get(index as u32))?;
+                                }
+                            }
                             let mut keys = builder.init_keys(key_page.len() as u32);
                             for (index, key) in key_page.iter().enumerate() {
                                 keys.set(index as u32, *key);
@@ -366,10 +413,13 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                         }
                     }
                     server = None;
-                    let fields = alloc::vec![(
+                    let mut fields = alloc::vec![(
                         b"ID".to_vec(),
                         Value::List(key_page.iter().copied().map(Value::Uint).collect()),
                     )];
+                    if let Some(value_page) = value_page {
+                        fields.push((b"Value".to_vec(), Value::List(value_page.to_vec())));
+                    }
                     let mut send_request = stream.send_request();
                     Value::Record(Record::with_fields(kvs_capnp::SCAN_TYPE_ID, fields))
                         .write_to_builder(send_request.get().init_value())?;

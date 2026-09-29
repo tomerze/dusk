@@ -9,7 +9,9 @@ use dusk_capnp::dusk_capnp::dusk;
 use dusk_connection::Connection;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program::stream::{Stream, StreamMixin};
-use dusk_program_kvs::{Args as KvsArgs, Value, kvs::key_id, kvs_capnp};
+use dusk_program_kvs::{
+    Args as KvsArgs, Record, Value, client::key_display, kvs::key_id, kvs_capnp,
+};
 use dusk_program_sh::sh_capnp;
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use std::cell::RefCell;
@@ -139,10 +141,22 @@ async fn test_kvs_args_interface() {
             stop(&client, pid).await;
 
             let (pid, values, daemonize) =
-                run_action(&client, KvsArgs::get(key).as_program_args().unwrap()).await;
+                run_action(&client, KvsArgs::get(&[key]).as_program_args().unwrap()).await;
             assert_eq!(
                 values,
-                vec![Value::String("1".to_string())],
+                vec![Value::Record(Record::with_fields(
+                    kvs_capnp::SCAN_TYPE_ID,
+                    [
+                        (
+                            b"Key".to_vec(),
+                            Value::List(vec![Value::String(key_display(key))])
+                        ),
+                        (
+                            b"Value".to_vec(),
+                            Value::List(vec![Value::String("1".to_string())])
+                        ),
+                    ],
+                ))],
                 "get must read back what an earlier process set"
             );
             assert!(!daemonize);

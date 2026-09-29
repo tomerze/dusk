@@ -63,7 +63,7 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
     async fn build(&self, _client: dusk::Client, args: &[&str]) -> anyhow::Result<Rc<ProgramArgs>> {
         let cli = KvsCli::try_parse_from(args)?;
         let args = match cli.action {
-            KvsAction::Get { key } => Args::get(key_parse(&key)),
+            KvsAction::Get { key } => Args::get(&[key_parse(&key)]),
             KvsAction::Set { key, value } => Args::set(key_parse(&key), &Value::String(value))?,
             KvsAction::Delete { key } => Args::delete(key_parse(&key)),
             KvsAction::Exists { key } => Args::exists(key_parse(&key)),
