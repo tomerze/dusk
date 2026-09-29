@@ -10,8 +10,13 @@ impl Driver for StdDriver {
         Ok(std::env::consts::OS.to_string())
     }
 
+    fn tid(&self) -> u64 {
+        std::thread::current().id().as_u64().get()
+    }
+
     fn exit(&self, exit_code: i32) {
         tracing::info!(exit_code, "node exiting");
         std::panic::panic_any(crate::ExitCode(exit_code));
     }
 }
+
