@@ -8,6 +8,14 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
         ("dusk.device.cores", cores()),
         ("dusk.device.memory_bytes", memory_bytes()),
         ("dusk.device.boot_time_ms", boot_time_ms()),
+        (
+            "dusk.device.vendor",
+            registry_string("HARDWARE\\DESCRIPTION\\System\\BIOS", "SystemManufacturer"),
+        ),
+        (
+            "dusk.device.model",
+            registry_string("HARDWARE\\DESCRIPTION\\System\\BIOS", "SystemProductName"),
+        ),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -49,6 +57,36 @@ fn boot_time_ms() -> Option<Value> {
         Ok(since_epoch) => Some(Value::Uint(since_epoch.as_millis() as u64)),
         Err(error) => {
             tracing::warn!(error = %error, "the device booted before 1970");
+            None
+        }
+    }
+}
+
+fn registry_string(path: &str, name: &str) -> Option<Value> {
+    let key = match windows_registry::LOCAL_MACHINE
+        .options()
+        .read()
+        .wow64_64()
+        .open(path)
+    {
+        Ok(key) => key,
+        Err(error) if crate::os_info::is_not_found(&error) => {
+            tracing::info!(path, "the device reports no such registry key");
+            return None;
+        }
+        Err(error) => {
+            tracing::warn!(path, error = %error, "opening a registry key failed");
+            return None;
+        }
+    };
+    match key.get_string(name) {
+        Ok(value) => Some(Value::String(String::from(value.trim()))),
+        Err(error) if crate::os_info::is_not_found(&error) => {
+            tracing::info!(path, name, "the device reports no such registry value");
+            None
+        }
+        Err(error) => {
+            tracing::warn!(path, name, error = %error, "reading a registry value failed");
             None
         }
     }

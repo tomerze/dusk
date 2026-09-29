@@ -8,6 +8,8 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
         ("dusk.device.memory_bytes", memory_bytes()),
         ("dusk.device.swap_bytes", swap_bytes()),
         ("dusk.device.boot_time_ms", boot_time_ms()),
+        ("dusk.device.vendor", vendor()),
+        ("dusk.device.model", model()),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name, value?)))
@@ -152,4 +154,95 @@ fn sysctl_struct<T: Copy>(name: &str) -> Option<T> {
         return None;
     }
     Some(unsafe { core::ptr::read_unaligned(bytes.as_ptr().cast::<T>()) })
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn sysctl_string(name: &str) -> Option<Value> {
+    use sysctl::Sysctl;
+    match sysctl::Ctl::new(name).and_then(|control| control.value_string()) {
+        Ok(value) => Some(Value::String(value)),
+        Err(error) => {
+            tracing::warn!(name, error = %error, "sysctl failed");
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn read_device_string(path: &str) -> Option<String> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => {
+            let contents = contents
+                .trim_matches(|character: char| character.is_whitespace() || character == '\0');
+            (!contents.is_empty()).then(|| String::from(contents))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            tracing::warn!(path, error = %error, "reading a device file failed");
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn vendor() -> Option<Value> {
+    let vendor = read_device_string("/sys/class/dmi/id/sys_vendor");
+    if vendor.is_none() {
+        tracing::info!("the device reports no vendor");
+    }
+    vendor.map(Value::String)
+}
+
+#[cfg(target_os = "linux")]
+fn model() -> Option<Value> {
+    let model = read_device_string("/sys/class/dmi/id/product_name")
+        .or_else(|| read_device_string("/sys/firmware/devicetree/base/model"));
+    if model.is_none() {
+        tracing::info!("the device reports no model");
+    }
+    model.map(Value::String)
+}
+
+#[cfg(target_os = "android")]
+fn android_property(property: &str) -> Option<Value> {
+    let value = android_system_properties::AndroidSystemProperties::new().get(property);
+    if value.is_none() {
+        tracing::info!(property, "Android system property not found");
+    }
+    value.map(Value::String)
+}
+
+#[cfg(target_os = "android")]
+fn vendor() -> Option<Value> {
+    android_property("ro.product.manufacturer")
+}
+
+#[cfg(target_os = "android")]
+fn model() -> Option<Value> {
+    android_property("ro.product.model")
+}
+
+#[cfg(target_os = "macos")]
+fn model() -> Option<Value> {
+    sysctl_string("hw.model")
+}
+
+#[cfg(target_os = "ios")]
+fn model() -> Option<Value> {
+    sysctl_string("hw.machine")
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn vendor() -> Option<Value> {
+    None
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "ios"
+)))]
+fn model() -> Option<Value> {
+    None
 }
