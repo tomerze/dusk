@@ -31,6 +31,119 @@ mod known_keys {
     dusk_program_kvs_internal::known_key!(ARCH, "dusk.target.arch");
     dusk_program_kvs_internal::known_key!(OS, "dusk.target.os");
     dusk_program_kvs_internal::known_key!(BITS, "dusk.target.bits");
+    dusk_program_kvs_internal::known_key!(IMPL, "dusk.impl");
+    dusk_program_kvs_internal::known_key!(OS_PROCESS_PID, "dusk.os.process.pid");
+    dusk_program_kvs_internal::known_key!(OS_PROCESS_EXECUTABLE, "dusk.os.process.executable");
+    dusk_program_kvs_internal::known_key!(
+        OS_PROCESS_WORKING_DIRECTORY,
+        "dusk.os.process.working_directory"
+    );
+    dusk_program_kvs_internal::known_key!(OS_PROCESS_PARENT_PID, "dusk.os.process.parent_pid");
+    dusk_program_kvs_internal::known_key!(OS_TIME_ZONE, "dusk.os.time_zone");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_SYSNAME, "dusk.os.nix.uname.sysname");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_NODENAME, "dusk.os.nix.uname.nodename");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_RELEASE, "dusk.os.nix.uname.release");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_VERSION, "dusk.os.nix.uname.version");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_MACHINE, "dusk.os.nix.uname.machine");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_DOMAINNAME, "dusk.os.nix.uname.domainname");
+    dusk_program_kvs_internal::known_key!(OS_NIX_UID, "dusk.os.nix.uid");
+    dusk_program_kvs_internal::known_key!(OS_NIX_EUID, "dusk.os.nix.euid");
+    dusk_program_kvs_internal::known_key!(
+        OS_NIX_LIMITS_OPEN_FILES_SOFT,
+        "dusk.os.nix.limits.open_files.soft"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_NIX_LIMITS_OPEN_FILES_HARD,
+        "dusk.os.nix.limits.open_files.hard"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_NIX_LIMITS_CORE_FILE_SIZE_SOFT,
+        "dusk.os.nix.limits.core_file_size.soft"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_NIX_LIMITS_CORE_FILE_SIZE_HARD,
+        "dusk.os.nix.limits.core_file_size.hard"
+    );
+    dusk_program_kvs_internal::known_key!(OS_LINUX_BOOT_ID, "dusk.os.linux.boot_id");
+    dusk_program_kvs_internal::known_key!(OS_LINUX_PID1, "dusk.os.linux.pid1");
+    dusk_program_kvs_internal::known_key!(OS_LINUX_GLIBC_VERSION, "dusk.os.linux.glibc_version");
+    dusk_program_kvs_internal::known_key!(OS_LINUX_OS_RELEASE_ID, "dusk.os.linux.os_release.id");
+    dusk_program_kvs_internal::known_key!(
+        OS_LINUX_OS_RELEASE_ID_LIKE,
+        "dusk.os.linux.os_release.id_like"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_LINUX_OS_RELEASE_NAME,
+        "dusk.os.linux.os_release.name"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_LINUX_OS_RELEASE_PRETTY_NAME,
+        "dusk.os.linux.os_release.pretty_name"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_LINUX_OS_RELEASE_VERSION,
+        "dusk.os.linux.os_release.version"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_LINUX_OS_RELEASE_VERSION_CODENAME,
+        "dusk.os.linux.os_release.version_codename"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_LINUX_OS_RELEASE_VERSION_ID,
+        "dusk.os.linux.os_release.version_id"
+    );
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_RELEASE, "dusk.os.android.release");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_SDK, "dusk.os.android.sdk");
+    dusk_program_kvs_internal::known_key!(
+        OS_ANDROID_SECURITY_PATCH,
+        "dusk.os.android.security_patch"
+    );
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_INCREMENTAL, "dusk.os.android.incremental");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_MODEL, "dusk.os.android.model");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_MANUFACTURER, "dusk.os.android.manufacturer");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_FINGERPRINT, "dusk.os.android.fingerprint");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_BRAND, "dusk.os.android.brand");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_BUILD_TYPE, "dusk.os.android.build_type");
+    dusk_program_kvs_internal::known_key!(OS_ANDROID_ABI_LIST, "dusk.os.android.abi_list");
+    dusk_program_kvs_internal::known_key!(
+        OS_MACOS_PRODUCT_VERSION,
+        "dusk.os.macos.product_version"
+    );
+    dusk_program_kvs_internal::known_key!(OS_MACOS_BUILD_VERSION, "dusk.os.macos.build_version");
+    dusk_program_kvs_internal::known_key!(OS_MACOS_TRANSLATED, "dusk.os.macos.translated");
+    dusk_program_kvs_internal::known_key!(OS_IOS_PRODUCT_VERSION, "dusk.os.ios.product_version");
+    dusk_program_kvs_internal::known_key!(OS_IOS_BUILD_VERSION, "dusk.os.ios.build_version");
+    dusk_program_kvs_internal::known_key!(
+        OS_WINDOWS_MAJOR_VERSION,
+        "dusk.os.windows.major_version"
+    );
+    dusk_program_kvs_internal::known_key!(
+        OS_WINDOWS_MINOR_VERSION,
+        "dusk.os.windows.minor_version"
+    );
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_BUILD_NUMBER, "dusk.os.windows.build_number");
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_REVISION, "dusk.os.windows.revision");
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_EDITION, "dusk.os.windows.edition");
+    dusk_program_kvs_internal::known_key!(
+        OS_WINDOWS_DISPLAY_VERSION,
+        "dusk.os.windows.display_version"
+    );
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_NATIVE_ARCH, "dusk.os.windows.native_arch");
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_EMULATED, "dusk.os.windows.emulated");
+    dusk_program_kvs_internal::known_key!(
+        OS_WINDOWS_COMPUTER_NAME,
+        "dusk.os.windows.computer_name"
+    );
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_SESSION_ID, "dusk.os.windows.session_id");
+    dusk_program_kvs_internal::known_key!(OS_WINDOWS_ELEVATED, "dusk.os.windows.elevated");
+    dusk_program_kvs_internal::known_key!(DEVICE_CORES, "dusk.device.cores");
+    dusk_program_kvs_internal::known_key!(DEVICE_MEMORY_BYTES, "dusk.device.memory_bytes");
+    dusk_program_kvs_internal::known_key!(DEVICE_SWAP_BYTES, "dusk.device.swap_bytes");
+    dusk_program_kvs_internal::known_key!(DEVICE_BOOT_TIME_MS, "dusk.device.boot_time_ms");
+    dusk_program_kvs_internal::known_key!(DEVICE_VENDOR, "dusk.device.vendor");
+    dusk_program_kvs_internal::known_key!(DEVICE_MODEL, "dusk.device.model");
+    dusk_program_kvs_internal::known_key!(DEVICE_CPU, "dusk.device.cpu");
+    dusk_program_kvs_internal::known_key!(DEVICE_ID, "dusk.device.id");
 }
 
 pub type InitArgsDataMessage = ImbuedMessageBuilder<HeapAllocator>;
