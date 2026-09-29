@@ -73,7 +73,6 @@ In every session:
 - A commit that changes only `docs/` has a subject starting `Update docs`, and one that changes only `tests/` starts `Add tests`, so a reviewer can skip the low-stakes commits by their first two words.
 - `git commit` runs in the foreground with a 600000 ms timeout; nothing is staged with `git add -A` or `git add .` except the atomic-commit snapshot.
 - No polling loop over a command's output; no `cp` of a `target` directory; no bare `git stash`.
-- `cargo test` and `cargo nextest` ask first.
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
 - `git push` never targets master and requires every commit on the branch to pass the subject checks.
 - The `race-screen`, `race-inspector` and `self-review` agents read; they do not commit, and do not write into the working tree.
