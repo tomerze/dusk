@@ -174,6 +174,7 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.os.android.abi_list` | `nix`, on Android | The `ro.product.cpu.abilist` system property: the ABIs the device runs, e.g. `arm64-v8a,armeabi-v7a,armeabi`. |
 | `dusk.os.macos.product_version` | `nix`, on macOS | The `kern.osproductversion` sysctl, e.g. `14.5`. |
 | `dusk.os.macos.build_version` | `nix`, on macOS | The `kern.osversion` sysctl, e.g. `23F79`. |
+| `dusk.os.macos.translated` | `nix`, on macOS | Whether the node runs under Rosetta - an `x86_64` build on Apple silicon - from the `sysctl.proc_translated` sysctl; `false` on Intel Macs, which have no Rosetta. |
 | `dusk.os.ios.product_version` | `nix`, on iOS | The `kern.osproductversion` sysctl. |
 | `dusk.os.ios.build_version` | `nix`, on iOS | The `kern.osversion` sysctl. |
 | `dusk.os.windows.major_version` | `windows` | The Windows major version, as a number, e.g. `10`. |
