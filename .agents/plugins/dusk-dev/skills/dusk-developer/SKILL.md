@@ -100,7 +100,7 @@ vendor/        External libs submodules
 | `dusk_core` | The runtime: the `DuskServer` behind the `Dusk` capability, the `Driver` trait and its extern shim, sessions, and the `init` wiring. `no_std`. |
 | `dusk_nix` | The Unix impl: hosts the Embassy executor, implements `NixDriver`, and enables `embassy-time/std`. |
 | `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
-| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and aborts rather than unwinding on `exit`. Nothing in it is platform-specific, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
+| `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and aborts rather than unwinding on `exit`. Nothing in it is platform-specific but the device id, which it reads through the `machine-uid` crate on the targets that crate supports - Linux, macOS, Windows, the BSDs and illumos - and the time zone, which it reads through the `iana-time-zone` crate everywhere but Windows, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side - the prompt UI and the `Shell` that drives the shell server a client attaches to. |
 | `dusk_connection` | `Connection` - the client's TCP/RPC link to a node. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
