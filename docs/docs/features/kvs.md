@@ -200,3 +200,5 @@ old to carry a value - writes no keys either, and is logged at `info`.
 | `dusk.os.windows.native_arch` | `windows` | The device's own architecture, in Rust's names - `x86`, `x86_64`, `arm`, `aarch64` - so it compares with `dusk.target.arch`. |
 | `dusk.os.windows.emulated` | `windows` | Whether the node runs emulated: `true` when `dusk.target.arch` is not the device's own architecture, e.g. an `x86_64` build on an ARM64 device or an `x86` build on an `x86_64` one. |
 | `dusk.os.windows.computer_name` | `windows` | The computer's name, as Windows reports it (its NetBIOS name). |
+| `dusk.os.windows.session_id` | `windows` | The Windows session the node runs in, as a number: `0` when it runs as a service. |
+| `dusk.os.windows.elevated` | `windows` | Whether the node runs elevated, with an administrator's rights. |
