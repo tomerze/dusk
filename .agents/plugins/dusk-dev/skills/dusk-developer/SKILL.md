@@ -422,10 +422,15 @@ run and talk to a node."
 
 `dusk_node` packages Dusk Core, the Base programs, and an impl into a runnable
 node. Its body is tiny - `default_launcher_set()` builds every Base program at
-its default configuration (building the logs launcher inside it also installs
-the global tracing subscriber, unconditionally - and nothing in the tree enables
-the logs program's `console` feature, so a node captures every event into its
-buffer and prints none of them), and `dusk_impl::run` starts the node with an
+its default configuration (building the logs launcher inside it also registers
+that node's log buffer under the calling thread's `dusk_core::driver::tid()`,
+unconditionally, until the launcher set is dropped, and the first one in a
+process installs the global tracing subscriber that routes each record by `tid()`
+- so a launcher set is built on the thread that runs its node, and each node in a
+process captures into its own buffer; nothing in the tree enables the logs
+program's `console` feature, so a node captures every event into its buffer and
+prints none of them), and
+`dusk_impl::run` starts the node with an
 `init` whose init script is compiled from `DUSK_NODE_INIT_SCRIPT`:
 
 ```rust
