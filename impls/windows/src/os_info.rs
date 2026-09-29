@@ -18,6 +18,7 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_windows_version(kvs);
     set_kvs_windows_emulation(kvs);
     set_kvs_windows_computer_name(kvs);
+    set_kvs_windows_session(kvs);
 }
 
 pub(crate) fn is_not_found(error: &windows_result::Error) -> bool {
@@ -278,4 +279,56 @@ fn set_kvs_windows_computer_name(kvs: &Kvs) {
             Value::String(String::from_utf16_lossy(&name[..length as usize])),
         )],
     );
+}
+
+fn set_kvs_windows_session(kvs: &Kvs) {
+    use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    let mut values = Vec::new();
+    let mut session_id = 0u32;
+    if unsafe { ProcessIdToSessionId(std::process::id(), &mut session_id) } == 0 {
+        tracing::warn!(error = %std::io::Error::last_os_error(), "ProcessIdToSessionId failed");
+    } else {
+        values.push((
+            String::from("dusk.os.windows.session_id"),
+            Value::Uint(u64::from(session_id)),
+        ));
+    }
+    if let Some(elevated) = elevated() {
+        values.push((
+            String::from("dusk.os.windows.elevated"),
+            Value::Bool(elevated),
+        ));
+    }
+    set_kvs_values(kvs, "windows session", values);
+}
+
+fn elevated() -> Option<bool> {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    };
+    use windows_sys::Win32::System::Threading::OpenProcessToken;
+    let mut token: HANDLE = core::ptr::null_mut();
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+        tracing::warn!(error = %std::io::Error::last_os_error(), "OpenProcessToken failed");
+        return None;
+    }
+    let mut elevation: TOKEN_ELEVATION = unsafe { core::mem::zeroed() };
+    let mut length = 0u32;
+    let succeeded = unsafe {
+        GetTokenInformation(
+            token,
+            TokenElevation,
+            (&mut elevation as *mut TOKEN_ELEVATION).cast(),
+            size_of::<TOKEN_ELEVATION>() as u32,
+            &mut length,
+        )
+    } != 0;
+    let error = (!succeeded).then(std::io::Error::last_os_error);
+    unsafe { CloseHandle(token) };
+    if let Some(error) = error {
+        tracing::warn!(error = %error, "GetTokenInformation failed");
+        return None;
+    }
+    Some(elevation.TokenIsElevated != 0)
 }
