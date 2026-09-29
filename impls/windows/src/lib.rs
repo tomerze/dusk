@@ -10,6 +10,8 @@ use std::time::UNIX_EPOCH;
 
 pub use dusk_program::launcher_set::LauncherSet;
 
+#[cfg(windows)]
+mod device_info;
 mod driver;
 #[cfg(windows)]
 mod os_info;
@@ -59,6 +61,8 @@ pub fn run(
             ));
             #[cfg(windows)]
             os_info::set_kvs_os_info(&kvs);
+            #[cfg(windows)]
+            device_info::set_kvs_device_info(&kvs);
 
             dusk_core::init::init(root, launcher_set, init_program_args);
         });
