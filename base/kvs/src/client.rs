@@ -26,6 +26,20 @@ pub fn key_parse(key: &str) -> u64 {
         .unwrap_or_else(|| key_id(key))
 }
 
+fn pattern_matches(pattern: &str, name: &str) -> bool {
+    let mut pieces = pattern.split('*');
+    let Some(mut rest) = name.strip_prefix(pieces.next().unwrap_or_default()) else {
+        return false;
+    };
+    for piece in pieces {
+        let Some(index) = rest.find(piece) else {
+            return false;
+        };
+        rest = &rest[index + piece.len()..];
+    }
+    true
+}
+
 #[derive(clap::Parser)]
 #[command(name = "kvs", no_binary_name = true)]
 struct KvsCli {
@@ -160,7 +174,7 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
                     Ok(scanned) => {
                         let keys: Vec<u64> = scanned
                             .into_iter()
-                            .filter(|id| *id == typed || key_display(*id).starts_with(&key))
+                            .filter(|id| *id == typed || pattern_matches(&key, &key_display(*id)))
                             .collect();
                         anyhow::ensure!(!keys.is_empty(), "no key matches `{key}`");
                         keys
