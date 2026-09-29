@@ -14,7 +14,7 @@ in it survives a restart.
 ## Commands
 
 ```sh
-kvs get <key>            # print the value under <key>; fails if there is none
+kvs get <key>            # print every key starting with <key>, with its value; fails if there is none
 kvs set <key> <value>    # store <value> under <key>, replacing what was there
 kvs delete <key>         # remove <key>; prints whether it was there
 kvs exists <key>         # print whether <key> is there
@@ -59,6 +59,30 @@ store with many keys never has to answer in one reply.
 
 Two different names can hash to the same id. It is unlikely, and if it happens
 the two names silently share one entry.
+
+## Reading keys by name
+
+`kvs get` reads every key whose name starts with what you type, and answers a
+table of `Key` and `Value`, one row per key, in name order:
+
+```sh
+kvs get dusk            # dusk.git_rev, dusk.namespace_id and dusk.version
+kvs get dusk.version    # dusk.version alone
+```
+
+The client finds them the way `kvs scan` lists them: it asks the node for every
+id it holds, keeps the ones whose name starts with `<key>`, and reads those. So
+only a registered name matches part of what you typed. A key you set yourself,
+like `deploy.stage`, is found by its whole name or by its id, and its row shows
+the id.
+
+The client asks when it reads the line, not when the line runs. A `kvs get` in a
+shell function reads the keys that matched when the function was defined, and
+one in a detached script the keys that matched when it was sent; a key written
+after that is left out.
+
+`kvs get` fails when no key matches, and names what you typed:
+``no key matches `logs` ``.
 
 ## What Dusk records
 

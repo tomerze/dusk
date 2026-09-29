@@ -209,8 +209,8 @@ pub fn sh_entry() -> ShEntry {
 The `kvs` program reads and writes a key-value store held by the node.
 The key-value store is in-memory and shared across all programs on the node.
 
-* `kvs get <key>` prints the value stored under `<key>`, and fails if there is
-  none.
+* `kvs get <key>` prints every key whose name starts with `<key>`, with its
+  value, and fails if there is none.
 * `kvs set <key> <value>` stores `<value>` under `<key>`. Values typed at the
   prompt are stored as strings.
 * `kvs delete <key>` removes `<key>` and reports whether it was present.
