@@ -23,7 +23,7 @@ use dusk_program::anyhow;
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_logs::client::LogsArgs;
 use dusk_program_logs::common_capnp::any_value;
-use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, logs_args, signal};
+use dusk_program_logs::{FLAG_FOLLOW, FLAG_REPLAY, Launcher, LogsConfig, logs_args, signal};
 use dusk_program_sh::sh_capnp;
 use dusk_program_sh::{ShArgs, ShMode};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
@@ -379,6 +379,25 @@ async fn test_each_node_in_a_process_streams_only_its_own_records() {
         })
         .await
         .unwrap();
+}
+
+#[test]
+fn test_one_thread_holds_one_logs_launcher_at_a_time() {
+    std::thread::spawn(|| {
+        let first = Launcher::new(LogsConfig::default()).unwrap();
+        let Err(error) = Launcher::new(LogsConfig::default()) else {
+            panic!("a second logs launcher was registered on one thread");
+        };
+        assert!(
+            error.to_string().contains("already registered"),
+            "unexpected error: {error:#}"
+        );
+        drop(first);
+        Launcher::new(LogsConfig::default())
+            .expect("a logs launcher on a thread whose last one was dropped");
+    })
+    .join()
+    .unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]
