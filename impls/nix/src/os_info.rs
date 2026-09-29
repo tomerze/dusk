@@ -12,6 +12,8 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_os_release(kvs);
     #[cfg(target_os = "linux")]
     set_kvs_boot_id(kvs);
+    #[cfg(target_os = "linux")]
+    set_kvs_pid1(kvs);
     #[cfg(target_os = "android")]
     set_kvs_android_properties(kvs);
     #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -180,6 +182,29 @@ fn set_kvs_boot_id(kvs: &Kvs) {
             )],
         ),
         Err(error) => tracing::warn!(error = %error, "reading the boot id failed"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_kvs_pid1(kvs: &Kvs) {
+    match std::fs::read_to_string("/proc/1/comm") {
+        Ok(name) => set_kvs_values(
+            kvs,
+            "pid 1",
+            vec![(
+                String::from("dusk.os.linux.pid1"),
+                Value::String(String::from(name.trim())),
+            )],
+        ),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+            ) =>
+        {
+            tracing::info!(error = %error, "process 1 is hidden from the node")
+        }
+        Err(error) => tracing::warn!(error = %error, "reading the name of process 1 failed"),
     }
 }
 
