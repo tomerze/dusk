@@ -210,7 +210,9 @@ The `kvs` program reads and writes a key-value store held by the node.
 The key-value store is in-memory and shared across all programs on the node.
 
 * `kvs get <key>` prints every key whose name starts with `<key>`, with its
-  value, and fails if there is none.
+  value, and fails if there is none. A `*` in `<key>` stands for any run of
+  characters: `kvs get *` prints every key, and `kvs get dusk.*.uname` every
+  key named `dusk.`, then anything, then `.uname`.
 * `kvs set <key> <value>` stores `<value>` under `<key>`. Values typed at the
   prompt are stored as strings.
 * `kvs delete <key>` removes `<key>` and reports whether it was present.

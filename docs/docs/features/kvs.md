@@ -14,7 +14,7 @@ in it survives a restart.
 ## Commands
 
 ```sh
-kvs get <key>            # print every key starting with <key>, with its value; fails if there is none
+kvs get <key>            # print every key matching <key>, with its value; fails if there is none
 kvs set <key> <value>    # store <value> under <key>, replacing what was there
 kvs delete <key>         # remove <key>; prints whether it was there
 kvs exists <key>         # print whether <key> is there
@@ -70,8 +70,18 @@ kvs get dusk            # dusk.git_rev, dusk.namespace_id and dusk.version
 kvs get dusk.version    # dusk.version alone
 ```
 
+A `*` stands for any run of characters, dots included, so a pattern can leave
+out the middle of a name as well as its end. What you type is always matched
+from the start of the name and left open at its end, as though it ended in `*`:
+
+```sh
+kvs get *               # every key
+kvs get logs*           # the same as kvs get logs
+kvs get dusk.*.uname    # dusk., then anything, then .uname
+```
+
 The client finds them the way `kvs scan` lists them: it asks the node for every
-id it holds, keeps the ones whose name starts with `<key>`, and reads those. So
+id it holds, keeps the ones whose name matches `<key>`, and reads those. So
 only a registered name matches part of what you typed. A key you set yourself,
 like `deploy.stage`, is found by its whole name or by its id, and its row shows
 the id.
