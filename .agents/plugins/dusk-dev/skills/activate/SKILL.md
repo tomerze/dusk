@@ -28,6 +28,22 @@ The pre-edit hook enforces this against the git user's own name and address and
 their home directory, read fresh each time, so nothing personal is stored in the
 plugin either.
 
+## No std in `no_std` code
+
+**`dusk_core`, `dusk_program` and the server side of every program under `base/`
+are `no_std`, and nothing I write puts std in them** - no `extern crate std`, no
+`std` feature of their own under any name, no dependency's `std` feature, no
+std-only dependency. Not behind a `cfg`, not "only when the template turns it
+on". Dusk runs where there is no std, and these crates are why. The node
+template, `artifacts/dusk_node/lib/src/lib.rs`, takes nothing from std either -
+not even `c_void`, which `core::ffi` has.
+
+What needs std - a thread, `catch_unwind`, any std-only API - lives on the std
+side: an impl under `impls/`. The `no_std` crate reaches it through an
+`unsafe extern "Rust"` declaration that the std side defines, the way
+`dusk_core::driver` reaches the impl's `_dusk_hostname`. When that shape does
+not fit, I stop and ask; I never decide it myself.
+
 ## What the hooks refuse in every session
 
 These are checked as each action is taken:
