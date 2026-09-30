@@ -16,6 +16,20 @@ pub(crate) struct State {
     pub(crate) folded: bool,
 }
 
+pub(crate) fn folds(script: crate::bytecode::Reader<'_>) -> capnp::Result<bool> {
+    let statements = script.get_statements()?;
+    if statements.len() != 1 {
+        return Ok(false);
+    }
+    let crate::bytecode::statement::Which::Expr(expr) = statements.get(0).which()? else {
+        return Ok(false);
+    };
+    Ok(matches!(
+        expr?.which()?,
+        crate::bytecode::statement::expr::Which::ProgramArgs(_)
+    ))
+}
+
 pub(crate) fn log_detached_result(pid: u64, result: &anyhow::Result<()>) {
     match result {
         Ok(()) => tracing::info!(pid, "detached script finished"),

@@ -32,7 +32,7 @@ pub mod parser;
 mod exec;
 mod interpreter;
 
-use exec::{State, log_detached_result, spawn_sh_exec_task};
+use exec::{State, folds, log_detached_result, spawn_sh_exec_task};
 use interpreter::{FunctionTable, Interpreter, Stop};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -104,20 +104,6 @@ impl Process {
             })),
         })
     }
-}
-
-fn folds(script: bytecode::Reader<'_>) -> capnp::Result<bool> {
-    let statements = script.get_statements()?;
-    if statements.len() != 1 {
-        return Ok(false);
-    }
-    let bytecode::statement::Which::Expr(expr) = statements.get(0).which()? else {
-        return Ok(false);
-    };
-    Ok(matches!(
-        expr?.which()?,
-        bytecode::statement::expr::Which::ProgramArgs(_)
-    ))
 }
 
 #[async_trait::async_trait(?Send)]
