@@ -1,3 +1,5 @@
+#![feature(thread_id_value)]
+
 extern crate alloc;
 
 use alloc::rc::Rc;

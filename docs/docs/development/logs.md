@@ -261,9 +261,17 @@ On a node, signals reach the buffer through **`BufferLayer`**
 (`src/tracing/layer.rs`, always compiled). It is a standalone `tracing`
 **subscriber**, and it is **no_std** - it tracks live spans' fields and
 parentage in its own map instead of the std-only subscriber registry, so it
-needs no `tracing-subscriber` `Registry`. Building the logs program's `Launcher`
-installs it as the program's global subscriber (a no-op if one already exists,
-e.g. under a test harness). The **`console`** cargo feature adds the std
+needs no `tracing-subscriber` `Registry`. Each node has its own layer. Building
+the logs program's `Launcher` registers that node's layer under
+`dusk_core::driver::tid()` of the building thread, until the `Launcher` is
+dropped; the first `Launcher` in a process also installs one global subscriber
+that sends every record to the layer registered under the calling thread's
+`tid()`. A node runs on the thread that calls `dusk_impl::run`, and its launcher
+set is dropped once its namespace has terminated, so build the launcher set on
+that thread: each node in a process then captures into its own buffer, and a
+record emitted on a thread that runs no node reaches no buffer. `Launcher::new`
+fails when another global subscriber was installed first, or when a logs
+`Launcher` is already registered on the calling thread. The **`console`** cargo feature adds the std
 machinery to also print each event to stdout at INFO and above; without it the
 same subscriber captures into the buffer but prints nothing. For each event the layer builds
 a `log_record`: the message becomes the OTLP `body`; the event's **own** fields

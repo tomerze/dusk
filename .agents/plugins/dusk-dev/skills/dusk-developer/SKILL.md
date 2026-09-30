@@ -112,7 +112,7 @@ which links Dusk Core, the Base programs, and one impl. There is one library
 artifact, `dusk_node` in `artifacts/dusk_node/lib`, and one binary wrapping it in
 `artifacts/dusk_node/bin`. Which impl they link is a cargo feature on the library
 - `impl_nix`, `impl_std` or `impl_windows` - defaulting to `impl_nix`. Exactly one
-may be enabled: every impl defines `_dusk_hostname` and `_dusk_exit`, so two in
+may be enabled: every impl defines `_dusk_hostname`, `_dusk_tid` and `_dusk_exit`, so two in
 one link is a duplicate symbol. Nothing enforces it - selecting none fails on an
 unresolved `dusk_impl`, selecting two on a duplicate definition of it.
 
@@ -185,6 +185,9 @@ Everything platform-specific lives behind the `Driver` trait
 (`Send + Sync`), which an impl implements:
 
 - `hostname()` - the node's hostname.
+- `tid()` - which thread is calling: the same number for the whole life of a
+  thread, a different one for every thread running a node at the same time. The
+  logs program routes each record to the node registered under it.
 - `exit(exit_code)` - halt the node.
 
 An impl registers its driver once with `dusk_driver_impl!`. See
@@ -272,8 +275,8 @@ back into the client that defined it for as long as the function is defined. See
 
 `dusk_core` is `no_std` and depends on no impl, yet it must call into one. It does
 so through a link-time shim. `dusk_driver_impl!` defines a `lazy_static` singleton
-for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname` and
-`_dusk_exit`. `dusk_core::driver` declares those same symbols
+for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
+`_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
 as `unsafe extern "Rust"` and calls through them. The linker resolves them to
 whichever impl is in the final binary.
 
@@ -362,7 +365,8 @@ the platform), and calls `dusk_core::init::init`
 with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process writes `dusk.target.arch`,
-`dusk.target.os` and `dusk.target.bits` beside `dusk.version`, logs them as `dusk target` and the impl's
+`dusk.target.os` and `dusk.target.bits` beside `dusk.version`, and the driver's
+`tid()` and `hostname()` as `dusk.tid` and `dusk.hostname`, logs the target keys as `dusk target` and the impl's
 name as `dusk impl`, and is handed an init script - a
 `Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate` while it reaps that `sh` with `waitpid` - the `sh` running a detached
@@ -419,10 +423,15 @@ run and talk to a node."
 
 `dusk_node` packages Dusk Core, the Base programs, and an impl into a runnable
 node. Its body is tiny - `default_launcher_set()` builds every Base program at
-its default configuration (building the logs launcher inside it also installs
-the global tracing subscriber, unconditionally - and nothing in the tree enables
-the logs program's `console` feature, so a node captures every event into its
-buffer and prints none of them), and `dusk_impl::run` starts the node with an
+its default configuration (building the logs launcher inside it also registers
+that node's log buffer under the calling thread's `dusk_core::driver::tid()`,
+unconditionally, until the launcher set is dropped, and the first one in a
+process installs the global tracing subscriber that routes each record by `tid()`
+- so a launcher set is built on the thread that runs its node, and each node in a
+process captures into its own buffer; nothing in the tree enables the logs
+program's `console` feature, so a node captures every event into its buffer and
+prints none of them), and
+`dusk_impl::run` starts the node with an
 `init` whose init script is compiled from `DUSK_NODE_INIT_SCRIPT`:
 
 ```rust

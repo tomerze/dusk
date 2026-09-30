@@ -119,6 +119,8 @@ until their owner writes again.
 | `dusk.version` | `init`, at startup | The node's Dusk version, e.g. `0.1.0`. |
 | `dusk.git_rev` | `init`, at startup | The git revision the node's `init` program was built from. |
 | `dusk.namespace_id` | `init`, at startup | The node's namespace id, a random 64-bit number chosen at startup. |
+| `dusk.tid` | `init`, at startup | The id of the thread the node runs on, as the impl's driver reports it - the operating system's thread id on Linux, Android, Apple systems and Windows. |
+| `dusk.hostname` | `init`, at startup | The node's hostname, as the impl's driver reports it. Left unset, with a warning in the node's logs, when the driver cannot read it. |
 | `dusk.target.arch` | `init`, at startup | The CPU architecture the node was built for, as Rust names it, e.g. `x86_64`, `aarch64`. |
 | `dusk.target.os` | `init`, at startup | The operating system the node was built for, as Rust names it, e.g. `linux`, `windows`, `android`, `macos`. |
 | `dusk.target.bits` | `init`, at startup | The width of a pointer on that target, as a number, e.g. `64`. |

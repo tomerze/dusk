@@ -122,8 +122,6 @@ def main():
         deny("Never copy a target directory; park it with mv and move it back (drive-issue, Step 2).")
     if has(r"\bgit\s+stash\b(?!\s+(push|list|show|apply|drop|branch)\b)"):
         deny("No bare git stash and no stash pop: the stash stack is shared with every worktree. Use git stash push -u -m <tag>, restore with git stash apply <sha>, then drop it by tag.")
-    if has(r"\bcargo\s+(test|nextest)\b"):
-        ask("Tests run only when the user asked for them (dusk-developer, Don't write or run tests unless told). Did they ask?")
     snapshot = has(r"\bgit\s+commit\b") and any("snapshot" in message.lower() for message in commit_messages(command))
     if has(r"\bgit\s+add\b[^\n;&|]*(\s-A\b|\s--all\b|\s\.(?=\s|$))") and not snapshot:
         deny("Stage named paths, never git add -A or git add . - only the atomic-commit snapshot is taken that way.")

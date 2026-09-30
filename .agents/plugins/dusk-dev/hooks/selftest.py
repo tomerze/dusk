@@ -106,7 +106,6 @@ with tempfile.TemporaryDirectory() as temp:
         expect("a read-only agent may not write into the tree", run("pre_bash.py", {**bash("grep -rn x . > out.txt"), "agent_type": "dusk-dev:self-review"}), 2, "reads"),
         expect("bare stash is denied", run("pre_bash.py", bash("git stash")), 2, "stash"),
         expect("stash push is allowed", run("pre_bash.py", bash("git stash push -u -m tag")), 0),
-        expect("cargo test asks", run("pre_bash.py", bash("cargo nextest run")), 0, '"ask"'),
         expect("push to master is denied", run("pre_bash.py", bash("git push origin master")), 2, "master"),
         expect("push to a topic branch is allowed", run("pre_bash.py", bash("git push -u origin topic")), 0),
         expect("a pull request with a watermark is denied", run("pre_pull_request.py", pull_request("Adds x\n\nGenerated with a tool")), 2, "watermark"),

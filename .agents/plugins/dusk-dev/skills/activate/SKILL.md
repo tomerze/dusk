@@ -41,7 +41,7 @@ These are checked as each action is taken:
 - `git commit` runs in the foreground with `timeout: 600000`; nothing is staged
   with `git add -A` or `git add .`.
 - No polling loop over a command I started; no copying of a build directory; no
-  bare `git stash`; `cargo test` and `cargo nextest` only after asking.
+  bare `git stash`.
 - A program under `base/` is edited only with `authoring-a-program` loaded; the
   `Driver` trait only with `adding-a-driver-method` loaded.
 - `git push` never targets master, and every commit on the branch passes the

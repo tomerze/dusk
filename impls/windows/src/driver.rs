@@ -1,5 +1,6 @@
 use dusk_core::driver::Driver;
 use dusk_program::anyhow::{Ok, Result, anyhow};
+use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::System::WindowsProgramming::GetComputerNameW;
 
 pub(crate) struct WindowsDriver;
@@ -17,6 +18,10 @@ impl Driver for WindowsDriver {
             ));
         }
         Ok(String::from_utf16(&name[..length as usize])?)
+    }
+
+    fn tid(&self) -> u64 {
+        u64::from(unsafe { GetCurrentThreadId() })
     }
 
     fn exit(&self, exit_code: i32) {

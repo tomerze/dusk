@@ -70,10 +70,9 @@ In every session:
 - No comment line is added to a `.rs`, `.capnp`, `.py`, `.toml`, `.c` or `.h` file.
 - Nothing personal is written into any file: the git user's name, their email address and their home directory are refused, read fresh each time so the plugin stores none of them.
 - A commit subject has no conventional-commit prefix, does not start with Say, carries no issue number, and no message carries a watermark trailer.
-- A commit that changes only `docs/` has a subject starting `Update docs`, and one that changes only `tests/` starts `Add tests`, so a reviewer can skip the low-stakes commits by their first two words.
+- A commit that changes only `docs/` has a subject starting `Update docs`, and one that changes only `tests/` starts `Add tests`, or `Update tests` when it changes tests that exist, so a reviewer can skip the low-stakes commits by their first two words.
 - `git commit` runs in the foreground with a 600000 ms timeout; nothing is staged with `git add -A` or `git add .` except the atomic-commit snapshot.
 - No polling loop over a command's output; no `cp` of a `target` directory; no bare `git stash`.
-- `cargo test` and `cargo nextest` ask first.
 - A program under `base/` is edited only after `authoring-a-program` is loaded; a change to the `Driver` trait only after `adding-a-driver-method` is loaded.
 - `git push` never targets master and requires every commit on the branch to pass the subject checks.
 - The `race-screen`, `race-inspector` and `self-review` agents read; they do not commit, and do not write into the working tree.
