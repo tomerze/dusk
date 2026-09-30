@@ -1121,11 +1121,11 @@ impl Pager {
         let mut position = self.top;
         for row in 0..rows {
             queue!(out, cursor::MoveTo(0, row as u16))?;
+            let mut last_character = String::new();
             if let Some(line) = self.lines.get(position.0) {
-                queue!(
-                    out,
-                    crossterm::style::Print(self.render_row(position.0, line, position.1))
-                )?;
+                let (row_text, row_last_character) = self.render_row(position.0, line, position.1);
+                queue!(out, crossterm::style::Print(row_text))?;
+                last_character = row_last_character;
                 position = if position.1 + 1 < self.rows_of(position.0) {
                     (position.0, position.1 + 1)
                 } else {
@@ -1143,10 +1143,13 @@ impl Pager {
                 )?;
             }
             queue!(out, Clear(ClearType::UntilNewLine))?;
+            queue!(out, crossterm::style::Print(last_character))?;
         }
         queue!(out, cursor::MoveTo(0, rows as u16))?;
-        queue!(out, crossterm::style::Print(self.render_status()))?;
+        let (status, status_last_character) = self.render_status();
+        queue!(out, crossterm::style::Print(status))?;
         queue!(out, Clear(ClearType::UntilNewLine))?;
+        queue!(out, crossterm::style::Print(status_last_character))?;
         // The real terminal cursor, vim-style: a block on the cell in normal
         // and visual mode, a bar at the input position while typing.
         let column_limit = self.width.saturating_sub(1);
@@ -1178,7 +1181,7 @@ impl Pager {
         Ok(())
     }
 
-    fn render_status(&self) -> String {
+    fn render_status(&self) -> (String, String) {
         let (left, left_style) = match &self.mode {
             Mode::Input { prefix, buffer } => (format!("{prefix}{buffer}"), Style::new().bold()),
             Mode::Visual { .. } => match &self.flash {
@@ -1251,19 +1254,27 @@ impl Pager {
         let padding = self
             .width
             .saturating_sub(left.chars().count() + right_plain.chars().count());
-        format!(
-            "{}{}{}{}{}",
-            left_style.paint(&left),
-            " ".repeat(padding),
-            Style::new().fg(Color::DarkGray).paint(match_counter),
-            Style::new().fg(Color::DarkGray).paint(position),
-            chip_style.paint(mode_chip),
+        let last_character_start = mode_chip
+            .char_indices()
+            .last()
+            .map_or(0, |(index, _)| index);
+        let (mode_chip, mode_chip_last_character) = mode_chip.split_at(last_character_start);
+        (
+            format!(
+                "{}{}{}{}{}",
+                left_style.paint(&left),
+                " ".repeat(padding),
+                Style::new().fg(Color::DarkGray).paint(match_counter),
+                Style::new().fg(Color::DarkGray).paint(position),
+                chip_style.paint(mode_chip),
+            ),
+            chip_style.paint(mode_chip_last_character).to_string(),
         )
     }
 
     /// Compose one wrap-row of line `index` (`wrap_row` rows into the line):
     /// base span styles, search-match and selection overlays.
-    fn render_row(&self, index: usize, line: &Line, wrap_row: usize) -> String {
+    fn render_row(&self, index: usize, line: &Line, wrap_row: usize) -> (String, String) {
         let chars: Vec<(char, Style)> = line
             .spans
             .iter()
@@ -1336,8 +1347,12 @@ impl Pager {
             }
             run.push(character);
         }
+        let last_character = run.pop();
         flush(&mut rendered, run_style, &mut run);
-        rendered
+        let last_character = last_character
+            .map(|character| run_style.paint(character.to_string()).to_string())
+            .unwrap_or_default();
+        (rendered, last_character)
     }
 }
 
