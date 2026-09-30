@@ -102,6 +102,15 @@ impl dusk_program::process::ProcessMixin for Process {
             ip_address, port,
         ))?;
         tracing::info!(address = %address, port, "listening for sessions");
+        let local_address = listener.get_ref().local_addr()?;
+        let listen = if local_address.ip().is_unspecified() {
+            alloc::format!(":{}", local_address.port())
+        } else {
+            local_address.to_string()
+        };
+        self.ctx
+            .name
+            .lock(|name| *name.borrow_mut() = Some(alloc::format!("nightfall[listen {listen}]")));
 
         ready.sender().send(true);
 

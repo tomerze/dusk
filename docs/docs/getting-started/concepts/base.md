@@ -140,3 +140,7 @@ listener and holds the shell as a foreground command until it is terminated.
 nightfall -l 4000              # listen on port 4000, on every address
 nightfall -l 127.0.0.1:4000    # listen on one address
 ```
+
+`ps` shows it as `nightfall[listen :4000]`, or `nightfall[listen 127.0.0.1:4000]`
+when it listens on one address. The port is the one it is listening on, so
+`nightfall -l 0` shows the port the system picked.

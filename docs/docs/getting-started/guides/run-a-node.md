@@ -37,7 +37,7 @@ with `waitpid` when it exits. When the script is one program, that `sh` exits as
 soon as it has started the program. For the node
 artifact that script is by default the single command `nightfall -l 9090`, compiled
 while the artifact itself is built, so nothing is compiled at boot, and `ps`
-shows `init` and `nightfall` with no `sh` between them.
+shows `init` and `nightfall[listen :9090]` with no `sh` between them.
 [`nightfall`](../concepts/base.md#nightfall)
 binds the node's network listener and accepts connections, running in the
 foreground of that script.
