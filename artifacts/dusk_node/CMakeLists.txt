@@ -192,7 +192,7 @@ add_library(dusk::node STATIC IMPORTED GLOBAL)
 add_dependencies(dusk::node dusk_node)
 set_target_properties(dusk::node PROPERTIES
     IMPORTED_LOCATION "${DUSK_NODE_LIBRARY_PATH}"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/lib/include"
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../dusk/include"
     INTERFACE_LINK_LIBRARIES "${DUSK_NODE_SYSTEM_LIBRARIES}")
 
 # ---- executable ----

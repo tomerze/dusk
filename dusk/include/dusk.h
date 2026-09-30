@@ -1,5 +1,5 @@
-#ifndef DUSK_NODE_DUSK_H
-#define DUSK_NODE_DUSK_H
+#ifndef DUSK_DUSK_H
+#define DUSK_DUSK_H
 
 #include <stdint.h>
 
@@ -8,4 +8,4 @@
 // `user` is whatever the program running the node gives it at run time.
 int32_t dusk_node_run(void *user);
 
-#endif // DUSK_NODE_DUSK_H
+#endif // DUSK_DUSK_H
