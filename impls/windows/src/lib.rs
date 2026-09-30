@@ -67,7 +67,14 @@ pub fn run(
             #[cfg(windows)]
             device_info::set_kvs_device_info(&kvs);
 
-            dusk_core::init::init(root, launcher_set, init_program_args);
+            dusk_core::init::init(
+                root,
+                move || {
+                    let _store = &kvs;
+                    launcher_set()
+                },
+                init_program_args,
+            );
         });
     }));
 

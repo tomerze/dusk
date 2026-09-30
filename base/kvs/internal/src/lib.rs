@@ -6,7 +6,7 @@
 
 extern crate alloc;
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use core::cell::RefCell;
 use dusk_program::embassy_sync::blocking_mutex::Mutex as BlockingMutex;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -149,8 +149,10 @@ impl Kvs {
     }
 }
 
-type Registry =
-    BlockingMutex<CriticalSectionRawMutex, RefCell<HashMap<u64, Arc<Kvs>, BuildNoHashHasher<u64>>>>;
+type Registry = BlockingMutex<
+    CriticalSectionRawMutex,
+    RefCell<HashMap<u64, Weak<Kvs>, BuildNoHashHasher<u64>>>,
+>;
 
 static REGISTRY: LazyLock<Registry> =
     LazyLock::new(|| BlockingMutex::new(RefCell::new(HashMap::default())));
@@ -162,10 +164,13 @@ static REGISTRY: LazyLock<Registry> =
 #[must_use]
 pub fn get_kvs(namespace_id: u64) -> Arc<Kvs> {
     REGISTRY.get().lock(|registry| {
-        registry
-            .borrow_mut()
-            .entry(namespace_id)
-            .or_insert_with(|| Arc::new(Kvs::new()))
-            .clone()
+        let mut registry = registry.borrow_mut();
+        registry.retain(|_, kvs| kvs.strong_count() > 0);
+        if let Some(kvs) = registry.get(&namespace_id).and_then(Weak::upgrade) {
+            return kvs;
+        }
+        let kvs = Arc::new(Kvs::new());
+        registry.insert(namespace_id, Arc::downgrade(&kvs));
+        kvs
     })
 }
