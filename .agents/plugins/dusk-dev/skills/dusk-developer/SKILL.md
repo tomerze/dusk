@@ -365,7 +365,8 @@ the platform), and calls `dusk_core::init::init`
 with the launcher set and the init args. `init` registers
 the set against the namespace, spawns the init task, and removes the set again
 when that namespace terminates. The `init` process writes `dusk.target.arch`,
-`dusk.target.os` and `dusk.target.bits` beside `dusk.version`, logs them as `dusk target` and the impl's
+`dusk.target.os` and `dusk.target.bits` beside `dusk.version`, and the driver's
+`tid()` and `hostname()` as `dusk.tid` and `dusk.hostname`, logs the target keys as `dusk target` and the impl's
 name as `dusk impl`, and is handed an init script - a
 `Bytecode.Bytecode` - and starts a detached `sh` to run it, then waits for its own
 `Terminate` while it reaps that `sh` with `waitpid` - the `sh` running a detached
