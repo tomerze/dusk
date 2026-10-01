@@ -33,7 +33,7 @@ def readable(raw: str) -> str:
     """The text a person would see, with the terminal's control codes gone."""
     return ANSI.sub("", raw)
 
-REPOSITORY = pathlib.Path(__file__).resolve().parents[2]
+REPOSITORY = pathlib.Path(__file__).resolve().parents[3]
 NODE_BINARY = REPOSITORY / "target/debug/dusk_node"
 CLI_BINARY = REPOSITORY / "target/debug/dusk"
 ADDRESS = "127.0.0.1"

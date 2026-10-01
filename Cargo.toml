@@ -35,10 +35,10 @@ members = [
     "base/echo",
     "base/kvs",
     "base/kvs/internal",
-    "tests/api",
-    "tests/cli",
+    "tests/interfaces/api",
+    "tests/interfaces/cli",
     "tests/common",
-    "tests/py",
+    "tests/interfaces/py",
 ]
 resolver = "2"
 

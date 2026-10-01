@@ -39,10 +39,10 @@ jobs:
       # Both commands mirror the ruff-check and ruff-format hooks in
       # .pre-commit-config.yaml, including their file scope.
       - name: ruff check
-        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/gw/
+        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/
 
       - name: ruff format
-        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/gw/
+        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/
 
   python-tests:
     name: Python (pytest)
@@ -69,7 +69,7 @@ jobs:
         run: uv sync --no-install-project
 
       - name: pytest
-        run: .venv/bin/python -m pytest tests/gw -q
+        run: .venv/bin/python -m pytest tests/interfaces/gw -q
 
   c-lint:
     name: C (clang-format, clang-tidy)

@@ -3,7 +3,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 fn python(code: &str) -> (bool, String) {
-    let interpreter = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.venv/bin/python");
+    let interpreter = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.venv/bin/python");
     let output = Command::new(interpreter)
         .arg("-c")
         .arg(code)

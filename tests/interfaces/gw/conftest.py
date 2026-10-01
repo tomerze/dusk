@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-PYTHON_SOURCE = pathlib.Path(__file__).resolve().parents[2] / "dusk/src/dusk_py/python"
+PYTHON_SOURCE = pathlib.Path(__file__).resolve().parents[3] / "dusk/src/dusk_py/python"
 
 # ``dusk/__init__.py`` is one line: ``from .dusk import *``, importing the
 # PyO3 extension. Seeding sys.modules with a stub for it, before anything

@@ -50,14 +50,14 @@ select = ["E4", "E7", "E9", "F", "I"]
 include = [
     "dusk/src/dusk_py/python/dusk/gw",
     "dusk/src/dusk_py/python/dusk/__init__.py",
-    "tests/gw",
+    "tests/interfaces/gw",
 ]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.14.3"
 
 [tool.pytest.ini_options]
-testpaths = ["tests/gw", "tests/prompt"]
+testpaths = ["tests/interfaces/gw", "tests/interfaces/prompt"]
 
 [dependency-groups]
 dev = [

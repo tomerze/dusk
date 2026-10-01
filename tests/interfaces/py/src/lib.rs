@@ -8,7 +8,7 @@ use std::process::Command;
 
 #[allow(dead_code)]
 fn run_python_code(code: &str) -> bool {
-    let python = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.venv/bin/python");
+    let python = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.venv/bin/python");
     let status = Command::new(python)
         .arg("-c")
         .arg(code)
