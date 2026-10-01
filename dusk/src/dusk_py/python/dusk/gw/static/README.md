@@ -37,7 +37,7 @@ cd dusk/src/dusk_py/python/dusk/gw/static
 sha256sum swagger-ui-bundle.js swagger-ui.css LICENSE
 ```
 
-The digests must match the table above. `tests/gw/test_openapi.py` separately
+The digests must match the table above. `tests/interfaces/gw/test_openapi.py` separately
 asserts the served page references no external host, which is the property that
 actually matters - these digests only say *which* copy is here.
 

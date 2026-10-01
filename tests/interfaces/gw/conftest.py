@@ -9,7 +9,7 @@ in the same way any other caller would hand in its own.
 That keeps the suite runnable from a plain checkout: the ``dusk`` package is
 imported from the source tree with its compiled extension replaced by a stub, so
 nothing here needs ``maturin develop`` or a built node. The end-to-end coverage
-that does need a real node lives in ``tests/py``.
+that does need a real node lives in ``tests/interfaces/py``.
 """
 
 from __future__ import annotations

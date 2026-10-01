@@ -39,7 +39,7 @@ client.disconnect()
 
 /// Drives the REST API of a real `dusk_gw` process against a real node.
 ///
-/// The gateway's own tests (`tests/gw`) stub the node out to stay fast, so this
+/// The gateway's own tests (`tests/interfaces/gw`) stub the node out to stay fast, so this
 /// is the one place the whole path is exercised: an HTTP request arrives on a
 /// bound socket, the gateway opens a Cap'n Proto connection to a node, runs a
 /// program, and hands the output back as JSON.

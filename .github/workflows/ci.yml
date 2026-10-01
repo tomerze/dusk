@@ -64,7 +64,7 @@ jobs:
       # against a tree written for 1.x. The gateway's tests supply their own
       # connections and program set and stub the extension out, so they need
       # nothing the lockfile does not already carry. The end-to-end tests that
-      # do drive a real node live in tests/py and are not run here.
+      # do drive a real node live in tests/interfaces/py and are not run here.
       - name: Install the locked dependencies
         run: uv sync --no-install-project
 
