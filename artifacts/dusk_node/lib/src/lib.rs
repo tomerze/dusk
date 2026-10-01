@@ -1,7 +1,7 @@
+use core::ffi::c_void;
 use dusk_base::dusk_program_init::Args as InitArgs;
 use dusk_core::driver::DuskImplExit;
 use dusk_program_sh_compiler_proc::compile_sh;
-use std::ffi::c_void;
 
 pub use dusk_core::ffi::*;
 
