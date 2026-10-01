@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use alloc::rc::Rc;
+use dusk_core::driver::DuskImplExit;
 use dusk_program::embassy_executor::Executor;
 use dusk_program::namespace::Namespace;
 use dusk_program::program_args::ProgramArgs;
@@ -24,7 +25,7 @@ pub fn run(
     handle: u64,
     launcher_set: impl Fn() -> dusk_program::anyhow::Result<LauncherSet> + Send + Sync + 'static,
     init_program_args: Rc<ProgramArgs>,
-) -> i32 {
+) -> DuskImplExit {
     // Keep the exit-code panic out of the default panic output so a clean
     // exit() doesn't look like a crash. Real panics still print normally.
     let default_hook = std::panic::take_hook();
@@ -73,10 +74,10 @@ pub fn run(
     match outcome {
         Ok(()) => unreachable!("executor.run() should never return"),
         Err(payload) => match payload.downcast::<ExitCode>() {
-            Ok(exit_code) => exit_code.0,
-            // Not our exit code - a real panic. Return -1 rather than
+            Ok(exit_code) => DuskImplExit::Code(exit_code.0),
+            // Not our exit code - a real panic. Return Panic rather than
             // resume_unwind: unwinding across an extern "C" caller is UB.
-            Err(_payload) => -1,
+            Err(_payload) => DuskImplExit::Panic,
         },
     }
 }

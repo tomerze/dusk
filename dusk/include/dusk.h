@@ -10,6 +10,7 @@ extern "C" {
 enum dusk_result_source {
     DUSK_RESULT_SOURCE_NAMESPACE = 0,
     DUSK_RESULT_SOURCE_DUSK_MAIN = 1,
+    DUSK_RESULT_SOURCE_RUST_PANIC = 2,
 };
 
 enum dusk_main_failed {

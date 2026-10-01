@@ -1,4 +1,5 @@
 use dusk_base::dusk_program_init::Args as InitArgs;
+use dusk_core::driver::DuskImplExit;
 use dusk_program_sh_compiler_proc::compile_sh;
 use std::ffi::c_void;
 
@@ -12,7 +13,7 @@ use dusk_std as dusk_impl;
 use dusk_windows as dusk_impl;
 
 #[unsafe(no_mangle)]
-fn dusk_main(handle: u64, _user: *mut c_void) -> Result<i32, DuskMainFailed> {
+fn dusk_main(handle: u64, _user: *mut c_void) -> Result<DuskImplExit, DuskMainFailed> {
     Ok(dusk_impl::run(
         handle,
         dusk_base::default_launcher_set,

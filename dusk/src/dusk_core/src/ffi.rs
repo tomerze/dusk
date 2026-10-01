@@ -1,9 +1,11 @@
+use crate::driver::DuskImplExit;
 use core::ffi::c_void;
 use dusk_program::handle::{self, HandleState, new_handle, unbind_handle};
 use portable_atomic::Ordering;
 
 pub const DUSK_RESULT_SOURCE_NAMESPACE: i64 = 0;
 pub const DUSK_RESULT_SOURCE_DUSK_MAIN: i64 = 1;
+pub const DUSK_RESULT_SOURCE_RUST_PANIC: i64 = 2;
 
 #[repr(i64)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,7 +16,7 @@ pub enum DuskMainFailed {
 }
 
 unsafe extern "Rust" {
-    safe fn dusk_main(handle: u64, user: *mut c_void) -> Result<i32, DuskMainFailed>;
+    safe fn dusk_main(handle: u64, user: *mut c_void) -> Result<DuskImplExit, DuskMainFailed>;
 }
 
 struct HandleGuard(u64);
@@ -43,7 +45,8 @@ pub extern "C" fn dusk_run(handle: u64, user: *mut c_void) -> i64 {
         None => Err(DuskMainFailed::UnknownHandle),
     };
     match result {
-        Ok(exit_code) => i64::from(exit_code) << 16,
+        Ok(DuskImplExit::Code(exit_code)) => i64::from(exit_code) << 16,
+        Ok(DuskImplExit::Panic) => DUSK_RESULT_SOURCE_RUST_PANIC,
         Err(failed) => ((failed as i64) << 16) | DUSK_RESULT_SOURCE_DUSK_MAIN,
     }
 }
