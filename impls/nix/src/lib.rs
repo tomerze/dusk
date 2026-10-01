@@ -19,6 +19,7 @@ mod os_info;
 pub(crate) struct ExitCode(pub(crate) i32);
 
 pub fn run(
+    handle: u64,
     launcher_set: impl Fn() -> dusk_program::anyhow::Result<LauncherSet> + Send + Sync + 'static,
     init_program_args: Rc<ProgramArgs>,
 ) -> i32 {
@@ -44,6 +45,7 @@ pub fn run(
             getrandom::getrandom(&mut seed).expect("the operating system's random source failed");
 
             let root = Rc::new(Namespace::new(
+                handle,
                 u128::from_le_bytes(seed),
                 spawner,
                 SystemTime::now()

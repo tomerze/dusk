@@ -1,3 +1,4 @@
+use crate::handle;
 use crate::launcher_set::LauncherSet;
 use crate::process::Process;
 use crate::process::ProcessContext;
@@ -62,7 +63,12 @@ pub struct Namespace {
 }
 
 impl Namespace {
-    pub fn new(random_seed: u128, spawner: Spawner, unix_time_ms: Option<u64>) -> Self {
+    pub fn new(
+        handle: u64,
+        random_seed: u128,
+        spawner: Spawner,
+        unix_time_ms: Option<u64>,
+    ) -> Self {
         let entropy = Sha256::new()
             .chain_update(random_seed.to_le_bytes())
             .chain_update(unix_time_ms.unwrap_or(0).to_le_bytes())
@@ -70,6 +76,7 @@ impl Namespace {
             .into();
         let mut rng = ChaCha20Rng::from_seed(entropy);
         let id = rng.next_u64();
+        handle::bind_handle(handle, id);
         info!(
             namespace_id = id,
             unix_time_ms = unix_time_ms,
