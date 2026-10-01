@@ -16,34 +16,59 @@
 extern "C" {
 #endif
 
+/**
+ * @file
+ * @brief Run Dusk namespaces from C.
+ *
+ * dusk_new returns a handle: 1, 2, 3 and up, never reused. Pass it to dusk_run
+ * to run a namespace under it on the calling thread. When that namespace stops,
+ * the handle may be run again.
+ *
+ * dusk_spawn calls dusk_new and dusk_run for you on a new thread, and passes
+ * the result to finalize when the namespace terminates and or failure.
+ *
+ * Every function may be called from any thread.
+ */
+
+/**
+ * @brief The source of a result: what produced its value.
+ */
 enum dusk_result_source {
+    /** The namespace exited. The value is its exit code. */
     DUSK_RESULT_SOURCE_NAMESPACE = 0,
+    /** Dusk could not run the namespace. The value is a `dusk_main_failed` saying why.
+     */
     DUSK_RESULT_SOURCE_DUSK_MAIN = 1,
+    /** There was a rust panic. The value is 0. */
     DUSK_RESULT_SOURCE_RUST_PANIC = 2,
 };
 
+/** @brief Reasons why we failed before the Dusk namespace even started.
+ *  later versions may add more. */
 enum dusk_main_failed {
-    DUSK_MAIN_FAILED_INIT_ARGS = 1,
-    DUSK_MAIN_FAILED_UNKNOWN_HANDLE = 2,
-    DUSK_MAIN_FAILED_BOUND_HANDLE = 3,
-    DUSK_MAIN_FAILED_SPAWN = 4,
+    DUSK_MAIN_FAILED_INIT_ARGS = 1,      /**< Its init arguments could not be built. */
+    DUSK_MAIN_FAILED_UNKNOWN_HANDLE = 2, /**< No such handle. */
+    DUSK_MAIN_FAILED_BOUND_HANDLE = 3, /**< A namespace is running under the handle. */
+    DUSK_MAIN_FAILED_SPAWN = 4,        /**< dusk_spawn could not start a thread. */
 };
 
 union dusk_result {
     int64_t raw;
     struct {
 #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        int64_t value : 48;
-        uint64_t source : 16;
+        int64_t value : 48; // `meaning as described by the docs of the specific source`
+        uint64_t source : 16; // `enum dusk_result_source`
 #else
-        uint64_t source : 16;
-        int64_t value : 48;
+        uint64_t source : 16; // `enum dusk_result_source`
+        int64_t value : 48; // `meaning as described by the docs of the specific source`
 #endif
     };
 };
 
+/** @brief Registers a new namespace. @return its `handle`. */
 uint64_t dusk_new(void);
 
+/** @brief Runs the namespace of `handle` on this thread. @return its result. */
 int64_t dusk_run(uint64_t handle, void *user);
 
 #if defined(DUSK_PTHREAD) || defined(DUSK_WIN32)
@@ -55,6 +80,15 @@ struct dusk_spawn_args_ {
 
 static inline int dusk_spawn_trampoline_0_(struct dusk_spawn_args_ *args);
 
+/**
+ * @brief Runs dusk_run(dusk_new(), user) on a new thread, which takes `user`.
+ *
+ * Calls `finalize(user, result)` exactly once, when the namespace has
+ * stopped, with its result - or, when the thread cannot start, with a result
+ * whose value is DUSK_MAIN_FAILED_SPAWN. `finalize` may be NULL.
+ *
+ * @return its `handle`, or 0 if the thread cannot start.
+ */
 static inline uint64_t dusk_spawn(void *user,
                                   void (*finalize)(void *user, int64_t result)) {
     struct dusk_spawn_args_ *args = (struct dusk_spawn_args_ *)malloc(sizeof *args);
