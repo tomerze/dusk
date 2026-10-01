@@ -1235,11 +1235,10 @@ pub fn link_anchors() {
 
 ### The server launches whatever `default_launcher_set()` returns
 
-`artifacts/dusk_node/lib/src/lib.rs` builds its launcher set by calling `dusk_base::default_launcher_set()`:
+`artifacts/dusk_node/lib/src/lib.rs` hands `dusk_base::default_launcher_set` to the impl as the namespace's launcher-set builder, which `init` calls once:
 
 ```rust
-let Ok(launcher_set) = dusk_base::default_launcher_set() else { return 1; };
-dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
+Ok(dusk_impl::run(handle, dusk_base::default_launcher_set, init_args))
 ```
 
 Both the server (`artifacts/dusk_node/lib/src/lib.rs`) and the integration test harness (`tests/common/src/lib.rs`) call `dusk_base::default_launcher_set()`, so adding your `Box::new(dusk_program_<name>::Launcher::new())` to `default_launcher_set()` is all that's needed - there is no second vec to keep in sync anywhere.
