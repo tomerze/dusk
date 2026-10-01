@@ -7,7 +7,7 @@ running one beyond the quickstart binary.
 
 A node ships as **`dusk_node`** - the server binary under `artifacts/`, run with
 `cargo run --bin dusk_node` (its `main` just calls
-`dusk_node::dusk_node_run()`).
+`dusk_node::dusk_new()` and `dusk_node::dusk_run()`).
 It links the portable core, a set of programs, and one impl - by default the
 **nix** impl (`impls/nix/`, a library, not a binary) for Unix-like systems. You make a node
 your own by linking in your programs and, if needed, swapping the underlying impl.
