@@ -15,6 +15,7 @@ pub extern crate embassy_time;
 pub extern crate futures;
 pub extern crate hashbrown;
 
+pub mod handle;
 pub mod launcher;
 pub mod launcher_set;
 pub mod namespace;
