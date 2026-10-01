@@ -110,7 +110,7 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
   to *theirs*: build yours on another port instead, with
   `DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --bin dusk_node`,
   and point the CLI at that. That build replaces `target/debug/dusk_node` until
-  the next build without the variable, and `tests/prompt` fails meanwhile: with
+  the next build without the variable, and `tests/interfaces/prompt` fails meanwhile: with
   `something already listens on 127.0.0.1:9090` while another node holds 9090,
   otherwise with `nothing came up on 127.0.0.1:9090`, leaving the 9091 node it
   started running. Do not kill a node you did not start.
