@@ -24,6 +24,8 @@ use portable_atomic::AtomicU64;
 use tracing::Instrument;
 
 pub mod driver;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 pub mod init;
 pub mod launchers;
 pub mod server;
