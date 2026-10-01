@@ -31,3 +31,4 @@ install_manifest.txt
 Makefile
 *.make
 artifacts/**/build
+.vscode
