@@ -199,6 +199,8 @@ find_package(Threads)
 if(CMAKE_USE_PTHREADS_INIT)
     set_property(TARGET dusk::node APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS DUSK_PTHREAD)
     set_property(TARGET dusk::node APPEND PROPERTY INTERFACE_LINK_LIBRARIES Threads::Threads)
+elseif(CMAKE_USE_WIN32_THREADS_INIT)
+    set_property(TARGET dusk::node APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS DUSK_WIN32)
 endif()
 
 # ---- executable ----

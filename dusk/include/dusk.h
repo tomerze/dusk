@@ -2,10 +2,14 @@
 #define DUSK_DUSK_H
 
 #include <stdint.h>
+#if defined(DUSK_PTHREAD) || defined(DUSK_WIN32)
+#include <stdlib.h>
+#endif
 
 #if defined(DUSK_PTHREAD)
 #include <pthread.h>
-#include <stdlib.h>
+#elif defined(DUSK_WIN32)
+#include <windows.h>
 #endif
 
 #ifdef __cplusplus
@@ -42,7 +46,7 @@ uint64_t dusk_new(void);
 
 int64_t dusk_run(uint64_t handle, void *user);
 
-#if defined(DUSK_PTHREAD)
+#if defined(DUSK_PTHREAD) || defined(DUSK_WIN32)
 struct dusk_spawn_args_ {
     uint64_t handle;
     void *user;
@@ -79,6 +83,7 @@ static inline void dusk_spawn_trampoline_2_(void *arg) {
     }
 }
 
+#if defined(DUSK_PTHREAD)
 static inline void *dusk_spawn_trampoline_1_(void *arg) {
     dusk_spawn_trampoline_2_(arg);
     return NULL;
@@ -92,6 +97,21 @@ static inline int dusk_spawn_trampoline_0_(struct dusk_spawn_args_ *args) {
     pthread_detach(thread);
     return 1;
 }
+#elif defined(DUSK_WIN32)
+static inline DWORD WINAPI dusk_spawn_trampoline_1_(LPVOID arg) {
+    dusk_spawn_trampoline_2_(arg);
+    return 0;
+}
+
+static inline int dusk_spawn_trampoline_0_(struct dusk_spawn_args_ *args) {
+    HANDLE thread = CreateThread(NULL, 0, dusk_spawn_trampoline_1_, args, 0, NULL);
+    if (thread == NULL) {
+        return 0;
+    }
+    CloseHandle(thread);
+    return 1;
+}
+#endif
 #endif
 
 #ifdef __cplusplus
