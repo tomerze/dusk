@@ -23,6 +23,7 @@ repos:
           -   dusk/include/dusk.h
           -   --
           -   -std=c11
+          -   -DDUSK_PTHREAD
       -   id: ruff-check
           name: ruff (lint)
           entry: uvx ruff check --force-exclude

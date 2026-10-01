@@ -13,6 +13,7 @@ pub enum DuskMainFailed {
     InitArgs = 1,
     UnknownHandle = 2,
     BoundHandle = 3,
+    Spawn = 4,
 }
 
 unsafe extern "Rust" {

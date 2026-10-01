@@ -195,6 +195,12 @@ set_target_properties(dusk::node PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../../dusk/include"
     INTERFACE_LINK_LIBRARIES "${DUSK_NODE_SYSTEM_LIBRARIES}")
 
+find_package(Threads)
+if(CMAKE_USE_PTHREADS_INIT)
+    set_property(TARGET dusk::node APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS DUSK_PTHREAD)
+    set_property(TARGET dusk::node APPEND PROPERTY INTERFACE_LINK_LIBRARIES Threads::Threads)
+endif()
+
 # ---- executable ----
 
 add_custom_target(dusk_node_bin
