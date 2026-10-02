@@ -2,7 +2,7 @@ site_name: Dusk
 site_description: Documentation for the Dusk framework
 repo_name: Dusk
 repo_url: https://github.com/tomerze/dusk
-copyright: "© Dusk 2026"
+copyright: "© 2023-2026 Tomer Zeitune"
 markdown_extensions:
   - attr_list
   - md_in_html
@@ -105,6 +105,8 @@ nav:
       - Python API: sdk-reference/python-api.md
       - Proc macros: sdk-reference/proc-macros.md
       - Cap'n Proto schemas: sdk-reference/capnp-schemas.md
+  - Legal:
+      - License: legal/license.md
 extra:
   generator: false
   social:
