@@ -17,6 +17,13 @@ cargo build --release -p dusk_cli_bin # Build
 
 ![A Dusk CLI client connected to a Dusk node](docs/docs/assets/dusk_showcase.png)
 
+## Contributing
+
+Contributions are welcome under the [Contributor Assignment Agreement](docs/docs/legal/cla.md);
+see [CONTRIBUTING.md](CONTRIBUTING.md) for how to make a change and
+[GOVERNANCE.md](GOVERNANCE.md) for how the project is run. Vulnerabilities go
+through [SECURITY.md](SECURITY.md), not the issue tracker.
+
 ## License
 
 Copyright (C) 2023-2026 Tomer Zeitune
