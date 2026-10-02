@@ -3,6 +3,7 @@ name = "dusk"
 version = "0.1.0"
 requires-python = ">=3.14"
 readme = "README.md"
+license = "AGPL-3.0-only"
 dependencies = [
     "maturin>=1.10.2",
     "pre-commit>=4.3.0",
@@ -20,7 +21,7 @@ dependencies = [
 dusk_gw = "dusk.gw.__main__:main"
 
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
+requires = ["maturin>=1.9.3,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]

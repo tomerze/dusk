@@ -2,6 +2,7 @@
 name = "dusk_py_tests"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 dusk_tests = { path = "../../common" }

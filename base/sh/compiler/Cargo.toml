@@ -2,6 +2,7 @@
 name = "dusk_program_sh_compiler"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 nom = { version = "8.0.0", default-features = false, features = ["alloc"], public = true }
