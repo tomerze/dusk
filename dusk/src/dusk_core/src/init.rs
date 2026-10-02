@@ -54,7 +54,13 @@ pub fn init(
     launcher_set: impl Fn() -> Result<LauncherSet> + Send + Sync + 'static,
     init_program_args: Rc<ProgramArgs>,
 ) {
-    crate::launchers::set_launcher_set(namespace.id, launcher_set);
+    if let Err(error) = crate::launchers::set_launcher_set(namespace.id, launcher_set) {
+        error!(
+            namespace_id = namespace.id,
+            error = %error,
+            "couldn't build the namespace's launcher set"
+        );
+    }
     let task_id = Rc::new(Cell::new(0));
     match init_task(task_id.clone(), namespace.clone(), init_program_args) {
         Ok(spawn_token) => {
