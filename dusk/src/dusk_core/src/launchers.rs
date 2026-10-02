@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use core::cell::RefCell;
 use dusk_program::anyhow::{Result, anyhow};
 use dusk_program::embassy_sync::blocking_mutex::Mutex as BlockingMutex;
@@ -8,11 +7,9 @@ use dusk_program::hashbrown::HashMap;
 use dusk_program::launcher_set::LauncherSet;
 use nohash_hasher::BuildNoHashHasher;
 
-type LauncherSetFn = Arc<dyn Fn() -> Result<LauncherSet> + Send + Sync>;
-
 type Registry = BlockingMutex<
     CriticalSectionRawMutex,
-    RefCell<HashMap<u64, LauncherSetFn, BuildNoHashHasher<u64>>>,
+    RefCell<HashMap<u64, LauncherSet, BuildNoHashHasher<u64>>>,
 >;
 
 static REGISTRY: LazyLock<Registry> =
@@ -21,11 +18,12 @@ static REGISTRY: LazyLock<Registry> =
 pub fn set_launcher_set(
     namespace_id: u64,
     launcher_set: impl Fn() -> Result<LauncherSet> + Send + Sync + 'static,
-) {
+) -> Result<()> {
+    let launcher_set = launcher_set()?;
     let replaced = REGISTRY.get().lock(|registry| {
         registry
             .borrow_mut()
-            .insert(namespace_id, Arc::new(launcher_set))
+            .insert(namespace_id, launcher_set)
             .is_some()
     });
 
@@ -34,6 +32,7 @@ pub fn set_launcher_set(
     } else {
         tracing::info!(namespace_id, "registered the namespace's launcher set");
     }
+    Ok(())
 }
 
 pub fn remove_launcher_set(namespace_id: u64) {
@@ -47,14 +46,8 @@ pub fn remove_launcher_set(namespace_id: u64) {
 }
 
 pub fn launchers(namespace_id: u64) -> Result<LauncherSet> {
-    let launcher_set = REGISTRY
+    REGISTRY
         .get()
-        .lock(|registry| registry.borrow().get(&namespace_id).cloned());
-
-    match launcher_set {
-        Some(launcher_set) => launcher_set(),
-        None => Err(anyhow!(
-            "launcher set not found for namespace {namespace_id}"
-        )),
-    }
+        .lock(|registry| registry.borrow().get(&namespace_id).cloned())
+        .ok_or_else(|| anyhow!("launcher set not found for namespace {namespace_id}"))
 }

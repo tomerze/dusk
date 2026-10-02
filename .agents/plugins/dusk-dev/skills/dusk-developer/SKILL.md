@@ -356,15 +356,17 @@ client to downcast. `Dusk.kill(pid, signal)` looks
 up the process's signal channel in the namespace and sends the signal, which the
 process receives on its `signal_receiver`.
 
-**Startup.** `dusk_node_run()` calls into `dusk_impl::run` - whichever impl the
-`impl_*` feature selected - which creates the `Namespace`, writes `dusk.impl` into
+**Startup.** `dusk_run()` calls the template's `dusk_main`, which calls into
+`dusk_impl::run` - whichever impl the
+`impl_*` feature selected - which creates the `Namespace` (which records its id
+under its handle), writes `dusk.impl` into
 that namespace's kvs with `block_on` before any task exists (then its `dusk.os.*`
 keys through its `os_info::set_kvs_os_info` and its `dusk.device.*` keys through
 its `device_info::set_kvs_device_info`, which of them depending on the impl and
 the platform), and calls `dusk_core::init::init`
-with the launcher set and the init args. `init` registers
-the set against the namespace, spawns the init task, and removes the set again
-when that namespace terminates. The `init` process writes `dusk.target.arch`,
+with the launcher-set builder and the init args. `init` calls the builder
+once, registers the set against the namespace, spawns the init task, and removes
+the set again when that namespace terminates. The `init` process writes `dusk.target.arch`,
 `dusk.target.os` and `dusk.target.bits` beside `dusk.version`, and the driver's
 `tid()` and `hostname()` as `dusk.tid` and `dusk.hostname`, logs the target keys as `dusk target` and the impl's
 name as `dusk impl`, and is handed an init script - a
@@ -436,17 +438,27 @@ prints none of them), and
 
 ```rust
 #[unsafe(no_mangle)]
-pub extern "C" fn dusk_node_run(_user: *mut c_void) -> i32 {
-    let Ok(launcher_set) = dusk_base::default_launcher_set() else {
-        return 1;
-    };
-    let init_script = dusk_program_sh_compiler_proc::compile_sh!(env!("DUSK_NODE_INIT_SCRIPT"));
-    let Ok(init_args) = InitArgs::new(&init_script).and_then(|args| args.as_program_args()) else {
-        return 2;
-    };
-    dusk_impl::run(move || Ok(launcher_set.clone()), init_args)
+fn dusk_main(handle: u64, _user: *mut c_void) -> Result<DuskImplExit, DuskMainFailed> {
+    Ok(dusk_impl::run(
+        handle,
+        dusk_base::default_launcher_set,
+        InitArgs::new(&compile_sh!(env!("DUSK_NODE_INIT_SCRIPT")))
+            .and_then(|a| a.as_program_args())
+            .map_err(|_| DuskMainFailed::InitArgs)?,
+    ))
 }
 ```
+
+`dusk_main` is all the template adds. The C API is `dusk_core::ffi`, behind
+`dusk_core`'s `ffi` feature: it mirrors `dusk/include/dusk.h` by hand, and
+`dusk_run` calls the template's `dusk_main` through an `unsafe extern "Rust"`
+declaration. The one registry of namespace handles is `dusk_program::handle`,
+and `Namespace::new` binds its id to its handle there. `dusk_core` stays
+`no_std`: the impl's `run` catches a panic and
+returns `DuskImplExit::Panic`, and `dusk_spawn` is C in `dusk.h` itself - `dusk_run(dusk_new(), user)`
+on a new thread, then `finalize(user, result)` - under `DUSK_PTHREAD` or
+`DUSK_WIN32`, which the `dusk::node` target defines wherever CMake finds pthreads
+or Win32 threads. Nothing in the Rust core starts a thread.
 
 There is no shell source in the binary: the macro resolved it at build time, so
 neither `init` nor the node artifact turns
@@ -459,7 +471,7 @@ empty - its default outside the presets - and in a plain cargo build, it comes
 from the environment, and `.cargo/config.toml`'s `[env]` sets the same default for
 when the environment does not.
 
-There is one entry point, and `user` is the only thing a caller gives it. The
+`user` is the only thing a caller gives `dusk_run`. The
 template ignores it, and `dusk_node_bin` passes a null pointer and reads no argv,
 so where a node listens is settled by the init script it was built with - 9090 on
 every address by default - and nothing at run time can move it. `user` stays in
@@ -475,18 +487,14 @@ three ways:
 
 - **As a binary** - `dusk_node_bin` wraps it as the `dusk_node` executable
   (`cargo run --bin dusk_node`).
-- **As a C library** - the `staticlib` exposes one entry point, declared
-  in `artifacts/dusk_node/lib/include/dusk.h`:
-  ```c
-  int32_t dusk_node_run(void *user);
-  ```
-  Link `libdusk_node` and call `dusk_node_run(NULL)` to run a node and get its
-  exit code. Dusk drops into an existing C/C++ program with no Rust on the
+- **As a C library** - the `staticlib` exposes the C API declared in
+  `dusk/include/dusk.h`. Link `libdusk_node` and call `dusk_spawn(NULL, NULL)`, or
+  `dusk_run(dusk_new(), NULL)` on a thread you choose. Dusk drops into an existing C/C++ program with no Rust on the
   surface. `user` carries what the program running the node gives it at run
   time - editing the template settles what a node is built from, `user` carries
   what is only known once it runs. Dusk itself never looks at it.
-- **As a Rust rlib** - call `dusk_node::dusk_node_run()` directly, or copy
-  its body to assemble your own node (different programs, different impl).
+- **As a Rust rlib** - call `dusk_new` and `dusk_run` on `dusk_node` directly, or copy
+  `dusk_main` to assemble your own node (different programs, different impl).
 
 ### `dusk` - the CLI
 

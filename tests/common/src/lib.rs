@@ -108,7 +108,7 @@ impl DuskNixImpl {
                 .expect("build init program_args");
             let launcher_set =
                 dusk_base::default_launcher_set().expect("build the base launcher set");
-            dusk_nix::run(move || Ok(launcher_set.clone()), init_program_args);
+            dusk_nix::run(0, move || Ok(launcher_set.clone()), init_program_args);
         });
 
         // Block until the server is accepting connections.

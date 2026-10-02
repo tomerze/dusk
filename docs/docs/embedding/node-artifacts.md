@@ -51,7 +51,6 @@ Output:
 ```
 build/nix-x64-linux/lib/libdusk_node.a
 build/nix-x64-linux/bin/dusk_node
-lib/include/dusk.h
 ```
 
 Clean:
@@ -209,7 +208,8 @@ Rust's standard library needs. On Linux with glibc:
 
 ```sh
 gcc main.c \
-  -I path/to/dusk/artifacts/dusk_node/lib/include \
+  -D DUSK_PTHREAD \
+  -I path/to/dusk/dusk/include \
   -L path/to/lib/dir \
   -ldusk_node -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
 ```
@@ -233,28 +233,22 @@ The list is on the `native-static-libs:` line of the output.
 
 ### Library
 
-`dusk_node_run` blocks, so start it on a dedicated thread, early in your
-application's startup. With POSIX threads:
+`dusk_spawn` starts a namespace on a thread of its own, so call it early in your
+application's startup:
 
 ```c
-#include <pthread.h>
 #include "dusk.h"
-
-static void *run_dusk_node(void *arg)
-{
-    (void)arg;
-    dusk_node_run(NULL);
-    return NULL;
-}
 
 int main(void)
 {
-    pthread_t dusk_thread;
-    pthread_create(&dusk_thread, NULL, run_dusk_node, NULL);
+    uint64_t handle = dusk_spawn(NULL, NULL);
 
     /* ... the rest of your application ... */
 }
 ```
+
+To run it on a thread you choose, call `dusk_run(dusk_new(), NULL)` there
+instead. `dusk.h` documents every call.
 
 ### Executable
 

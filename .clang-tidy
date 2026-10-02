@@ -15,3 +15,5 @@ Checks: >
 WarningsAsErrors: '*'
 HeaderFilterRegex: '^(dusk/src/dusk_llm/warmup/|artifacts/dusk_node/include/)'
 FormatStyle: file
+CheckOptions:
+  misc-include-cleaner.IgnoreHeaders: 'bits/.*'

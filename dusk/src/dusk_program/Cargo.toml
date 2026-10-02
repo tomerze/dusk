@@ -18,6 +18,7 @@ hashbrown = { version = "0.16", default-features = false, public = true }
 indexmap = { version = "2.11.4", default-features = false, public = true }
 nohash-hasher = { version = "0.2", public = true }
 portable-atomic = { version = "1", default-features = false, features = ["critical-section", "fallback"], public = true }
+boxcar = "0.2.14"
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"], public = true }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"], public = true }
 rapidhash = { version = "4.1.0", default-features = false, public = true }

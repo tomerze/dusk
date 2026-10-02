@@ -55,3 +55,9 @@ pub fn tid() -> u64 {
 pub fn exit(exit_code: i32) {
     unsafe { _dusk_exit(exit_code) }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DuskImplExit {
+    Code(i32),
+    Panic,
+}

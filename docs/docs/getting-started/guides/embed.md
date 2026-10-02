@@ -18,27 +18,36 @@ diagnosis, remote control) works against it. No rewrite, no separate service.
 
 ## Link the library
 
-`dusk_node` builds as a static C library, with a one-function
-header (`artifacts/dusk_node/lib/include/dusk.h`):
+`dusk_node` builds as a static C library. Its header is Dusk's own,
+`dusk/include/dusk.h`, which the `dusk::node` CMake target puts on your include
+path. Link `libdusk_node` and call `dusk_spawn()` in your app's startup:
 
 ```c
 #include "dusk.h"
 
-int32_t dusk_node_run(void *user);
+uint64_t handle = dusk_spawn(NULL, NULL);  // a namespace on port 9090, on its own thread
 ```
 
-Link `libdusk_node` and call `dusk_node_run()` - typically on its own thread,
-since it runs the node until shutdown:
+Every call, its result and its lifetime are documented in `dusk.h` itself. In
+short:
 
-```c
-// in your app's startup
-dusk_node_run(NULL);   // a node on port 9090; returns an exit code
-```
+- `dusk_new` returns a **namespace handle** - 1, 2, 3 and up, never reused, the
+  way OpenGL names its objects. `dusk_run` runs a namespace under it on the
+  calling thread until it stops; once it has, the handle may be run again.
+- `dusk_spawn` runs a namespace on a thread of its own until it stops, then hands
+  its result to your `finalize`. It is C in `dusk.h` itself, so it is there only
+  under `DUSK_PTHREAD` or `DUSK_WIN32`, which the `dusk::node` target defines
+  wherever CMake finds pthreads or Win32 threads.
+- A result is one `int64_t`. Put it in a `union dusk_result` to read its
+  `source`, a `DUSK_RESULT_SOURCE_*` saying what produced it, and its `value`.
+  With `DUSK_RESULT_SOURCE_NAMESPACE` (0), the namespace exited and the value is
+  its exit code. With `DUSK_RESULT_SOURCE_DUSK_MAIN`, Dusk failed before the
+  namespace started and the value is a `DUSK_MAIN_FAILED_*` saying why. With
+  `DUSK_RESULT_SOURCE_RUST_PANIC`, there was a Rust panic.
 
-From Rust, link the `dusk_node` rlib and call
-`dusk_node::dusk_node_run()`, and set
+From Rust, link the `dusk_node` rlib and call `dusk_new` and `dusk_run`, and set
 [`DUSK_NODE_INIT_SCRIPT`](../../embedding/node-artifacts.md#building-with-cargo)
-for the build. From any other language, bind the C function.
+for the build. From any other language, bind the C functions.
 That's the whole integration: one library, one call.
 
 Which impl you build it with depends on where your application runs - `impl_nix`
@@ -48,7 +57,8 @@ here, `impl_windows` on Windows, `impl_std` everywhere else. See
 ## The `user` pointer
 
 `dusk_node` is a template - you copy it, put your programs and your impl in it,
-and ship the result, so `dusk_node_run` is a function in **your** library. See
+and ship the result, so `dusk_run` and `dusk_spawn` are functions in **your**
+library. See
 [Make it yours](#make-it-yours).
 
 Editing the template settles what your node is *built from*. `user` is the other
@@ -60,6 +70,11 @@ The template itself ignores `user`, so `NULL` is the only call it needs. It is i
 the signature for the node you build from it: your node can read the pointer as a
 config struct, a device handle, a callback table, or the identifier the device was
 provisioned with.
+
+`dusk_spawn` takes `user` over, with a `finalize` callback: Dusk calls
+`finalize(user, result)` once the namespace has stopped - even if its thread
+never starts - so a spawned namespace frees what you gave it and tells you how it
+ended.
 
 > **TODO:** node identity and the encrypted transport are part of the
 > connection-layer work, and neither is configurable yet, through `user` or
