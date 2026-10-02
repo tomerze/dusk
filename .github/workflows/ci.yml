@@ -39,10 +39,10 @@ jobs:
       # Both commands mirror the ruff-check and ruff-format hooks in
       # .pre-commit-config.yaml, including their file scope.
       - name: ruff check
-        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/gw/
+        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/
 
       - name: ruff format
-        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/gw/
+        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/
 
   python-tests:
     name: Python (pytest)
@@ -64,12 +64,12 @@ jobs:
       # against a tree written for 1.x. The gateway's tests supply their own
       # connections and program set and stub the extension out, so they need
       # nothing the lockfile does not already carry. The end-to-end tests that
-      # do drive a real node live in tests/py and are not run here.
+      # do drive a real node live in tests/interfaces/py and are not run here.
       - name: Install the locked dependencies
         run: uv sync --no-install-project
 
       - name: pytest
-        run: .venv/bin/python -m pytest tests/gw -q
+        run: .venv/bin/python -m pytest tests/interfaces/gw -q
 
   c-lint:
     name: C (clang-format, clang-tidy)

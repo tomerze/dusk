@@ -143,7 +143,11 @@ built with as `dusk impl` with a `name` field - the value of
 ## What the impl records
 
 The [impl](../getting-started/concepts/drivers-and-impls.md) writes these keys
-once, as the node starts, before `init` runs. Which of them a node has depends
+once, as the node starts, before `init` runs. The store only lives while something
+holds it, so the impl moves its `Arc<Kvs>` into the launcher-set closure it hands
+`dusk_core::init::init`, which keeps that closure for as long as the namespace's
+launcher set is registered; an impl that drops the store instead loses these keys
+before `init` runs. Which of them a node has depends
 on its impl and on the platform it was built for; the table names the impls in
 Dusk's repository that write each one. The impl logs them at `info`: each source
 of `dusk.os.*` keys once, as `dusk os`, with a `source` field naming it -

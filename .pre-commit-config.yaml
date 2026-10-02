@@ -29,19 +29,19 @@ repos:
           entry: uvx ruff check --force-exclude
           language: system
           types_or: [python, pyi]
-          files: ^(dusk/src/dusk_py/python/|tests/gw/)
+          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/)
       -   id: ruff-format
           name: ruff (format)
           entry: uvx ruff format --force-exclude
           language: system
           types_or: [python, pyi]
-          files: ^(dusk/src/dusk_py/python/|tests/gw/)
+          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/)
       -   id: pyright
           name: pyright
           entry: uvx pyright
           language: system
           types_or: [python, pyi]
-          files: ^(dusk/src/dusk_py/python/|tests/gw/)
+          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/)
           pass_filenames: false
 
 fail_fast: true

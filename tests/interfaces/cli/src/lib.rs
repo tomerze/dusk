@@ -19,7 +19,7 @@ lazy_static! {
     static ref DUSK_CLI_BIN: PathBuf = {
         Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../target/debug/dusk"
+            "/../../../target/debug/dusk"
         ))
         .to_path_buf()
     };

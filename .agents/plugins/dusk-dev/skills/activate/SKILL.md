@@ -28,6 +28,22 @@ The pre-edit hook enforces this against the git user's own name and address and
 their home directory, read fresh each time, so nothing personal is stored in the
 plugin either.
 
+## No std in `no_std` code
+
+**`dusk_core`, `dusk_program` and the server side of every program under `base/`
+are `no_std`, and nothing I write puts std in them** - no `extern crate std`, no
+`std` feature of their own under any name, no dependency's `std` feature, no
+std-only dependency. Not behind a `cfg`, not "only when the template turns it
+on". Dusk runs where there is no std, and these crates are why. The node
+template, `artifacts/dusk_node/lib/src/lib.rs`, takes nothing from std either -
+not even `c_void`, which `core::ffi` has.
+
+What needs std - a thread, `catch_unwind`, any std-only API - lives on the std
+side: an impl under `impls/`. The `no_std` crate reaches it through an
+`unsafe extern "Rust"` declaration that the std side defines, the way
+`dusk_core::driver` reaches the impl's `_dusk_hostname`. When that shape does
+not fit, I stop and ask; I never decide it myself.
+
 ## What the hooks refuse in every session
 
 These are checked as each action is taken:
@@ -94,7 +110,7 @@ one-shot CLI commands (`./target/debug/dusk 127.0.0.1:9090 "ps"`).
   to *theirs*: build yours on another port instead, with
   `DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --bin dusk_node`,
   and point the CLI at that. That build replaces `target/debug/dusk_node` until
-  the next build without the variable, and `tests/prompt` fails meanwhile: with
+  the next build without the variable, and `tests/interfaces/prompt` fails meanwhile: with
   `something already listens on 127.0.0.1:9090` while another node holds 9090,
   otherwise with `nothing came up on 127.0.0.1:9090`, leaving the 9091 node it
   started running. Do not kill a node you did not start.

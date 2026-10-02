@@ -7,9 +7,9 @@
 /history.sqlite3
 /history.sqlite3-shm
 /history.sqlite3-wal
-/tests/cli/history.sqlite3
-/tests/cli/history.sqlite3-shm
-/tests/cli/history.sqlite3-wal
+/tests/interfaces/cli/history.sqlite3
+/tests/interfaces/cli/history.sqlite3-shm
+/tests/interfaces/cli/history.sqlite3-wal
 /vendor/capnproto
 /build
 /docs/site
@@ -31,3 +31,4 @@ install_manifest.txt
 Makefile
 *.make
 artifacts/**/build
+.vscode
