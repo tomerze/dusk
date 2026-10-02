@@ -107,6 +107,7 @@ nav:
       - Cap'n Proto schemas: sdk-reference/capnp-schemas.md
   - Legal:
       - License: legal/license.md
+      - Contributor agreement: legal/cla.md
 extra:
   generator: false
   social:
