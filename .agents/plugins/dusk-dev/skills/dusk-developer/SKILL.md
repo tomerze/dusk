@@ -365,8 +365,10 @@ keys through its `os_info::set_kvs_os_info` and its `dusk.device.*` keys through
 its `device_info::set_kvs_device_info`, which of them depending on the impl and
 the platform), and calls `dusk_core::init::init`
 with the launcher-set builder and the init args. `init` calls the builder
-once, registers the set against the namespace, spawns the init task, and removes
-the set again when that namespace terminates. The `init` process writes `dusk.target.arch`,
+once and registers the set against the namespace, keeping the builder beside it -
+the impl's closure holds that kvs store, so the store lives at least as long as
+the set - then spawns the init task, and removes the set again when that
+namespace terminates. The `init` process writes `dusk.target.arch`,
 `dusk.target.os` and `dusk.target.bits` beside `dusk.version`, and the driver's
 `tid()` and `hostname()` as `dusk.tid` and `dusk.hostname`, logs the target keys as `dusk target` and the impl's
 name as `dusk impl`, and is handed an init script - a
