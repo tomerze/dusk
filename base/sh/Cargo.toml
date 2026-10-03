@@ -2,6 +2,7 @@
 name = "dusk_program_sh"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 tracing = { version = "0.1.41", default-features = false }
@@ -21,12 +22,12 @@ dusk_program_sh_compiler = { path = "compiler", optional = true, public = true }
 tokio = { version = "1.47.1", features = ["full", "tracing"], optional = true, public = true }
 reedline = { version = "0.47", features = ["sqlite", "idle_callback"], optional = true, public = true }
 crossterm = { version = "0.29", optional = true }
-nu-ansi-term = { version = "0.50.1", optional = true }
+nu-ansi-term = { version = "0.50.1", optional = true, public = true }
 nu-table = { version = "0.107.0", optional = true }
 nu-color-config = { version = "0.107.0", optional = true }
 nu-protocol = { version = "0.107.0", optional = true }
 termimad = { version = "0.20", optional = true, public = true }
-colored_json = { version = "5.0.0", optional = true }
+serde_json = { version = "1.0", optional = true, public = true }
 chrono = { version = "0.4.42", optional = true }
 unicode-width = { version = "0.2", optional = true }
 base64 = { version = "0.22.1", optional = true }
@@ -50,7 +51,7 @@ client = [
     "nu-color-config",
     "nu-protocol",
     "termimad",
-    "colored_json",
+    "serde_json",
     "chrono",
     "unicode-width",
     "base64",

@@ -38,3 +38,14 @@ cargo nextest run
 ```
 
 Integration tests live under `tests/`.
+
+## License and the contributor agreement
+
+Dusk is licensed under the GNU Affero General Public License, version 3
+only. Every contribution is accepted under the project's
+[Contributor Assignment Agreement](../legal/cla.md),
+signed once per GitHub account by replying to the check on your first pull
+request. The process, from fork to merge, is in
+[CONTRIBUTING.md](https://github.com/tomerze/dusk/blob/master/CONTRIBUTING.md),
+and how the project is run is in
+[GOVERNANCE.md](https://github.com/tomerze/dusk/blob/master/GOVERNANCE.md).

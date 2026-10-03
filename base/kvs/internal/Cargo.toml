@@ -2,6 +2,7 @@
 name = "dusk_program_kvs_internal"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 dusk_program = { path = "../../../dusk/src/dusk_program", public = true }

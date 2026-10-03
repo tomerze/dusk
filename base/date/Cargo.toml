@@ -2,6 +2,7 @@
 name = "dusk_program_date"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true }

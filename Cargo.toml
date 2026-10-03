@@ -42,6 +42,9 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+license = "AGPL-3.0-only"
+
 [profile.release]
 strip = true
 

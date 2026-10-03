@@ -1,0 +1,41 @@
+name: Docs
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: mkdocs build
+        working-directory: docs
+        run: uv run mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

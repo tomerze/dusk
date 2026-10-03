@@ -7,8 +7,9 @@ use dusk_program::value::Value;
 
 use tokio::sync::oneshot;
 
-use colored_json::prelude::*;
-use colored_json::{Color, Styler};
+use nu_ansi_term::Color;
+
+use super::highlight_json::{Styler, highlight_json};
 
 pub struct JsonStream {
     pub done_sender: Option<oneshot::Sender<()>>,
@@ -30,28 +31,28 @@ impl JsonStream {
 
 impl StreamMixin for JsonStream {
     fn send(&mut self, value: Value) -> Promise<(), capnp::Error> {
-        let mut json = match value.to_json_string() {
+        let json = if self.colored {
+            serde_json::to_value(&value).and_then(|json| {
+                highlight_json(
+                    &json,
+                    &Styler {
+                        key: Color::Green.bold(),
+                        string_value: Color::Blue.bold(),
+                        integer_value: Color::Cyan.bold(),
+                        float_value: Color::Magenta.italic(),
+                        object_brackets: Color::Yellow.bold(),
+                        array_brackets: Color::Yellow.bold(),
+                        ..Default::default()
+                    },
+                )
+            })
+        } else {
+            value.to_json_string()
+        };
+        let json = match json {
             Ok(json) => json,
             Err(error) => return Promise::err(capnp::Error::failed(error.to_string())),
         };
-
-        if self.colored {
-            json = match json.to_colored_json_with_styler(
-                ColorMode::default().eval(),
-                Styler {
-                    key: Color::Green.bold(),
-                    string_value: Color::Blue.bold(),
-                    integer_value: Color::Cyan.bold(),
-                    float_value: Color::Magenta.italic(),
-                    object_brackets: Color::Yellow.bold(),
-                    array_brackets: Color::Yellow.bold(),
-                    ..Default::default()
-                },
-            ) {
-                Ok(json) => json,
-                Err(error) => return Promise::err(capnp::Error::failed(error.to_string())),
-            };
-        }
 
         print!("{}\n\n", json); // Json objects are delimited by an empty line
         Promise::ok(())
