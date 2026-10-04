@@ -2,7 +2,7 @@
 
 <div style="text-align: center;">
 <h1 class="dusk-wordmark">Dusk</h1>
-<p class="tagline lead"><span class="emph">The one solution for any fleet<span class="punct">.</span></span>
+<p class="tagline lead"><span class="emph">The one solution for every fleet<span class="punct">.</span></span>
 <span class="emph">Seamlessly drop it in at any scale<span class="punct">.</span></span></p>
 <p class="tagline">Dusk can monitor and manage fleets deployed on everything from microcontrollers to supercomputers.
 
