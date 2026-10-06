@@ -1,0 +1,11 @@
+**/target/
+.git/
+**/.venv/
+node_modules/
+**/node_modules/
+.claude/
+build/
+docs/site/
+**/__pycache__/
+services/twilight/web/dist/
+**/dusk*.so
