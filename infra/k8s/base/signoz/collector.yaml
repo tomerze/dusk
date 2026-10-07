@@ -1,0 +1,150 @@
+connectors:
+  signozmeter:
+    metrics_flush_interval: 1h
+    dimensions:
+    - name: service.name
+    - name: deployment.environment
+    - name: host.name
+receivers:
+  kafka:
+    brokers:
+    - ${env:KAFKA_BROKERS}
+    client_id: signoz
+    group_id: signoz
+    initial_offset: earliest
+    logs:
+      topics:
+      - dusk.otel-logs
+      encoding: otlp_json
+    metrics:
+      topics:
+      - dusk.otel-metrics
+      encoding: otlp_json
+    traces:
+      topics:
+      - dusk.otel-spans
+      encoding: otlp_json
+processors:
+  batch:
+    send_batch_size: 50000
+    timeout: 1s
+  batch/meter:
+    send_batch_max_size: 25000
+    send_batch_size: 20000
+    timeout: 1s
+  signozspanmetrics/delta:
+    metrics_exporter: signozclickhousemetrics
+    latency_histogram_buckets:
+    - 100us
+    - 1ms
+    - 2ms
+    - 6ms
+    - 10ms
+    - 50ms
+    - 100ms
+    - 250ms
+    - 500ms
+    - 1000ms
+    - 1400ms
+    - 2000ms
+    - 5s
+    - 10s
+    - 20s
+    - 40s
+    - 60s
+    dimensions_cache_size: 100000
+    dimensions:
+    - name: service.namespace
+      default: default
+    - name: deployment.environment
+      default: default
+    - name: signoz.collector.id
+    aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+  signozspanmapper:
+    groups: []
+  signozllmpricing:
+    attrs:
+      model: gen_ai.request.model
+      in: gen_ai.usage.input_tokens
+      out: gen_ai.usage.output_tokens
+      cache_read: gen_ai.usage.cache_read.input_tokens
+      cache_write: gen_ai.usage.cache_creation.input_tokens
+    default_pricing:
+      rules: []
+    output_attrs:
+      in: signoz.gen_ai.usage.input_tokens.cost
+      out: signoz.gen_ai.usage.output_tokens.cost
+      cache_read: signoz.gen_ai.usage.cache_read.input_tokens.cost
+      cache_write: signoz.gen_ai.usage.cache_write.input_tokens.cost
+      total: signoz.gen_ai.usage.tokens.cost
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+exporters:
+  clickhousetraces:
+    datasource: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_TRACE_DATABASE}
+    low_cardinal_exception_grouping: ${env:LOW_CARDINAL_EXCEPTION_GROUPING}
+    use_new_schema: true
+  signozclickhousemetrics:
+    dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_DATABASE}
+    timeout: 45s
+  clickhouselogsexporter:
+    dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_LOG_DATABASE}
+    timeout: 10s
+    use_new_schema: true
+  metadataexporter:
+    enabled: true
+    dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/signoz_metadata
+    timeout: 10s
+    tenant_id: ${env:TENANT_ID}
+    cache:
+      provider: in_memory
+  signozclickhousemeter:
+    dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_METER_DATABASE}
+    timeout: 45s
+    sending_queue:
+      enabled: false
+service:
+  telemetry:
+    logs:
+      encoding: json
+  extensions:
+  - health_check
+  pipelines:
+    traces:
+      receivers:
+      - kafka
+      processors:
+      - signozspanmetrics/delta
+      - signozspanmapper
+      - signozllmpricing
+      - batch
+      exporters:
+      - clickhousetraces
+      - metadataexporter
+      - signozmeter
+    metrics:
+      receivers:
+      - kafka
+      processors:
+      - batch
+      exporters:
+      - metadataexporter
+      - signozclickhousemetrics
+      - signozmeter
+    logs:
+      receivers:
+      - kafka
+      processors:
+      - batch
+      exporters:
+      - clickhouselogsexporter
+      - metadataexporter
+      - signozmeter
+    metrics/meter:
+      receivers:
+      - signozmeter
+      processors:
+      - batch/meter
+      exporters:
+      - signozclickhousemeter
