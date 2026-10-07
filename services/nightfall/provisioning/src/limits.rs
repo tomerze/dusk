@@ -194,6 +194,42 @@ impl RenewLimiter {
     }
 }
 
+#[derive(Debug)]
+pub struct RateWindow {
+    seconds: [u64; 60],
+    current: u64,
+    origin: Instant,
+}
+
+impl RateWindow {
+    pub fn new(now: Instant) -> RateWindow {
+        RateWindow {
+            seconds: [0; 60],
+            current: 0,
+            origin: now,
+        }
+    }
+
+    pub fn record(&mut self, now: Instant) -> u64 {
+        self.count(now);
+        self.seconds[(self.current % 60) as usize] += 1;
+        self.seconds.iter().sum()
+    }
+
+    pub fn count(&mut self, now: Instant) -> u64 {
+        let second = now.saturating_duration_since(self.origin).as_secs();
+        if second.saturating_sub(self.current) >= 60 {
+            self.seconds = [0; 60];
+        } else {
+            for stale in self.current + 1..=second {
+                self.seconds[(stale % 60) as usize] = 0;
+            }
+        }
+        self.current = self.current.max(second);
+        self.seconds.iter().sum()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,5 +309,18 @@ mod tests {
                 .ok();
         }
         assert!(limiter.order.len() <= 16, "{}", limiter.order.len());
+    }
+
+    #[test]
+    fn counts_the_last_minute() {
+        let now = Instant::now();
+        let mut window = RateWindow::new(now);
+        assert_eq!(window.record(now), 1);
+        assert_eq!(window.record(now + Duration::from_secs(30)), 2);
+        assert_eq!(window.record(now + Duration::from_secs(59)), 3);
+        assert_eq!(window.record(now + Duration::from_secs(61)), 3);
+        assert_eq!(window.record(now + Duration::from_secs(200)), 1);
+        assert_eq!(window.count(now + Duration::from_secs(230)), 1);
+        assert_eq!(window.count(now + Duration::from_secs(261)), 0);
     }
 }
