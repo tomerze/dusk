@@ -1,0 +1,57 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otel-collector
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [nightfall, dawn, twilight]
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nightfall
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dawn
+      ports:
+        - protocol: TCP
+          port: 9101
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: twilight
+      ports:
+        - protocol: TCP
+          port: 9102
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vector
+      ports:
+        - protocol: TCP
+          port: 9598
