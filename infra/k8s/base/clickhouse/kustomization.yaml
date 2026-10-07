@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: dusk-stack
+resources:
+  - statefulset.yaml
+  - service.yaml
+  - schema-job.yaml
+  - network-policy.yaml
+configMapGenerator:
+  - name: clickhouse
+    files:
+      - config.yaml=config.d/dusk.yaml
+      - users.yaml=users.d/dusk.yaml
+  - name: clickhouse-schema
+    files:
+      - apply-schema.sh
+      - schema/001-database.sql
+      - schema/010-ledger.sql
+      - schema/011-connections.sql
+      - schema/012-enrollments.sql
+      - schema/013-process-results.sql
+      - schema/014-process-output.sql
+      - schema/015-files.sql
+      - schema/020-otel.sql
+      - schema/030-ledger-chain.sql
+      - schema/040-lake.sql
