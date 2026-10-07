@@ -1,6 +1,7 @@
 pub mod canonical;
 pub mod chain;
 pub mod entry;
+pub mod log;
 pub mod param_hash;
 pub mod signing;
 pub mod time;
