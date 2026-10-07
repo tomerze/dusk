@@ -1,0 +1,95 @@
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: admin
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk admin
+  keys:
+    - accessKeyRef:
+        name: ceph-admin
+        key: access-key
+      secretKeyRef:
+        name: ceph-admin
+        key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: vector
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk vector
+  keys:
+    - accessKeyRef:
+        name: ceph-vector
+        key: access-key
+      secretKeyRef:
+        name: ceph-vector
+        key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: ledger-writer
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk ledger-writer
+  keys:
+    - accessKeyRef:
+        name: ceph-ledger-writer
+        key: access-key
+      secretKeyRef:
+        name: ceph-ledger-writer
+        key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: dawn
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk dawn
+  keys:
+    - accessKeyRef:
+        name: ceph-dawn
+        key: access-key
+      secretKeyRef:
+        name: ceph-dawn
+        key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: reader
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk reader
+  keys:
+    - accessKeyRef:
+        name: ceph-reader
+        key: access-key
+      secretKeyRef:
+        name: ceph-reader
+        key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: signoz
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk signoz
+  keys:
+    - accessKeyRef:
+        name: ceph-signoz
+        key: access-key
+      secretKeyRef:
+        name: ceph-signoz
+        key: secret-key

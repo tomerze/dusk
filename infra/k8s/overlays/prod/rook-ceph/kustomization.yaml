@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rook-ceph
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: dusk-stack
+resources:
+  - ceph-cluster.yaml
+  - object-store.yaml
