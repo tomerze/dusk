@@ -45,6 +45,8 @@ spec:
               value: clickhouse-keeper-0.clickhouse-keeper-headless.$(POD_NAMESPACE).svc
             - name: LAKE_URL
               value: http://ceph:8080/dusk-lake/
+            - name: SIGNOZ_COLD_URL
+              value: http://ceph:8080/signoz-cold/clickhouse/
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -74,6 +76,16 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: ceph-reader
+                  key: secret-key
+            - name: SIGNOZ_COLD_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ceph-signoz
+                  key: access-key
+            - name: SIGNOZ_COLD_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ceph-signoz
                   key: secret-key
           ports:
             - name: http

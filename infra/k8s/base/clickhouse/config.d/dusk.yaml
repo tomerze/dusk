@@ -39,3 +39,22 @@ named_collections:
     secret_access_key:
       "@from_env": LAKE_SECRET_ACCESS_KEY
     format: Parquet
+storage_configuration:
+  disks:
+    s3:
+      type: s3
+      endpoint:
+        "@from_env": SIGNOZ_COLD_URL
+      access_key_id:
+        "@from_env": SIGNOZ_COLD_ACCESS_KEY_ID
+      secret_access_key:
+        "@from_env": SIGNOZ_COLD_SECRET_ACCESS_KEY
+      skip_access_check: true
+  policies:
+    tiered:
+      volumes:
+        default:
+          disk: default
+        s3:
+          disk: s3
+          perform_ttl_move_on_insert: 0

@@ -215,6 +215,8 @@ services:
         CLICKHOUSE_SIGNOZ_PASSWORD="$$(cat /run/secrets/clickhouse-signoz/password)"
         LAKE_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-reader/access-key)"
         LAKE_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-reader/secret-key)"
+        SIGNOZ_COLD_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-signoz/access-key)"
+        SIGNOZ_COLD_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-signoz/secret-key)"
         && exec /entrypoint.sh
     networks: [stack]
     environment:
@@ -222,6 +224,7 @@ services:
       CLICKHOUSE_REPLICA_HOST: clickhouse
       CLICKHOUSE_KEEPER_HOST: clickhouse-keeper
       LAKE_URL: http://ceph:8080/dusk-lake/
+      SIGNOZ_COLD_URL: http://ceph:8080/signoz-cold/clickhouse/
     ulimits:
       nofile:
         soft: 262144
@@ -240,6 +243,7 @@ services:
       - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
       - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
       - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8123/ping"]
       interval: 5s

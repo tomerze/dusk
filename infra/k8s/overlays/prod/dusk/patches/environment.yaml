@@ -42,6 +42,8 @@ spec:
           env:
             - name: LAKE_URL
               value: http://rook-ceph-rgw-dusk.rook-ceph.svc/dusk-lake/
+            - name: SIGNOZ_COLD_URL
+              value: http://rook-ceph-rgw-dusk.rook-ceph.svc/signoz-cold/clickhouse/
 ---
 apiVersion: apps/v1
 kind: Deployment
