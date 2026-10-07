@@ -1,0 +1,36 @@
+deny_certificates = []
+deny_principals = []
+
+[[role]]
+name = "dawn"
+allow = ["Dusk.process", "Dusk.run", "Dusk.ps", "Dusk.kill", "Dusk.hostname", "Dusk.waitpid", "Dusk.time", "Dusk.programs", "Dusk.namespaceId", "Dusk.dusk", "Process.*", "Portal.*", "OutputPortal.*", "ShPortal.*", "KvsPortal.get", "KvsPortal.exists", "KvsPortal.scan", "SignalBatch.Ack.ack"]
+deny = ["Dusk.settime", "Dusk.fleetToken"]
+reverse_allow = ["Stream.*", "Created.created", "ShStop.stop", "Sink.*", "LogsArgs.Server.openStream", "LogsArgs.Stream.*", "KvsArgs.Server.transpose", "ProgramsArgs.Server.transpose", "CpArgs.Server.stat", "CpArgs.Server.hash", "CpArgs.Server.write"]
+quarantine_override = false
+
+[[role]]
+name = "quarantine"
+allow = ["Dusk.hostname", "Dusk.programs", "Dusk.namespaceId", "Dusk.time"]
+reverse_allow = []
+
+[[role]]
+name = "admin"
+allow = []
+reverse_allow = []
+quarantine_override = false
+
+[[role]]
+name = "break-glass"
+allow = ["Dusk.process", "Dusk.run", "Dusk.ps", "Dusk.kill", "Dusk.hostname", "Dusk.waitpid", "Dusk.time", "Dusk.programs", "Dusk.namespaceId", "Dusk.dusk", "Process.*", "Portal.*", "OutputPortal.*", "ShPortal.*", "KvsPortal.get", "KvsPortal.exists", "KvsPortal.scan", "SignalBatch.Ack.ack"]
+deny = ["Dusk.settime", "Dusk.fleetToken"]
+reverse_allow = ["Stream.*", "Created.created", "ShStop.stop", "Sink.*", "LogsArgs.Server.openStream", "LogsArgs.Stream.*", "KvsArgs.Server.transpose", "ProgramsArgs.Server.transpose", "CpArgs.Server.stat", "CpArgs.Server.hash", "CpArgs.Server.write"]
+quarantine_override = false
+admission_exempt = true
+
+[[principal]]
+name = "dawn-*"
+roles = ["dawn"]
+
+[[principal]]
+name = "admin-*"
+roles = ["admin"]

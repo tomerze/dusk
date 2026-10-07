@@ -1,0 +1,96 @@
+instance = "nightfall-0"
+shards = 0
+drain_seconds = 300
+
+[fleet]
+listen = "0.0.0.0:8443"
+server_names = ["fleet.dusk.test"]
+certificate = "/etc/nightfall/tls/fleet.crt"
+key = "/etc/nightfall/tls/fleet.key"
+client_ca = "/etc/nightfall/pki/fleet-client-ca.crt"
+handshake_timeout_ms = 10000
+heartbeat_seconds = 30
+session_setup_timeout_ms = 15000
+max_sessions = 100000
+proxy_protocol = false
+proxy_protocol_trusted_cidrs = []
+
+[provision]
+listen = "0.0.0.0:8443"
+server_names = ["provision.dusk.test"]
+certificate = "/etc/nightfall/tls/provision.crt"
+key = "/etc/nightfall/tls/provision.key"
+fleet_tokens_file = "/etc/nightfall/secrets/fleet-tokens.toml"
+install_token_keys = "/etc/nightfall/secrets/install-token-jwks.json"
+device_id_key_file = "/etc/nightfall/secrets/device-id.key"
+challenge_ttl_ms = 300000
+renew_grace = "2160h"
+
+[inner]
+listen = "0.0.0.0:8444"
+relay_listen = "0.0.0.0:8445"
+advertise = "nightfall-0.nightfall-inner.dusk.svc:8444"
+relay_advertise = "nightfall-0.nightfall-inner.dusk.svc:8445"
+server_name_suffix = "fleet.dusk.test"
+certificate = "/etc/nightfall/tls/inner.crt"
+key = "/etc/nightfall/tls/inner.key"
+client_ca = "/etc/nightfall/pki/internal-ca.crt"
+
+[step_ca]
+url = "https://step-ca:9000"
+root = "/etc/nightfall/pki/fleet-client-root.crt"
+provisioner = "nightfall"
+provisioner_key_file = "/etc/nightfall/secrets/provisioner.jwk"
+certificate_lifetime = "168h"
+max_concurrent = 16
+timeout_ms = 10000
+
+[ledger]
+signing_key_file = "/etc/nightfall/secrets/ledger-signing.key"
+param_key_file = "/etc/nightfall/secrets/ledger-param.key"
+checkpoint_interval_ms = 1000
+queue_entries = 100000
+partition = -1
+
+[kafka]
+brokers = "kafka:9092"
+allow_plaintext = true
+properties = {}
+topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes" }
+census_interval_seconds = 300
+census_heartbeat_seconds = 15
+
+[schemas]
+directory = "/usr/share/nightfall/schemas"
+
+[permissions]
+file = "/etc/nightfall/permissions.toml"
+
+[admission]
+max_intended_processes = 1000000
+clock_skew_ms = 5000
+intent_wait_ms = 3000
+
+[limits]
+handshakes_per_second = 2000
+handshake_failures_per_ip_per_minute = 30
+credential_failures_per_ip_per_hour = 20
+penalty_seconds = 60
+session_setups_per_identity_per_5s = 1
+enrollments_per_second = 50
+enrollments_per_second_per_credential = 10
+enrollment_alert_per_minute = 600
+calls_per_second_per_principal_per_node = 200
+calls_per_second_instance = 200000
+max_inflight_calls_per_session = 256
+max_message_bytes = 4194304
+max_inflight_bytes_per_session = 8388608
+max_inflight_bytes_instance = 4294967296
+max_live_caps_per_session = 10000
+max_relayed_connections = 10000
+
+[admin]
+listen = "0.0.0.0:9100"
+certificate = ""
+key = ""
+client_ca = ""
