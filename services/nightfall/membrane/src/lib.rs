@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod canonical;
+mod copy;
 pub mod filter;
 mod gate;
 pub mod limits;
