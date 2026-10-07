@@ -15,9 +15,11 @@ rustls-pki-types = { version = "1.12", features = ["std"], public = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", public = true }
 thiserror = "2"
+time = { version = "0.3.41", features = ["formatting", "macros"] }
 tokio = { version = "1.47.1", features = ["sync", "time"] }
 toml = "0.9"
 tracing = "0.1.41"
+uuid = { version = "1.17", features = ["v7"] }
 x509-parser = { version = "0.18", features = ["verify"] }
 
 [dev-dependencies]

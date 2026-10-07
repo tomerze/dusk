@@ -2,6 +2,7 @@ pub mod challenge;
 pub mod config;
 pub mod credential;
 pub mod csr;
+pub mod events;
 pub mod identity;
 pub mod jwt;
 pub mod limits;
