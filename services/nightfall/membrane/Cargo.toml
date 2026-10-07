@@ -26,6 +26,10 @@ dusk_capnp = { path = "../../../dusk/src/dusk_capnp" }
 
 [dev-dependencies]
 dusk_base = { path = "../../../dusk/src/dusk_base", features = ["client"] }
+dusk_tests = { path = "../../../tests/common" }
+nightfall_membrane = { path = ".", features = ["test-support"] }
+tokio = { version = "1.47", features = ["io-util", "macros", "net", "rt", "time"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 
 [features]
 test-support = []
