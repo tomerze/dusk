@@ -5,4 +5,5 @@ mod gate;
 pub mod limits;
 pub mod node;
 pub mod permissions;
+pub mod provenance;
 pub mod schema;
