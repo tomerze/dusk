@@ -1,0 +1,215 @@
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: dusk-dawn
+spec:
+  allowed:
+    commonName:
+      value: "dawn-*"
+      required: true
+    dnsNames:
+      values: ["dawn-*.dawn.dusk.svc", "dawn", "dawn.dusk.svc"]
+    uris:
+      values: ["urn:dusk:principal:dawn-*"]
+      required: true
+    usages: [digital signature, server auth, client auth]
+  constraints:
+    maxDuration: 24h
+    privateKey:
+      algorithm: ECDSA
+      minSize: 256
+      maxSize: 256
+  selector:
+    issuerRef:
+      name: internal
+      kind: Issuer
+      group: cert-manager.io
+    namespace:
+      matchNames: [dusk]
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: dusk-twilight
+spec:
+  allowed:
+    commonName:
+      value: "twilight-*"
+      required: true
+    dnsNames:
+      values: ["twilight-*"]
+    uris:
+      values: ["urn:dusk:principal:twilight-*"]
+      required: true
+    usages: [digital signature, client auth]
+  constraints:
+    maxDuration: 24h
+    privateKey:
+      algorithm: ECDSA
+      minSize: 256
+      maxSize: 256
+  selector:
+    issuerRef:
+      name: internal
+      kind: Issuer
+      group: cert-manager.io
+    namespace:
+      matchNames: [dusk]
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: dusk-certificate-authorities
+spec:
+  allowed:
+    commonName:
+      value: "Dusk * root"
+      required: true
+    isCA: true
+    usages: [digital signature, key encipherment, cert sign]
+  constraints:
+    privateKey:
+      algorithm: ECDSA
+      minSize: 256
+      maxSize: 256
+  selector:
+    issuerRef:
+      name: dusk-bootstrap
+      kind: Issuer
+      group: cert-manager.io
+    namespace:
+      matchNames: [dusk]
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: dusk-fleet-server-certificates
+spec:
+  allowed:
+    commonName:
+      value: "*.dusk.example"
+      required: true
+    dnsNames:
+      values: [fleet.dusk.example, provision.dusk.example]
+      required: true
+    usages: [digital signature, server auth]
+  constraints:
+    maxDuration: 2160h
+    privateKey:
+      algorithm: ECDSA
+      minSize: 256
+      maxSize: 256
+  selector:
+    issuerRef:
+      name: fleet-server
+      kind: Issuer
+      group: cert-manager.io
+    namespace:
+      matchNames: [dusk]
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: dusk-internal-certificates
+spec:
+  allowed:
+    commonName:
+      value: "*"
+    dnsNames:
+      values:
+        - "*.fleet.dusk.example"
+        - nightfall-inner
+        - nightfall-inner.dusk.svc
+        - nightfall-inner.dusk.svc.cluster.local
+        - clickhouse
+        - clickhouse.dusk.svc
+        - clickhouse.dusk.svc.cluster.local
+    uris:
+      values: ["urn:dusk:principal:admin-*"]
+    usages: [digital signature, server auth, client auth]
+  constraints:
+    maxDuration: 720h
+    privateKey:
+      algorithm: ECDSA
+      minSize: 256
+      maxSize: 256
+  selector:
+    issuerRef:
+      name: internal
+      kind: Issuer
+      group: cert-manager.io
+    namespace:
+      matchNames: [dusk]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dusk-dawn-certificates
+rules:
+  - apiGroups: [cert-manager.io]
+    resources: [certificaterequests]
+    verbs: [create]
+  - apiGroups: [policy.cert-manager.io]
+    resources: [certificaterequestpolicies]
+    resourceNames: [dusk-dawn]
+    verbs: [use]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dusk-dawn-certificates
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dusk-dawn-certificates
+subjects:
+  - kind: ServiceAccount
+    name: dawn
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dusk-twilight-certificates
+rules:
+  - apiGroups: [cert-manager.io]
+    resources: [certificaterequests]
+    verbs: [create]
+  - apiGroups: [policy.cert-manager.io]
+    resources: [certificaterequestpolicies]
+    resourceNames: [dusk-twilight]
+    verbs: [use]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dusk-twilight-certificates
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dusk-twilight-certificates
+subjects:
+  - kind: ServiceAccount
+    name: twilight
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dusk-certificates
+rules:
+  - apiGroups: [policy.cert-manager.io]
+    resources: [certificaterequestpolicies]
+    resourceNames: [dusk-certificate-authorities, dusk-fleet-server-certificates, dusk-internal-certificates]
+    verbs: [use]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dusk-certificates
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dusk-certificates
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager

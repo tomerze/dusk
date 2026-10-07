@@ -1,0 +1,172 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: dusk-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-ca
+spec:
+  isCA: true
+  commonName: Dusk internal root
+  secretName: internal-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  issuerRef:
+    name: dusk-bootstrap
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: fleet-server-ca
+spec:
+  isCA: true
+  commonName: Dusk fleet-server root
+  secretName: fleet-server-ca
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  issuerRef:
+    name: dusk-bootstrap
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: internal
+spec:
+  ca:
+    secretName: internal-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: fleet-server
+spec:
+  ca:
+    secretName: fleet-server-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nightfall-fleet
+spec:
+  secretName: nightfall-fleet-tls
+  commonName: fleet.dusk.example
+  dnsNames: [fleet.dusk.example]
+  duration: 2160h
+  renewBefore: 720h
+  usages: [digital signature, server auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: fleet-server
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nightfall-provision
+spec:
+  secretName: nightfall-provision-tls
+  commonName: provision.dusk.example
+  dnsNames: [provision.dusk.example]
+  duration: 2160h
+  renewBefore: 720h
+  usages: [digital signature, server auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: fleet-server
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nightfall-inner
+spec:
+  secretName: nightfall-inner-tls
+  commonName: nightfall-inner
+  dnsNames: ["*.fleet.dusk.example"]
+  duration: 720h
+  renewBefore: 240h
+  usages: [digital signature, server auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: internal
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nightfall-admin
+spec:
+  secretName: nightfall-admin-tls
+  commonName: nightfall
+  dnsNames: [nightfall-inner, nightfall-inner.dusk.svc, nightfall-inner.dusk.svc.cluster.local]
+  duration: 720h
+  renewBefore: 240h
+  usages: [digital signature, server auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: internal
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: clickhouse
+spec:
+  secretName: clickhouse-tls
+  commonName: clickhouse
+  dnsNames: [clickhouse, clickhouse.dusk.svc, clickhouse.dusk.svc.cluster.local]
+  duration: 720h
+  renewBefore: 240h
+  usages: [digital signature, server auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: internal
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: admin
+spec:
+  secretName: admin-tls
+  commonName: admin-0
+  uris: ["urn:dusk:principal:admin-0"]
+  duration: 24h
+  renewBefore: 8h
+  usages: [digital signature, client auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: internal
+    kind: Issuer
