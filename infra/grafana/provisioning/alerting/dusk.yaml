@@ -1,0 +1,60 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: dusk
+    folder: Dusk
+    interval: 1m
+    rules:
+      - uid: dusk-open-critical-alert
+        title: "Open critical alert in twilight"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-inventory", "model": {"refId": "A", "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'critical' AND resolved_at IS NULL AND acknowledged_at IS NULL", "format": "table", "rawQuery": true, "editorMode": "code"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "{{ $values.B }} critical alert(s) in twilight are neither acknowledged nor resolved."
+          description: "Open the Alerts dashboard or twilight's Alerts page; acknowledge each alert once someone owns it."
+        labels:
+          severity: critical
+      - uid: dusk-ledger-chain-broken
+        title: "Ledger chain broken"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-clickhouse", "model": {"refId": "A", "rawSql": "SELECT countIf(NOT intact) AS broken FROM dusk.ledger_chain(since = now64(9) - INTERVAL 1 HOUR)", "format": 1, "editorType": "sql", "pluginVersion": "4.22.1"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        isPaused: false
+        annotations:
+          summary: "{{ $values.B }} ledger chain(s) in ClickHouse show a gap, a broken link or two entries at one sequence."
+          description: "Open the Ledger dashboard's chain status, then verify the evidence copy with nightfall verify-ledger before trusting the ClickHouse copy."
+        labels:
+          severity: critical
+      - uid: dusk-ledger-evidence-stalled
+        title: "Ledger evidence copy stalled"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-clickhouse", "model": {"refId": "A", "rawSql": "SELECT if(entries > 0 AND written = 0, 1, 0) AS stalled FROM (SELECT (SELECT count() FROM dusk.ledger WHERE time BETWEEN now() - INTERVAL 10 MINUTE AND now() - INTERVAL 5 MINUTE) AS entries, (SELECT coalesce(sum(increase), 0) FROM (SELECT greatest(max(value) - min(value), 0) AS increase FROM dusk.otel_metrics WHERE service_name = 'vector' AND metric_name IN ('vector_component_sent_events_total', 'vector_component_sent_events') AND attributes['component_id'] = 'evidence_ledger' AND time > now() - INTERVAL 5 MINUTE GROUP BY resource_attributes['service.instance.id'], toString(attributes))) AS written)", "format": 1, "editorType": "sql", "pluginVersion": "4.22.1"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "Ledger entries reached ClickHouse but Vector wrote no evidence object in the last five minutes."
+          description: "Check Vector's evidence_ledger sink: the ledger-writer credentials, the dusk-ledger-evidence bucket and its object lock configuration."
+        labels:
+          severity: critical
+      - uid: dusk-contract-messages-dropped
+        title: "Messages dropped by Vector"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-clickhouse", "model": {"refId": "A", "rawSql": "SELECT coalesce(sum(increase), 0) AS dropped FROM (SELECT max(value) - min(value) AS increase FROM dusk.otel_metrics WHERE service_name = 'vector' AND metric_name IN ('vector_component_discarded_events_total', 'vector_component_discarded_events') AND time > now() - INTERVAL 10 MINUTE GROUP BY resource_attributes['service.instance.id'], toString(attributes))", "format": 1, "editorType": "sql", "pluginVersion": "4.22.1"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "Vector dropped {{ $values.B }} record(s) in the last ten minutes."
+          description: "Vector logs each dropped record at warn with its topic, partition and offset; a producer is writing messages that fail their contract schema."
+        labels:
+          severity: high
