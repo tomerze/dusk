@@ -5,7 +5,9 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
+base64 = "0.22"
 ring = "0.17"
+rustls-pki-types = { version = "1.12", features = ["std"] }
 ryu-js = "1.0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", public = true }
