@@ -1,0 +1,81 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
+  primaryUpdateStrategy: unsupervised
+  inheritedMetadata:
+    labels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/part-of: dusk-stack
+  postgresql:
+    parameters:
+      tcp_keepalives_idle: "10"
+      tcp_keepalives_interval: "5"
+      tcp_keepalives_count: "3"
+      tcp_user_timeout: "15000"
+  bootstrap:
+    initdb:
+      database: inventory
+      owner: twilight
+      secret:
+        name: postgres-twilight
+      postInitSQL:
+        - CREATE ROLE grafana LOGIN
+        - ALTER ROLE grafana SET default_transaction_read_only = on
+        - REVOKE ALL ON DATABASE inventory FROM PUBLIC
+        - GRANT CONNECT ON DATABASE inventory TO grafana
+      postInitApplicationSQL:
+        - REVOKE ALL ON SCHEMA public FROM PUBLIC
+        - GRANT USAGE ON SCHEMA public TO grafana
+        - |
+          CREATE FUNCTION public.grant_grafana_reporting_tables() RETURNS event_trigger LANGUAGE plpgsql AS $$
+          DECLARE
+              created record;
+          BEGIN
+              FOR created IN
+                  SELECT object_identity FROM pg_event_trigger_ddl_commands()
+                  WHERE command_tag = 'CREATE TABLE' AND object_type = 'table' AND schema_name = 'public'
+                      AND object_identity = ANY (ARRAY['public.nodes', 'public.node_presence', 'public.campaigns', 'public.campaign_counters', 'public.campaign_events', 'public.campaign_nodes', 'public.alerts', 'public.ledger_chain_heads'])
+              LOOP
+                  EXECUTE format('GRANT SELECT ON %s TO grafana', created.object_identity);
+              END LOOP;
+          END
+          $$
+        - CREATE EVENT TRIGGER grant_grafana_reporting_tables ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION public.grant_grafana_reporting_tables()
+  managed:
+    roles:
+      - name: grafana
+        ensure: present
+        login: true
+        passwordSecret:
+          name: postgres-grafana
+      - name: signoz
+        ensure: present
+        login: true
+        passwordSecret:
+          name: postgres-signoz
+  storage:
+    size: 100Gi
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+    limits:
+      memory: 8Gi
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: signoz
+spec:
+  name: signoz
+  owner: signoz
+  cluster:
+    name: postgres
