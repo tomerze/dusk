@@ -1,0 +1,41 @@
+sources:
+  kafka_ledger:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_connections:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_enrollments:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_process_results:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_process_output:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_files:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_otel_logs:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_otel_spans:
+    type: demo_logs
+    format: json
+    count: 0
+  kafka_otel_metrics:
+    type: demo_logs
+    format: json
+    count: 0
+sinks:
+  discard:
+    type: blackhole
+    inputs: [ledger, connections, enrollments, process_results, process_output, files, otel_logs, otel_spans, otel_metrics]
