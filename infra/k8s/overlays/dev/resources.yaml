@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+spec:
+  template:
+    spec:
+      containers:
+        - name: kafka
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 1536Mi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+spec:
+  template:
+    spec:
+      containers:
+        - name: clickhouse
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 3Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ceph
+spec:
+  template:
+    spec:
+      containers:
+        - name: ceph
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nightfall
+spec:
+  template:
+    spec:
+      containers:
+        - name: nightfall
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dawn
+spec:
+  template:
+    spec:
+      containers:
+        - name: dawn
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twilight
+spec:
+  template:
+    spec:
+      containers:
+        - name: twilight
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector
+spec:
+  template:
+    spec:
+      containers:
+        - name: vector
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+spec:
+  template:
+    spec:
+      containers:
+        - name: kafka
+          env:
+            - name: KAFKA_HEAP_OPTS
+              value: -Xms512m -Xmx512m
