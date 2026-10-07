@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nightfall-inner
+  labels:
+    app.kubernetes.io/name: nightfall
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: nightfall
+  ports:
+    - name: inner
+      port: 8444
+      targetPort: inner
+    - name: relay
+      port: 8445
+      targetPort: relay
+    - name: admin
+      port: 9100
+      targetPort: admin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nightfall
+  labels:
+    app.kubernetes.io/name: nightfall
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: nightfall
+  ports:
+    - name: fleet
+      port: 443
+      targetPort: fleet

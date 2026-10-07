@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nightfall
+  labels:
+    app.kubernetes.io/name: nightfall
+spec:
+  serviceName: nightfall-inner
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nightfall
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nightfall
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 360
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: nightfall
+      containers:
+        - name: nightfall
+          image: dusk-nightfall:dev
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NIGHTFALL__INSTANCE
+              value: $(POD_NAME)
+            - name: NIGHTFALL__INNER__ADVERTISE
+              value: $(POD_NAME).nightfall-inner.$(POD_NAMESPACE).svc:8444
+            - name: NIGHTFALL__INNER__RELAY_ADVERTISE
+              value: $(POD_NAME).nightfall-inner.$(POD_NAMESPACE).svc:8445
+          ports:
+            - name: fleet
+              containerPort: 8443
+            - name: inner
+              containerPort: 8444
+            - name: relay
+              containerPort: 8445
+            - name: admin
+              containerPort: 9100
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/nightfall
+              readOnly: true
+      volumes:
+        - name: configuration
+          projected:
+            defaultMode: 0440
+            sources:
+              - configMap:
+                  name: nightfall
+                  items:
+                    - key: nightfall.toml
+                      path: nightfall.toml
+              - configMap:
+                  name: nightfall-permissions
+                  items:
+                    - key: permissions.toml
+                      path: permissions.toml
+              - secret:
+                  name: nightfall-fleet-tls
+                  items:
+                    - key: tls.crt
+                      path: tls/fleet.crt
+                    - key: tls.key
+                      path: tls/fleet.key
+              - secret:
+                  name: nightfall-provision-tls
+                  items:
+                    - key: tls.crt
+                      path: tls/provision.crt
+                    - key: tls.key
+                      path: tls/provision.key
+              - secret:
+                  name: nightfall-inner-tls
+                  items:
+                    - key: tls.crt
+                      path: tls/inner.crt
+                    - key: tls.key
+                      path: tls/inner.key
+              - secret:
+                  name: nightfall-admin-tls
+                  items:
+                    - key: tls.crt
+                      path: tls/admin.crt
+                    - key: tls.key
+                      path: tls/admin.key
+              - configMap:
+                  name: dusk-trust-anchors
+                  items:
+                    - key: fleet-client-ca.crt
+                      path: pki/fleet-client-ca.crt
+                    - key: fleet-client-ca.crt
+                      path: pki/fleet-client-root.crt
+                    - key: internal-ca.crt
+                      path: pki/internal-ca.crt
+              - secret:
+                  name: fleet-token
+                  items:
+                    - key: fleet-tokens.toml
+                      path: secrets/fleet-tokens.toml
+              - secret:
+                  name: fleet-install-token-keys
+                  items:
+                    - key: install-token-jwks.json
+                      path: secrets/install-token-jwks.json
+              - secret:
+                  name: fleet-device-id
+                  items:
+                    - key: device-id.key
+                      path: secrets/device-id.key
+              - secret:
+                  name: fleet-provisioner
+                  items:
+                    - key: provisioner.jwk
+                      path: secrets/provisioner.jwk
+              - secret:
+                  name: nightfall-ledger
+                  items:
+                    - key: ledger-signing.key
+                      path: secrets/ledger-signing.key
+                    - key: ledger-param.key
+                      path: secrets/ledger-param.key
