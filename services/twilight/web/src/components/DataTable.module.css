@@ -43,6 +43,27 @@
   padding-block: 5px;
 }
 
+.table thead th[aria-sort] {
+  padding: 0;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 9px 12px;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.sortButton:hover,
+.table thead th[aria-sort='ascending'] .sortButton,
+.table thead th[aria-sort='descending'] .sortButton {
+  color: var(--mantine-color-text);
+}
+
 .table th[data-align='right'],
 .table td[data-align='right'] {
   text-align: right;

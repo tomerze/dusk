@@ -1,4 +1,5 @@
-import { Skeleton } from '@mantine/core'
+import { Skeleton, UnstyledButton } from '@mantine/core'
+import { IconArrowDown, IconArrowsSort, IconArrowUp } from '@tabler/icons-react'
 import type { ColumnVisibilityState, RowData } from '@tanstack/react-table'
 import { useTable } from '@tanstack/react-table'
 import type { KeyboardEvent, ReactNode } from 'react'
@@ -114,6 +115,7 @@ export function DataTable<Row extends RowData>({
                     key={header.id}
                     scope="col"
                     data-align={meta?.align}
+                    aria-sort={meta?.sort}
                     style={meta?.width === undefined ? undefined : { width: meta.width }}
                   >
                     {header.isPlaceholder ? null : <table.FlexRender header={header} />}
@@ -182,5 +184,26 @@ export function DataTable<Row extends RowData>({
       </table>
       {showEmpty && <div className={classes.empty}>{empty}</div>}
     </div>
+  )
+}
+
+interface SortHeaderProperties {
+  label: string
+  direction: 'ascending' | 'descending' | 'none'
+  onSort: () => void
+}
+
+export function SortHeader({ label, direction, onSort }: SortHeaderProperties) {
+  const SortIcon =
+    direction === 'ascending'
+      ? IconArrowUp
+      : direction === 'descending'
+        ? IconArrowDown
+        : IconArrowsSort
+  return (
+    <UnstyledButton className={classes.sortButton} onClick={onSort}>
+      {label}
+      <SortIcon size={13} stroke={2} aria-hidden="true" opacity={direction === 'none' ? 0.5 : 1} />
+    </UnstyledButton>
   )
 }

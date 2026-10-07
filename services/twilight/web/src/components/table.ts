@@ -7,6 +7,7 @@ export interface ColumnDescription {
   width?: number
   mobile?: 'title' | 'hidden' | 'block' | 'normal'
   hideable?: boolean
+  sort?: 'ascending' | 'descending' | 'none'
 }
 
 export const tableFeatureSet = tableFeatures({
