@@ -1,0 +1,2 @@
+coordinates = {"topic": %kafka.topic, "partition": %kafka.partition, "offset": %kafka.offset}
+message = .

@@ -1,0 +1,35 @@
+valid, failure = validate_json_schema(message, "/etc/vector/contracts/dusk.enrollments.schema.json")
+if !valid {
+  log({"message": "dropped a message that fails its contract schema", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset, "error": failure}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+message = object!(parse_json!(message))
+time = parse_timestamp!(message.time, "%+")
+cert_not_after = if is_null(message.cert_not_after) { null } else { parse_timestamp!(message.cert_not_after, "%+") }
+. = {
+  "time": time,
+  "id": message.id,
+  "schema": message.schema,
+  "operation": message.operation,
+  "outcome": message.outcome,
+  "reason": message.reason,
+  "device_id": string(message.device_id) ?? "",
+  "installation_id": string(message.installation_id) ?? "",
+  "tenant": message.tenant,
+  "credential_kind": message.credential_kind,
+  "credential_ref": message.credential_ref,
+  "hardware_fingerprint_hash": message.hardware_fingerprint_hash,
+  "remote_address": message.remote_address,
+  "cert_serial": message.cert_serial,
+  "cert_fingerprint": message.cert_fingerprint,
+  "cert_not_after": cert_not_after,
+  "dusk_version": message.dusk_version,
+  "impl": message.impl,
+  "target_os": message.target_os,
+  "target_arch": message.target_arch,
+  "hostname": message.hostname,
+  "instance": message.instance,
+  "kafka_partition": coordinates.partition,
+  "kafka_offset": coordinates.offset,
+  "dt": format_timestamp!(time, "%F")
+}

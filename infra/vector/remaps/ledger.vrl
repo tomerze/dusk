@@ -1,0 +1,48 @@
+valid, failure = validate_json_schema(message, "/etc/vector/contracts/dusk.ledger.schema.json")
+if !valid {
+  log({"message": "dropped a message that fails its contract schema", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset, "error": failure}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+message = object!(parse_json!(message))
+time = parse_timestamp!(message.time, "%+")
+event_detail = if is_null(message.event_detail) { null } else { encode_json(message.event_detail) }
+. = {
+  "time": time,
+  "id": message.id,
+  "schema": message.schema,
+  "kind": message.kind,
+  "instance": message.instance,
+  "partition": message.partition,
+  "sequence": message.sequence,
+  "previous_hash": message.previous_hash,
+  "hash": message.hash,
+  "device_id": string(message.device_id) ?? "",
+  "installation_id": string(message.installation_id) ?? "",
+  "namespace_id": message.namespace_id,
+  "epoch": message.epoch,
+  "principal": message.principal,
+  "pid": message.pid,
+  "intent_campaign_id": message.intent_campaign_id,
+  "intent_principal": message.intent_principal,
+  "intent_subject": message.intent_subject,
+  "session_id": message.session_id,
+  "call_id": message.call_id,
+  "cap_id": message.cap_id,
+  "parent_cap_id": message.parent_cap_id,
+  "direction": message.direction,
+  "action": message.action,
+  "interface_id": message.interface_id,
+  "method_id": message.method_id,
+  "param_fields": message.param_fields,
+  "param_cap_ids": message.param_cap_ids,
+  "param_hash": message.param_hash,
+  "result_code": message.result_code,
+  "result_cap_ids": message.result_cap_ids,
+  "event": message.event,
+  "event_detail": event_detail,
+  "key_id": message.key_id,
+  "signature": message.signature,
+  "kafka_partition": coordinates.partition,
+  "kafka_offset": coordinates.offset,
+  "dt": format_timestamp!(time, "%F")
+}

@@ -1,0 +1,23 @@
+valid, failure = validate_json_schema(message, "/etc/vector/contracts/dusk.process-output.schema.json")
+if !valid {
+  log({"message": "dropped a message that fails its contract schema", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset, "error": failure}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+message = object!(parse_json!(message))
+time = parse_timestamp!(message.time, "%+")
+. = {
+  "time": time,
+  "id": message.id,
+  "schema": message.schema,
+  "pid": message.pid,
+  "campaign_id": string(message.campaign_id) ?? "",
+  "device_id": message.device_id,
+  "installation_id": message.installation_id,
+  "namespace_id": message.namespace_id,
+  "index": message.index,
+  "value": encode_json(message.value),
+  "truncated": message.truncated,
+  "kafka_partition": coordinates.partition,
+  "kafka_offset": coordinates.offset,
+  "dt": format_timestamp!(time, "%F")
+}

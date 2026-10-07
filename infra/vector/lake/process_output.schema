@@ -1,0 +1,15 @@
+message process_output {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required binary id (STRING);
+  required binary schema (STRING);
+  required binary pid (STRING);
+  required binary campaign_id (STRING);
+  required binary device_id (STRING);
+  required binary installation_id (STRING);
+  required binary namespace_id (STRING);
+  required int64 index (INTEGER(64,false));
+  required binary value (STRING);
+  required boolean truncated;
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

@@ -1,0 +1,2 @@
+coordinates = {"topic": .topic, "partition": .partition, "offset": .offset}
+message = string!(.message)

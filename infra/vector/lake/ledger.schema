@@ -1,0 +1,54 @@
+message ledger {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required binary id (STRING);
+  required binary schema (STRING);
+  required binary kind (STRING);
+  required binary instance (STRING);
+  required int32 partition (INTEGER(32,false));
+  required int64 sequence (INTEGER(64,false));
+  required binary previous_hash (STRING);
+  required binary hash (STRING);
+  required binary device_id (STRING);
+  required binary installation_id (STRING);
+  optional binary namespace_id (STRING);
+  optional int64 epoch (INTEGER(64,false));
+  required binary principal (STRING);
+  required binary pid (STRING);
+  optional binary intent_campaign_id (STRING);
+  optional binary intent_principal (STRING);
+  optional binary intent_subject (STRING);
+  optional binary session_id (STRING);
+  optional binary call_id (STRING);
+  optional int64 cap_id (INTEGER(64,false));
+  optional int64 parent_cap_id (INTEGER(64,false));
+  optional binary direction (STRING);
+  optional binary action (STRING);
+  optional binary interface_id (STRING);
+  optional int32 method_id (INTEGER(32,false));
+  required group param_fields (LIST) {
+    repeated group list {
+      required group element {
+        required binary name (STRING);
+        required boolean redacted;
+      }
+    }
+  }
+  required group param_cap_ids (LIST) {
+    repeated group list {
+      required int64 element (INTEGER(64,false));
+    }
+  }
+  required binary param_hash (STRING);
+  optional binary result_code (STRING);
+  required group result_cap_ids (LIST) {
+    repeated group list {
+      required int64 element (INTEGER(64,false));
+    }
+  }
+  optional binary event (STRING);
+  optional binary event_detail (STRING);
+  optional binary key_id (STRING);
+  optional binary signature (STRING);
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

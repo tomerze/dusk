@@ -1,0 +1,49 @@
+if !is_array(message.resourceLogs) {
+  log({"message": "dropped a record that is not an OTLP JSON logs export", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+rows = []
+for_each(array!(message.resourceLogs)) -> |_resource_position, resource_logs| {
+  for_each(array(resource_logs.scopeLogs) ?? []) -> |_scope_position, scope_logs| {
+    for_each(array(scope_logs.logRecords) ?? []) -> |_record_position, record| {
+      maps = {}
+      for_each({"attributes": record.attributes, "resource_attributes": resource_logs.resource.attributes, "scope_attributes": scope_logs.scope.attributes, "body": [{"key": "body", "value": record.body}]}) -> |name, list| {
+        converted = {}
+        for_each(array(list) ?? []) -> |_attribute_position, attribute| {
+          value = object(attribute.value) ?? {}
+          text = if length(value) == 0 { "" } else if value.stringValue != null { to_string(value.stringValue) ?? "" } else if value.boolValue != null { to_string(value.boolValue) ?? "" } else if value.intValue != null { to_string(value.intValue) ?? "" } else if value.doubleValue != null { to_string(value.doubleValue) ?? "" } else if value.bytesValue != null { to_string(value.bytesValue) ?? "" } else { encode_json(value) }
+          converted = set!(converted, [to_string(attribute.key) ?? ""], text)
+        }
+        maps = set!(maps, [name], converted)
+      }
+      record_nanoseconds = to_int(record.timeUnixNano) ?? 0
+      observed_nanoseconds = to_int(record.observedTimeUnixNano) ?? 0
+      if observed_nanoseconds == 0 {
+        observed_nanoseconds = record_nanoseconds
+      }
+      observed_time = if observed_nanoseconds == 0 { now() } else { from_unix_timestamp(observed_nanoseconds, unit: "nanoseconds") ?? now() }
+      time = if record_nanoseconds == 0 { observed_time } else { from_unix_timestamp(record_nanoseconds, unit: "nanoseconds") ?? observed_time }
+      rows = push(rows, {
+        "time": time,
+        "observed_time": observed_time,
+        "service_name": get(maps, ["resource_attributes", "service.name"]) ?? "",
+        "severity_number": to_int(record.severityNumber) ?? 0,
+        "severity_text": to_string(record.severityText) ?? "",
+        "body": get(maps, ["body", "body"]) ?? "",
+        "trace_id": to_string(record.traceId) ?? "",
+        "span_id": to_string(record.spanId) ?? "",
+        "flags": to_int(record.flags) ?? 0,
+        "event_name": to_string(record.eventName) ?? "",
+        "attributes": maps.attributes,
+        "resource_attributes": maps.resource_attributes,
+        "scope_name": to_string(scope_logs.scope.name) ?? "",
+        "scope_version": to_string(scope_logs.scope.version) ?? "",
+        "scope_attributes": maps.scope_attributes,
+        "kafka_partition": coordinates.partition,
+        "kafka_offset": coordinates.offset,
+        "dt": format_timestamp!(time, "%F")
+      })
+    }
+  }
+}
+. = rows
