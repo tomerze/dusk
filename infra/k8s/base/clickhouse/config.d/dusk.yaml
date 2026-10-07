@@ -1,0 +1,41 @@
+logger:
+  level: information
+  console: 1
+  formatting:
+    type: json
+listen_host:
+  - "::"
+  - 0.0.0.0
+listen_try: 1
+remote_servers:
+  "@replace": "replace"
+  dusk:
+    shard:
+      internal_replication: true
+      replica:
+        host:
+          "@from_env": CLICKHOUSE_REPLICA_HOST
+        port: 9000
+macros:
+  cluster: dusk
+  shard: "01"
+  replica:
+    "@from_env": CLICKHOUSE_REPLICA_HOST
+zookeeper:
+  node:
+    host:
+      "@from_env": CLICKHOUSE_KEEPER_HOST
+    port: 9181
+distributed_ddl:
+  path: /clickhouse/task_queue/ddl
+default_replica_path: /clickhouse/tables/{uuid}/{shard}
+default_replica_name: "{replica}"
+named_collections:
+  lake:
+    url:
+      "@from_env": LAKE_URL
+    access_key_id:
+      "@from_env": LAKE_ACCESS_KEY_ID
+    secret_access_key:
+      "@from_env": LAKE_SECRET_ACCESS_KEY
+    format: Parquet

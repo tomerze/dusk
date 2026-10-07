@@ -1,0 +1,69 @@
+profiles:
+  dusk_writer:
+    readonly: 0
+    max_memory_usage: 4000000000
+    async_insert: 0
+  dusk_reader:
+    readonly: 2
+    max_execution_time: 120
+    max_memory_usage: 4000000000
+    max_result_rows: 1000000
+    constraints:
+      max_execution_time:
+        min: 1
+        max: 180
+      max_memory_usage:
+        min: 1
+        max: 4000000000
+      max_result_rows:
+        min: 1
+        max: 1000000
+users:
+  default:
+    named_collection_control: 1
+    show_named_collections: 1
+  vector:
+    password:
+      "@from_env": CLICKHOUSE_VECTOR_PASSWORD
+    networks:
+      ip: "::/0"
+    profile: dusk_writer
+    quota: default
+    grants:
+      query:
+        - GRANT INSERT, SELECT ON dusk.*
+  grafana:
+    password:
+      "@from_env": CLICKHOUSE_GRAFANA_PASSWORD
+    networks:
+      ip: "::/0"
+    profile: dusk_reader
+    quota: default
+    grants:
+      query:
+        - GRANT SELECT ON dusk.*
+        - GRANT SELECT ON system.databases
+        - GRANT SELECT ON system.tables
+        - GRANT SELECT ON system.columns
+        - GRANT SELECT ON signoz_logs.*
+        - GRANT SELECT ON signoz_traces.*
+        - GRANT SELECT ON signoz_metrics.*
+  signoz:
+    password:
+      "@from_env": CLICKHOUSE_SIGNOZ_PASSWORD
+    networks:
+      ip: "::/0"
+    profile: default
+    quota: default
+    grants:
+      query:
+        - GRANT ALL ON signoz_logs.*
+        - GRANT ALL ON signoz_traces.*
+        - GRANT ALL ON signoz_metrics.*
+        - GRANT ALL ON signoz_meter.*
+        - GRANT ALL ON signoz_metadata.*
+        - GRANT ALL ON signoz_analytics.*
+        - GRANT SELECT ON dusk.*
+        - GRANT CLUSTER ON *.*
+        - GRANT SELECT ON system.*
+        - GRANT REMOTE ON *.*
