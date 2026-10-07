@@ -24,3 +24,6 @@ dusk_capnp = { path = "../../../dusk/src/dusk_capnp" }
 
 [dev-dependencies]
 dusk_base = { path = "../../../dusk/src/dusk_base", features = ["client"] }
+
+[features]
+test-support = []
