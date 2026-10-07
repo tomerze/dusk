@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 base64 = "0.22"
+rdkafka = { version = "0.39", default-features = false, features = ["cmake-build", "curl-static", "ssl-vendored", "zstd"], public = true }
 ring = "0.17"
 rustls-pki-types = { version = "1.12", features = ["std"] }
 ryu-js = "1.0.3"

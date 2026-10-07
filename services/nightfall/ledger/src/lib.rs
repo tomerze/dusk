@@ -2,6 +2,7 @@ mod builder;
 pub mod canonical;
 pub mod chain;
 pub mod entry;
+pub mod kafka;
 pub mod log;
 pub mod memory;
 pub mod param_hash;
