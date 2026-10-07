@@ -1,0 +1,10 @@
+[package]
+name = "nightfall_ledger"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+ryu-js = "1.0.3"
+serde_json = { version = "1", public = true }
+thiserror = "2"
