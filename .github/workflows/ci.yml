@@ -39,10 +39,10 @@ jobs:
       # Both commands mirror the ruff-check and ruff-format hooks in
       # .pre-commit-config.yaml, including their file scope.
       - name: ruff check
-        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/
+        run: uvx ruff check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/ services/dawn/
 
       - name: ruff format
-        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/
+        run: uvx ruff format --check --force-exclude dusk/src/dusk_py/python/ tests/interfaces/gw/ services/dawn/
 
   python-tests:
     name: Python (pytest)
@@ -70,6 +70,30 @@ jobs:
 
       - name: pytest
         run: .venv/bin/python -m pytest tests/interfaces/gw -q
+
+  dawn:
+    name: dawn (pyright, pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/dawn
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the locked dependencies
+        run: uv sync --locked --no-install-package dusk
+
+      - name: pyright
+        run: uvx pyright
+
+      - name: pytest
+        run: .venv/bin/python -m pytest -q
 
   c-lint:
     name: C (clang-format, clang-tidy)

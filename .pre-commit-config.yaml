@@ -29,13 +29,13 @@ repos:
           entry: uvx ruff check --force-exclude
           language: system
           types_or: [python, pyi]
-          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/)
+          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/|services/dawn/)
       -   id: ruff-format
           name: ruff (format)
           entry: uvx ruff format --force-exclude
           language: system
           types_or: [python, pyi]
-          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/)
+          files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/|services/dawn/)
       -   id: pyright
           name: pyright
           entry: uvx pyright
@@ -60,6 +60,13 @@ repos:
           entry: bash -c 'cd docs && uv run mkdocs build --strict --quiet'
           language: system
           files: ^docs/
+          pass_filenames: false
+      -   id: pyright-dawn
+          name: pyright (dawn)
+          entry: uvx pyright -p services/dawn
+          language: system
+          types_or: [python, pyi]
+          files: ^services/dawn/
           pass_filenames: false
 
 fail_fast: true
