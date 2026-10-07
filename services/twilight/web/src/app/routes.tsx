@@ -21,7 +21,15 @@ export const routes: RouteObject[] = [
     children: [
       {
         errorElement: <RouteError />,
-        children: [{ path: '*', element: <NotFound /> }],
+        children: [
+          {
+            path: 'campaigns',
+            lazy: async () => ({
+              Component: (await import('../campaigns/CampaignsPage')).CampaignsPage,
+            }),
+          },
+          { path: '*', element: <NotFound /> },
+        ],
       },
     ],
   },
