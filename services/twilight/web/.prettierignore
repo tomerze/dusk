@@ -1,0 +1,4 @@
+dist
+dist-mock
+node_modules
+package-lock.json
