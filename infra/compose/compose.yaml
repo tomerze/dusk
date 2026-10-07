@@ -407,3 +407,46 @@ services:
       timeout: 5s
       retries: 12
 
+  verify:
+    image: python:3.14.8-slim-trixie
+    profiles: [verify]
+    networks: [stack]
+    working_dir: /tests
+    entrypoint:
+      - /bin/sh
+      - -c
+      - pip install --quiet --no-cache-dir --root-user-action ignore --disable-pip-version-check -r requirements.txt && exec python -m pytest -q -p no:cacheprovider "$$@"
+      - verify
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
+      STEP_CA_URL: https://step-ca:9000
+      STEP_CA_ROOT: /pki/trust-anchors/fleet-client-ca.crt
+      PROVISIONER_KEY: /secrets/fleet-provisioner/provisioner.jwk
+      KAFKA_BROKERS: kafka:9092
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_PASSWORD_FILE: /secrets/clickhouse-admin/password
+      S3_ENDPOINT: http://ceph:8080
+      SECRETS_DIRECTORY: /secrets
+      CONTRACTS_DIRECTORY: /contracts
+      OTEL_COLLECTOR_URL: http://otel-collector:4318
+      POSTGRES_HOST: postgres
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_PASSWORD_FILE: /secrets/grafana-admin/password
+      VERIFY_LAKE: ${VERIFY_LAKE:-}
+    volumes:
+      - ../tests:/tests:ro
+      - ../grafana/dashboards:/grafana/dashboards:ro
+      - ../../services/contracts/kafka:/contracts:ro
+      - { <<: *pki, target: /pki/trust-anchors, volume: { subpath: trust-anchors } }
+      - { <<: *secret, target: /secrets/fleet-provisioner, volume: { subpath: fleet-provisioner } }
+      - { <<: *secret, target: /secrets/clickhouse-admin, volume: { subpath: clickhouse-admin } }
+      - { <<: *secret, target: /secrets/grafana-admin, volume: { subpath: grafana-admin } }
+      - { <<: *secret, target: /secrets/ceph-admin, volume: { subpath: ceph-admin } }
+      - { <<: *secret, target: /secrets/ceph-ledger-writer, volume: { subpath: ceph-ledger-writer } }
+      - { <<: *secret, target: /secrets/ceph-vector, volume: { subpath: ceph-vector } }
+      - { <<: *secret, target: /secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
+      - { <<: *secret, target: /secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+      - { <<: *secret, target: /secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
+      - { <<: *secret, target: /secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
+      - { <<: *secret, target: /secrets/postgres-signoz, volume: { subpath: postgres-signoz } }
