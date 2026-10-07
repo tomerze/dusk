@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ceph
+  labels:
+    app.kubernetes.io/name: ceph
+spec:
+  serviceName: ceph
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ceph
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ceph
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: ceph
+          image: quay.io/ceph/demo@sha256:522483cf07cfce6386b8e18a3edfa88a1b32c688dee231d0a6962b1513557723
+          command: ["/bin/bash", "-c", "ulimit -n 1048576 && exec /opt/ceph-container/bin/demo"]
+          env:
+            - name: MON_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CEPH_PUBLIC_NETWORK
+              value: $(MON_IP)/32
+            - name: DEMO_DAEMONS
+              value: mon,mgr,osd,rgw
+            - name: RGW_FRONTEND_PORT
+              value: "8080"
+            - name: RGW_NAME
+              value: ceph
+            - name: OSD_COUNT
+              value: "1"
+            - name: CEPH_DEMO_UID
+              value: admin
+            - name: CEPH_DEMO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ceph-admin
+                  key: access-key
+            - name: CEPH_DEMO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ceph-admin
+                  key: secret-key
+          ports:
+            - name: s3
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: s3
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /
+              port: s3
+            periodSeconds: 10
+            failureThreshold: 60
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 3Gi
+          volumeMounts:
+            - name: etc
+              mountPath: /etc/ceph
+            - name: data
+              mountPath: /var/lib/ceph
+            - name: demo
+              mountPath: /opt/ceph-container/tmp
+        - name: users
+          image: quay.io/ceph/demo@sha256:522483cf07cfce6386b8e18a3edfa88a1b32c688dee231d0a6962b1513557723
+          command: ["/bin/bash", "-c", "ulimit -n 1048576 && /scripts/users.sh && exec sleep infinity"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: etc
+              mountPath: /etc/ceph
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+      volumes:
+        - name: etc
+          emptyDir: {}
+        - name: data
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: demo
+          emptyDir: {}
+        - name: scripts
+          configMap:
+            name: ceph-users
+            defaultMode: 0555
+        - name: secrets
+          projected:
+            defaultMode: 0400
+            sources:
+              - secret:
+                  name: ceph-admin
+                  items:
+                    - key: access-key
+                      path: ceph-admin/access-key
+                    - key: secret-key
+                      path: ceph-admin/secret-key
+              - secret:
+                  name: ceph-vector
+                  items:
+                    - key: access-key
+                      path: ceph-vector/access-key
+                    - key: secret-key
+                      path: ceph-vector/secret-key
+              - secret:
+                  name: ceph-ledger-writer
+                  items:
+                    - key: access-key
+                      path: ceph-ledger-writer/access-key
+                    - key: secret-key
+                      path: ceph-ledger-writer/secret-key
+              - secret:
+                  name: ceph-dawn
+                  items:
+                    - key: access-key
+                      path: ceph-dawn/access-key
+                    - key: secret-key
+                      path: ceph-dawn/secret-key
+              - secret:
+                  name: ceph-reader
+                  items:
+                    - key: access-key
+                      path: ceph-reader/access-key
+                    - key: secret-key
+                      path: ceph-reader/secret-key
+              - secret:
+                  name: ceph-signoz
+                  items:
+                    - key: access-key
+                      path: ceph-signoz/access-key
+                    - key: secret-key
+                      path: ceph-signoz/secret-key
