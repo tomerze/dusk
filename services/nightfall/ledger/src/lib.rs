@@ -1,3 +1,4 @@
+mod builder;
 pub mod canonical;
 pub mod chain;
 pub mod entry;
@@ -7,3 +8,4 @@ pub mod param_hash;
 pub mod signing;
 pub mod time;
 pub mod verifier;
+pub mod writer;

@@ -13,3 +13,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", public = true }
 thiserror = "2"
 time = { version = "0.3.41", features = ["formatting", "macros"], public = true }
+tokio = { version = "1.47.1", features = ["sync", "time"] }
+tracing = "0.1.41"
+uuid = { version = "1.17", features = ["v7"] }
+
+[dev-dependencies]
+tokio = { version = "1.47.1", features = ["macros", "rt", "sync", "time"] }
