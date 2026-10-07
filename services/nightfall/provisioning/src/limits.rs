@@ -1,9 +1,14 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
+use tracing::warn;
+
 pub const RENEWALS_PER_DAY: usize = 4;
+pub const COLLISION_INSTALLATIONS: usize = 20;
+pub const COLLISION_ADDRESSES: usize = 5;
 const DAY: Duration = Duration::from_secs(24 * 3600);
+const COLLISION_ENTRIES_PER_DEVICE: usize = 64;
 
 pub trait PenaltyBox: Send + Sync {
     fn penalized(&self, address: IpAddr) -> bool;
@@ -230,8 +235,125 @@ impl RateWindow {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Collision {
+    pub installations: usize,
+    pub addresses: usize,
+}
+
+#[derive(Debug, Default)]
+struct DeviceHistory {
+    enrollments: VecDeque<(String, IpAddr, Instant)>,
+    reported: Option<Instant>,
+}
+
+impl DeviceHistory {
+    fn latest(&self) -> Option<Instant> {
+        self.enrollments.back().map(|(_, _, time)| *time)
+    }
+}
+
+#[derive(Debug)]
+pub struct CollisionTracker {
+    devices: HashMap<String, DeviceHistory>,
+    order: VecDeque<(String, Instant)>,
+    capacity: usize,
+}
+
+impl CollisionTracker {
+    pub fn new(capacity: usize) -> CollisionTracker {
+        CollisionTracker {
+            devices: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn latest(&self, device_id: &str) -> Option<Instant> {
+        self.devices.get(device_id).and_then(DeviceHistory::latest)
+    }
+
+    pub fn record(
+        &mut self,
+        device_id: &str,
+        installation_id: &str,
+        address: IpAddr,
+        now: Instant,
+    ) -> Option<Collision> {
+        while let Some((front, time)) = self.order.front().cloned() {
+            let current = self.latest(&front) == Some(time);
+            if current && now.saturating_duration_since(time) < DAY {
+                break;
+            }
+            self.order.pop_front();
+            if current {
+                self.devices.remove(&front);
+            }
+        }
+        if !self.devices.contains_key(device_id) && self.devices.len() >= self.capacity {
+            while let Some((oldest, time)) = self.order.pop_front() {
+                if self.latest(&oldest) != Some(time) {
+                    continue;
+                }
+                self.devices.remove(&oldest);
+                metrics::counter!("nightfall_collision_histories_evicted_total").increment(1);
+                warn!(
+                    device_id = %oldest,
+                    capacity = self.capacity,
+                    "the device id collision tracker is full; the oldest device's enrollments of the last 24 hours are forgotten"
+                );
+                break;
+            }
+        }
+        if self.order.len() > self.capacity.saturating_mul(2).max(16) {
+            let devices = &self.devices;
+            self.order.retain(|(device, time)| {
+                devices.get(device).and_then(DeviceHistory::latest) == Some(*time)
+            });
+        }
+        let history = self.devices.entry(String::from(device_id)).or_default();
+        history
+            .enrollments
+            .retain(|(_, _, time)| now.saturating_duration_since(*time) < DAY);
+        if history.enrollments.len() >= COLLISION_ENTRIES_PER_DEVICE {
+            history.enrollments.pop_front();
+        }
+        history
+            .enrollments
+            .push_back((String::from(installation_id), address, now));
+        self.order.push_back((String::from(device_id), now));
+        let installations: HashSet<&str> = history
+            .enrollments
+            .iter()
+            .map(|(installation, _, _)| installation.as_str())
+            .collect();
+        let addresses: HashSet<IpAddr> = history
+            .enrollments
+            .iter()
+            .map(|(_, address, _)| *address)
+            .collect();
+        let collision = Collision {
+            installations: installations.len(),
+            addresses: addresses.len(),
+        };
+        let recently_reported = history
+            .reported
+            .is_some_and(|reported| now.saturating_duration_since(reported) < DAY);
+        if collision.installations > COLLISION_INSTALLATIONS
+            && collision.addresses > COLLISION_ADDRESSES
+            && !recently_reported
+        {
+            history.reported = Some(now);
+            return Some(collision);
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use super::*;
 
     #[test]
@@ -312,6 +434,32 @@ mod tests {
     }
 
     #[test]
+    fn forgets_expired_devices_and_evicts_the_oldest_live_one_at_capacity() {
+        let now = Instant::now();
+        let address = IpAddr::V4(Ipv4Addr::new(198, 51, 100, 1));
+        let mut tracker = CollisionTracker::new(2);
+        tracker.record("a", "1", address, now);
+        tracker.record("b", "1", address, now + Duration::from_secs(1));
+        tracker.record("a", "2", address, now + Duration::from_secs(2));
+        tracker.record("c", "1", address, now + Duration::from_secs(3));
+        assert_eq!(tracker.devices.len(), 2);
+        assert!(tracker.devices.contains_key("a"));
+        assert!(tracker.devices.contains_key("c"));
+        tracker.record("d", "1", address, now + DAY + Duration::from_secs(3));
+        assert_eq!(tracker.devices.len(), 1);
+        assert!(tracker.devices.contains_key("d"));
+        for second in 0..100 {
+            tracker.record(
+                "d",
+                "1",
+                address,
+                now + DAY + Duration::from_secs(10 + second),
+            );
+        }
+        assert!(tracker.order.len() <= 16, "{}", tracker.order.len());
+    }
+
+    #[test]
     fn counts_the_last_minute() {
         let now = Instant::now();
         let mut window = RateWindow::new(now);
@@ -322,5 +470,39 @@ mod tests {
         assert_eq!(window.record(now + Duration::from_secs(200)), 1);
         assert_eq!(window.count(now + Duration::from_secs(230)), 1);
         assert_eq!(window.count(now + Duration::from_secs(261)), 0);
+    }
+
+    #[test]
+    fn reports_a_cloned_image_once_a_day() {
+        let now = Instant::now();
+        let mut tracker = CollisionTracker::new(10);
+        let mut reports = Vec::new();
+        for number in 0..30u8 {
+            let address = IpAddr::V4(Ipv4Addr::new(198, 51, 100, number % 8));
+            if let Some(collision) =
+                tracker.record("device", &format!("{number:032x}"), address, now)
+            {
+                reports.push((number, collision));
+            }
+        }
+        assert_eq!(
+            reports,
+            vec![(
+                20,
+                Collision {
+                    installations: 21,
+                    addresses: 8
+                }
+            )]
+        );
+        let mut few_addresses = CollisionTracker::new(10);
+        for number in 0..30u8 {
+            let address = IpAddr::V4(Ipv4Addr::new(198, 51, 100, number % 5));
+            assert!(
+                few_addresses
+                    .record("device", &format!("{number:032x}"), address, now)
+                    .is_none()
+            );
+        }
     }
 }
