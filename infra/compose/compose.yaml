@@ -26,6 +26,10 @@ networks:
       config:
         - subnet: ${DUSK_SUBNET:-10.231.64.0/24}
 
+secrets:
+  fleet-token:
+    environment: DUSK_FLEET_TOKEN
+
 volumes:
   secrets: {}
   pki: {}
@@ -406,6 +410,173 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  nightfall:
+    <<: [*restart, *logging]
+    image: dusk-nightfall:dev
+    stop_grace_period: 360s
+    build:
+      context: ../..
+      dockerfile: services/nightfall/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    networks:
+      stack:
+        aliases:
+          - fleet.${DUSK_DOMAIN:-dusk.test}
+          - provision.${DUSK_DOMAIN:-dusk.test}
+    ports:
+      - "127.0.0.1:${DUSK_FLEET_PORT-8443}:8443"
+    environment:
+      NIGHTFALL__INSTANCE: nightfall-0
+      NIGHTFALL__INNER__ADVERTISE: nightfall:8444
+      NIGHTFALL__INNER__RELAY_ADVERTISE: nightfall:8445
+      NIGHTFALL__INNER__SERVER_NAME_SUFFIX: fleet.${DUSK_DOMAIN:-dusk.test}
+      NIGHTFALL__FLEET__SERVER_NAMES: '["fleet.${DUSK_DOMAIN:-dusk.test}"]'
+      NIGHTFALL__PROVISION__SERVER_NAMES: '["provision.${DUSK_DOMAIN:-dusk.test}"]'
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      step-ca:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/nightfall/nightfall.toml:/etc/nightfall/nightfall.toml:ro
+      - ../k8s/base/nightfall/permissions.toml:/etc/nightfall/permissions.toml:ro
+      - { <<: *pki, target: /etc/nightfall/tls, volume: { subpath: nightfall-tls } }
+      - { <<: *pki, target: /etc/nightfall/pki/fleet-client-ca.crt, volume: { subpath: trust-anchors/fleet-client-ca.crt } }
+      - { <<: *pki, target: /etc/nightfall/pki/fleet-client-root.crt, volume: { subpath: trust-anchors/fleet-client-ca.crt } }
+      - { <<: *pki, target: /etc/nightfall/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
+      - { <<: *secret, target: /etc/nightfall/secrets/fleet-tokens.toml, volume: { subpath: fleet-token/fleet-tokens.toml } }
+      - { <<: *secret, target: /etc/nightfall/secrets/install-token-jwks.json, volume: { subpath: fleet-install-token-keys/install-token-jwks.json } }
+      - { <<: *secret, target: /etc/nightfall/secrets/device-id.key, volume: { subpath: fleet-device-id/device-id.key } }
+      - { <<: *secret, target: /etc/nightfall/secrets/provisioner.jwk, volume: { subpath: fleet-provisioner/provisioner.jwk } }
+      - { <<: *secret, target: /etc/nightfall/secrets/ledger-signing.key, volume: { subpath: nightfall-ledger/ledger-signing.key } }
+      - { <<: *secret, target: /etc/nightfall/secrets/ledger-param.key, volume: { subpath: nightfall-ledger/ledger-param.key } }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9100 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  dawn:
+    <<: [*restart, *logging]
+    image: dusk-dawn:dev
+    stop_grace_period: 360s
+    build:
+      context: ../..
+      dockerfile: services/dawn/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_DAWN_PORT-9443}:8443"
+    environment:
+      DAWN__INSTANCE: dawn-0
+      DAWN__NIGHTFALL__DEFAULT_INNER_ADDRESS: nightfall:8444
+      DAWN__NIGHTFALL__ALLOWED_INNER_ADDRESSES: '["nightfall:8444"]'
+      DAWN__NIGHTFALL__SERVER_NAME_SUFFIX: fleet.${DUSK_DOMAIN:-dusk.test}
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      ceph-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/dawn/dawn.toml:/etc/dawn/dawn.toml:ro
+      - { <<: *pki, target: /etc/dawn/tls, volume: { subpath: dawn-tls } }
+      - { <<: *pki, target: /etc/dawn/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
+      - { <<: *secret, target: /etc/dawn/secrets/output.key, volume: { subpath: dawn-output-key/output.key } }
+      - { <<: *secret, target: /etc/dawn/secrets/s3, volume: { subpath: ceph-dawn } }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/readyz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  twilight-migrate:
+    image: dusk-twilight:dev
+    build: &twilight-build
+      context: ../..
+      dockerfile: services/twilight/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    command: ["migrate"]
+    networks: [stack]
+    environment:
+      TWILIGHT__INSTANCE: twilight-migrate
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    volumes: &twilight-volumes
+      - ../k8s/base/twilight/twilight.yaml:/etc/twilight/twilight.yaml:ro
+      - { <<: *pki, target: /etc/twilight/tls, volume: { subpath: twilight-tls } }
+      - { <<: *pki, target: /etc/twilight/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
+      - { <<: *secret, target: /etc/twilight/pki/ledger-verify-jwks.json, volume: { subpath: nightfall-ledger-verify/ledger-verify-jwks.json } }
+      - { <<: *secret, target: /etc/twilight/secrets/postgres, volume: { subpath: postgres-twilight } }
+
+  twilight:
+    <<: [*restart, *logging]
+    image: dusk-twilight:dev
+    stop_grace_period: 60s
+    build: *twilight-build
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_TWILIGHT_PORT-8080}:8080"
+    environment:
+      TWILIGHT__INSTANCE: twilight-0
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      twilight-migrate:
+        condition: service_completed_successfully
+      dawn:
+        condition: service_started
+    volumes: *twilight-volumes
+
+  node:
+    <<: [*restart, *logging]
+    image: dusk-node:dev
+    build:
+      context: ../..
+      dockerfile: infra/node/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+        FLEET: fleet.${DUSK_DOMAIN:-dusk.test}:8443
+        PROVISION: provision.${DUSK_DOMAIN:-dusk.test}:8443
+      secrets: [fleet-token]
+    networks: [stack]
+    deploy:
+      replicas: ${DUSK_NODES:-3}
+    depends_on:
+      nightfall:
+        condition: service_healthy
+    volumes:
+      - /var/lib/dusk
+      - { <<: *pki, target: /etc/dusk/fleet-server-ca.pem, volume: { subpath: trust-anchors/fleet-server-ca.crt } }
 
   verify:
     image: python:3.14.8-slim-trixie
