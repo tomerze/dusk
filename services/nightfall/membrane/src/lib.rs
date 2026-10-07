@@ -4,6 +4,7 @@ mod copy;
 pub mod filter;
 mod gate;
 pub mod limits;
+pub mod membrane;
 pub mod node;
 pub mod permissions;
 pub mod provenance;
