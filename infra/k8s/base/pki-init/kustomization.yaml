@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: dusk-stack
+resources:
+  - rbac.yaml
+  - job.yaml
+  - cronjob.yaml
+configMapGenerator:
+  - name: dusk-pki-scripts
+    files:
+      - pki.sh
+      - node.tpl
+    options:
+      disableNameSuffixHash: true
