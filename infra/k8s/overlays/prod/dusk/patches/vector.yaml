@@ -1,0 +1,69 @@
+- op: add
+  path: /spec/template/spec/volumes/1/projected/sources/-
+  value:
+    secret:
+      name: vector
+      items:
+        - key: user.crt
+          path: kafka/user.crt
+        - key: user.key
+          path: kafka/user.key
+- op: add
+  path: /spec/template/spec/volumes/1/projected/sources/-
+  value:
+    secret:
+      name: dusk-cluster-ca-cert
+      items:
+        - key: ca.crt
+          path: kafka/ca.crt
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: KAFKA_SECURITY_PROTOCOL
+    value: ssl
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: KAFKA_TLS_CA
+    value: /run/secrets/kafka/ca.crt
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: KAFKA_TLS_CERTIFICATE
+    value: /run/secrets/kafka/user.crt
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: KAFKA_TLS_KEY
+    value: /run/secrets/kafka/user.key
+- op: test
+  path: /spec/template/spec/containers/0/env/0/name
+  value: KAFKA_BROKERS
+- op: replace
+  path: /spec/template/spec/containers/0/env/0/value
+  value: dusk-kafka-bootstrap:9093
+- op: test
+  path: /spec/template/spec/containers/0/env/2/name
+  value: S3_ENDPOINT
+- op: replace
+  path: /spec/template/spec/containers/0/env/2/value
+  value: http://rook-ceph-rgw-dusk.rook-ceph.svc
+- op: test
+  path: /spec/template/spec/containers/0/env/1/name
+  value: CLICKHOUSE_ENDPOINT
+- op: replace
+  path: /spec/template/spec/containers/0/env/1/value
+  value: https://clickhouse:8443
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: CLICKHOUSE_TLS_CA
+    value: /run/secrets/internal-ca/ca.crt
+- op: add
+  path: /spec/template/spec/volumes/1/projected/sources/-
+  value:
+    configMap:
+      name: dusk-trust-anchors
+      items:
+        - key: internal-ca.crt
+          path: internal-ca/ca.crt

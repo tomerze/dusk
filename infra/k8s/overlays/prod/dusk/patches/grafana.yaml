@@ -1,0 +1,11 @@
+- op: test
+  path: /spec/template/spec/volumes/1/name
+  value: secrets
+- op: add
+  path: /spec/template/spec/volumes/1/projected/sources/-
+  value:
+    secret:
+      name: postgres-ca
+      items:
+        - key: ca.crt
+          path: postgres-ca/ca.crt
