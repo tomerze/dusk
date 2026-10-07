@@ -1,0 +1,135 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coverage {
+  position: relative;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--twilight-surface-sunken);
+  overflow: hidden;
+}
+
+.band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 2px solid var(--twilight-surface);
+  transition:
+    left 200ms ease,
+    width 200ms ease;
+}
+
+.band[data-index='0'],
+.number[data-index='0'] {
+  --phase-color: var(--mantine-color-dusk-filled);
+}
+
+.band[data-index='1'],
+.number[data-index='1'] {
+  --phase-color: var(--mantine-color-cyan-filled);
+}
+
+.band[data-index='2'],
+.number[data-index='2'] {
+  --phase-color: var(--mantine-color-teal-filled);
+}
+
+.band[data-index='3'],
+.number[data-index='3'] {
+  --phase-color: var(--mantine-color-grape-filled);
+}
+
+.band {
+  background: var(--phase-color);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 28px minmax(120px, 1fr) 150px minmax(200px, 240px) 36px;
+  align-items: start;
+  gap: 10px;
+}
+
+.number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 28px;
+  border-radius: 50%;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--twilight-text-strong);
+  border: 2px solid var(--phase-color);
+}
+
+.remove {
+  margin-top: 26px;
+}
+
+.label {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
+}
+
+@media (min-width: 48em) {
+  .row + .row .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .row + .row .number,
+  .row + .row .remove {
+    margin-top: 4px;
+  }
+}
+
+@media (max-width: 48em) {
+  .row {
+    grid-template-columns: 28px 1fr 36px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--twilight-border-subtle);
+  }
+
+  .name {
+    grid-column: 2;
+  }
+
+  .remove {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .percent {
+    grid-column: 2 / span 2;
+  }
+
+  .bake {
+    grid-column: 2 / span 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .band {
+    transition: none;
+  }
+}
