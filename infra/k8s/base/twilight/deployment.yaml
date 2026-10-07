@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twilight
+  labels:
+    app.kubernetes.io/name: twilight
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: twilight
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: twilight
+    spec:
+      serviceAccountName: twilight
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: twilight
+      initContainers:
+        - name: migrate
+          image: dusk-twilight:dev
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TWILIGHT__INSTANCE
+              value: $(POD_NAME)
+          args: ["migrate"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/twilight
+              readOnly: true
+      containers:
+        - name: twilight
+          image: dusk-twilight:dev
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TWILIGHT__INSTANCE
+              value: $(POD_NAME)
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: health
+              containerPort: 9102
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/twilight
+              readOnly: true
+      volumes:
+        - name: configuration
+          projected:
+            defaultMode: 0440
+            sources:
+              - configMap:
+                  name: twilight
+                  items:
+                    - key: twilight.yaml
+                      path: twilight.yaml
+              - secret:
+                  name: twilight-tls
+                  items:
+                    - key: tls.crt
+                      path: tls/tls.crt
+                    - key: tls.key
+                      path: tls/tls.key
+              - configMap:
+                  name: dusk-trust-anchors
+                  items:
+                    - key: internal-ca.crt
+                      path: pki/internal-ca.crt
+              - secret:
+                  name: nightfall-ledger-verify
+                  items:
+                    - key: ledger-verify-jwks.json
+                      path: pki/ledger-verify-jwks.json
+              - secret:
+                  name: postgres-twilight
+                  items:
+                    - key: pgpass
+                      path: secrets/postgres/pgpass
