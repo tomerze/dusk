@@ -1,0 +1,21 @@
+- op: test
+  path: /spec/template/spec/containers/0/env/12/name
+  value: SIGNOZ_SQLSTORE_POSTGRES_DSN
+- op: replace
+  path: /spec/template/spec/containers/0/env/12/value
+  value: postgres://signoz:$(SQLSTORE_POSTGRES_PASSWORD)@postgres-rw:5432/signoz?sslmode=verify-full&sslrootcert=/var/run/postgres/ca.crt
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: postgres-ca
+    mountPath: /var/run/postgres
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: postgres-ca
+    secret:
+      secretName: postgres-ca
+      items:
+        - key: ca.crt
+          path: ca.crt

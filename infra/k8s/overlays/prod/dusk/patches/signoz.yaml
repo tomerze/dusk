@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signoz-otel-collector
+spec:
+  template:
+    spec:
+      containers:
+        - name: collector
+          env:
+            - name: KAFKA_BROKERS
+              value: dusk-kafka-bootstrap:9093
+          volumeMounts:
+            - name: kafka
+              mountPath: /var/run/kafka
+              readOnly: true
+      volumes:
+        - name: kafka
+          projected:
+            defaultMode: 0444
+            sources:
+              - secret:
+                  name: signoz
+                  items:
+                    - key: user.crt
+                      path: user.crt
+                    - key: user.key
+                      path: user.key
+              - secret:
+                  name: dusk-cluster-ca-cert
+                  items:
+                    - key: ca.crt
+                      path: ca.crt

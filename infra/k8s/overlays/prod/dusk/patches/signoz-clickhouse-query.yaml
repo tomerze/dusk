@@ -1,0 +1,38 @@
+- op: test
+  path: /spec/template/spec/containers/0/env/1/name
+  value: CLICKHOUSE_PORT
+- op: replace
+  path: /spec/template/spec/containers/0/env/1/value
+  value: "9440"
+- op: test
+  path: /spec/template/spec/containers/0/env/6/name
+  value: CLICKHOUSE_SECURE
+- op: replace
+  path: /spec/template/spec/containers/0/env/6/value
+  value: "true"
+- op: test
+  path: /spec/template/spec/containers/0/env/9/name
+  value: SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN
+- op: replace
+  path: /spec/template/spec/containers/0/env/9/value
+  value: "tcp://clickhouse:9440/?username=$(CLICKHOUSE_USER)&password=$(CLICKHOUSE_PASSWORD)&secure=true"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SSL_CERT_FILE
+    value: /var/run/clickhouse-ca/ca.crt
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: clickhouse-ca
+    mountPath: /var/run/clickhouse-ca
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: clickhouse-ca
+    configMap:
+      name: dusk-trust-anchors
+      items:
+        - key: internal-ca.crt
+          path: ca.crt

@@ -13,6 +13,7 @@ resources:
   - ../../../base/otel-collector
   - ../../../base/vector
   - ../../../base/grafana
+  - ../../../base/signoz
   - ../../../base/nightfall
   - ../../../base/dawn
   - ../../../base/twilight
@@ -56,6 +57,10 @@ configMapGenerator:
     behavior: merge
     files:
       - config.yaml=configuration/clickhouse.yaml
+  - name: signoz-otel-collector
+    behavior: merge
+    files:
+      - otel-collector-config.yaml=configuration/signoz-collector.yaml
 images:
   - name: dusk-nightfall
     newName: registry.dusk.example/dusk-nightfall
@@ -177,6 +182,33 @@ patches:
       kind: Deployment
       name: otel-collector|otel-collector-scraper
     path: patches/otel-collector.yaml
+  - path: patches/signoz.yaml
+  - target:
+      kind: StatefulSet
+      name: signoz
+    path: patches/signoz-postgres.yaml
+  - target:
+      kind: Deployment
+      name: signoz-otel-collector
+    path: patches/signoz-clickhouse-collector.yaml
+  - target:
+      kind: StatefulSet
+      name: signoz
+    path: patches/signoz-clickhouse-query.yaml
+  - target:
+      kind: Job
+      name: signoz-telemetrystore-migrator
+    path: patches/signoz-clickhouse-migrator.yaml
+  - target:
+      kind: NetworkPolicy
+      name: signoz
+    patch: |-
+      - op: test
+        path: /spec/egress/0/ports/0/port
+        value: 9000
+      - op: replace
+        path: /spec/egress/0/ports/0/port
+        value: 9440
 replacements:
   - source:
       kind: ConfigMap
