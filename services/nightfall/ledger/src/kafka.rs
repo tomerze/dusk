@@ -10,6 +10,8 @@ use rdkafka::topic_partition_list::{Offset, TopicPartitionList};
 use tracing::{info, warn};
 
 use crate::log::{LedgerLog, LogError, LogErrorKind};
+use crate::signing::VerifyingKeys;
+use crate::verifier::{VerificationReport, Verifier, VerifyOptions};
 
 const QUEUE_FULL_WAIT: Duration = Duration::from_millis(5);
 
@@ -76,6 +78,65 @@ pub fn reader_config(
         .set("auto.offset.reset", "earliest")
         .set("allow.auto.create.topics", "false");
     config
+}
+
+#[derive(Debug, Clone)]
+pub struct PartitionRange {
+    pub topic: String,
+    pub partition: u32,
+    pub start: Option<i64>,
+    pub end: Option<i64>,
+}
+
+pub fn verify_partition(
+    brokers: &str,
+    properties: &BTreeMap<String, String>,
+    range: &PartitionRange,
+    keys: VerifyingKeys,
+    options: VerifyOptions,
+    timeout: Duration,
+) -> Result<VerificationReport, LogError> {
+    let consumer: BaseConsumer = reader_config(brokers, properties, "nightfall-verify-ledger")
+        .create()
+        .map_err(|error| {
+            LogError::new(
+                LogErrorKind::Fatal,
+                format!("creating the ledger reader failed: {error}"),
+            )
+        })?;
+    let (low, high) = consumer
+        .fetch_watermarks(&range.topic, range.partition as i32, timeout)
+        .map_err(|error| {
+            LogError::new(
+                LogErrorKind::Retriable,
+                format!(
+                    "reading the watermarks of {} partition {} failed: {error}",
+                    range.topic, range.partition
+                ),
+            )
+        })?;
+    let start = range.start.unwrap_or(low).max(low);
+    let end = range.end.unwrap_or(high).min(high);
+    let mut verifier = Verifier::new(keys, options);
+    if start < end {
+        read_partition(
+            &consumer,
+            &range.topic,
+            range.partition,
+            start,
+            Some(end),
+            timeout,
+            |_, payload| verifier.push_record(payload),
+        )?;
+    }
+    info!(
+        topic = %range.topic,
+        partition = range.partition,
+        start,
+        end,
+        "ledger partition range read for verification"
+    );
+    Ok(verifier.finish())
 }
 
 pub struct KafkaLog {
