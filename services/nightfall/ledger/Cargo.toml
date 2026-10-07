@@ -5,6 +5,9 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
+ring = "0.17"
 ryu-js = "1.0.3"
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", public = true }
 thiserror = "2"
+time = { version = "0.3.41", features = ["formatting", "macros"], public = true }
