@@ -1,0 +1,11 @@
+[package]
+name = "nightfall_provisioning"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+hex = "0.4"
+ring = "0.17"
+rustls-pki-types = { version = "1.12", features = ["std"], public = true }
+thiserror = "2"

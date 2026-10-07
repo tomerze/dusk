@@ -42,6 +42,7 @@ members = [
     "tests/interfaces/py",
     "services/nightfall/membrane",
     "services/nightfall/ledger",
+    "services/nightfall/provisioning",
 ]
 resolver = "2"
 
