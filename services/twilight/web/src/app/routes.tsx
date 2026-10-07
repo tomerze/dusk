@@ -23,6 +23,12 @@ export const routes: RouteObject[] = [
         errorElement: <RouteError />,
         children: [
           {
+            index: true,
+            lazy: async () => ({
+              Component: (await import('../overview/OverviewPage')).OverviewPage,
+            }),
+          },
+          {
             path: 'campaigns',
             lazy: async () => ({
               Component: (await import('../campaigns/CampaignsPage')).CampaignsPage,
