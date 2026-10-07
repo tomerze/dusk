@@ -1,0 +1,38 @@
+clickhouse:
+  enabled: false
+externalClickhouse:
+  host: clickhouse
+  cluster: dusk
+  user: signoz
+  existingSecret: clickhouse-signoz
+  existingSecretPasswordKey: password
+signoz:
+  env:
+    signoz_sqlstore_provider: postgres
+    sqlstore_postgres_password:
+      valueFrom:
+        secretKeyRef:
+          name: postgres-signoz
+          key: password
+    signoz_sqlstore_postgres_dsn: postgres://signoz:$(SQLSTORE_POSTGRES_PASSWORD)@postgres:5432/signoz?sslmode=disable
+  podSecurityContext:
+    fsGroup: 1000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+otelCollector:
+  clusterRole:
+    create: false
+  additionalEnvs:
+    KAFKA_BROKERS: kafka:9092
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+telemetryStoreMigrator:
+  upgradeHelmHooks: false

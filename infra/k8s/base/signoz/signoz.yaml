@@ -1,0 +1,802 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: signoz-otel-collector
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: otel-collector
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: signoz
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: signoz
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: signoz-telemetrystore-migrator
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: signoz-telemetrystore-migrator
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-otel-collector
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: otel-collector
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  otel-collector-config.yaml: |-
+    connectors:
+      signozmeter:
+        dimensions:
+        - name: service.name
+        - name: deployment.environment
+        - name: host.name
+        metrics_flush_interval: 1h
+    exporters:
+      clickhouselogsexporter:
+        dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_LOG_DATABASE}
+        timeout: 10s
+        use_new_schema: true
+      clickhousetraces:
+        datasource: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_TRACE_DATABASE}
+        low_cardinal_exception_grouping: ${env:LOW_CARDINAL_EXCEPTION_GROUPING}
+        use_new_schema: true
+      metadataexporter:
+        cache:
+          provider: in_memory
+        dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/signoz_metadata
+        enabled: true
+        tenant_id: ${env:TENANT_ID}
+        timeout: 10s
+      signozclickhousemeter:
+        dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_METER_DATABASE}
+        sending_queue:
+          enabled: false
+        timeout: 45s
+      signozclickhousemetrics:
+        dsn: tcp://${env:CLICKHOUSE_USER}:${env:CLICKHOUSE_PASSWORD}@${env:CLICKHOUSE_HOST}:${env:CLICKHOUSE_PORT}/${env:CLICKHOUSE_DATABASE}
+        timeout: 45s
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: localhost:1777
+      zpages:
+        endpoint: localhost:55679
+    processors:
+      batch:
+        send_batch_size: 50000
+        timeout: 1s
+      batch/meter:
+        send_batch_max_size: 25000
+        send_batch_size: 20000
+        timeout: 1s
+      signozllmpricing:
+        attrs:
+          cache_read: gen_ai.usage.cache_read.input_tokens
+          cache_write: gen_ai.usage.cache_creation.input_tokens
+          in: gen_ai.usage.input_tokens
+          model: gen_ai.request.model
+          out: gen_ai.usage.output_tokens
+        default_pricing:
+          rules: []
+        output_attrs:
+          cache_read: signoz.gen_ai.usage.cache_read.input_tokens.cost
+          cache_write: signoz.gen_ai.usage.cache_write.input_tokens.cost
+          in: signoz.gen_ai.usage.input_tokens.cost
+          out: signoz.gen_ai.usage.output_tokens.cost
+          total: signoz.gen_ai.usage.tokens.cost
+      signozspanmapper:
+        groups: []
+      signozspanmetrics/delta:
+        aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+        dimensions:
+        - default: default
+          name: service.namespace
+        - default: default
+          name: deployment.environment
+        - name: signoz.collector.id
+        dimensions_cache_size: 100000
+        latency_histogram_buckets:
+        - 100us
+        - 1ms
+        - 2ms
+        - 6ms
+        - 10ms
+        - 50ms
+        - 100ms
+        - 250ms
+        - 500ms
+        - 1000ms
+        - 1400ms
+        - 2000ms
+        - 5s
+        - 10s
+        - 20s
+        - 40s
+        - 60s
+        metrics_exporter: signozclickhousemetrics
+    receivers:
+      httplogreceiver/heroku:
+        endpoint: 0.0.0.0:8081
+        source: heroku
+      httplogreceiver/json:
+        endpoint: 0.0.0.0:8082
+        source: json
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+            max_recv_msg_size_mib: 16
+          http:
+            endpoint: 0.0.0.0:4318
+    service:
+      extensions:
+      - health_check
+      - zpages
+      - pprof
+      pipelines:
+        logs:
+          exporters:
+          - clickhouselogsexporter
+          - metadataexporter
+          - signozmeter
+          processors:
+          - batch
+          receivers:
+          - otlp
+          - httplogreceiver/heroku
+          - httplogreceiver/json
+        metrics:
+          exporters:
+          - metadataexporter
+          - signozclickhousemetrics
+          - signozmeter
+          processors:
+          - batch
+          receivers:
+          - otlp
+        metrics/meter:
+          exporters:
+          - signozclickhousemeter
+          processors:
+          - batch/meter
+          receivers:
+          - signozmeter
+        traces:
+          exporters:
+          - clickhousetraces
+          - metadataexporter
+          - signozmeter
+          processors:
+          - signozspanmetrics/delta
+          - signozspanmapper
+          - signozllmpricing
+          - batch
+          receivers:
+          - otlp
+          - jaeger
+      telemetry:
+        logs:
+          encoding: json
+  otel-collector-opamp-config.yaml: |-
+    server_endpoint: "ws://signoz:4320/v1/opamp"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signoz-otel-collector
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: otel-collector
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:    
+    - name: jaeger-grpc
+      port: 14250
+      targetPort: jaeger-grpc
+      protocol: TCP
+      nodePort: null
+    - name: jaeger-thrift
+      port: 14268
+      targetPort: jaeger-thrift
+      protocol: TCP
+      nodePort: null
+    - name: logsheroku
+      port: 8081
+      targetPort: logsheroku
+      protocol: TCP
+      nodePort: null
+    - name: logsjson
+      port: 8082
+      targetPort: logsjson
+      protocol: TCP
+      nodePort: null
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+      protocol: TCP
+      nodePort: null
+    - name: otlp
+      port: 4317
+      targetPort: otlp
+      protocol: TCP
+      nodePort: null
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: otel-collector
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signoz
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: signoz
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080      
+      nodePort: null
+      protocol: TCP
+      targetPort: http
+    - name: http-internal
+      port: 8085      
+      nodePort: null
+      protocol: TCP
+      targetPort: http-internal
+    - name: opamp-internal
+      port: 4320      
+      nodePort: null
+      protocol: TCP
+      targetPort: opamp-internal
+  selector:
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: signoz
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signoz-otel-collector
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: otel-collector
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: signoz
+      app.kubernetes.io/instance: signoz
+      app.kubernetes.io/component: otel-collector
+  minReadySeconds: 5
+  progressDeadlineSeconds: 600
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        signoz.io/port: "8888"
+        signoz.io/scrape: "true"
+        checksum/config: 9ebce8a85505156f169b37d030959d368e45ff0654735cf234c339990f616c03
+      labels:
+        app.kubernetes.io/name: signoz
+        app.kubernetes.io/instance: signoz
+        app.kubernetes.io/component: otel-collector
+    spec:
+      serviceAccountName: signoz-otel-collector
+      priorityClassName: ""
+      topologySpreadConstraints: 
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: otel-collector
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      securityContext:
+        {}
+      initContainers:
+        - name: check
+          image: docker.io/signoz/signoz-otel-collector:v0.144.12
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/signoz-otel-collector"
+          args:
+            - "migrate"
+            - "sync"
+            - "check"
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN
+              value: "tcp://$(CLICKHOUSE_USER):$(CLICKHOUSE_PASSWORD)@$(CLICKHOUSE_HOST):$(CLICKHOUSE_PORT)"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER
+              value: $(CLICKHOUSE_CLUSTER)
+            - name: SIGNOZ_OTEL_COLLECTOR_TIMEOUT
+              value: "10m"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION
+              value: "true"
+      containers:
+        - name: collector
+          image: docker.io/signoz/signoz-otel-collector:v0.144.12
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: jaeger-grpc
+              containerPort: 14250
+              protocol: TCP
+            - name: jaeger-thrift
+              containerPort: 14268
+              protocol: TCP
+            - name: logsheroku
+              containerPort: 8081
+              protocol: TCP
+            - name: logsjson
+              containerPort: 8082
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+            - name: otlp
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          command:
+            - "/signoz-otel-collector"
+          args:
+            - "--config=/conf/otel-collector-config.yaml"
+            - "--manager-config=/conf/otel-collector-opamp-config.yaml"
+            - "--copy-path=/var/tmp/collector-config.yaml"
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: CLICKHOUSE_DATABASE
+              value: "signoz_metrics"
+            - name: CLICKHOUSE_TRACE_DATABASE
+              value: "signoz_traces"
+            - name: CLICKHOUSE_LOG_DATABASE
+              value: "signoz_logs"
+            - name: CLICKHOUSE_METER_DATABASE
+              value: "signoz_meter"
+            - name: CLICKHOUSE_VERIFY
+              value: "false"
+            
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: K8S_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LOW_CARDINAL_EXCEPTION_GROUPING
+              value: "false"
+            - name: KAFKA_BROKERS
+              value: kafka:9092
+          volumeMounts:
+            - name: otel-collector-config-vol
+              mountPath: /conf
+          livenessProbe:
+            httpGet:
+              port: 13133
+              path: /
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              port: 13133
+              path: /
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+      volumes:
+        - name: otel-collector-config-vol
+          configMap:
+            name: signoz-otel-collector
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: signoz
+  labels:
+    helm.sh/chart: signoz-0.145.0
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: signoz
+    app.kubernetes.io/version: "v0.145.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: signoz
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: signoz
+      app.kubernetes.io/instance: signoz
+      app.kubernetes.io/component: signoz
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: signoz
+        app.kubernetes.io/instance: signoz
+        app.kubernetes.io/component: signoz
+    spec:
+      serviceAccountName: signoz
+      priorityClassName: ""
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: signoz
+          securityContext:
+            {}
+          image: docker.io/signoz/signoz:v0.145.0
+          imagePullPolicy: IfNotPresent
+          args:
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: http-internal
+              containerPort: 8085
+              protocol: TCP
+            - name: opamp-internal
+              containerPort: 4320
+              protocol: TCP
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            
+            
+            
+            
+            
+            
+            
+            - name: SQLSTORE_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: postgres-signoz
+            - name: SIGNOZ_TELEMETRYSTORE_PROVIDER
+              value: "clickhouse"
+            - name: SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN
+              value: "tcp://clickhouse:9000/?username=$(CLICKHOUSE_USER)&password=$(CLICKHOUSE_PASSWORD)"
+            - name: SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: SIGNOZ_SQLSTORE_PROVIDER
+              value: "postgres"
+            - name: SIGNOZ_SQLSTORE_POSTGRES_DSN
+              value: "postgres://signoz:$(SQLSTORE_POSTGRES_PASSWORD)@postgres:5432/signoz?sslmode=disable"
+            - name: SIGNOZ_PROMETHEUS_ACTIVE__QUERY__TRACKER_ENABLED
+              value: "false"
+            - name: SIGNOZ_EMAILING_ENABLED
+              value: "false"
+            - name: SIGNOZ_ALERTMANAGER_SIGNOZ_EXTERNAL__URL
+              value: "http://localhost:8080"
+            - name: SIGNOZ_ALERTMANAGER_PROVIDER
+              value: "signoz"
+          livenessProbe:
+            httpGet:
+              port: http
+              path: /api/v1/health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              port: http
+              path: /api/v1/health?live=1
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: signoz-db
+              mountPath: /var/lib/signoz/
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+      volumes:
+        - name: dashboards
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: signoz-db
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: signoz-telemetrystore-migrator
+  labels:
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: signoz-telemetrystore-migrator
+  annotations:
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: signoz
+        app.kubernetes.io/instance: signoz
+        app.kubernetes.io/component: signoz-telemetrystore-migrator
+    spec:
+      serviceAccountName: signoz-telemetrystore-migrator
+      initContainers:
+        - name: ready
+          image: docker.io/signoz/signoz-otel-collector:v0.144.12
+          imagePullPolicy: IfNotPresent
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN
+              value: "tcp://$(CLICKHOUSE_USER):$(CLICKHOUSE_PASSWORD)@$(CLICKHOUSE_HOST):$(CLICKHOUSE_PORT)"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER
+              value: $(CLICKHOUSE_CLUSTER)
+            - name: SIGNOZ_OTEL_COLLECTOR_TIMEOUT
+              value: "10m"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION
+              value: "true"
+          args:
+            - "migrate"
+            - "ready"
+        - name: bootstrap
+          image: docker.io/signoz/signoz-otel-collector:v0.144.12
+          imagePullPolicy: IfNotPresent
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN
+              value: "tcp://$(CLICKHOUSE_USER):$(CLICKHOUSE_PASSWORD)@$(CLICKHOUSE_HOST):$(CLICKHOUSE_PORT)"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER
+              value: $(CLICKHOUSE_CLUSTER)
+            - name: SIGNOZ_OTEL_COLLECTOR_TIMEOUT
+              value: "10m"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION
+              value: "true"
+          args:
+            - "migrate"
+            - "bootstrap"
+        - name: sync
+          image: docker.io/signoz/signoz-otel-collector:v0.144.12
+          imagePullPolicy: IfNotPresent
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN
+              value: "tcp://$(CLICKHOUSE_USER):$(CLICKHOUSE_PASSWORD)@$(CLICKHOUSE_HOST):$(CLICKHOUSE_PORT)"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER
+              value: $(CLICKHOUSE_CLUSTER)
+            - name: SIGNOZ_OTEL_COLLECTOR_TIMEOUT
+              value: "10m"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION
+              value: "true"
+          args:
+            - "migrate"
+            - "sync"
+            - "up"
+      containers:
+        - name: async
+          image: docker.io/signoz/signoz-otel-collector:v0.144.12
+          imagePullPolicy: IfNotPresent
+          env:
+            
+            - name: CLICKHOUSE_HOST
+              value: "clickhouse"
+            - name: CLICKHOUSE_PORT
+              value: "9000"
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_CLUSTER
+              value: "dusk"
+            - name: CLICKHOUSE_USER
+              value: "signoz"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "clickhouse-signoz"
+                  key: "password"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN
+              value: "tcp://$(CLICKHOUSE_USER):$(CLICKHOUSE_PASSWORD)@$(CLICKHOUSE_HOST):$(CLICKHOUSE_PORT)"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER
+              value: $(CLICKHOUSE_CLUSTER)
+            - name: SIGNOZ_OTEL_COLLECTOR_TIMEOUT
+              value: "10m"
+            - name: SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION
+              value: "true"
+          args:
+            - "migrate"
+            - "async"
+            - "up"
+      restartPolicy: OnFailure
