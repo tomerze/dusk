@@ -35,6 +35,18 @@ export const routes: RouteObject[] = [
             }),
           },
           {
+            path: 'campaigns/new',
+            lazy: async () => ({
+              Component: (await import('../campaigns/editor/CampaignEditorPage')).NewCampaignPage,
+            }),
+          },
+          {
+            path: 'campaigns/:campaignId/edit',
+            lazy: async () => ({
+              Component: (await import('../campaigns/editor/CampaignEditorPage')).EditCampaignPage,
+            }),
+          },
+          {
             path: 'campaigns/:campaignId',
             lazy: async () => ({
               Component: (await import('../campaigns/detail/CampaignPage')).CampaignPage,
