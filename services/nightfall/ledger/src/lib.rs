@@ -1,6 +1,8 @@
 mod builder;
 pub mod canonical;
 pub mod chain;
+#[cfg(test)]
+mod contract_tests;
 pub mod entry;
 pub mod kafka;
 pub mod log;
