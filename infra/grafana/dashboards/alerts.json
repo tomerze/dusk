@@ -1,0 +1,527 @@
+{
+  "uid": "dusk-alerts",
+  "title": "Alerts",
+  "description": "Twilight's alerts, including the ledger reconcile, and the health of the pipeline that feeds them.",
+  "tags": [
+    "dusk",
+    "alerts"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "dusk"
+      ],
+      "asDropdown": true,
+      "title": "Dusk dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Open alerts",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Open critical",
+      "description": "Unresolved critical alerts.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'critical' AND resolved_at IS NULL",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Open high",
+      "description": "Unresolved high alerts.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'high' AND resolved_at IS NULL",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Open medium",
+      "description": "Unresolved medium alerts.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'medium' AND resolved_at IS NULL",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Open low",
+      "description": "Unresolved low alerts.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'low' AND resolved_at IS NULL",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "blue",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Unresolved alerts",
+      "description": "Every alert not resolved yet, newest first.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT time, severity, kind, occurrences, last_seen_at, acknowledged_by, acknowledged_at, detail::text AS detail FROM alerts WHERE resolved_at IS NULL ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, time DESC LIMIT 500",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Alerts raised by kind",
+      "description": "New alerts per interval.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT $__timeGroupAlias(time, $__interval), kind AS metric, count(*) AS alerts FROM alerts WHERE $__timeFilter(time) GROUP BY 1, 2 ORDER BY 1",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Pipeline",
+      "collapsed": false,
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Evidence copies per second",
+      "description": "Ledger entries Vector wrote to the object-locked evidence bucket.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['component_id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'vector' AND metric_name IN ('vector_component_sent_events_total', 'vector_component_sent_events') AND attributes['component_id'] = 'evidence_ledger'\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Messages dropped per second",
+      "description": "Records Vector discarded, by component: contract-invalid messages and non-OTLP records.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['component_id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'vector' AND metric_name IN ('vector_component_discarded_events_total', 'vector_component_discarded_events')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

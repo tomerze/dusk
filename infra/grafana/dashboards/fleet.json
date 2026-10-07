@@ -1,0 +1,821 @@
+{
+  "uid": "dusk-fleet",
+  "title": "Fleet",
+  "description": "Every node twilight knows, what it runs and how nodes connect and enroll.",
+  "tags": [
+    "dusk",
+    "fleet"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "dusk"
+      ],
+      "asDropdown": true,
+      "title": "Dusk dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Inventory",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Nodes",
+      "description": "Rows in twilight's inventory, one per device and installation.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS nodes FROM nodes",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Online",
+      "description": "Nodes twilight last saw with a live session.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS online FROM node_presence WHERE online",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Quarantined",
+      "description": "Nodes whose lifecycle is quarantined.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS quarantined FROM nodes WHERE lifecycle = 'quarantined'",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Revoked or retired",
+      "description": "Nodes that may no longer connect.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS revoked FROM nodes WHERE lifecycle IN ('revoked', 'retired')",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 6,
+      "type": "piechart",
+      "title": "Lifecycle",
+      "description": "Nodes by lifecycle.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT lifecycle AS metric, count(*) AS nodes FROM nodes GROUP BY lifecycle ORDER BY nodes DESC",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "Operating systems",
+      "description": "The twenty most common operating systems.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 5,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT coalesce(os_name, 'unknown') || ' ' || coalesce(os_version, '') AS metric, count(*) AS nodes FROM nodes GROUP BY 1 ORDER BY nodes DESC LIMIT 20",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Dusk versions",
+      "description": "The twenty most common reported dusk versions.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT coalesce(dusk_version, 'unknown') AS metric, count(*) AS nodes FROM nodes GROUP BY 1 ORDER BY nodes DESC LIMIT 20",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Countries",
+      "description": "The twenty countries with the most nodes.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT coalesce(country, 'unknown') AS metric, count(*) AS nodes FROM nodes GROUP BY 1 ORDER BY nodes DESC LIMIT 20",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Hardware classes",
+      "description": "The twenty most common hardware classes.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 13,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT coalesce(hardware_class, 'unknown') AS metric, count(*) AS nodes FROM nodes GROUP BY 1 ORDER BY nodes DESC LIMIT 20",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Tenants",
+      "description": "Nodes per tenant.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 13,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT coalesce(tenant, 'none') AS metric, count(*) AS nodes FROM nodes GROUP BY 1 ORDER BY nodes DESC LIMIT 20",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Connections",
+      "collapsed": false,
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Connects and disconnects",
+      "description": "dusk.connections events per interval.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, event, count() AS events FROM dusk.connections WHERE $__timeFilter(time) GROUP BY t, event ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Disconnects by reason",
+      "description": "Why sessions ended.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, disconnect_reason, count() AS events FROM dusk.connections WHERE $__timeFilter(time) AND event = 'disconnected' GROUP BY t, disconnect_reason ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Connects by nightfall instance",
+      "description": "Where nodes land.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, instance, count() AS events FROM dusk.connections WHERE $__timeFilter(time) AND event = 'connected' GROUP BY t, instance ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Enrollment",
+      "collapsed": false,
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Enrollments by outcome",
+      "description": "dusk.enrollments per interval, by operation and outcome.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, concat(operation, ' ', outcome) AS outcome, count() AS events FROM dusk.enrollments WHERE $__timeFilter(time) GROUP BY t, outcome ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Refused enrollments",
+      "description": "The latest denied, rate limited and failed enrollments.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT time, operation, outcome, reason, credential_kind, credential_ref, remote_address, device_id, installation_id, instance FROM dusk.enrollments WHERE $__timeFilter(time) AND outcome IN ('denied', 'rate_limited', 'error') ORDER BY time DESC LIMIT 200",
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    }
+  ]
+}

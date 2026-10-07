@@ -1,0 +1,591 @@
+{
+  "uid": "dusk-campaigns",
+  "title": "Campaigns",
+  "description": "Campaign progress from twilight's inventory and process results from the events database.",
+  "tags": [
+    "dusk",
+    "campaigns"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "dusk"
+      ],
+      "asDropdown": true,
+      "title": "Dusk dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Campaigns",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Running",
+      "description": "Campaigns that are running.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS running FROM campaigns WHERE status = 'running'",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Paused",
+      "description": "Campaigns that are paused, by an operator, a gate or a denied permission.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS paused FROM campaigns WHERE status = 'paused'",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Failed",
+      "description": "Campaigns aborted by their policy.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS failed FROM campaigns WHERE status = 'failed'",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Completed in the time range",
+      "description": "Campaigns that finished as completed.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT count(*) AS completed FROM campaigns WHERE status = 'completed' AND $__timeFilter(finished_at)",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Active campaigns",
+      "description": "Running and paused campaigns with their node counts by state.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "dusk-inventory"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "dusk-inventory"
+          },
+          "rawSql": "SELECT c.name, c.status, c.kind, c.current_phase AS phase, c.pause_kind, c.pause_reason, c.started_at, c.created_by,\n  coalesce(sum(n.count) FILTER (WHERE n.state = 'succeeded'), 0) AS succeeded,\n  coalesce(sum(n.count) FILTER (WHERE n.state IN ('failed', 'unknown')), 0) AS failed_or_unknown,\n  coalesce(sum(n.count) FILTER (WHERE n.state IN ('pending', 'dispatching', 'dispatched', 'delivered', 'verifying', 'backoff')), 0) AS in_progress,\n  coalesce(sum(n.count), 0) AS nodes\nFROM campaigns c LEFT JOIN campaign_counters n ON n.campaign_id = c.id\nWHERE c.status IN ('running', 'paused') GROUP BY c.id ORDER BY c.started_at DESC NULLS LAST",
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Process results",
+      "collapsed": false,
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Process results by status",
+      "description": "Final dusk.process-results per interval.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, status, count() AS results FROM dusk.process_results WHERE $__timeFilter(time) AND status != 'started' GROUP BY t, status ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Failures by action",
+      "description": "failed, timed_out, denied and error results by action kind.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, action_kind, count() AS results FROM dusk.process_results WHERE $__timeFilter(time) AND status IN ('failed', 'timed_out', 'denied', 'error') GROUP BY t, action_kind ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Dispatch to result",
+      "description": "Median and 99th percentile of the time from dawn starting a dispatch to its final result.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, quantile(0.5)(dateDiff('millisecond', started_at, finished_at) / 1000) AS median, quantile(0.99)(dateDiff('millisecond', started_at, finished_at) / 1000) AS p99 FROM dusk.process_results WHERE $__timeFilter(time) AND status != 'started' AND finished_at IS NOT NULL GROUP BY t ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Uploaded file bytes",
+      "description": "Bytes of collected files dawn uploaded, per interval.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT $__timeInterval(time) AS t, sum(size_bytes) AS bytes FROM dusk.files WHERE $__timeFilter(time) GROUP BY t ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Latest failures",
+      "description": "The most recent failed process results.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT time, campaign_id, attempt, toString(pid) AS pid, action_kind, status, delivered, error, device_id, installation_id, dawn_instance FROM dusk.process_results WHERE $__timeFilter(time) AND status IN ('failed', 'timed_out', 'denied', 'error') ORDER BY time DESC LIMIT 200",
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    }
+  ]
+}

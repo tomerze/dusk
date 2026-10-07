@@ -1,0 +1,1014 @@
+{
+  "uid": "dusk-nightfall",
+  "title": "nightfall",
+  "description": "nightfall's own metrics, scraped by the OTel collector into dusk.otel_metrics.",
+  "tags": [
+    "dusk",
+    "nightfall"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "dusk"
+      ],
+      "asDropdown": true,
+      "title": "Dusk dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Sessions",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Sessions",
+      "description": "Live node sessions per instance.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_sessions'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Handshakes per second",
+      "description": "TLS handshakes by listener and outcome.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['outcome'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_handshakes_total', 'nightfall_handshakes')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Heartbeat misses per second",
+      "description": "Heartbeats a node did not answer.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, '' AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_heartbeat_misses_total', 'nightfall_heartbeat_misses')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Remote nodes in the directory",
+      "description": "Nodes held by other instances, per instance.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_directory_remote_nodes'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Relayed connections",
+      "description": "Inner connections relayed to the instance holding the node.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_relayed_connections'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Node state lag",
+      "description": "How far behind dusk.node-state each instance is.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, max(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_node_state_lag_seconds'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Calls and limits",
+      "collapsed": false,
+      "id": 8,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Calls per second by result",
+      "description": "Forwarded calls by result.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['result'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_calls_total', 'nightfall_calls')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Rate limited per second",
+      "description": "Refusals by the limit that refused them.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['limit'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_rate_limited_total', 'nightfall_rate_limited')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Penalty box",
+      "description": "Addresses currently in the penalty box.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_penalty_box_ips'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "In-flight bytes",
+      "description": "Parameter and result bytes held, per instance.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_inflight_bytes'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Membranes dropped per second",
+      "description": "Client membranes dropped, by reason.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['reason'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_membranes_dropped_total', 'nightfall_membranes_dropped')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Admission refusals per second",
+      "description": "Calls nightfall refused because no intended process allowed them, by the rule that refused them. Each one is a dawn asking for work twilight did not intend.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['rule'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_admission_refused_total', 'nightfall_admission_refused')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Ledger and enrollment",
+      "collapsed": false,
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Ledger queue depth",
+      "description": "Entries waiting for the chain builder.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, max(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_ledger_queue_depth'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Ledger delivery failures per second",
+      "description": "Producer delivery failures.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, '' AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_ledger_delivery_failures_total', 'nightfall_ledger_delivery_failures')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Enrollments per second",
+      "description": "Provisioning outcomes by operation and outcome.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, sum(increase) / $__interval_s AS per_second FROM (\n  SELECT t, series, instance, greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series, instance, attribute_set ORDER BY t), 0) AS increase\n  FROM (\n    SELECT $__timeInterval(time) AS t, attributes['outcome'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, max(value) AS highest\n    FROM dusk.otel_metrics\n    WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name IN ('nightfall_enrollments_total', 'nightfall_enrollments')\n    GROUP BY t, series, instance, attribute_set))\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Enrollment rate alert",
+      "description": "1 while an instance sees enrollments above enrollment_alert_per_minute.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, max(latest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, resource_attributes['service.instance.id'] AS series, resource_attributes['service.instance.id'] AS instance, toString(attributes) AS attribute_set, argMax(value, time) AS latest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'nightfall' AND metric_name = 'nightfall_enrollment_rate_alert'\n  GROUP BY t, series, instance, attribute_set)\nGROUP BY t, series ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}
