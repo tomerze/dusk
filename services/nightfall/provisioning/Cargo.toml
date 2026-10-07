@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 base64 = "0.22"
+dusk_capnp = { path = "../../../dusk/src/dusk_capnp", public = true }
+dusk_program_nightfall = { path = "../../../base/nightfall", public = true }
 hex = "0.4"
 metrics = "0.24"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }

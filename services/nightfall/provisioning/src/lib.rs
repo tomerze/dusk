@@ -7,5 +7,8 @@ pub mod identity;
 pub mod jwt;
 pub mod limits;
 pub mod renew;
+pub mod server;
 pub mod state;
 pub mod step_ca;
+
+pub use dusk_program_nightfall::provision_capnp;
