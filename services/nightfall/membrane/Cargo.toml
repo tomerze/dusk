@@ -1,0 +1,16 @@
+[package]
+name = "nightfall_membrane"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+anyhow = { version = "1.0", public = true }
+capnp = { version = "0.21.7", public = true }
+dusk_capnp = { path = "../../../dusk/src/dusk_capnp", public = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", public = true }
+tracing = "0.1.41"
+
+[build-dependencies]
+dusk_capnp = { path = "../../../dusk/src/dusk_capnp" }
