@@ -114,7 +114,20 @@ func TestValidation(test *testing.T) {
 		"reconcile.commands_per_session": minimal + "reconcile: {commands_per_session: 0}\n",
 		"reconcile.default_shell":        minimal + "reconcile: {default_shell: {kill: -1}}\n",
 		"engine.reaps_per_second":        minimal + "engine: {reaps_per_second: 0}\n",
+		"max_requests":                   minimal + "max_requests: 0\n",
 		"kafka.reconcile_results":        minimal + "  reconcile_results_group: \"\"\n",
+		"tls.certificate and":            minimal + "tls: {certificate: /a.crt}\n",
+		"tls.client_ca needs":            minimal + "tls: {client_ca: /ca.crt}\n",
+		"principals needs":               minimal + "principals: {\"dawn-*\": viewer}\n",
+		"principals maps":                minimal + "tls: {certificate: /a.crt, key: /a.key, client_ca: /ca.crt}\nprincipals: {\"dawn-*\": root}\n",
+		"principals holds":               minimal + "tls: {certificate: /a.crt, key: /a.key, client_ca: /ca.crt}\nprincipals: {\"[dawn\": viewer}\n",
+		"oidc.issuer must":               minimal + oidc("http://issuer.example", "https://twilight.example/api/v1/auth/callback"),
+		"oidc.redirect_url must":         minimal + oidc("https://issuer.example", "https://twilight.example/callback"),
+		"oidc.client_id":                 minimal + "oidc: {issuer: \"https://issuer.example\", redirect_url: \"https://twilight.example/api/v1/auth/callback\", role_map: {ops: admin}}\n",
+		"oidc.role_map must":             minimal + "oidc: {issuer: \"https://issuer.example\", client_id: twilight, redirect_url: \"https://twilight.example/api/v1/auth/callback\"}\n",
+		"oidc.role_map maps":             minimal + "oidc: {issuer: \"https://issuer.example\", client_id: twilight, redirect_url: \"https://twilight.example/api/v1/auth/callback\", role_map: {ops: root}}\n",
+		"sessions.lifetime":              minimal + "sessions: {lifetime_seconds: 600, idle_seconds: 3600}\n",
+		"max_streams":                    minimal + "max_streams: 0\n",
 	}
 	for want, content := range cases {
 		_, failure := Load(writeFile(test, content), true, nil)
@@ -137,5 +150,49 @@ func TestDefaultShellCommandsFollowDawnsReads(test *testing.T) {
 	shell.ReapedPid = 1
 	if got := shell.Commands("reap", 3); got != 7 {
 		test.Errorf("a reap of 3 pids at one command each allows %d, want 7", got)
+	}
+}
+
+func oidc(issuer, redirect string) string {
+	return "oidc: {issuer: \"" + issuer + "\", client_id: twilight, redirect_url: \"" + redirect + "\", role_map: {ops: operator}}\n"
+}
+
+func TestAPISettings(test *testing.T) {
+	path := writeFile(test, minimal+`
+tls: {certificate: /etc/twilight/tls/server.crt, key: /etc/twilight/tls/server.key, client_ca: /etc/twilight/pki/internal-ca.crt}
+principals: {"dawn-*": viewer}
+oidc:
+  issuer: https://login.example.org/realms/fleet
+  client_id: twilight
+  redirect_url: https://twilight.example.org/api/v1/auth/callback
+  role_map: {fleet-viewers: viewer}
+`)
+	environment := []string{
+		"TWILIGHT__OIDC__ROLE_MAP=fleet-admins=admin, fleet-operators = operator",
+		"TWILIGHT__PRINCIPALS=automation-*=operator",
+		"TWILIGHT__OIDC__ROLE_CLAIM=realm_access.roles",
+	}
+	loaded, failure := Load(path, true, environment)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if len(loaded.OIDC.RoleMap) != 2 || loaded.OIDC.RoleMap["fleet-admins"] != "admin" || loaded.OIDC.RoleMap["fleet-operators"] != "operator" {
+		test.Fatalf("role map %v", loaded.OIDC.RoleMap)
+	}
+	if len(loaded.Principals) != 1 || loaded.Principals["automation-*"] != "operator" {
+		test.Fatalf("principals %v", loaded.Principals)
+	}
+	if loaded.OIDC.RoleClaim != "realm_access.roles" || strings.Join(loaded.OIDC.Scopes, " ") != "openid profile email" {
+		test.Fatalf("oidc %+v", loaded.OIDC)
+	}
+	if loaded.Sessions.LifetimeSeconds != 43200 || loaded.Sessions.IdleSeconds != 3600 || loaded.MaxStreams != 1000 {
+		test.Fatalf("defaults %+v %d", loaded.Sessions, loaded.MaxStreams)
+	}
+	if _, failure := Load(path, true, []string{"TWILIGHT__OIDC__ROLE_MAP=admins"}); failure == nil || !strings.Contains(failure.Error(), "key=value") {
+		test.Fatalf("a map entry without = was accepted: %v", failure)
+	}
+	loopback := writeFile(test, minimal+oidc("http://127.0.0.1:5556/dex", "http://localhost:8080/api/v1/auth/callback"))
+	if _, failure := Load(loopback, true, nil); failure != nil {
+		test.Fatalf("http on a loopback address is refused: %v", failure)
 	}
 }

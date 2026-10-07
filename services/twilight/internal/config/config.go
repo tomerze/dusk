@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
+	"path"
 	"reflect"
 	"sort"
 	"strconv"
@@ -133,29 +135,73 @@ func (shell DefaultShell) Commands(actionKind string, reapedPids int) int {
 	return shell.Kill + shell.ReapRounds
 }
 
+type TLS struct {
+	Certificate string `yaml:"certificate"`
+	Key         string `yaml:"key"`
+	ClientCA    string `yaml:"client_ca"`
+}
+
+type OIDC struct {
+	Issuer           string            `yaml:"issuer"`
+	ClientID         string            `yaml:"client_id"`
+	ClientSecretFile string            `yaml:"client_secret_file"`
+	RedirectURL      string            `yaml:"redirect_url"`
+	Scopes           []string          `yaml:"scopes"`
+	RoleClaim        string            `yaml:"role_claim"`
+	RoleMap          map[string]string `yaml:"role_map"`
+}
+
+type Sessions struct {
+	LifetimeSeconds int `yaml:"lifetime_seconds"`
+	IdleSeconds     int `yaml:"idle_seconds"`
+}
+
 type Config struct {
-	Instance     string    `yaml:"instance"`
-	Listen       string    `yaml:"listen"`
-	HealthListen string    `yaml:"health_listen"`
-	DrainSeconds int       `yaml:"drain_seconds"`
-	LogLevel     string    `yaml:"log_level"`
-	Database     Database  `yaml:"database"`
-	Kafka        Kafka     `yaml:"kafka"`
-	Dawn         Dawn      `yaml:"dawn"`
-	Engine       Engine    `yaml:"engine"`
-	Alerts       Alerts    `yaml:"alerts"`
-	Reconcile    Reconcile `yaml:"reconcile"`
+	Instance              string            `yaml:"instance"`
+	Listen                string            `yaml:"listen"`
+	HealthListen          string            `yaml:"health_listen"`
+	DrainSeconds          int               `yaml:"drain_seconds"`
+	LogLevel              string            `yaml:"log_level"`
+	MaxStreams            int               `yaml:"max_streams"`
+	MaxRequests           int               `yaml:"max_requests"`
+	RequestTimeoutSeconds int               `yaml:"request_timeout_seconds"`
+	TLS                   TLS               `yaml:"tls"`
+	Principals            map[string]string `yaml:"principals"`
+	OIDC                  OIDC              `yaml:"oidc"`
+	Sessions              Sessions          `yaml:"sessions"`
+	Database              Database          `yaml:"database"`
+	Kafka                 Kafka             `yaml:"kafka"`
+	Dawn                  Dawn              `yaml:"dawn"`
+	Engine                Engine            `yaml:"engine"`
+	Alerts                Alerts            `yaml:"alerts"`
+	Reconcile             Reconcile         `yaml:"reconcile"`
+}
+
+var Roles = []string{"viewer", "operator", "admin"}
+
+func validRole(role string) bool {
+	for _, known := range Roles {
+		if role == known {
+			return true
+		}
+	}
+	return false
 }
 
 func Default() Config {
 	hostname, _ := os.Hostname()
 	return Config{
-		Instance:     hostname,
-		Listen:       "0.0.0.0:8080",
-		HealthListen: "0.0.0.0:9102",
-		DrainSeconds: 30,
-		LogLevel:     "info",
-		Database:     Database{URL: "postgres://twilight@postgres:5432/inventory?sslmode=verify-full", MaxConnections: 20},
+		Instance:              hostname,
+		Listen:                "0.0.0.0:8080",
+		HealthListen:          "0.0.0.0:9102",
+		DrainSeconds:          30,
+		LogLevel:              "info",
+		MaxStreams:            1000,
+		MaxRequests:           8,
+		RequestTimeoutSeconds: 15,
+		OIDC:                  OIDC{Scopes: []string{"openid", "profile", "email"}, RoleClaim: "groups"},
+		Sessions:              Sessions{LifetimeSeconds: 43200, IdleSeconds: 3600},
+		Database:              Database{URL: "postgres://twilight@postgres:5432/inventory?sslmode=verify-full", MaxConnections: 20},
 		Kafka: Kafka{
 			Brokers:  []string{"kafka:9092"},
 			ClientID: "twilight",
@@ -315,6 +361,20 @@ func assign(target reflect.Value, text string) error {
 			}
 		}
 		target.Set(reflect.ValueOf(items))
+	case reflect.Map:
+		entries := map[string]string{}
+		for item := range strings.SplitSeq(text, ",") {
+			if strings.TrimSpace(item) == "" {
+				continue
+			}
+			key, value, found := strings.Cut(item, "=")
+			key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+			if !found || key == "" {
+				return fmt.Errorf("%q is not a comma-separated list of key=value", text)
+			}
+			entries[key] = value
+		}
+		target.Set(reflect.ValueOf(entries))
 	default:
 		return fmt.Errorf("cannot set a %s from the environment", target.Kind())
 	}
@@ -361,6 +421,50 @@ func (loaded Config) Validate() error {
 	if !loaded.Dawn.AllowPlaintext && (loaded.Dawn.CA == "" || loaded.Dawn.Certificate == "" || loaded.Dawn.Key == "") {
 		problem("dawn.ca, dawn.certificate and dawn.key are required unless dawn.allow_plaintext is true")
 	}
+	if (loaded.TLS.Certificate == "") != (loaded.TLS.Key == "") {
+		problem("tls.certificate and tls.key are set together")
+	}
+	if loaded.TLS.ClientCA != "" && loaded.TLS.Certificate == "" {
+		problem("tls.client_ca needs tls.certificate and tls.key")
+	}
+	if len(loaded.Principals) > 0 && loaded.TLS.ClientCA == "" {
+		problem("principals needs tls.client_ca")
+	}
+	for _, pattern := range sortedKeys(loaded.Principals) {
+		if _, failure := path.Match(pattern, ""); failure != nil || pattern == "" {
+			problem("principals holds an invalid pattern %q", pattern)
+		}
+		if !validRole(loaded.Principals[pattern]) {
+			problem("principals maps %q to %q, which is not one of %s", pattern, loaded.Principals[pattern], strings.Join(Roles, ", "))
+		}
+	}
+	if loaded.OIDC.Issuer != "" {
+		if !secureURL(loaded.OIDC.Issuer) {
+			problem("oidc.issuer must be an https URL, or http on a loopback address")
+		}
+		if loaded.OIDC.ClientID == "" {
+			problem("oidc.client_id is required with oidc.issuer")
+		}
+		if !secureURL(loaded.OIDC.RedirectURL) {
+			problem("oidc.redirect_url must be an https URL, or http on a loopback address, ending in /api/v1/auth/callback")
+		} else if parsed, _ := url.Parse(loaded.OIDC.RedirectURL); parsed.Path != "/api/v1/auth/callback" {
+			problem("oidc.redirect_url must end in /api/v1/auth/callback")
+		}
+		if strings.TrimSpace(loaded.OIDC.RoleClaim) == "" {
+			problem("oidc.role_claim is required with oidc.issuer")
+		}
+		if len(loaded.OIDC.RoleMap) == 0 {
+			problem("oidc.role_map must map at least one %s value to a role", loaded.OIDC.RoleClaim)
+		}
+		for _, value := range sortedKeys(loaded.OIDC.RoleMap) {
+			if !validRole(loaded.OIDC.RoleMap[value]) {
+				problem("oidc.role_map maps %q to %q, which is not one of %s", value, loaded.OIDC.RoleMap[value], strings.Join(Roles, ", "))
+			}
+		}
+	}
+	if loaded.Sessions.LifetimeSeconds < 60 || loaded.Sessions.IdleSeconds < 60 || loaded.Sessions.IdleSeconds > loaded.Sessions.LifetimeSeconds {
+		problem("sessions.lifetime_seconds and sessions.idle_seconds must be at least 60, and idle_seconds at most lifetime_seconds")
+	}
 	if loaded.Alerts.WebhookURL != "" {
 		if parsed, failure := url.Parse(loaded.Alerts.WebhookURL); failure != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
 			problem("alerts.webhook_url must be an http or https URL")
@@ -368,6 +472,9 @@ func (loaded Config) Validate() error {
 	}
 	positive := map[string]int{
 		"drain_seconds":                            loaded.DrainSeconds,
+		"max_streams":                              loaded.MaxStreams,
+		"max_requests":                             loaded.MaxRequests,
+		"request_timeout_seconds":                  loaded.RequestTimeoutSeconds,
 		"dawn.port":                                loaded.Dawn.Port,
 		"dawn.request_timeout_seconds":             loaded.Dawn.RequestTimeoutSeconds,
 		"dawn.resolve_interval_seconds":            loaded.Dawn.ResolveIntervalSeconds,
@@ -431,4 +538,32 @@ func (loaded Config) Validate() error {
 		return errors.New("invalid configuration: " + strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func sortedKeys(entries map[string]string) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func secureURL(text string) bool {
+	parsed, failure := url.Parse(text)
+	if failure != nil || parsed.Host == "" {
+		return false
+	}
+	if parsed.Scheme == "https" {
+		return true
+	}
+	if parsed.Scheme != "http" {
+		return false
+	}
+	host := parsed.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	address := net.ParseIP(host)
+	return address != nil && address.IsLoopback()
 }
