@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "event",
+    "device_id",
+    "installation_id",
+    "namespace_id",
+    "epoch",
+    "instance",
+    "inner_address",
+    "remote_address",
+    "tenant",
+    "cert_fingerprint",
+    "cert_not_after",
+    "connected_at",
+    "disconnect_reason"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.connections/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "event": { "enum": ["connected", "disconnected"] },
+    "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+    "installation_id": { "$ref": "common.schema.json#/$defs/installation_id" },
+    "namespace_id": { "$ref": "common.schema.json#/$defs/namespace_id" },
+    "epoch": { "$ref": "common.schema.json#/$defs/epoch" },
+    "instance": { "$ref": "common.schema.json#/$defs/instance" },
+    "inner_address": { "$ref": "common.schema.json#/$defs/inner_address" },
+    "remote_address": { "$ref": "common.schema.json#/$defs/remote_address" },
+    "tenant": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/tenant" }, { "type": "null" }]
+    },
+    "cert_fingerprint": { "$ref": "common.schema.json#/$defs/hash" },
+    "cert_not_after": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "connected_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "disconnect_reason": {
+      "enum": [
+        null,
+        "node_closed",
+        "transport_error",
+        "replaced",
+        "revoked",
+        "cert_expired",
+        "shutdown",
+        "killed",
+        "binding_conflict",
+        "idle_timeout",
+        "lifecycle_changed"
+      ]
+    }
+  },
+  "if": {
+    "required": ["event"],
+    "properties": { "event": { "const": "disconnected" } }
+  },
+  "then": { "properties": { "disconnect_reason": { "type": "string" } } },
+  "else": { "properties": { "disconnect_reason": { "type": "null" } } }
+}
