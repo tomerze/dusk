@@ -1,0 +1,55 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dawn
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dawn
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: twilight
+      ports:
+        - protocol: TCP
+          port: 8443
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+      ports:
+        - protocol: TCP
+          port: 9101
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nightfall
+      ports:
+        - protocol: TCP
+          port: 8444
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ceph
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318

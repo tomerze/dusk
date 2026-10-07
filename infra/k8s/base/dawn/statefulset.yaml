@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dawn
+  labels:
+    app.kubernetes.io/name: dawn
+spec:
+  serviceName: dawn
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dawn
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dawn
+    spec:
+      serviceAccountName: dawn
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 360
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: dawn
+      containers:
+        - name: dawn
+          image: dusk-dawn:dev
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: DAWN__INSTANCE
+              value: $(POD_NAME)
+          ports:
+            - name: https
+              containerPort: 8443
+            - name: metrics
+              containerPort: 9101
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/dawn
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: configuration
+          projected:
+            defaultMode: 0440
+            sources:
+              - configMap:
+                  name: dawn
+                  items:
+                    - key: dawn.toml
+                      path: dawn.toml
+              - secret:
+                  name: dawn-tls
+                  items:
+                    - key: tls.crt
+                      path: tls/tls.crt
+                    - key: tls.key
+                      path: tls/tls.key
+              - configMap:
+                  name: dusk-trust-anchors
+                  items:
+                    - key: internal-ca.crt
+                      path: pki/internal-ca.crt
+              - secret:
+                  name: dawn-output-key
+                  items:
+                    - key: output.key
+                      path: secrets/output.key
+              - secret:
+                  name: ceph-dawn
+                  items:
+                    - key: access-key
+                      path: secrets/s3/access-key
+                    - key: secret-key
+                      path: secrets/s3/secret-key
