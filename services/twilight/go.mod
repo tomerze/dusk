@@ -2,6 +2,8 @@ module dusk/services/twilight
 
 go 1.27.0
 
+ignore ./web/node_modules
+
 require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
