@@ -1,0 +1,409 @@
+name: dusk-stack
+
+x-secret: &secret
+  type: volume
+  source: secrets
+  read_only: true
+
+x-pki: &pki
+  type: volume
+  source: pki
+  read_only: true
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "5"
+
+networks:
+  stack:
+    ipam:
+      config:
+        - subnet: ${DUSK_SUBNET:-10.231.64.0/24}
+
+volumes:
+  secrets: {}
+  pki: {}
+  step-ca: {}
+  kafka: {}
+  postgres: {}
+  clickhouse: {}
+  clickhouse-keeper: {}
+  ceph-etc: {}
+  ceph-data: {}
+  ceph-demo: {}
+  vector: {}
+  grafana: {}
+
+services:
+  secrets-init:
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint: ["/scripts/generate.sh", "/secrets"]
+    environment:
+      FLEET_TOKEN_NAME: compose
+      FLEET_TOKEN_TENANT: dev
+    network_mode: none
+    volumes:
+      - secrets:/secrets
+      - ../k8s/base/secrets-init/generate.sh:/scripts/generate.sh:ro
+
+  pki-init:
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint: ["/scripts/pki.sh", "init", "/pki", "/home/step", "/secrets"]
+    environment:
+      DUSK_DOMAIN: ${DUSK_DOMAIN:-dusk.test}
+      STEP_CA_DNS_NAMES: step-ca,localhost
+    network_mode: none
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - pki:/pki
+      - step-ca:/home/step
+      - { <<: *secret, target: /secrets/fleet-provisioner, volume: { subpath: fleet-provisioner } }
+      - { <<: *secret, target: /secrets/step-ca-password, volume: { subpath: step-ca-password } }
+      - ../k8s/base/pki-init:/scripts:ro
+
+  cert-renewer:
+    <<: [*restart, *logging]
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint: ["/scripts/pki.sh", "renew", "/pki"]
+    environment:
+      DUSK_DOMAIN: ${DUSK_DOMAIN:-dusk.test}
+    network_mode: none
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+    volumes:
+      - pki:/pki
+      - ../k8s/base/pki-init:/scripts:ro
+
+  step-ca:
+    <<: [*restart, *logging]
+    image: smallstep/step-ca:0.30.2
+    entrypoint: ["step-ca", "--password-file", "/run/secrets/step-ca-password/password", "/home/step/config/ca.json"]
+    networks: [stack]
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+    volumes:
+      - step-ca:/home/step
+      - { <<: *secret, target: /run/secrets/step-ca-password, volume: { subpath: step-ca-password } }
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://localhost:9000", "--root", "/home/step/certs/root_ca.crt"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  kafka:
+    <<: [*restart, *logging]
+    image: apache/kafka:4.2.2
+    networks: [stack]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      CLUSTER_ID: _K0rJMXsQlKs0rwJynjxcw
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  kafka-init:
+    image: apache/kafka:4.2.2
+    entrypoint: ["/scripts/create-topics.sh"]
+    networks: [stack]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TOPIC_PROFILE: dev
+      REPLICATION_FACTOR: 1
+      MIN_INSYNC_REPLICAS: 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ../k8s/base/kafka-init:/scripts:ro
+
+  postgres:
+    <<: [*restart, *logging]
+    image: postgres:17.11-trixie
+    command:
+      - postgres
+      - -c
+      - tcp_keepalives_idle=10
+      - -c
+      - tcp_keepalives_interval=5
+      - -c
+      - tcp_keepalives_count=3
+      - -c
+      - tcp_user_timeout=15000
+    networks: [stack]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-superuser/password
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ../k8s/base/postgres/init.sh:/docker-entrypoint-initdb.d/10-dusk.sh:ro
+      - { <<: *secret, target: /run/secrets/postgres-superuser, volume: { subpath: postgres-superuser } }
+      - { <<: *secret, target: /run/secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
+      - { <<: *secret, target: /run/secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
+      - { <<: *secret, target: /run/secrets/postgres-signoz, volume: { subpath: postgres-signoz } }
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host", "127.0.0.1", "--username", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  clickhouse-keeper:
+    <<: [*restart, *logging]
+    image: clickhouse/clickhouse-keeper:26.8.19.9
+    networks: [stack]
+    environment:
+      KEEPER_CONFIG: /etc/clickhouse-keeper/keeper.yaml
+      KEEPER_SERVER_ID: 1
+      KEEPER_RAFT_HOST: clickhouse-keeper
+    volumes:
+      - clickhouse-keeper:/var/lib/clickhouse
+      - ../k8s/base/clickhouse-keeper/keeper.yaml:/etc/clickhouse-keeper/keeper.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:9182/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  clickhouse:
+    <<: [*restart, *logging]
+    image: clickhouse/clickhouse-server:26.8.19.9
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        export CLICKHOUSE_PASSWORD="$$(cat /run/secrets/clickhouse-admin/password)"
+        CLICKHOUSE_VECTOR_PASSWORD="$$(cat /run/secrets/clickhouse-vector/password)"
+        CLICKHOUSE_GRAFANA_PASSWORD="$$(cat /run/secrets/clickhouse-grafana/password)"
+        CLICKHOUSE_SIGNOZ_PASSWORD="$$(cat /run/secrets/clickhouse-signoz/password)"
+        LAKE_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-reader/access-key)"
+        LAKE_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-reader/secret-key)"
+        && exec /entrypoint.sh
+    networks: [stack]
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_REPLICA_HOST: clickhouse
+      CLICKHOUSE_KEEPER_HOST: clickhouse-keeper
+      LAKE_URL: http://ceph:8080/dusk-lake/
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+      clickhouse-keeper:
+        condition: service_healthy
+    volumes:
+      - clickhouse:/var/lib/clickhouse
+      - ../k8s/base/clickhouse/config.d/dusk.yaml:/etc/clickhouse-server/config.d/dusk.yaml:ro
+      - ../k8s/base/clickhouse/users.d/dusk.yaml:/etc/clickhouse-server/users.d/dusk.yaml:ro
+      - { <<: *secret, target: /run/secrets/clickhouse-admin, volume: { subpath: clickhouse-admin } }
+      - { <<: *secret, target: /run/secrets/clickhouse-vector, volume: { subpath: clickhouse-vector } }
+      - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
+      - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
+      - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  clickhouse-schema:
+    image: clickhouse/clickhouse-server:26.8.19.9
+    entrypoint: ["/scripts/apply-schema.sh"]
+    networks: [stack]
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse-admin/password
+      SCHEMA_DIRECTORY: /schema
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      ceph-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/clickhouse/apply-schema.sh:/scripts/apply-schema.sh:ro
+      - ../k8s/base/clickhouse/schema:/schema:ro
+      - { <<: *secret, target: /run/secrets/clickhouse-admin, volume: { subpath: clickhouse-admin } }
+
+  ceph:
+    <<: [*restart, *logging]
+    image: quay.io/ceph/demo@sha256:522483cf07cfce6386b8e18a3edfa88a1b32c688dee231d0a6962b1513557723
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        export CEPH_DEMO_ACCESS_KEY="$$(cat /run/secrets/ceph-admin/access-key)"
+        CEPH_DEMO_SECRET_KEY="$$(cat /run/secrets/ceph-admin/secret-key)"
+        && exec /opt/ceph-container/bin/demo
+    networks:
+      stack:
+        ipv4_address: ${DUSK_CEPH_IP:-10.231.64.10}
+    environment:
+      MON_IP: ${DUSK_CEPH_IP:-10.231.64.10}
+      CEPH_PUBLIC_NETWORK: ${DUSK_SUBNET:-10.231.64.0/24}
+      DEMO_DAEMONS: mon,mgr,osd,rgw
+      RGW_FRONTEND_PORT: 8080
+      RGW_NAME: ceph
+      OSD_COUNT: 1
+      CEPH_DEMO_UID: admin
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - ceph-etc:/etc/ceph
+      - ceph-data:/var/lib/ceph
+      - ceph-demo:/opt/ceph-container/tmp
+      - { <<: *secret, target: /run/secrets/ceph-admin, volume: { subpath: ceph-admin } }
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "--fail", "--output", "/dev/null", "http://127.0.0.1:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  ceph-users:
+    image: quay.io/ceph/demo@sha256:522483cf07cfce6386b8e18a3edfa88a1b32c688dee231d0a6962b1513557723
+    entrypoint: ["/scripts/users.sh"]
+    networks: [stack]
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+      ceph:
+        condition: service_healthy
+    volumes:
+      - type: volume
+        source: ceph-etc
+        target: /etc/ceph
+        read_only: true
+      - ../k8s/base/ceph/users.sh:/scripts/users.sh:ro
+      - { <<: *secret, target: /run/secrets/ceph-admin, volume: { subpath: ceph-admin } }
+      - { <<: *secret, target: /run/secrets/ceph-vector, volume: { subpath: ceph-vector } }
+      - { <<: *secret, target: /run/secrets/ceph-ledger-writer, volume: { subpath: ceph-ledger-writer } }
+      - { <<: *secret, target: /run/secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
+      - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+
+  ceph-init:
+    image: amazon/aws-cli:2.37.9
+    entrypoint: ["/scripts/buckets.sh"]
+    networks: [stack]
+    environment:
+      S3_ENDPOINT: http://ceph:8080
+      EVIDENCE_RETENTION_MODE: GOVERNANCE
+      EVIDENCE_RETENTION_DAYS: 1
+    depends_on:
+      ceph-users:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/ceph-init/buckets.sh:/scripts/buckets.sh:ro
+      - { <<: *secret, target: /run/secrets/ceph-admin, volume: { subpath: ceph-admin } }
+
+  otel-collector:
+    <<: [*restart, *logging]
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command: ["--config", "/etc/otelcol-contrib/config.yaml", "--config", "/etc/otelcol-contrib/scrape.yaml"]
+    networks: [stack]
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./otel-collector/scrape.yaml:/etc/otelcol-contrib/scrape.yaml:ro
+
+  vector:
+    <<: [*restart, *logging]
+    image: dusk-vector:dev
+    build:
+      context: ../..
+      dockerfile: infra/vector/Dockerfile
+    networks: [stack]
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      S3_ENDPOINT: http://ceph:8080
+      S3_REGION: us-east-1
+      LAKE_BUCKET: dusk-lake
+      EVIDENCE_BUCKET: dusk-ledger-evidence
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      clickhouse-schema:
+        condition: service_completed_successfully
+      ceph-init:
+        condition: service_completed_successfully
+    volumes:
+      - vector:/var/lib/vector
+      - { <<: *secret, target: /run/secrets/clickhouse, volume: { subpath: clickhouse-vector } }
+      - { <<: *secret, target: /run/secrets/lake, volume: { subpath: ceph-vector } }
+      - { <<: *secret, target: /run/secrets/evidence, volume: { subpath: ceph-ledger-writer } }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  grafana:
+    <<: [*restart, *logging]
+    image: dusk-grafana:dev
+    build:
+      context: ../..
+      dockerfile: infra/grafana/Dockerfile
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_GRAFANA_PORT-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin/password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse-schema:
+        condition: service_completed_successfully
+    volumes:
+      - grafana:/var/lib/grafana
+      - { <<: *secret, target: /run/secrets/grafana-admin, volume: { subpath: grafana-admin } }
+      - { <<: *secret, target: /run/secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
+      - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
