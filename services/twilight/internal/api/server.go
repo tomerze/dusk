@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
@@ -86,6 +87,7 @@ type Server struct {
 	Options
 	mux       *http.ServeMux
 	routes    []route
+	schemas   map[string]*jsonschema.Schema
 	streams   atomic.Int64
 	requests  chan struct{}
 	draining  chan struct{}
@@ -110,6 +112,7 @@ type exchange struct {
 	client    context.Context
 	principal *Principal
 	requestID string
+	schema    *jsonschema.Schema
 }
 
 func (call *exchange) actor() string {
@@ -163,6 +166,11 @@ func New(options Options) (*Server, error) {
 	if options.MaxRequests > 0 {
 		server.requests = make(chan struct{}, options.MaxRequests)
 	}
+	schemas, failure := requestSchemas(server.routes)
+	if failure != nil {
+		return nil, failure
+	}
+	server.schemas = schemas
 	if options.OIDC != nil {
 		server.oidc = &oidcClient{settings: *options.OIDC}
 	}
@@ -219,7 +227,7 @@ func (server *Server) wrap(current route) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		started := time.Now()
 		recorded := &recorder{ResponseWriter: writer}
-		call := &exchange{writer: recorded, request: request, client: request.Context(), requestID: newRequestID()}
+		call := &exchange{writer: recorded, request: request, client: request.Context(), requestID: newRequestID(), schema: server.schemas[current.pattern()]}
 		header := recorded.Header()
 		header.Set("X-Request-Id", call.requestID)
 		header.Set("Cache-Control", "no-store")
@@ -345,6 +353,16 @@ func decodeBody(call *exchange, target any, required bool) error {
 	}
 	if mediaType, _, failure := mime.ParseMediaType(call.request.Header.Get("Content-Type")); failure != nil || mediaType != "application/json" {
 		return newProblem(http.StatusUnsupportedMediaType, "unsupported_media_type", "the request body must be application/json")
+	}
+	if call.schema != nil {
+		instance, failure := jsonschema.UnmarshalJSON(bytes.NewReader(content))
+		if failure != nil {
+			return invalid("the request body is not JSON")
+		}
+		if failure := call.schema.Validate(instance); failure != nil {
+			found := violations(failure)
+			return invalid("the request body does not match its schema: "+found[0]["at"]+": "+found[0]["message"]).with("violations", found)
+		}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()

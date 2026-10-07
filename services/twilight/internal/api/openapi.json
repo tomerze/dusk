@@ -1,0 +1,4450 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "twilight",
+    "version": "1",
+    "description": "Run campaigns on the fleet, read its inventory and alerts. Authenticate with a login session (cookie, plus the twilight_csrf cookie's value in X-CSRF-Token on every request that changes something), an API token (Authorization: Bearer), or a client certificate. Every error is {\"error\": {\"code\", \"message\", \"details\"}}. Lists are pages of {\"items\", \"next_cursor\"}."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    },
+    {
+      "session": []
+    },
+    {
+      "certificate": []
+    }
+  ],
+  "paths": {
+    "/api/openapi.json": {
+      "get": {
+        "operationId": "getOpenAPI",
+        "summary": "This document",
+        "x-required-role": "public",
+        "responses": {
+          "200": {
+            "description": "The OpenAPI 3.1 document of this API.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/login": {
+      "get": {
+        "operationId": "login",
+        "summary": "Log in",
+        "x-required-role": "public",
+        "description": "Starts an OIDC authorization code login with PKCE. In development mode it creates an admin session at once, for loopback callers only.",
+        "parameters": [
+          {
+            "name": "return_to",
+            "in": "query",
+            "description": "A path on this site to return to after logging in; / by default.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "To the identity provider's login page."
+          },
+          "303": {
+            "description": "Development mode only: a session was created; back to return_to."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/callback": {
+      "get": {
+        "operationId": "loginCallback",
+        "summary": "Finish logging in",
+        "x-required-role": "public",
+        "description": "Where the identity provider sends the browser back. 403 with code no_role when none of the user's role claim values is in oidc.role_map.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "A session was created; to return_to. Sets the twilight_session and twilight_csrf cookies."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Log out",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The session ended and its cookies were cleared."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Who is calling",
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "The caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Principal"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/overview": {
+      "get": {
+        "operationId": "getOverview",
+        "summary": "The fleet at a glance",
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "Node counts, active campaigns and open alerts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes": {
+      "get": {
+        "operationId": "listNodes",
+        "summary": "List nodes",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "name": "selector",
+            "in": "query",
+            "description": "Only nodes this selector matches.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "online",
+            "in": "query",
+            "description": "Only online (true) or offline (false) nodes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "The column to sort by, - first for descending: device_id (default), hostname, lifecycle, country, os_name, os_version, os_build, dusk_version, hardware_class, tenant, locale, impl, target_arch or reported_version.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of nodes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{device}/{installation}": {
+      "get": {
+        "operationId": "getNode",
+        "summary": "A node",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/Installation"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The node with its live sessions and campaign rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{device}/{installation}/lifecycle": {
+      "post": {
+        "operationId": "setNodeLifecycle",
+        "summary": "Change a node's lifecycle",
+        "x-required-role": "operator",
+        "description": "retired and revoked need the admin role, and so does any change to a node that is retired or revoked. The change is produced to dusk.node-state, which nightfall enforces, and then written to the inventory.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/Installation"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The node after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{device}/{installation}/sessions": {
+      "post": {
+        "operationId": "openNodeSession",
+        "summary": "Open an interactive session",
+        "x-required-role": "operator",
+        "description": "Records a random pid as the node's intended interactive process and answers it with the node's live session, to connect to through dawn. 409 with code node_offline when the node is not online.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/Installation"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The pid to open the shell at and the node to reach it on.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorProcess"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{device}/{installation}/logs": {
+      "post": {
+        "operationId": "streamNodeLogs",
+        "summary": "Stream a node's logs",
+        "x-required-role": "operator",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/Installation"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "dawn started the stream.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "stream_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "stream_id"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{device}/{installation}/files": {
+      "post": {
+        "operationId": "collectNodeFile",
+        "summary": "Collect a file from a node",
+        "x-required-role": "operator",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/Installation"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FilesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "dawn started the upload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "upload_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "upload_id"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/devices/{device}/lifecycle": {
+      "post": {
+        "operationId": "setDeviceLifecycle",
+        "summary": "Change a device's lifecycle",
+        "x-required-role": "admin",
+        "description": "Retiring or revoking a device blocks every installation of it, now and later. active lifts the block, and each installation keeps its own lifecycle. The change is produced to dusk.node-state, which nightfall enforces, and then written to the inventory.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLifecycleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The device's lifecycle after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLifecycle"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/selectors/validate": {
+      "post": {
+        "operationId": "validateSelector",
+        "summary": "Check a selector",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether it parses, where it fails, how many nodes it matches and a sample of them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectorValidation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns": {
+      "get": {
+        "operationId": "listCampaigns",
+        "summary": "List campaigns",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Only campaigns in these statuses, comma-separated or repeated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of campaigns, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCampaign",
+        "summary": "Create a campaign",
+        "x-required-role": "operator",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignDefinition"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new draft campaign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "description": "The campaign's path.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}": {
+      "get": {
+        "operationId": "getCampaign",
+        "summary": "A campaign",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The campaign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateCampaign",
+        "summary": "Edit a draft campaign",
+        "x-required-role": "operator",
+        "description": "Only a draft can be edited. 409 with code version_conflict when the campaign changed since the version given was read.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/overlap": {
+      "get": {
+        "operationId": "getCampaignOverlap",
+        "summary": "Count the nodes a campaign shares with running campaigns",
+        "x-required-role": "viewer",
+        "description": "For an ensure_version or ensure_config campaign: how many nodes running campaigns of the same kind (and version_key) also target, and which campaigns. Starting the campaign needs policy.allow_overlap while the count is above 0. Always 0 for other kinds.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The overlap.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overlap"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/start": {
+      "post": {
+        "operationId": "startCampaign",
+        "summary": "Start a draft campaign",
+        "x-required-role": "operator",
+        "description": "409 with code overlap when an ensure campaign of the same kind is running on some of the same nodes; details give the count and the campaigns. Set policy.allow_overlap to start anyway.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/pause": {
+      "post": {
+        "operationId": "pauseCampaign",
+        "summary": "Pause a running campaign",
+        "x-required-role": "operator",
+        "description": "Stops new dispatches; processes in flight finish.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/resume": {
+      "post": {
+        "operationId": "resumeCampaign",
+        "summary": "Resume a paused campaign",
+        "x-required-role": "operator",
+        "description": "409 with code gate_override_required after a health gate paused it, unless override_gate is true and a reason is given.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/abort": {
+      "post": {
+        "operationId": "abortCampaign",
+        "summary": "Abort a campaign",
+        "x-required-role": "operator",
+        "description": "Stops new dispatches and cancels the rows not yet dispatched.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/complete": {
+      "post": {
+        "operationId": "completeCampaign",
+        "summary": "Complete a campaign",
+        "x-required-role": "operator",
+        "description": "Ends a running or paused campaign, such as a converging ensure campaign.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/archive": {
+      "post": {
+        "operationId": "archiveCampaign",
+        "summary": "Archive a finished campaign",
+        "x-required-role": "operator",
+        "description": "Drops its node rows and events. 409 with code not_archivable until an hour past the node timeout after the last dispatch.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The campaign after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/nodes": {
+      "get": {
+        "operationId": "listCampaignNodes",
+        "summary": "A campaign's nodes",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Only rows in these states, comma-separated or repeated.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phase",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the campaign's rows, by node.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignNodePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/nodes/retry": {
+      "post": {
+        "operationId": "retryCampaignNodes",
+        "summary": "Retry nodes",
+        "x-required-role": "operator",
+        "description": "Starts a new attempt, with a new pid, for failed or unknown rows of a running or paused campaign.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many rows were set to run again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/nodes/resolve": {
+      "post": {
+        "operationId": "resolveCampaignNodes",
+        "summary": "Resolve unknown nodes by hand",
+        "x-required-role": "operator",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many rows were resolved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/events": {
+      "get": {
+        "operationId": "listCampaignEvents",
+        "summary": "A campaign's history",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Only events after this event id: the next_cursor of the previous page.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events oldest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignEventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/{id}/gates": {
+      "get": {
+        "operationId": "getCampaignGates",
+        "summary": "A campaign's health gate",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Campaign"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The gate's tallies, verdict and bake progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gates"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "operationId": "listAlerts",
+        "summary": "List alerts",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "description": "open (default) or all.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "all"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of alerts, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{id}/acknowledge": {
+      "post": {
+        "operationId": "acknowledgeAlert",
+        "summary": "Acknowledge an alert",
+        "x-required-role": "operator",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Alert"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The alert.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/{id}/resolve": {
+      "post": {
+        "operationId": "resolveAlert",
+        "summary": "Resolve an alert",
+        "x-required-role": "operator",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Alert"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The alert.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/stream": {
+      "get": {
+        "operationId": "stream",
+        "summary": "Live updates",
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of FeedEvent objects, one per event, named by kind. The latest event of each kind comes first; a comment line is sent every 15 seconds; the stream ends after 5 minutes and the client reconnects.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "x-event-schema": {
+                  "$ref": "#/components/schemas/FeedEvent"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "A stable, machine-readable code, such as not_found, invalid_argument, invalid_selector, overlap or csrf_failed."
+              },
+              "message": {
+                "type": "string",
+                "description": "What went wrong, for a person."
+              },
+              "details": {
+                "type": "object",
+                "description": "Facts that belong to the code: field for invalid_argument, position and end for invalid_selector, count and campaigns for overlap, login for unauthenticated, violations for a request body that does not match its schema, request_id for a server failure."
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "details"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Principal": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "Who is calling: the OIDC subject, token:<id> for an API token, the certificate principal, or dev."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A display name, when one is known."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "operator",
+              "admin"
+            ]
+          },
+          "authentication": {
+            "type": "string",
+            "description": "How the caller authenticated.",
+            "enum": [
+              "oidc",
+              "token",
+              "mtls",
+              "dev"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the login session ends unless it is used again; null when the caller is not using a session."
+          }
+        },
+        "required": [
+          "subject",
+          "name",
+          "role",
+          "authentication",
+          "expires_at"
+        ]
+      },
+      "NodeKey": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        },
+        "required": [
+          "device_id",
+          "installation_id"
+        ]
+      },
+      "Node": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "cert_fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "enrolled",
+              "active",
+              "quarantined",
+              "retired",
+              "revoked"
+            ]
+          },
+          "lifecycle_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lifecycle_changed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "os_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "os_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "os_build": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dusk_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hardware_class": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "impl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_arch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "description": "Every fact the node last reported, by key."
+          },
+          "reported_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reported_config_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reported_services": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "facts_namespace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "facts_read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "enrolled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "online": {
+            "type": "boolean",
+            "description": "Whether the node has a live session now."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When nightfall last heard from the node."
+          }
+        },
+        "required": [
+          "device_id",
+          "installation_id",
+          "cert_fingerprint",
+          "lifecycle",
+          "lifecycle_reason",
+          "lifecycle_changed_at",
+          "country",
+          "os_name",
+          "os_version",
+          "os_build",
+          "dusk_version",
+          "hardware_class",
+          "tenant",
+          "locale",
+          "hostname",
+          "impl",
+          "target_arch",
+          "facts",
+          "reported_version",
+          "reported_config_hash",
+          "reported_services",
+          "reported_at",
+          "facts_namespace_id",
+          "facts_read_at",
+          "enrolled_at",
+          "first_seen_at",
+          "updated_at",
+          "online",
+          "last_seen_at"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "namespace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "epoch": {
+            "type": "integer"
+          },
+          "instance": {
+            "type": "string",
+            "description": "The nightfall instance holding the session."
+          },
+          "inner_address": {
+            "type": "string"
+          },
+          "connected_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "namespace_id",
+          "epoch",
+          "instance",
+          "inner_address",
+          "connected_at",
+          "last_seen"
+        ]
+      },
+      "CampaignNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "campaign_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "device_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "dispatching",
+              "dispatched",
+              "delivered",
+              "verifying",
+              "backoff",
+              "succeeded",
+              "failed",
+              "unknown",
+              "excluded",
+              "conflict",
+              "cancelled"
+            ]
+          },
+          "attempt": {
+            "type": "integer"
+          },
+          "failures": {
+            "type": "integer"
+          },
+          "unreached": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Dispatches of the current attempt that did not reach the node."
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{4,19}$",
+                "description": "A process id, a u64 in decimal."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pid of the current attempt; null before its first dispatch."
+          },
+          "epoch": {
+            "type": "integer",
+            "description": "The session epoch the current attempt was sent to; 0 before its first dispatch."
+          },
+          "namespace_id": {
+            "type": "string"
+          },
+          "dispatched_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "deadline_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "next_attempt_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "last_status": {
+            "type": "string",
+            "description": "The last process result status dawn reported, or empty."
+          },
+          "event_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "back_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "silent": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "reaped_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When dawn reported the current attempt's process reaped on the node."
+          },
+          "breakdown": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The node's inventory values for the gate breakdown, copied at its first dispatch."
+          }
+        },
+        "required": [
+          "campaign_id",
+          "device_id",
+          "installation_id",
+          "phase",
+          "state",
+          "attempt",
+          "failures",
+          "unreached",
+          "pid",
+          "epoch",
+          "namespace_id",
+          "dispatched_at",
+          "delivered_at",
+          "deadline_at",
+          "finished_at",
+          "next_attempt_at",
+          "last_error",
+          "last_status",
+          "event_at",
+          "back_at",
+          "silent",
+          "reaped_at",
+          "breakdown"
+        ]
+      },
+      "NodeDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "cert_fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "enrolled",
+              "active",
+              "quarantined",
+              "retired",
+              "revoked"
+            ]
+          },
+          "lifecycle_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lifecycle_changed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "os_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "os_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "os_build": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dusk_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hardware_class": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "impl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_arch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "facts": {
+            "type": "object",
+            "description": "Every fact the node last reported, by key."
+          },
+          "reported_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reported_config_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reported_services": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "facts_namespace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "facts_read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "enrolled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "online": {
+            "type": "boolean",
+            "description": "Whether the node has a live session now."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When nightfall last heard from the node."
+          },
+          "device": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeviceLifecycle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last lifecycle change made to the node's device as a whole, or null when there was none."
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "executions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CampaignNode"
+            },
+            "description": "The node's rows in campaigns, newest first, at most 100."
+          }
+        },
+        "required": [
+          "device_id",
+          "installation_id",
+          "cert_fingerprint",
+          "lifecycle",
+          "lifecycle_reason",
+          "lifecycle_changed_at",
+          "country",
+          "os_name",
+          "os_version",
+          "os_build",
+          "dusk_version",
+          "hardware_class",
+          "tenant",
+          "locale",
+          "hostname",
+          "impl",
+          "target_arch",
+          "facts",
+          "reported_version",
+          "reported_config_hash",
+          "reported_services",
+          "reported_at",
+          "facts_namespace_id",
+          "facts_read_at",
+          "enrolled_at",
+          "first_seen_at",
+          "updated_at",
+          "online",
+          "last_seen_at",
+          "device",
+          "sessions",
+          "executions"
+        ]
+      },
+      "DeviceLifecycle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "active",
+              "retired",
+              "revoked"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who made the change."
+          }
+        },
+        "required": [
+          "device_id",
+          "lifecycle",
+          "reason",
+          "changed_at",
+          "actor"
+        ],
+        "description": "The last lifecycle change made to a device as a whole."
+      },
+      "NodeReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "installation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "namespace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "nightfall": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "device_id",
+          "installation_id",
+          "namespace_id",
+          "nightfall"
+        ]
+      },
+      "OperatorProcess": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pid": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{4,19}$",
+            "description": "A process id, a u64 in decimal."
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeReference"
+          }
+        },
+        "required": [
+          "pid",
+          "node"
+        ]
+      },
+      "StreamLogs": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "trace",
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ]
+          },
+          "duration_seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "duration_seconds"
+        ]
+      },
+      "Action": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "run_script",
+              "ensure_version",
+              "ensure_config",
+              "quarantine"
+            ]
+          },
+          "script": {
+            "type": "string",
+            "description": "The dusk shell script to run; required except for quarantine."
+          },
+          "collect_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Absolute paths to collect after the script (run_script only)."
+          },
+          "stream_logs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StreamLogs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "string",
+            "description": "The desired version (ensure_version only)."
+          },
+          "version_key": {
+            "type": "string",
+            "description": "The fact the version is read from (ensure_version only); dusk.version by default."
+          },
+          "config_hash": {
+            "type": "string",
+            "description": "The desired configuration hash (ensure_config only)."
+          },
+          "require_script_success": {
+            "type": "boolean",
+            "description": "Quarantine only when the script succeeded (quarantine only)."
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "Policy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rate": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "per_second": {
+                "type": "number",
+                "description": "Dispatches per second across the fleet."
+              },
+              "burst": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "per_second",
+              "burst"
+            ]
+          },
+          "phases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "percent": {
+                  "type": "number",
+                  "description": "Cumulative percent of the matching nodes this phase reaches; the last is 100."
+                },
+                "bake_seconds": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "percent",
+                "bake_seconds"
+              ]
+            }
+          },
+          "gates": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "min_sample": {
+                "type": "integer"
+              },
+              "max_failure_rate": {
+                "type": "number"
+              },
+              "max_silent_rate": {
+                "type": "number"
+              },
+              "silent_window_seconds": {
+                "type": "integer"
+              },
+              "breakdown": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "os_build",
+                    "hardware_class",
+                    "dusk_version",
+                    "country"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "min_sample",
+              "max_failure_rate",
+              "max_silent_rate",
+              "silent_window_seconds",
+              "breakdown"
+            ]
+          },
+          "abort": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "on_gate_failure": {
+                "type": "string",
+                "enum": [
+                  "pause",
+                  "abort"
+                ]
+              },
+              "max_total_failures": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "on_gate_failure",
+              "max_total_failures"
+            ]
+          },
+          "node_timeout_seconds": {
+            "type": "integer"
+          },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_attempts": {
+                "type": "integer"
+              },
+              "initial_backoff_seconds": {
+                "type": "integer"
+              },
+              "max_backoff_seconds": {
+                "type": "integer"
+              },
+              "multiplier": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "max_attempts",
+              "initial_backoff_seconds",
+              "max_backoff_seconds",
+              "multiplier"
+            ]
+          },
+          "deadline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "allow_overlap": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rate",
+          "phases",
+          "gates",
+          "abort",
+          "node_timeout_seconds",
+          "retry",
+          "deadline",
+          "allow_overlap"
+        ]
+      },
+      "PolicyInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rate": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "per_second": {
+                "type": "number",
+                "description": "Dispatches per second across the fleet."
+              },
+              "burst": {
+                "type": "integer"
+              }
+            }
+          },
+          "phases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "percent": {
+                  "type": "number",
+                  "description": "Cumulative percent of the matching nodes this phase reaches; the last is 100."
+                },
+                "bake_seconds": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "percent"
+              ]
+            }
+          },
+          "gates": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "min_sample": {
+                "type": "integer"
+              },
+              "max_failure_rate": {
+                "type": "number"
+              },
+              "max_silent_rate": {
+                "type": "number"
+              },
+              "silent_window_seconds": {
+                "type": "integer"
+              },
+              "breakdown": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "os_build",
+                    "hardware_class",
+                    "dusk_version",
+                    "country"
+                  ]
+                }
+              }
+            }
+          },
+          "abort": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "on_gate_failure": {
+                "type": "string",
+                "enum": [
+                  "pause",
+                  "abort"
+                ]
+              },
+              "max_total_failures": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "node_timeout_seconds": {
+            "type": "integer"
+          },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_attempts": {
+                "type": "integer"
+              },
+              "initial_backoff_seconds": {
+                "type": "integer"
+              },
+              "max_backoff_seconds": {
+                "type": "integer"
+              },
+              "multiplier": {
+                "type": "number"
+              }
+            }
+          },
+          "deadline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "allow_overlap": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CampaignDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selector": {
+            "type": "string",
+            "description": "Which nodes the campaign targets, in the selector language."
+          },
+          "action": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PolicyInput"
+          }
+        },
+        "required": [
+          "name",
+          "selector",
+          "action"
+        ]
+      },
+      "CampaignUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selector": {
+            "type": "string",
+            "description": "Which nodes the campaign targets, in the selector language."
+          },
+          "action": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PolicyInput"
+          },
+          "version": {
+            "type": "integer",
+            "description": "The version of the campaign this edit was made to."
+          }
+        },
+        "required": [
+          "version",
+          "name",
+          "selector",
+          "action"
+        ]
+      },
+      "Counter": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "dispatching",
+              "dispatched",
+              "delivered",
+              "verifying",
+              "backoff",
+              "succeeded",
+              "failed",
+              "unknown",
+              "excluded",
+              "conflict",
+              "cancelled"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "phase",
+          "state",
+          "count"
+        ]
+      },
+      "Campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "running",
+              "paused",
+              "completed",
+              "aborted",
+              "failed",
+              "archived"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "run_script",
+              "ensure_version",
+              "ensure_config",
+              "quarantine"
+            ]
+          },
+          "selector": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "paused_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "current_phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "phase_started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "phase_paused_seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "gate_override_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pause_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "operator",
+              "gate",
+              "permission",
+              null
+            ]
+          },
+          "pause_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "abort_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_dispatch_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Changes whenever the definition or the status changes."
+          },
+          "counters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Counter"
+            },
+            "description": "The campaign's nodes counted by phase and state, refreshed every few seconds."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "tenant",
+          "status",
+          "kind",
+          "selector",
+          "action",
+          "policy",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "started_at",
+          "paused_at",
+          "finished_at",
+          "current_phase",
+          "phase_started_at",
+          "phase_paused_seconds",
+          "gate_override_after",
+          "pause_kind",
+          "pause_reason",
+          "abort_reason",
+          "last_dispatch_at",
+          "version",
+          "counters"
+        ]
+      },
+      "CampaignEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "description": "What happened, such as created, started, phase_opened, paused, resumed, nodes_retried or completed."
+          },
+          "actor": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "time",
+          "kind",
+          "actor",
+          "detail"
+        ]
+      },
+      "Tally": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "eligible": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "silent": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "succeeded",
+          "failed",
+          "eligible",
+          "silent"
+        ]
+      },
+      "Gates": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "overall": {
+            "$ref": "#/components/schemas/Tally"
+          },
+          "groups": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/components/schemas/Tally"
+              }
+            },
+            "description": "Tallies by breakdown dimension, then by value."
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "hold",
+              "fail"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "failing_group": {
+            "type": "string"
+          },
+          "degraded": {
+            "type": "boolean",
+            "description": "Whether the online view is degraded, which holds the gate."
+          },
+          "min_sample": {
+            "type": "integer"
+          },
+          "required": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The sample the gate waits for: min_sample, or the number of nodes in the phases opened so far when that is smaller."
+          },
+          "max_failure_rate": {
+            "type": "number"
+          },
+          "max_silent_rate": {
+            "type": "number"
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "phase_name": {
+            "type": "string"
+          },
+          "bake_seconds": {
+            "type": "integer"
+          },
+          "bake_accrued_seconds": {
+            "type": "number"
+          },
+          "converging": {
+            "type": "boolean",
+            "description": "An ensure campaign whose last phase passed and keeps enforcing its desired state."
+          }
+        },
+        "required": [
+          "overall",
+          "groups",
+          "verdict",
+          "reason",
+          "failing_group",
+          "degraded",
+          "min_sample",
+          "required",
+          "max_failure_rate",
+          "max_silent_rate",
+          "phase",
+          "phase_name",
+          "bake_seconds",
+          "bake_accrued_seconds",
+          "converging"
+        ]
+      },
+      "SelectorValidation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "position": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "position",
+              "end",
+              "message"
+            ]
+          },
+          "matched": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sample": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "ok",
+          "error",
+          "matched",
+          "sample"
+        ]
+      },
+      "Alert": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "occurrences": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "object"
+          },
+          "acknowledged_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acknowledged_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "resolved_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "time",
+          "last_seen_at",
+          "occurrences",
+          "severity",
+          "kind",
+          "fingerprint",
+          "detail",
+          "acknowledged_by",
+          "acknowledged_at",
+          "resolved_by",
+          "resolved_at"
+        ]
+      },
+      "Overview": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nodes": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "online": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "by_lifecycle": {
+                "type": "object",
+                "propertyNames": {
+                  "enum": [
+                    "enrolled",
+                    "active",
+                    "quarantined",
+                    "retired",
+                    "revoked"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "required": [
+              "total",
+              "online",
+              "by_lifecycle"
+            ]
+          },
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Campaign"
+            },
+            "description": "The running and paused campaigns."
+          },
+          "alerts": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Open alerts by severity."
+          },
+          "alerts_unacknowledged": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Open alerts nobody has acknowledged, by severity."
+          },
+          "degraded": {
+            "type": "boolean",
+            "description": "Whether the online view is degraded."
+          },
+          "leader": {
+            "type": "boolean",
+            "description": "Whether the instance that answered leads the campaign engine."
+          }
+        },
+        "required": [
+          "nodes",
+          "campaigns",
+          "alerts",
+          "alerts_unacknowledged",
+          "degraded",
+          "leader"
+        ]
+      },
+      "FeedEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "time",
+          "data"
+        ],
+        "description": "One server-sent event; the SSE event name is its kind.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "presence",
+              "counters",
+              "alerts"
+            ]
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "online": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "degraded": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "online",
+                  "degraded"
+                ],
+                "description": "presence: the instance's online count."
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "campaign_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "running",
+                        "paused",
+                        "completed",
+                        "aborted",
+                        "failed",
+                        "archived"
+                      ]
+                    },
+                    "phase": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "counters": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Counter"
+                      }
+                    }
+                  },
+                  "required": [
+                    "campaign_id",
+                    "status",
+                    "phase",
+                    "counters"
+                  ]
+                },
+                "description": "counters: every active campaign's counters."
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "open": {
+                    "type": "object",
+                    "propertyNames": {
+                      "enum": [
+                        "critical",
+                        "high",
+                        "medium",
+                        "low"
+                      ]
+                    },
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "unacknowledged": {
+                    "type": "object",
+                    "propertyNames": {
+                      "enum": [
+                        "critical",
+                        "high",
+                        "medium",
+                        "low"
+                      ]
+                    },
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "latest": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Alert"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "open",
+                  "unacknowledged",
+                  "latest"
+                ],
+                "description": "alerts: open alerts by severity, the ones nobody has acknowledged by severity, and the newest open one."
+              }
+            ]
+          }
+        }
+      },
+      "NodePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as cursor to read the next page; null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "CampaignPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Campaign"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as cursor to read the next page; null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "CampaignNodePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CampaignNode"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as cursor to read the next page; null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "CampaignEventPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CampaignEvent"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as after to read the next page; null when this page was not full."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "AlertPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as cursor to read the next page; null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "Count": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "count"
+        ]
+      },
+      "LifecycleRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "active",
+              "quarantined",
+              "retired",
+              "revoked"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "lifecycle",
+          "reason"
+        ]
+      },
+      "DeviceLifecycleRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "active",
+              "retired",
+              "revoked"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "lifecycle",
+          "reason"
+        ]
+      },
+      "SessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 28800
+          }
+        },
+        "required": [
+          "reason",
+          "ttl_seconds"
+        ]
+      },
+      "LogsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "trace",
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ]
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          }
+        },
+        "required": [
+          "level",
+          "duration_seconds"
+        ]
+      },
+      "FilesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "An absolute path on the node.",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "SelectorRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ]
+      },
+      "ReasonRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "ResumeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Required with override_gate."
+          },
+          "override_gate": {
+            "type": "boolean",
+            "description": "Resume a campaign a health gate paused; the gate then counts only rows dispatched after the resume."
+          }
+        }
+      },
+      "RetryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "dispatching",
+                "dispatched",
+                "delivered",
+                "verifying",
+                "backoff",
+                "succeeded",
+                "failed",
+                "unknown",
+                "excluded",
+                "conflict",
+                "cancelled"
+              ]
+            },
+            "description": "The row states to retry; failed and unknown by default."
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeKey"
+            },
+            "description": "Only these nodes; every row in states when absent.",
+            "maxItems": 10000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "ResolveRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeKey"
+            },
+            "minItems": 1,
+            "maxItems": 10000
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "nodes",
+          "outcome",
+          "reason"
+        ]
+      },
+      "Empty": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "Overlap": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Nodes both this campaign and a running campaign of the same kind target."
+          },
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The running campaigns that share nodes with this one."
+          }
+        },
+        "required": [
+          "count",
+          "campaigns"
+        ]
+      }
+    },
+    "responses": {
+      "Invalid": {
+        "description": "The request is not valid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "The caller is not authenticated.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The caller's role does not allow this, or a cookie session sent no matching CSRF token.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The resource is not in a state that allows this.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooLarge": {
+        "description": "The request body is larger than 1 MiB.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "The request body is not application/json.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "A dependency is busy, unreachable or too slow, or the instance answers as many requests as it may; Retry-After says when to try again.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "BadGateway": {
+        "description": "dawn refused the request; details give its status and message.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "GatewayTimeout": {
+        "description": "dawn did not answer; the request may or may not have reached the node.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Internal": {
+        "description": "twilight failed; details.request_id names the request in its logs.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "Device": {
+        "name": "device",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "Installation": {
+        "name": "installation",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "Campaign": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "Alert": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "description": "The next_cursor of the previous page.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "CSRF": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "description": "Required with a session cookie: the value of the twilight_csrf cookie.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API token from twilight token create."
+      },
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "twilight_session",
+        "description": "A login session from /api/v1/auth/login."
+      },
+      "certificate": {
+        "type": "mutualTLS",
+        "description": "A client certificate from the internal CA naming one urn:dusk:principal, mapped to a role by principals."
+      }
+    }
+  }
+}
