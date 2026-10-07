@@ -69,3 +69,5 @@ storage_configuration:
         s3:
           disk: s3
           perform_ttl_move_on_insert: 0
+merge_tree:
+  allow_dimensions_outside_sorting_key: 1
