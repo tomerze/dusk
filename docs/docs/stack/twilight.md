@@ -115,6 +115,9 @@ In Kubernetes, set `TWILIGHT__INSTANCE` to the pod name from the downward API.
 | `health_listen` | `0.0.0.0:9102` | Where `/healthz`, `/readyz` and `/metrics` are served, over plain HTTP. |
 | `drain_seconds` | `30` | How long shutdown may take. |
 | `log_level` | `info` | `debug`, `info`, `warn` or `error`. |
+| `max_streams` | `1000` | Live-update streams (`GET /api/v1/stream`) one instance serves at once. One more is refused with 503 and `Retry-After: 30`. |
+| `max_requests` | `8` | API requests one instance answers at once, live-update streams aside. A request waits for a free slot until its deadline, then is answered 503 `busy` with `Retry-After: 1`, so a burst of slow requests can never take the database connections the engine needs. |
+| `request_timeout_seconds` | `15` | How long one API request may take, waiting for a slot included. A request still running then is cancelled, its database queries with it, and answered 503 `timeout`. |
 
 ### `database`
 
@@ -417,6 +420,175 @@ the login also refuses callers that are not on a loopback address. Any value
 other than `1` leaves development mode off. `TWILIGHT_DEV` is not a
 configuration key and cannot be set in the configuration file.
 
+## The API
+
+This section is for the people who write programs against twilight: the web
+UI, release automation, dashboards, chat bots.
+
+The API is JSON over HTTP under `/api/v1` on [`listen`](#top-level).
+`GET /api/openapi.json` serves its OpenAPI 3.1.1 document, without
+authentication: every route with its parameters, request body, each status it
+answers with and the body of each, the security schemes, and
+`x-required-role`, the role each operation needs. Request and response bodies
+are closed schemas (`additionalProperties: false`), so clients can be
+generated from the document, and twilight's tests hold every route's answers
+to it.
+
+### Calling it
+
+A program sends an [API token](#api-tokens):
+
+```sh
+curl -fsS -H "Authorization: Bearer $TWILIGHT_TOKEN" \
+  'https://twilight.example.org/api/v1/campaigns?status=running'
+```
+
+A browser page [logs in](#logging-in) and is then authenticated by the
+session cookie. Every request a cookie session makes other than a `GET` must
+carry the value of the `twilight_csrf` cookie, which the page's script can
+read, in an `X-CSRF-Token` header; without it, or with another session's
+value, the request is refused with 403 `csrf_failed`. API tokens and client
+certificates need no CSRF token.
+
+A request without credentials, or with ones that are unknown, revoked or
+expired, is answered 401 `unauthenticated` with
+`WWW-Authenticate: Bearer realm="twilight"`; when logins are possible the
+error's `details.login` is `/api/v1/auth/login`, where a page sends the
+browser. A caller below the route's role gets 403 `forbidden` naming the role
+it needs.
+
+| Route | Role | What it does |
+|-------|------|--------------|
+| `GET /api/v1/auth/login?return_to=` | none | Starts a login and redirects to the identity provider; [development mode](#development-mode) starts the session at once. |
+| `GET /api/v1/auth/callback` | none | Where the identity provider returns the browser. |
+| `POST /api/v1/auth/logout` | viewer | Ends the caller's session and clears its cookies; 204. |
+| `GET /api/v1/me` | viewer | The caller: `subject`, `name`, `role`, `authentication` (`oidc`, `token`, `mtls` or `dev`) and, for a session, `expires_at`, when it ends unless it is used again. |
+
+### Requests and answers
+
+* A request body is `application/json`, at most 1 MiB, exactly one JSON value.
+  A body that does not match its schema - an unknown field, a misspelled key
+  inside a campaign's policy, a wrong type - is refused with 400
+  `invalid_argument`, each problem listed in `details.violations`, for example
+  `{"at": "/policy/gates", "message": "additional properties 'max_failure_rat' not allowed"}`.
+  Ranges and rules across fields are checked after that and name the field in
+  `details.field`.
+* A change answers the resource as it is afterwards: a campaign transition or
+  edit answers the campaign with its counters, a lifecycle change the node.
+* Every answer carries `X-Request-Id` and `Cache-Control: no-store`.
+* A device id and an installation id are 32 lowercase hexadecimal digits, a
+  campaign id a UUID, an alert id a positive integer. Times are RFC 3339.
+
+### Errors
+
+Every error is one shape:
+
+```json
+{"error": {"code": "gate_override_required", "message": "...", "details": {}}}
+```
+
+`code` is stable and meant for programs; `message` is for people; `details`
+holds the facts that belong to the code.
+
+| Status | `code` | When | `details` |
+|--------|--------|------|-----------|
+| 400 | `invalid_argument` | A parameter, a path segment or a body is wrong. | `field` or `violations` |
+| 400 | `invalid_selector` | A selector does not parse. | `position`, `end` |
+| 401 | `unauthenticated` | No usable credentials. | `login` |
+| 401 | `login_failed` | A login did not complete. | `login` |
+| 403 | `forbidden` | The caller lacks the role, or its certificate was refused. | |
+| 403 | `csrf_failed` | A cookie session's change without its CSRF token. | |
+| 403 | `no_role` | A login whose claims map to no role. | |
+| 404 | `not_found` | No such route, node, campaign or alert. | |
+| 404 | `login_unavailable` | No identity provider is configured. | |
+| 405 | `method_not_allowed` | The route exists with other methods, listed in `Allow`. | |
+| 409 | `version_conflict` | A campaign edit made to an older version. | |
+| 409 | `not_draft` | An edit to a campaign that has started. | |
+| 409 | `invalid_transition` | A transition the campaign's status does not allow. | |
+| 409 | `gate_override_required` | Resuming a campaign a health gate paused, without `override_gate` and a reason. | |
+| 409 | `overlap` | Starting a campaign that overlaps a running one. | `count`, `campaigns` |
+| 409 | `not_archivable` | Archiving a campaign too soon after its last dispatch. | |
+| 409 | `node_offline` | An action that needs the node online. | |
+| 413 | `payload_too_large` | A body over 1 MiB. | |
+| 415 | `unsupported_media_type` | A body that is not `application/json`. | |
+| 500 | `internal` | twilight failed. The log line `api request failed` with the same `request_id` holds the cause. | `request_id` |
+| 502 | `dawn_rejected` | dawn refused the request. | `dawn_status`, `dawn_message` |
+| 503 | `busy`, `timeout`, `dawn_busy`, `dawn_unavailable`, `issuer_unavailable`, `too_many_streams` | Try again after `Retry-After` seconds. | `retry_after_seconds` |
+| 504 | `dawn_unanswered` | dawn did not answer; the request may or may not have reached the node. | |
+
+### Lists
+
+Every list answers a page:
+
+```json
+{"items": [], "next_cursor": "..."}
+```
+
+Pass `next_cursor` back as `cursor` for the next page; it is `null` on the
+last one. `limit` is 1 to 500, 100 by default. A cursor is opaque and belongs
+to the query that made it: a node cursor made for one `sort` is refused with
+400 for another. Two lists differ:
+
+* `GET /api/v1/nodes` with `online=true` or `online=false` filters after
+  reading the inventory, so a page can hold fewer than `limit` nodes while
+  `next_cursor` is not `null`; keep following it.
+* A campaign's events are oldest first and paged by `after`, an event id: pass
+  `next_cursor` as `after`. A client polling a campaign's history passes the id
+  of the last event it holds.
+
+### Routes
+
+| Route | Role | What it does |
+|-------|------|--------------|
+| `GET /api/v1/overview` | viewer | Nodes online and in total, nodes by lifecycle, the running and paused campaigns with their counters, open alerts by severity (`alerts`) and the ones nobody has acknowledged (`alerts_unacknowledged`), whether the online view is degraded and whether this instance leads. |
+| `GET /api/v1/nodes?selector=&online=&sort=&limit=&cursor=` | viewer | Nodes matching a [selector](campaigns.md#which-nodes-the-selector), each with whether it is online and when it was last seen. `sort` is `device_id` (the default) or an indexed column - `hostname`, `lifecycle`, `country`, `os_name`, `os_version`, `os_build`, `dusk_version`, `hardware_class`, `tenant`, `locale`, `impl`, `target_arch`, `reported_version` - with a leading `-` for descending order; versions sort as semantic versions. |
+| `GET /api/v1/nodes/{device}/{installation}` | viewer | A node with its live sessions (namespace, epoch, nightfall instance), its campaign rows, and `device`: the last lifecycle change made to its device as a whole, or `null`. |
+| `POST /api/v1/nodes/{device}/{installation}/lifecycle` | operator | `{"lifecycle", "reason"}` sets the node `active` or `quarantined` (operator) or `retired` or `revoked` (admin), through `dusk.node-state`. Only an admin changes the lifecycle of a node that is `retired` or `revoked`. |
+| `POST /api/v1/nodes/{device}/{installation}/sessions` | operator | `{"reason", "ttl_seconds"}` (60 to 28800) opens an interactive session: twilight records a random pid as the node's intended interactive process for `ttl_seconds` and answers 201 `{"pid", "node"}`, the pid to connect a shell at through dawn's `/v1/connect` and the node's live session. |
+| `POST /api/v1/nodes/{device}/{installation}/logs` | operator | `{"level", "duration_seconds"}` streams the node's logs to the collector through dawn: 202 `{"stream_id"}`. |
+| `POST /api/v1/nodes/{device}/{installation}/files` | operator | `{"path"}` collects a file from the node into object storage through dawn: 202 `{"upload_id"}`. |
+| `POST /api/v1/devices/{device}/lifecycle` | admin | `{"lifecycle", "reason"}` with `retired` or `revoked` blocks every installation of the device, those enrolled now and any it enrolls later, through a device-scope `dusk.node-state` record; `active` lifts the block, and each installation keeps its own lifecycle. Answers `{"device_id", "lifecycle", "reason", "changed_at", "actor"}`. |
+| `POST /api/v1/selectors/validate` | viewer | `{"selector"}` answers `ok`, the `error` with its position, how many nodes it `matched`, and a `sample` of them. |
+| `GET /api/v1/campaigns?status=&limit=&cursor=` | viewer | Campaigns, newest first, each with its counters; `status` takes one status or several, comma-separated. |
+| `POST /api/v1/campaigns` | operator | Creates a draft from a [definition](campaigns.md): 201 with `Location`. |
+| `GET /api/v1/campaigns/{id}` | viewer | A campaign with its counters by phase and state. |
+| `PUT /api/v1/campaigns/{id}` | operator | Replaces a draft's definition; the body is the definition plus the `version` it was made to. |
+| `GET /api/v1/campaigns/{id}/overlap` | viewer | `{"count", "campaigns"}`: how many nodes an `ensure_*` campaign shares with running campaigns of its kind (and `version_key`), and which, so a draft can be checked before it is started. |
+| `POST /api/v1/campaigns/{id}/start`, `/pause`, `/resume`, `/abort`, `/complete`, `/archive` | operator | Moves the campaign; `pause`, `abort` and `complete` take an optional `{"reason"}`, `resume` takes `{"override_gate", "reason"}`. |
+| `GET /api/v1/campaigns/{id}/nodes?state=&phase=&limit=&cursor=` | viewer | The campaign's node rows; `state` takes one state or several, comma-separated. |
+| `POST /api/v1/campaigns/{id}/nodes/retry` | operator | `{"states", "nodes", "reason"}` gives `failed` or `unknown` rows a new attempt with a new pid; answers `{"count"}`. |
+| `POST /api/v1/campaigns/{id}/nodes/resolve` | operator | `{"nodes", "outcome", "reason"}` closes `unknown` rows by hand as `succeeded` or `failed`; answers `{"count"}`. |
+| `GET /api/v1/campaigns/{id}/events?after=&limit=` | viewer | The campaign's history. |
+| `GET /api/v1/campaigns/{id}/gates` | viewer | The health gate as it stands: the tallies overall and per breakdown group, the verdict and its reason, the thresholds, the sample the gate waits for, the phase and its bake time. |
+| `GET /api/v1/alerts?state=&limit=&cursor=` | viewer | Alerts, newest first; `state` is `open` (the default) or `all`. |
+| `POST /api/v1/alerts/{id}/acknowledge`, `/resolve` | operator | Acknowledges or resolves an alert. |
+| `GET /api/v1/stream` | viewer | [Live updates](#live-updates). |
+
+What each answer holds field by field, and the request bodies' full schemas,
+are in `/api/openapi.json`.
+
+### Live updates
+
+`GET /api/v1/stream` is a `text/event-stream`. Each event is named by its kind
+and its data is one JSON object, `{"kind", "time", "data"}`:
+
+| Event | `data` |
+|-------|--------|
+| `presence` | `{"online", "degraded"}`: the nodes online in the answering instance's view, and whether that view is degraded. |
+| `counters` | Each running or paused campaign's `campaign_id`, `status`, `phase` and `counters`. |
+| `alerts` | `{"open", "unacknowledged", "latest"}`: open alerts by severity, the open ones nobody has acknowledged by severity, and the newest open alert. |
+
+A new stream first gets the latest event of each kind, then each kind again
+whenever it changes, checked every 5 seconds. A comment line is sent every 15
+seconds so idle connections survive proxies. A stream ends after five
+minutes, and when the instance shuts down; the `retry: 5000` it starts with
+tells a browser's `EventSource` to reconnect five seconds later, which also
+authenticates the caller again. A browser's `EventSource` cannot send an
+`Authorization` header, so a page uses its session cookie. A client that does
+not take an event within 10 seconds is disconnected, and so is one that falls
+more than 64 events behind, so that it reconnects to a fresh snapshot. An
+instance serves at most [`max_streams`](#top-level) at once.
+
 ## Health, readiness and metrics
 
 On `health_listen`:
@@ -444,11 +616,16 @@ On `health_listen`:
 | `twilight_kafka_invalid_messages_total{topic}` | Kafka records dropped because they failed their contract. |
 | `twilight_kafka_refused_records_total{consumer}` | Kafka records skipped because the database refused their data; each is logged at `error` with its topic, partition and offset. U+0000 in a string from a node is replaced with U+FFFD before it is stored, so this stays at zero unless something else is wrong. |
 | `twilight_alerts_open{severity,kind}`, `twilight_alert_webhook_failures_total` | Open alerts, refreshed every 30 seconds, and webhook deliveries that gave up. A kind with no open alert left drops out of the gauge. |
+| `twilight_feed_subscribers_dropped_total` | Live-update streams ended because they fell behind. |
 | `twilight_reconcile_entries_total{kind}`, `twilight_reconcile_duplicate_entries_total` | Ledger entries reconciled, and exact duplicates skipped. |
 | `twilight_reconcile_findings_total{kind}` | Reconcile findings, repeats of an open alert included. |
 | `twilight_unattributed_processes_total{principal}` | Processes a client created without naming their pid, by principal. Client-side argument builders start helper processes this way, so they are counted, not alerted. |
 | `twilight_reconcile_lag_seconds` | How far behind the present the least advanced ledger partition is reconciled; `+Inf` while a partition has never been reconciled. Refreshed every 30 seconds. |
 | `twilight_reconcile_intended_process_cache_entries` | Intended processes held in reconcile's cache. |
+| `twilight_api_requests_total{route,code}`, `twilight_api_request_seconds{route}` | API requests answered, by route pattern (`GET /api/v1/campaigns/{id}`) and status code, and how long they took; a live-update stream counts until it ends. Requests under `/api/` that match no route count under the route `unmatched`; the UI's pages are not counted. |
+| `twilight_api_authentication_failures_total{reason}` | API requests refused because the caller could not be authenticated or lacked the role: `missing`, `malformed_authorization`, `token`, `session`, `certificate`, `principal`, `role`, `csrf`, `oidc` or `no_role`. |
+| `twilight_api_streams` | Live-update streams open on this instance. |
+| `twilight_api_requests_refused_total` | API requests answered 503 `busy` because no request slot came free before their deadline. |
 
 twilight logs JSON lines to standard output, one per event, with the ids it
 concerns as fields: `campaign_id`, `device_id`, `installation_id`,
