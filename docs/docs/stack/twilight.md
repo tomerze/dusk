@@ -209,6 +209,9 @@ is skipped for 30 seconds.
 | `intended_process_retention_days` | `31` | How long `intended_processes` and reconcile's per-pid state are kept: the ledger's 30 days plus one. |
 | `presence_flush_millis` | `1000` | How often the leader writes presence changes to `node_presence`. |
 | `last_seen_bucket_seconds` | `10` | The leader writes `last_seen_at` for one of 30 groups of online nodes this often, so each node's is at most 30 of these old. |
+| `reap_interval_seconds` | `300` | How long the reap sweep takes to look at every online node once, one of 30 groups at a time. |
+| `reaps_per_second` | `20` | Reap requests sent to dawn per second, across the fleet. |
+| `reap_retry_seconds` | `600` | How long a pid dawn was asked to reap waits before it is asked again, when dawn never reported it reaped. |
 
 ### `alerts`
 
@@ -544,7 +547,7 @@ to the query that made it: a node cursor made for one `sort` is refused with
 | `GET /api/v1/nodes?selector=&online=&sort=&limit=&cursor=` | viewer | Nodes matching a [selector](campaigns.md#which-nodes-the-selector), each with whether it is online and when it was last seen. `sort` is `device_id` (the default) or an indexed column - `hostname`, `lifecycle`, `country`, `os_name`, `os_version`, `os_build`, `dusk_version`, `hardware_class`, `tenant`, `locale`, `impl`, `target_arch`, `reported_version` - with a leading `-` for descending order; versions sort as semantic versions. |
 | `GET /api/v1/nodes/{device}/{installation}` | viewer | A node with its live sessions (namespace, epoch, nightfall instance), its campaign rows, and `device`: the last lifecycle change made to its device as a whole, or `null`. |
 | `POST /api/v1/nodes/{device}/{installation}/lifecycle` | operator | `{"lifecycle", "reason"}` sets the node `active` or `quarantined` (operator) or `retired` or `revoked` (admin), through `dusk.node-state`. Only an admin changes the lifecycle of a node that is `retired` or `revoked`. |
-| `POST /api/v1/nodes/{device}/{installation}/sessions` | operator | `{"reason", "ttl_seconds"}` (60 to 28800) opens an interactive session: twilight records a random pid as the node's intended interactive process for `ttl_seconds` and answers 201 `{"pid", "node"}`, the pid to connect a shell at through dawn's `/v1/connect` and the node's live session. |
+| `POST /api/v1/nodes/{device}/{installation}/sessions` | operator | `{"reason", "ttl_seconds"}` (60 to 28800) opens an interactive session: twilight records a random pid as the node's intended interactive process for `ttl_seconds` and answers 201 `{"pid", "node"}`, the pid to connect a shell at through dawn's `/v1/connect` and the node's live session. The session's process is reaped once it expires. |
 | `POST /api/v1/nodes/{device}/{installation}/logs` | operator | `{"level", "duration_seconds"}` streams the node's logs to the collector through dawn: 202 `{"stream_id"}`. |
 | `POST /api/v1/nodes/{device}/{installation}/files` | operator | `{"path"}` collects a file from the node into object storage through dawn: 202 `{"upload_id"}`. |
 | `POST /api/v1/devices/{device}/lifecycle` | admin | `{"lifecycle", "reason"}` with `retired` or `revoked` blocks every installation of the device, those enrolled now and any it enrolls later, through a device-scope `dusk.node-state` record; `active` lifts the block, and each installation keeps its own lifecycle. Answers `{"device_id", "lifecycle", "reason", "changed_at", "actor"}`. |
@@ -608,6 +611,7 @@ On `health_listen`:
 | `twilight_evaluation_queue`, `twilight_evaluation_dropped_total` | Nodes waiting for evaluation, and connect hints dropped because the queue was full. |
 | `twilight_row_transitions_total{state}` | Campaign node state changes, by the state entered. |
 | `twilight_dispatch_processes_total{kind,outcome}` | Campaign processes handed to dawn, by dawn's answer. |
+| `twilight_reap_requests_total{outcome}`, `twilight_reaped_pids_total` | Reap requests sent to dawn, by dawn's answer, and pids dawn reported reaped. |
 | `twilight_process_results_total{action_kind,status}` | Process results applied. A file collected or a log stream run for a campaign's process is counted under its own action kind and never moves the campaign's row. |
 | `twilight_gate_verdicts_total{verdict}` | Health gate verdicts. |
 | `twilight_facts_refresh_total{outcome}` | Facts reads asked of dawn. |
@@ -708,6 +712,20 @@ the leader sweeps every campaign once the view recovers.
   dawn's reads, kills and reaps run (`reconcile.default_shell`). For campaign
   work that row and the node's move to `dispatching` are one transaction; a
   resend extends the row's expiry.
+* The reap sweep looks at every online node once per `reap_interval_seconds`,
+  and at every node that connects. A pid is reaped once no row of a campaign
+  can send it again - its row has finished, or moved on to a later attempt -
+  and its campaign's retry horizon (`retry.max_backoff_seconds` plus the
+  node time-out) has passed since its intended process expired; the pid of
+  other work is reaped once it expires. twilight asks dawn to kill and reap up
+  to 256 pids of a node per request, oldest first, at most `reaps_per_second`
+  requests across the fleet; dawn reports each pid `reaped` in
+  `dusk.process-results`, and twilight records it in `reaped_at`.
+  A pid dawn did not report reaped is asked again after `reap_retry_seconds`.
+  Until then each process stays in the node's process table, which is what
+  makes a resend a `duplicate` instead of a second run. Each reap request is
+  recorded in `intended_processes` too, as a `reap` at a pid of its own that
+  is never reaped, so the commands it runs in the default shell are held to it.
 
 ### Reconcile
 

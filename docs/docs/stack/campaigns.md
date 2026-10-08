@@ -193,6 +193,8 @@ starts it only when no process at that pid is in the node's process table. So
 a node runs an attempt once however often twilight sends it: a resend of work
 already delivered is reported `duplicate` and runs nothing. A node that
 restarted has an empty process table, so a resend after a restart runs again.
+twilight reaps an attempt's process only once no resend of it can come (see
+[Running twilight](twilight.md#dispatch)).
 
 `run_script` and `quarantine` are **one-shot**: a script that may have run is
 never run again by itself. `ensure_version` and `ensure_config` are
