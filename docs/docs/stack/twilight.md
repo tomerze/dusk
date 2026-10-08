@@ -1,8 +1,9 @@
 # Running twilight
 
 This page is for the people who run the Dusk stack: how to start twilight, how to
-configure it, what it needs from Postgres and Kafka, and what it guarantees
-while it runs. Writing campaigns is covered in [Campaigns](campaigns.md).
+configure it, how people and programs sign in to it, what it needs from
+Postgres and Kafka, and what it guarantees while it runs. Writing campaigns is
+covered in [Campaigns](campaigns.md).
 
 twilight is the orchestration layer of the Dusk stack. It keeps the inventory of
 every node in Postgres, follows which nodes are online through the connection
@@ -93,7 +94,7 @@ In Kubernetes, set `TWILIGHT__INSTANCE` to the pod name from the downward API.
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `instance` | the host name | This instance's name, in logs, Kafka client ids and the leadership table. It must not contain `/`. |
-| `listen` | `0.0.0.0:8080` | Where the API and the web UI listen. |
+| `listen` | `0.0.0.0:8080` | Where the API and the web UI listen; plain HTTP unless [`tls`](#tls) is set. |
 | `health_listen` | `0.0.0.0:9102` | Where `/healthz`, `/readyz` and `/metrics` are served, over plain HTTP. |
 | `drain_seconds` | `30` | How long shutdown may take. |
 | `log_level` | `info` | `debug`, `info`, `warn` or `error`. |
@@ -236,6 +237,168 @@ The ledger key file holds Ed25519 public keys, for example:
 A `kid`, when present, must be the key's RFC 7638 thumbprint, which is the key
 id nightfall writes on every checkpoint. Keep a retired nightfall key in the
 file for as long as the ledger holds checkpoints it signed (30 days).
+
+### `tls`
+
+TLS normally ends at the ingress in front of twilight, and these stay empty.
+Set them when twilight terminates TLS itself: to serve without an ingress, or
+to accept client certificates from [service callers](#client-certificates).
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `certificate`, `key` | | The server certificate (with its chain) and key, in PEM. With them `listen` serves TLS 1.2 and 1.3, HTTP/2 and HTTP/1.1. |
+| `client_ca` | | The internal CA, in PEM. With it `listen` asks every caller for a client certificate and verifies one that is presented; a caller without one is still served. Needs `certificate` and `key`. |
+
+The certificate and key are checked at most every 30 seconds, during
+handshakes, and loaded again when either file's modification time changed, so
+a certificate cert-manager renews in place is served without a restart. A pair
+that does not load - half written, or a key that does not match the
+certificate yet - leaves the previous certificate in service, logged at
+`warn`, and is tried again at the next check. At startup a pair that does not
+load stops `serve`. `client_ca` is read once, at startup.
+
+### `principals`
+
+Maps principal name patterns to roles, for callers that authenticate with a
+client certificate. A pattern's `*` matches any run of characters other than
+`/`; when several patterns match a name, the highest role wins. It needs
+`tls.client_ca`.
+
+```yaml title="/etc/twilight/twilight.yaml"
+tls:
+  certificate: /etc/twilight/tls/server.crt
+  key: /etc/twilight/tls/server.key
+  client_ca: /etc/twilight/pki/internal-ca.crt
+principals:
+  "release-automation-*": operator
+  "dashboards-*": viewer
+```
+
+From the environment, a map is a comma-separated list of `pattern=role`:
+`TWILIGHT__PRINCIPALS=release-automation-*=operator,dashboards-*=viewer`.
+
+### `oidc`
+
+Setting `issuer` turns on logins through an OpenID Connect identity provider
+(see [Logging in](#logging-in)).
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `issuer` | | The issuer URL, exactly as the provider's discovery document states it. `https`, or `http` on a loopback address for a provider on the same machine. |
+| `client_id` | | twilight's client id at the provider. Required with `issuer`. |
+| `client_secret_file` | | A file holding the client secret, for a confidential client; read once at startup, surrounding white space removed. A public client leaves it empty. The login uses PKCE either way. |
+| `redirect_url` | | twilight's callback as the browser reaches it, whose path is `/api/v1/auth/callback`, for example `https://twilight.example.org/api/v1/auth/callback`. Register exactly this URL with the provider. `https`, or `http` on a loopback address. |
+| `scopes` | `[openid, profile, email]` | The scopes asked for. `openid` is always asked for. |
+| `role_claim` | `groups` | The ID token claim the role is read from: a claim with exactly this name, or else a dotted path into nested claims, such as `realm_access.roles`. Its value is a string or a list of strings. |
+| `role_map` | | Maps values of `role_claim` to `viewer`, `operator` or `admin`. Required with `issuer`, and it must map at least one value: there is no default role. |
+
+```yaml title="/etc/twilight/twilight.yaml"
+oidc:
+  issuer: https://login.example.org/realms/fleet
+  client_id: twilight
+  client_secret_file: /etc/twilight/secrets/oidc-client-secret
+  redirect_url: https://twilight.example.org/api/v1/auth/callback
+  role_claim: groups
+  role_map:
+    fleet-admins: admin
+    fleet-operators: operator
+    fleet-readers: viewer
+```
+
+The same `role_map` from the environment is
+`TWILIGHT__OIDC__ROLE_MAP=fleet-admins=admin,fleet-operators=operator,fleet-readers=viewer`.
+
+### `sessions`
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `lifetime_seconds` | `43200` | How long a login session lasts at most, from the login. |
+| `idle_seconds` | `3600` | A login session not used for this long ends. At most `lifetime_seconds`. |
+
+Both are at least 60. A session's last use is recorded at most once a minute,
+so an unused session ends `idle_seconds` after its last request at the
+latest, and up to a minute sooner.
+
+## Signing in
+
+Every API route except the OpenAPI document and the login routes needs a caller
+with a role:
+
+| Role | May |
+|------|-----|
+| `viewer` | Read everything: the overview, nodes, campaigns with their nodes, events and gates, alerts, and the live-update stream; check selectors. |
+| `operator` | What a viewer may, and: create, edit, start, pause, resume, abort, complete and archive campaigns; retry and resolve a campaign's nodes; set a node `active` or `quarantined` unless it is `retired` or `revoked`; open interactive sessions, stream a node's logs and collect files from it; acknowledge and resolve alerts. |
+| `admin` | What an operator may, and set a node `retired` or `revoked`, change the lifecycle of a node that is `retired` or `revoked`, and retire, revoke or restore a whole device. |
+
+A caller is identified in this order, and the first credential present
+decides: an `Authorization` header, then the session cookie, then a client
+certificate. A request whose `Authorization` header is wrong is refused even
+when it also carries a good session cookie.
+
+### Logging in
+
+People log in through the OpenID Connect provider named by [`oidc`](#oidc).
+The web UI sends the browser to `GET /api/v1/auth/login?return_to=<path>`;
+twilight sends it on to the provider with a PKCE challenge, and when the
+provider sends it back to `/api/v1/auth/callback` twilight checks that the
+login started in that same browser, exchanges the code, verifies the ID token
+(the provider's signature, the issuer, the audience, the expiry and the
+login's nonce), reads the role, starts a session and returns the browser to
+`return_to`, which must be a path on twilight's own site.
+
+The role comes from the ID token's `role_claim`: each of its values is looked
+up in `role_map`, and the highest role found wins. A user none of whose values
+maps to a role gets 403 `no_role`, and the refusal is logged with the values
+seen; there is no default role. A role change at the provider applies at the
+user's next login.
+
+A session is a pair of cookies: `twilight_session` (HttpOnly) and
+`twilight_csrf`, both `Secure` and `SameSite=Lax`. twilight stores only their
+SHA-256 digests, in the `api_sessions` table, so every instance serves every
+session and a database dump holds nothing that logs anyone in. A login in
+progress lives only in the browser, in the `twilight_login` cookie scoped to
+the callback: its state, nonce, PKCE verifier and `return_to`, sealed with
+AES-256-GCM under a key every instance shares from the `api_login_key` table,
+for ten minutes. A callback whose cookie twilight did not seal, whose state
+differs or whose ten minutes are over is refused, and no number of unfinished
+logins keeps anyone else from logging in.
+The provider is discovered on the first login, not at startup: twilight starts
+while the provider is down, and a login then answers 503 `issuer_unavailable`
+until it is up.
+
+### API tokens
+
+Programs use API tokens, made with [`twilight token create`](#commands) and
+sent as `Authorization: Bearer twilight_...`. A token's role is fixed when it
+is created. A token is looked up on every request, so `twilight token revoke`
+takes effect on the next one; a live-update stream already open with it ends
+within five minutes, when the stream ends and its client reconnects. The
+caller's subject - what campaign events, alerts and intended processes name as
+the actor - is `token:` followed by the token's id.
+
+### Client certificates
+
+Services authenticate with a client certificate from the internal CA, when
+twilight terminates TLS itself with [`tls.client_ca`](#tls) set. The
+certificate must carry exactly one `urn:dusk:principal:<name>` URI SAN and no
+`urn:dusk:device:` or `urn:dusk:installation:` SAN; the name is the caller's
+subject, and [`principals`](#principals) gives its role. A certificate that
+breaks those rules, or whose name no pattern matches, is refused with 403.
+twilight never reads identity from proxy headers, so a client certificate only
+counts on a connection that reaches twilight's own TLS listener: route service
+callers past any ingress that terminates TLS.
+
+### Development mode
+
+With `TWILIGHT_DEV=1` in the environment of `twilight serve`,
+`GET /api/v1/auth/login` starts an `admin` session for the subject `dev` at
+once, without a provider, and the session cookies lose `Secure` so they work
+over plain HTTP. Since that hands the fleet to anyone who reaches the port,
+`serve` refuses to start in development mode unless `listen` is a loopback
+address (`127.0.0.1`, any `127.0.0.0/8` address, `[::1]` or `localhost`), and
+the login also refuses callers that are not on a loopback address. Any value
+other than `1` leaves development mode off. `TWILIGHT_DEV` is not a
+configuration key and cannot be set in the configuration file.
 
 ## Health, readiness and metrics
 
