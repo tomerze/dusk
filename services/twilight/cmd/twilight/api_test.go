@@ -15,11 +15,66 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"dusk/services/twilight/internal/config"
 )
+
+func TestDevelopmentModeIsTwilightDevOne(test *testing.T) {
+	for environment, expected := range map[string]bool{
+		"TWILIGHT_DEV=1":        true,
+		"TWILIGHT_DEV=0":        false,
+		"TWILIGHT_DEV=true":     false,
+		"TWILIGHT_DEV=":         false,
+		"TWILIGHT__DEV=1":       false,
+		"OTHER=1":               false,
+		"TWILIGHT_DEVELOPMENT=": false,
+	} {
+		if developmentMode([]string{environment}) != expected {
+			test.Errorf("%s: development %v", environment, !expected)
+		}
+	}
+}
+
+func TestDevelopmentModeNeedsALoopbackListenAddress(test *testing.T) {
+	for listen, allowed := range map[string]bool{
+		"127.0.0.1:8080": true,
+		"127.0.0.2:8080": true,
+		"[::1]:8080":     true,
+		"localhost:8080": true,
+		"0.0.0.0:8080":   false,
+		":8080":          false,
+		"[::]:8080":      false,
+		"10.0.0.5:8080":  false,
+		"twilight:8080":  false,
+		"127.0.0.1":      false,
+	} {
+		settings := config.Default()
+		settings.Listen = listen
+		failure := checkDevelopment(settings, true)
+		if (failure == nil) != allowed {
+			test.Errorf("%s: %v", listen, failure)
+		}
+		if failure := checkDevelopment(settings, false); failure != nil {
+			test.Errorf("%s outside development: %v", listen, failure)
+		}
+	}
+}
+
+func TestServeRefusesDevelopmentModeOnAPublicAddress(test *testing.T) {
+	directory := test.TempDir()
+	configPath := filepath.Join(directory, "twilight.yaml")
+	if failure := os.WriteFile(configPath, []byte("instance: twilight-0\nlisten: 0.0.0.0:8080\nkafka:\n  allow_plaintext: true\ndawn:\n  allow_plaintext: true\n"), 0o600); failure != nil {
+		test.Fatal(failure)
+	}
+	var output, diagnostics strings.Builder
+	code := run(test.Context(), []string{"serve", "--config", configPath}, []string{"TWILIGHT_DEV=1"}, &output, &diagnostics)
+	if code != 1 || !strings.Contains(diagnostics.String(), "TWILIGHT_DEV=1") || !strings.Contains(diagnostics.String(), "0.0.0.0:8080") {
+		test.Fatalf("exit %d, %q", code, diagnostics.String())
+	}
+}
 
 type authority struct {
 	certificate *x509.Certificate
