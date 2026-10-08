@@ -51,10 +51,27 @@ applied migration differs from the one the binary carries, `migrate` and
 
 ### Shutting down
 
-On `SIGTERM` an instance reports itself not ready, stops its loops - a leader
-gives up its leadership, consumers commit their offsets - and exits. It waits
-at most `drain_seconds` for that and exits with 1 if the wait runs out. Set the
-Kubernetes `terminationGracePeriodSeconds` above `drain_seconds`.
+On `SIGTERM` an instance reports itself not ready, ends every live-update
+stream, stops accepting connections on `listen`, and stops its loops - a leader
+gives up its leadership, consumers commit their offsets - while the API
+requests already in flight finish. It waits at most `drain_seconds` for all of
+that; requests still running then are cut off, and the instance exits with 1.
+Kubernetes counts the `preStop` wait below inside the grace period, so set
+`terminationGracePeriodSeconds` above `drain_seconds` plus that wait: with the
+defaults, above 35 seconds.
+
+The instance stops accepting connections as soon as it receives `SIGTERM`, and
+a Kubernetes Service keeps sending it new ones until the endpoint removal has
+reached every node. Give the pod a `preStop` hook that waits a few seconds
+first; the twilight image has no shell, so use the `sleep` action, which
+Kubernetes 1.30 and later provide:
+
+```yaml title="twilight Deployment, container spec"
+lifecycle:
+  preStop:
+    sleep:
+      seconds: 5
+```
 
 ## Configuration
 
