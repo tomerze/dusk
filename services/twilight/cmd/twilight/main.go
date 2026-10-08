@@ -25,6 +25,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 
 	"dusk/services/twilight/internal/alerts"
+	"dusk/services/twilight/internal/api"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/database"
@@ -322,6 +323,14 @@ func serve(operation context.Context, arguments, environment []string, output, d
 		Dawn: dawnClient, KafkaOptions: options, Validator: validator,
 		NodeState: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState), Logger: logger,
 	})
+	apiConfiguration, failure := apiOptions(settings, pool, core.Service(), logger)
+	if failure != nil {
+		return failure
+	}
+	handler, failure := api.New(apiConfiguration)
+	if failure != nil {
+		return failure
+	}
 	tasks := []func(context.Context){core.Run, dawnClient.RunResolver}
 	if settings.Reconcile.Enabled {
 		reconciler := reconcile.New(reconcile.Dependencies{Config: settings, Pool: pool, Alerts: alertStore, Validator: validator, KafkaOptions: options, Keys: ledgerKeys, Logger: logger})
@@ -356,8 +365,15 @@ func serve(operation context.Context, arguments, environment []string, output, d
 		return fmt.Errorf("listen on health_listen %s: %w", settings.HealthListen, failure)
 	}
 	healthServer := &http.Server{Handler: health, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute}
-	serving := make(chan error, 1)
-	go func() { serving <- healthServer.Serve(listener) }()
+	serving := make(chan error, 2)
+	go func() { serving <- fmt.Errorf("the health server stopped: %w", healthServer.Serve(listener)) }()
+	publicListener, failure := apiListener(settings, logger)
+	if failure != nil {
+		healthServer.Close()
+		return failure
+	}
+	publicServer := apiServer(handler, logger)
+	go func() { serving <- fmt.Errorf("the API server stopped: %w", publicServer.Serve(publicListener)) }()
 
 	work, stopWork := context.WithCancel(context.WithoutCancel(signals))
 	defer stopWork()
@@ -369,17 +385,24 @@ func serve(operation context.Context, arguments, environment []string, output, d
 			task(work)
 		}()
 	}
-	logger.Info("twilight started", "version", version, "revision", buildRevision(), "health_listen", listener.Addr().String(), "reconcile", settings.Reconcile.Enabled)
+	logger.Info("twilight started", "version", version, "revision", buildRevision(), "listen", publicListener.Addr().String(), "oidc", settings.OIDC.Issuer != "",
+		"health_listen", listener.Addr().String(), "reconcile", settings.Reconcile.Enabled)
 
 	var result error
 	select {
 	case <-signals.Done():
 		logger.Info("shutting down", "drain_seconds", settings.DrainSeconds)
 	case failure := <-serving:
-		result = fmt.Errorf("the health server stopped: %w", failure)
-		logger.Error("the health server stopped; shutting down", "error", failure)
+		result = failure
+		logger.Error("a server stopped; shutting down", "error", failure)
 	}
 	draining.Store(true)
+	handler.Drain()
+	deadline := time.Now().Add(time.Duration(settings.DrainSeconds) * time.Second)
+	closing, cancelClosing := context.WithDeadline(context.Background(), deadline)
+	defer cancelClosing()
+	answered := make(chan error, 1)
+	go func() { answered <- publicServer.Shutdown(closing) }()
 	stopWork()
 	stopped := make(chan struct{})
 	go func() {
@@ -389,15 +412,24 @@ func serve(operation context.Context, arguments, environment []string, output, d
 	select {
 	case <-stopped:
 		logger.Info("the engine and reconcile stopped")
-	case <-time.After(time.Duration(settings.DrainSeconds) * time.Second):
+	case <-closing.Done():
 		logger.Error("the engine did not stop within drain_seconds; exiting anyway", "drain_seconds", settings.DrainSeconds)
 		if result == nil {
 			result = errors.New("shutdown did not finish within drain_seconds")
 		}
 	}
-	closing, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if failure := healthServer.Shutdown(closing); failure != nil {
+	if failure := <-answered; failure != nil {
+		logger.Error("API requests were still running at the end of drain_seconds; closing them", "error", failure)
+		publicServer.Close()
+		if result == nil {
+			result = errors.New("API requests did not finish within drain_seconds")
+		}
+	} else {
+		logger.Info("the API server stopped")
+	}
+	healthClosing, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelHealth()
+	if failure := healthServer.Shutdown(healthClosing); failure != nil {
 		logger.Warn("the health server did not close cleanly", "error", failure)
 	}
 	return result

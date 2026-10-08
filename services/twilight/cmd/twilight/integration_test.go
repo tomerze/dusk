@@ -64,7 +64,7 @@ func TestMigrateTokenAndServe(test *testing.T) {
 	brokers := testsupport.Brokers(test)
 	suffix := strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	ledgerPath := writeLedgerKeys(test)
-	healthAddress := freeAddress(test)
+	healthAddress, apiAddress := freeAddress(test), freeAddress(test)
 	configPath := filepath.Join(test.TempDir(), "twilight.yaml")
 	if failure := os.WriteFile(configPath, []byte("instance: twilight-command-test\n"), 0o600); failure != nil {
 		test.Fatal(failure)
@@ -84,6 +84,7 @@ func TestMigrateTokenAndServe(test *testing.T) {
 		"TWILIGHT__DAWN__ALLOW_PLAINTEXT=true",
 		"TWILIGHT__RECONCILE__LEDGER_KEYS=" + ledgerPath,
 		"TWILIGHT__HEALTH_LISTEN=" + healthAddress,
+		"TWILIGHT__LISTEN=" + apiAddress,
 		"TWILIGHT__DRAIN_SECONDS=30",
 	}
 	client, failure := kgo.NewClient(kgo.SeedBrokers(brokers))
