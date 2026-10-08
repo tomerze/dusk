@@ -385,8 +385,8 @@ func serve(operation context.Context, arguments, environment []string, output, d
 			task(work)
 		}()
 	}
-	logger.Info("twilight started", "version", version, "revision", buildRevision(), "listen", publicListener.Addr().String(), "oidc", settings.OIDC.Issuer != "",
-		"health_listen", listener.Addr().String(), "reconcile", settings.Reconcile.Enabled)
+	logger.Info("twilight started", "version", version, "revision", buildRevision(), "listen", publicListener.Addr().String(), "tls", settings.TLS.Certificate != "",
+		"oidc", settings.OIDC.Issuer != "", "health_listen", listener.Addr().String(), "reconcile", settings.Reconcile.Enabled)
 
 	var result error
 	select {
