@@ -5,6 +5,8 @@ package campaign_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,5 +199,127 @@ func TestOverlapCountsSharedNodes(test *testing.T) {
 	count, overlapping, failure := store.Overlap(operation, second)
 	if failure != nil || count != 1 || len(overlapping) != 1 || overlapping[0] != first.ID {
 		test.Fatalf("overlap %d %v %v", count, overlapping, failure)
+	}
+}
+
+func TestReapablePids(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := campaign.NewStore(pool)
+	operation := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	holding, _ := store.Create(operation, definition(), "a", now)
+	finished, _ := store.Create(operation, definition(), "a", now)
+	horizon := time.Duration(finished.Policy.Retry.MaxBackoffSeconds)*time.Second + finished.ProcessTimeout()
+	other := "e" + installation[1:]
+	next := campaign.Pid(65536)
+	intend := func(owner *campaign.Campaign, kind, node string, expiresAt time.Time) campaign.Pid {
+		test.Helper()
+		next++
+		intended := campaign.IntendedProcess{Pid: next, DeviceID: device, InstallationID: node, ActionKind: kind, Principal: "a", Subject: "twilight",
+			ExpiresAt: expiresAt, MaxCommands: 8, At: now}
+		if owner != nil {
+			attempt := 1
+			intended.CampaignID, intended.Attempt, intended.Subject = &owner.ID, &attempt, owner.Subject()
+		}
+		if failure := store.RecordIntendedProcess(operation, intended); failure != nil {
+			test.Fatal(failure)
+		}
+		return next
+	}
+	hold := func(owner *campaign.Campaign, pid campaign.Pid, state campaign.NodeState) {
+		test.Helper()
+		if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, pid) values ($1, $2, $3, 0, $4, $5::text::numeric)`,
+			owner.ID, device, installation, state, pid.String()); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	past := now.Add(-horizon - time.Minute)
+	oldAttempt := intend(holding, "run_script", installation, past.Add(-time.Minute))
+	pending := intend(holding, "run_script", installation, past)
+	succeeded := intend(finished, "ensure_version", installation, past)
+	facts := intend(nil, "collect_facts", installation, now.Add(-time.Second))
+	insideHorizon := intend(finished, "run_script", installation, now.Add(-time.Minute))
+	unexpired := intend(nil, "interactive", installation, now.Add(time.Hour))
+	elsewhere := intend(finished, "run_script", other, past)
+	intend(nil, "reap", installation, past.Add(-2*time.Minute))
+	hold(holding, pending, campaign.StatePending)
+	hold(finished, succeeded, campaign.StateSucceeded)
+
+	reapable := func(at time.Time, perNode int, nodes ...string) []string {
+		test.Helper()
+		devices := make([]string, len(nodes))
+		for index := range nodes {
+			devices[index] = device
+		}
+		found, failure := store.Reapable(operation, devices, nodes, at, 10*time.Minute, perNode)
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		pids := []string{}
+		for _, entry := range found {
+			pids = append(pids, entry.InstallationID[:1]+":"+entry.Pid.String())
+		}
+		return pids
+	}
+	expect := func(what string, got []string, want ...string) {
+		test.Helper()
+		if len(want) == 0 {
+			want = []string{}
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			test.Fatalf("%s: %v, want %v", what, got, want)
+		}
+	}
+	mine, theirs := installation[:1]+":", other[:1]+":"
+	expect("pids no row can send again, past their campaign's retry horizon", reapable(now, 256, installation), mine+oldAttempt.String(), mine+succeeded.String(), mine+facts.String())
+	expect("the limit per node keeps the oldest", reapable(now, 1, installation), mine+oldAttempt.String())
+	expect("each node gets its own", reapable(now, 1, installation, other), mine+oldAttempt.String(), theirs+elsewhere.String())
+	later := reapable(now.Add(horizon+time.Second), 256, installation)
+	if !slices.Contains(later, mine+insideHorizon.String()) || slices.Contains(reapable(now, 256, installation), mine+insideHorizon.String()) {
+		test.Fatalf("a pid of a terminal row is reaped only past its campaign's retry horizon: %v", later)
+	}
+	if slices.Contains(reapable(now.Add(30*time.Minute), 256, installation), mine+unexpired.String()) || !slices.Contains(reapable(now.Add(2*time.Hour), 256, installation), mine+unexpired.String()) {
+		test.Fatal("an interactive session's pid is reaped only once it expires")
+	}
+
+	if failure := store.RecordReapRequested(operation, device, installation, []campaign.Pid{oldAttempt}, now); failure != nil {
+		test.Fatal(failure)
+	}
+	expect("a requested reap waits its retry interval", reapable(now.Add(time.Minute), 256, installation), mine+succeeded.String(), mine+facts.String())
+	expect("a requested reap is asked again after its retry interval", reapable(now.Add(11*time.Minute), 256, installation), mine+oldAttempt.String(), mine+succeeded.String(), mine+facts.String())
+	recorded, failure := store.RecordReaped(operation, device, installation, succeeded, now)
+	if failure != nil || !recorded {
+		test.Fatalf("a reaped pid: %v %v", recorded, failure)
+	}
+	if again, failure := store.RecordReaped(operation, device, installation, succeeded, now); failure != nil || again {
+		test.Fatalf("a pid reaped twice: %v %v", again, failure)
+	}
+	if elsewhereRecorded, _ := store.RecordReaped(operation, device, other, succeeded, now); elsewhereRecorded {
+		test.Fatal("a reap reported on another node marked this node's pid")
+	}
+	row, failure := store.Row(operation, finished.ID, device, installation)
+	if failure != nil || row.ReapedAt == nil || !row.ReapedAt.Equal(now) {
+		test.Fatalf("the row of a reaped pid: %+v %v", row, failure)
+	}
+	expect("a reaped pid is never asked again", reapable(now.Add(time.Hour), 256, installation), mine+oldAttempt.String(), mine+facts.String())
+
+	retried, changed := row.Drifted()
+	if !changed {
+		test.Fatal("a succeeded row did not drift")
+	}
+	retried.Pid = campaign.DerivePid(finished.ID, device, installation, retried.Attempt)
+	term, _ := store.Term(operation)
+	written, applied, failure := store.UpdateRow(operation, term, row, retried)
+	if failure != nil || !applied || written.ReapedAt != nil {
+		test.Fatalf("a new attempt's pid kept the old pid's reaped_at: %+v %v %v", written, applied, failure)
+	}
+	if read, _ := store.Row(operation, finished.ID, device, installation); read.ReapedAt != nil {
+		test.Fatalf("the stored row kept the old pid's reaped_at: %+v", read)
+	}
+	if _, failure := pool.Exec(operation, `update campaign_nodes set state = 'failed' where campaign_id = $1`, holding.ID); failure != nil {
+		test.Fatal(failure)
+	}
+	if found, _ := store.Reapable(operation, []string{device}, []string{installation}, now.Add(time.Hour), 10*time.Minute, 256); len(found) != 3 {
+		test.Fatalf("a row that turned terminal releases its pid: %v", found)
 	}
 }

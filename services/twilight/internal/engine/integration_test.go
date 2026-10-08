@@ -55,6 +55,7 @@ type fakeDawn struct {
 	nodes      map[string]*node
 	processes  map[string]map[campaign.Pid]bool
 	dispatches []dispatchRecord
+	reaps      map[string][]campaign.Pid
 	facts      int
 	fail       map[string]string
 }
@@ -102,6 +103,28 @@ func (fake *fakeDawn) handler() http.Handler {
 		writer.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(writer).Encode(map[string]any{"accepted": accepted})
 		go fake.run(body.Node, body.Work)
+	})
+	mux.HandleFunc("POST /v1/reap", func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			Node dawn.NodeRef   `json:"node"`
+			Pids []campaign.Pid `json:"pids"`
+		}
+		if failure := json.NewDecoder(request.Body).Decode(&body); failure != nil || len(body.Pids) == 0 {
+			http.Error(writer, "a reap names pids", http.StatusBadRequest)
+			return
+		}
+		fake.mutex.Lock()
+		fake.reaps[body.Node.DeviceID] = append(fake.reaps[body.Node.DeviceID], body.Pids...)
+		for _, pid := range body.Pids {
+			delete(fake.processes[body.Node.DeviceID], pid)
+		}
+		fake.mutex.Unlock()
+		writer.WriteHeader(http.StatusAccepted)
+		go func() {
+			for _, pid := range body.Pids {
+				fake.result(body.Node, dawn.Work{Pid: pid, Kind: "reap"}, "reaped", false, nil, nil)
+			}
+		}()
 	})
 	mux.HandleFunc("POST /v1/facts", func(writer http.ResponseWriter, request *http.Request) {
 		var body struct {
@@ -267,7 +290,7 @@ func newHarness(test *testing.T) *harness {
 	if failure != nil {
 		test.Fatal(failure)
 	}
-	current.fake = &fakeDawn{harness: current, nodes: map[string]*node{}, processes: map[string]map[campaign.Pid]bool{}, fail: map[string]string{}}
+	current.fake = &fakeDawn{harness: current, nodes: map[string]*node{}, processes: map[string]map[campaign.Pid]bool{}, reaps: map[string][]campaign.Pid{}, fail: map[string]string{}}
 	server := httptest.NewServer(current.fake.handler())
 	test.Cleanup(server.Close)
 	current.settings.Dawn.Endpoints = []string{strings.TrimPrefix(server.URL, "http://")}
