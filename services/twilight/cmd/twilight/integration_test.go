@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -48,9 +49,13 @@ func writeLedgerKeys(test *testing.T) string {
 	return ledgerPath
 }
 
-func get(address, path string) (int, string) {
+func get(address, path, token string) (int, string) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	response, failure := client.Get("http://" + address + path)
+	request, _ := http.NewRequest(http.MethodGet, "http://"+address+path, nil)
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response, failure := client.Do(request)
 	if failure != nil {
 		return 0, failure.Error()
 	}
@@ -117,9 +122,7 @@ func TestMigrateTokenAndServe(test *testing.T) {
 		test.Fatalf("token create: exit %d, %q, %q", code, secret, diagnostics)
 	}
 	identifier := strings.Fields(diagnostics)[1]
-	if code, _, diagnostics := command("token", "revoke", identifier); code != 0 || !strings.Contains(diagnostics, "is revoked since") {
-		test.Fatalf("token revoke: exit %d, %q", code, diagnostics)
-	}
+	secret = strings.TrimSpace(secret)
 	if code, _, _ := command("token", "revoke", uuid.NewString()); code != 1 {
 		test.Fatalf("revoking an unknown token exits %d", code)
 	}
@@ -134,21 +137,39 @@ func TestMigrateTokenAndServe(test *testing.T) {
 	deadline := time.Now().Add(90 * time.Second)
 	ready := false
 	for time.Now().Before(deadline) && !ready {
-		status, _ := get(healthAddress, "/readyz")
+		status, _ := get(healthAddress, "/readyz", "")
 		ready = status == http.StatusOK
 		if !ready {
 			time.Sleep(250 * time.Millisecond)
 		}
 	}
 	if !ready {
-		status, body := get(healthAddress, "/readyz")
+		status, body := get(healthAddress, "/readyz", "")
 		test.Fatalf("serve never became ready: %d %q", status, body)
 	}
-	if status, _ := get(healthAddress, "/healthz"); status != http.StatusOK {
+	if status, _ := get(healthAddress, "/healthz", ""); status != http.StatusOK {
 		test.Fatalf("healthz %d", status)
 	}
-	status, metrics := get(healthAddress, "/metrics")
-	for _, metric := range []string{"twilight_online_nodes", "twilight_view_degraded", "twilight_reconcile_lag_seconds", "twilight_leader "} {
+	if status, body := get(apiAddress, "/api/v1/me", secret); status != http.StatusOK || !strings.Contains(body, `"subject":"token:`+identifier+`"`) || !strings.Contains(body, `"role":"operator"`) {
+		test.Fatalf("the created token on the API: %d %q", status, body)
+	}
+	if status, body := get(apiAddress, "/api/v1/me", ""); status != http.StatusUnauthorized || !strings.Contains(body, `"code":"unauthenticated"`) {
+		test.Fatalf("the API without a token: %d %q", status, body)
+	}
+	if status, body := get(apiAddress, "/api/openapi.json", ""); status != http.StatusOK || !strings.Contains(body, `"openapi": "3.1`) {
+		test.Fatalf("the OpenAPI document: %d %.200q", status, body)
+	}
+	if status, body := get(apiAddress, "/campaigns", ""); status != http.StatusServiceUnavailable || strings.TrimSpace(body) != "UI not built" {
+		test.Fatalf("a UI page of a binary built without the UI: %d %q", status, body)
+	}
+	if code, _, diagnostics := command("token", "revoke", identifier); code != 0 || !strings.Contains(diagnostics, "is revoked since") {
+		test.Fatalf("token revoke: exit %d, %q", code, diagnostics)
+	}
+	if status, body := get(apiAddress, "/api/v1/me", secret); status != http.StatusUnauthorized || !strings.Contains(body, "unknown or revoked") {
+		test.Fatalf("the revoked token on the API: %d %q", status, body)
+	}
+	status, metrics := get(healthAddress, "/metrics", "")
+	for _, metric := range []string{"twilight_online_nodes", "twilight_view_degraded", "twilight_reconcile_lag_seconds", "twilight_leader ", `twilight_api_requests_total{code="200",route="GET /api/v1/me"} 1`} {
 		if status != http.StatusOK || !strings.Contains(metrics, metric) {
 			test.Errorf("metrics lack %s", metric)
 		}
@@ -162,7 +183,45 @@ func TestMigrateTokenAndServe(test *testing.T) {
 	case <-time.After(45 * time.Second):
 		test.Fatal("serve did not stop within 45 s of its context ending")
 	}
-	if !strings.Contains(logs.String(), `"msg":"twilight started"`) || !strings.Contains(logs.String(), `"msg":"the engine and reconcile stopped"`) {
+	if !strings.Contains(logs.String(), `"msg":"twilight started"`) || !strings.Contains(logs.String(), `"msg":"the engine and reconcile stopped"`) ||
+		!strings.Contains(logs.String(), `"msg":"the API server stopped"`) {
 		test.Errorf("serve's start and stop were not logged:\n%s", logs.String())
+	}
+
+	code, secret, _ = command("token", "create", "--name", "drain", "--role", "viewer")
+	if code != 0 {
+		test.Fatalf("token create for the drain: exit %d", code)
+	}
+	draining := append(append([]string(nil), environment...), "TWILIGHT__DRAIN_SECONDS=2")
+	operation, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	var drainLogs bytes.Buffer
+	go func() {
+		finished <- run(operation, []string{"serve", "--config", configPath}, draining, &drainLogs, io.Discard)
+	}()
+	deadline = time.Now().Add(90 * time.Second)
+	for status, _ := get(healthAddress, "/readyz", ""); status != http.StatusOK; status, _ = get(healthAddress, "/readyz", "") {
+		if time.Now().After(deadline) {
+			test.Fatal("serve never became ready for the drain")
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	held, failure := net.Dial("tcp", apiAddress)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer held.Close()
+	if _, failure := fmt.Fprintf(held, "POST /api/v1/selectors/validate HTTP/1.1\r\nHost: twilight\r\nAuthorization: Bearer %s\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n{\"selector\":", strings.TrimSpace(secret)); failure != nil {
+		test.Fatal(failure)
+	}
+	time.Sleep(500 * time.Millisecond)
+	cancel()
+	select {
+	case code := <-finished:
+		if code != 1 || !strings.Contains(drainLogs.String(), `"msg":"API requests were still running at the end of drain_seconds; closing them"`) {
+			test.Fatalf("serve with a request still running at the end of its drain exited %d:\n%s", code, drainLogs.String())
+		}
+	case <-time.After(45 * time.Second):
+		test.Fatal("serve did not stop within 45 s of its context ending")
 	}
 }
