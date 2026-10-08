@@ -23,6 +23,7 @@ import (
 
 type Dawn interface {
 	Dispatch(operation context.Context, node dawn.NodeRef, work []dawn.Work) ([]campaign.Pid, error)
+	Reap(operation context.Context, node dawn.NodeRef, pids []campaign.Pid) error
 	Facts(operation context.Context, node dawn.NodeRef, pid campaign.Pid, versionKeys []string) (dawn.Facts, error)
 	Logs(operation context.Context, node dawn.NodeRef, pid campaign.Pid, level string, durationSeconds int, endpoint *string) (string, error)
 	Files(operation context.Context, node dawn.NodeRef, pid campaign.Pid, path string, campaignID *string) (string, error)
@@ -212,6 +213,7 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	start("facts", engine.runFacts)
 	start("results", engine.runResults)
 	start("deadlines", engine.runDeadlines)
+	start("reaps", engine.runReapSweep)
 	start("gates", engine.runGates)
 	start("sweeps", engine.runSweeps)
 	start("due", engine.runDueScan)

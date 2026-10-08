@@ -137,14 +137,17 @@ func (engine *Engine) evaluateBatch(operation context.Context, term int64, keys 
 		}
 		evaluate = append(evaluate, key)
 	}
-	targets := engine.registry.targets()
-	if len(evaluate) == 0 || len(targets) == 0 {
+	if len(evaluate) == 0 {
 		return missed, nil
 	}
 	devices := make([]string, len(evaluate))
 	installations := make([]string, len(evaluate))
 	for index, key := range evaluate {
 		devices[index], installations[index] = key.DeviceID, key.InstallationID
+	}
+	targets := engine.registry.targets()
+	if len(targets) == 0 {
+		return missed, engine.offerReaps(operation, evaluate, now)
 	}
 	identifiers := make([]uuid.UUID, len(targets))
 	for index, target := range targets {
@@ -162,20 +165,26 @@ func (engine *Engine) evaluateBatch(operation context.Context, term int64, keys 
 		}
 		rows[key][row.CampaignID] = row
 	}
+	var idle []NodeKey
 	for _, key := range evaluate {
 		var session *Session
 		if found, online := engine.view.Target(key); online {
 			session = &found
 		}
-		failed := false
+		failed, dispatching := false, false
 		for _, decision := range Evaluate(targets, nodes[key], rows[key], session, now, engine.randomFloat()) {
-			failed = engine.apply(operation, term, decision) != nil || failed
+			dispatch, failure := engine.apply(operation, term, decision)
+			dispatching = dispatching || dispatch
+			failed = failed || failure != nil
 		}
 		if failed {
 			missed++
 		}
+		if !dispatching {
+			idle = append(idle, key)
+		}
 	}
-	return missed, nil
+	return missed, engine.offerReaps(operation, idle, now)
 }
 
 func (engine *Engine) logTransition(previous *campaign.Row, next campaign.Row, reason string) {
@@ -211,12 +220,12 @@ func (engine *Engine) write(operation context.Context, term int64, previous *cam
 	return written, true, nil
 }
 
-func (engine *Engine) apply(operation context.Context, term int64, decision Decision) error {
+func (engine *Engine) apply(operation context.Context, term int64, decision Decision) (bool, error) {
 	row := decision.Next
 	if decision.Write {
 		written, applied, failure := engine.write(operation, term, decision.Previous, decision.Next, "evaluate")
 		if !applied {
-			return failure
+			return false, failure
 		}
 		row = written
 		if decision.Conflict {
@@ -226,7 +235,7 @@ func (engine *Engine) apply(operation context.Context, term int64, decision Deci
 	if decision.Dispatch {
 		engine.dispatcher.offer(decision.Target.Campaign.ID, NodeKey{DeviceID: row.DeviceID, InstallationID: row.InstallationID})
 	}
-	return nil
+	return decision.Dispatch, nil
 }
 
 func (engine *Engine) raiseConflict(operation context.Context, conflicted *campaign.Campaign, row campaign.Row) {

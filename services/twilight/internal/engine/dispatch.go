@@ -30,23 +30,28 @@ type batch struct {
 }
 
 type dispatcher struct {
-	engine   *Engine
-	mutex    sync.Mutex
-	ready    map[NodeKey]map[uuid.UUID]bool
-	queues   map[uuid.UUID][]NodeKey
-	inFlight map[NodeKey]*batch
-	wake     chan struct{}
-	workers  chan struct{}
+	engine     *Engine
+	mutex      sync.Mutex
+	ready      map[NodeKey]map[uuid.UUID]bool
+	queues     map[uuid.UUID][]NodeKey
+	inFlight   map[NodeKey]*batch
+	reaps      *keyQueue
+	reapTokens *TokenBucket
+	wake       chan struct{}
+	workers    chan struct{}
 }
 
 func newDispatcher(engine *Engine) *dispatcher {
+	reapsPerSecond := engine.Config.Engine.ReapsPerSecond
 	return &dispatcher{
-		engine:   engine,
-		ready:    map[NodeKey]map[uuid.UUID]bool{},
-		queues:   map[uuid.UUID][]NodeKey{},
-		inFlight: map[NodeKey]*batch{},
-		wake:     make(chan struct{}, 1),
-		workers:  make(chan struct{}, engine.Config.Engine.DispatchWorkers),
+		engine:     engine,
+		ready:      map[NodeKey]map[uuid.UUID]bool{},
+		queues:     map[uuid.UUID][]NodeKey{},
+		inFlight:   map[NodeKey]*batch{},
+		reaps:      newKeyQueue(engine.Config.Engine.EvaluationQueue),
+		reapTokens: NewTokenBucket(float64(reapsPerSecond), reapsPerSecond, time.Now()),
+		wake:       make(chan struct{}, 1),
+		workers:    make(chan struct{}, engine.Config.Engine.DispatchWorkers),
 	}
 }
 
@@ -56,6 +61,7 @@ func (current *dispatcher) reset() {
 	current.ready = map[NodeKey]map[uuid.UUID]bool{}
 	current.queues = map[uuid.UUID][]NodeKey{}
 	current.inFlight = map[NodeKey]*batch{}
+	current.reaps.take(current.reaps.size())
 }
 
 func (current *dispatcher) queueLimit(identifier uuid.UUID) int {
@@ -129,6 +135,8 @@ func (current *dispatcher) expire(now time.Time) {
 type pick struct {
 	key       NodeKey
 	campaigns []uuid.UUID
+	reap      bool
+	found     bool
 }
 
 func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
@@ -169,7 +177,7 @@ func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
 			if !current.engine.registry.takeToken(identifier, now) {
 				continue
 			}
-			chosen := pick{key: key, campaigns: []uuid.UUID{identifier}}
+			chosen := pick{key: key, campaigns: []uuid.UUID{identifier}, found: true}
 			for other := range current.ready[key] {
 				if current.engine.registry.takeToken(other, now) {
 					chosen.campaigns = append(chosen.campaigns, other)
@@ -193,6 +201,20 @@ func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
 			delete(current.queues, identifier)
 		}
 	}
+	if current.reaps.size() > 0 {
+		if !current.reapTokens.Available(now) {
+			return pick{}, min(wait, max(current.reapTokens.Wait(now), 5*time.Millisecond))
+		}
+		for _, key := range current.reaps.take(1) {
+			if _, busy := current.inFlight[key]; busy {
+				continue
+			}
+			current.reapTokens.Take(now)
+			current.inFlight[key] = &batch{pids: map[campaign.Pid]bool{}, deadline: now.Add(time.Minute)}
+			return pick{key: key, reap: true, found: true}, 0
+		}
+		wait = 0
+	}
 	return pick{}, wait
 }
 
@@ -201,7 +223,10 @@ func (current *dispatcher) run(operation context.Context, term int64) {
 	defer running.Wait()
 	for operation.Err() == nil {
 		chosen, wait := current.next(time.Now())
-		if len(chosen.campaigns) == 0 {
+		if !chosen.found {
+			if wait == 0 {
+				continue
+			}
 			select {
 			case <-operation.Done():
 				return
@@ -219,6 +244,10 @@ func (current *dispatcher) run(operation context.Context, term int64) {
 		go func() {
 			defer running.Done()
 			defer func() { <-current.workers }()
+			if chosen.reap {
+				current.reap(operation, chosen.key)
+				return
+			}
 			current.dispatch(operation, term, chosen)
 		}()
 	}

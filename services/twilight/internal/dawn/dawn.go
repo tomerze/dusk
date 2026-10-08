@@ -386,6 +386,18 @@ func (client *Client) Dispatch(operation context.Context, node NodeRef, work []W
 	return response.Accepted, nil
 }
 
+type reapRequest struct {
+	Node NodeRef        `json:"node"`
+	Pids []campaign.Pid `json:"pids"`
+}
+
+func (client *Client) Reap(operation context.Context, node NodeRef, pids []campaign.Pid) error {
+	if pids == nil {
+		pids = []campaign.Pid{}
+	}
+	return client.post(operation, "/v1/reap", node.Key(), reapRequest{Node: node, Pids: pids}, nil, http.StatusAccepted)
+}
+
 type factsRequest struct {
 	Node        NodeRef      `json:"node"`
 	Pid         campaign.Pid `json:"pid"`

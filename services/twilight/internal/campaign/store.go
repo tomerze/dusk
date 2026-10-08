@@ -730,6 +730,96 @@ func (store *Store) RecordIntendedProcess(operation context.Context, intended In
 	return recordIntendedProcess(operation, store.pool, intended)
 }
 
+type Reapable struct {
+	DeviceID       string
+	InstallationID string
+	Pid            Pid
+}
+
+func (store *Store) Reapable(operation context.Context, devices, installations []string, now time.Time, retryAfter time.Duration, perNode int) ([]Reapable, error) {
+	if len(devices) == 0 {
+		return nil, nil
+	}
+	rows, failure := store.pool.Query(operation, `select node.device_id, node.installation_id, reapable.pid::text
+		from unnest($1::text[], $2::text[]) as node (device_id, installation_id)
+		cross join lateral (
+			select intended.pid from intended_processes intended
+			left join campaigns on campaigns.id = intended.campaign_id
+			where intended.device_id = node.device_id and intended.installation_id = node.installation_id
+				and intended.reaped_at is null and intended.action_kind <> 'reap'
+				and (intended.reap_requested_at is null or intended.reap_requested_at < $3::timestamptz - make_interval(secs => $4))
+				and intended.expires_at < $3::timestamptz - make_interval(secs => coalesce(
+					(campaigns.policy -> 'retry' ->> 'max_backoff_seconds')::double precision
+					+ (campaigns.policy ->> 'node_timeout_seconds')::double precision, 0))
+				and not exists (
+					select 1 from campaign_nodes holder
+					where holder.campaign_id = intended.campaign_id and holder.device_id = intended.device_id
+						and holder.installation_id = intended.installation_id and holder.pid = intended.pid
+						and holder.state not in ('succeeded', 'failed', 'unknown', 'cancelled'))
+			order by intended.expires_at, intended.pid
+			limit $5) reapable
+		order by node.device_id, node.installation_id, reapable.pid`, devices, installations, now, retryAfter.Seconds(), perNode)
+	if failure != nil {
+		return nil, failure
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Reapable, error) {
+		var found Reapable
+		var pid *string
+		if failure := row.Scan(&found.DeviceID, &found.InstallationID, &pid); failure != nil {
+			return found, failure
+		}
+		var failure error
+		found.Pid, failure = scanPid(pid)
+		return found, failure
+	})
+}
+
+func pidTexts(pids []Pid) []string {
+	texts := make([]string, len(pids))
+	for index, pid := range pids {
+		texts[index] = pid.String()
+	}
+	return texts
+}
+
+func (store *Store) RecordReapRequested(operation context.Context, device, installation string, pids []Pid, at time.Time) error {
+	if len(pids) == 0 {
+		return nil
+	}
+	_, failure := store.pool.Exec(operation, `update intended_processes set reap_requested_at = $4
+		where pid = any($1::text[]::numeric[]) and device_id = $2 and installation_id = $3 and reaped_at is null`, pidTexts(pids), device, installation, at)
+	return failure
+}
+
+func (store *Store) RecordReaped(operation context.Context, device, installation string, pid Pid, at time.Time) (bool, error) {
+	recorded := false
+	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
+		rows, failure := transaction.Query(operation, `update intended_processes set reaped_at = $4
+			where pid = $1::text::numeric and device_id = $2 and installation_id = $3 and reaped_at is null
+			returning campaign_id`, pid.String(), device, installation, at)
+		if failure != nil {
+			return failure
+		}
+		campaigns, failure := pgx.CollectRows(rows, pgx.RowTo[*uuid.UUID])
+		if failure != nil {
+			return failure
+		}
+		recorded = len(campaigns) > 0
+		for _, identifier := range campaigns {
+			if identifier == nil {
+				continue
+			}
+			if _, failure := transaction.Exec(operation, `update campaign_nodes set reaped_at = $5
+				where campaign_id = $1 and device_id = $2 and installation_id = $3 and pid = $4::text::numeric and reaped_at is null`,
+				*identifier, device, installation, pid.String(), at); failure != nil {
+				return failure
+			}
+		}
+		return nil
+	})
+	return recorded, failure
+}
+
 func (store *Store) Dispatching(operation context.Context, term int64, previous, next Row, intended IntendedProcess) (Row, bool, error) {
 	var updated Row
 	changed := false

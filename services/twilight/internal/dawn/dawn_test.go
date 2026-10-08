@@ -187,6 +187,45 @@ func TestDispatchOverMutualTLS(test *testing.T) {
 	}
 }
 
+func TestReapSendsThePids(test *testing.T) {
+	fake := startFakeDawn(test)
+	fake.handler = func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusAccepted)
+	}
+	client, failure := New(fake.settings, nil, logger())
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if failure := client.Reap(context.Background(), node, []campaign.Pid{workPid, 65536}); failure != nil {
+		test.Fatal(failure)
+	}
+	request := <-fake.requests
+	body := <-fake.bodies
+	if request.URL.Path != "/v1/reap" {
+		test.Fatalf("reap went to %s", request.URL.Path)
+	}
+	var sent struct {
+		Node map[string]any `json:"node"`
+		Pids []string       `json:"pids"`
+	}
+	if failure := json.Unmarshal(body, &sent); failure != nil {
+		test.Fatal(failure)
+	}
+	if len(sent.Pids) != 2 || sent.Pids[0] != "12808937078074471924" || sent.Pids[1] != "65536" || sent.Node["namespace_id"] != "5d2e9a1c7b3f8e04" {
+		test.Fatalf("reap body %s", body)
+	}
+	fake.handler = func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusTooManyRequests)
+	}
+	if failure := client.Reap(context.Background(), node, nil); OutcomeOf(failure) != Busy {
+		test.Fatalf("a 429 to a reap: %v", failure)
+	}
+	<-fake.requests
+	if body := <-fake.bodies; !strings.Contains(string(body), `"pids":[]`) {
+		test.Fatalf("no pids go as an empty list: %s", body)
+	}
+}
+
 func TestOutcomesAreClassified(test *testing.T) {
 	fake := startFakeDawn(test)
 	client, failure := New(fake.settings, nil, logger())

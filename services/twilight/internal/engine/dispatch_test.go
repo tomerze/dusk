@@ -21,6 +21,37 @@ func TestBusyDawnBacksOffFurtherEachTime(test *testing.T) {
 	}
 }
 
+func TestReapsTakeTokensFromTheirOwnBucket(test *testing.T) {
+	settings := config.Default()
+	settings.Engine.ReapsPerSecond = 2
+	engine := &Engine{Dependencies: Dependencies{Config: settings}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
+	engine.registry = newRegistry(engine)
+	engine.dispatcher = newDispatcher(engine)
+	now := time.Now().Add(time.Hour)
+	keys := []NodeKey{{DeviceID: "a", InstallationID: "1"}, {DeviceID: "b", InstallationID: "2"}, {DeviceID: "c", InstallationID: "3"}}
+	for _, key := range keys {
+		engine.dispatcher.offerReap(key)
+	}
+	for index := range 2 {
+		chosen, _ := engine.dispatcher.next(now)
+		if !chosen.found || !chosen.reap || chosen.key != keys[index] {
+			test.Fatalf("pick %d: %+v", index, chosen)
+		}
+	}
+	chosen, wait := engine.dispatcher.next(now)
+	if chosen.found || wait < 400*time.Millisecond || wait > time.Second {
+		test.Fatalf("a third reap within the second went out (%+v) or waits %s", chosen, wait)
+	}
+	chosen, _ = engine.dispatcher.next(now.Add(time.Second))
+	if !chosen.found || !chosen.reap || chosen.key != keys[2] {
+		test.Fatalf("the third reap after its token came: %+v", chosen)
+	}
+	engine.dispatcher.offerReap(keys[2])
+	if chosen, _ := engine.dispatcher.next(now.Add(2 * time.Second)); chosen.found {
+		test.Fatalf("a reap went to a node with a dispatch in flight: %+v", chosen)
+	}
+}
+
 func TestANodeDueInSeveralCampaignsGoesOutInOnePick(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: config.Default()}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)

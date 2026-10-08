@@ -86,6 +86,19 @@ func (engine *Engine) applyResult(operation context.Context, term int64, pid cam
 	if failure != nil {
 		at = time.Now()
 	}
+	if result.Status == string(campaign.ResultReaped) {
+		if failure := engine.applyReaped(operation, key, pid, at); failure != nil {
+			return fmt.Errorf("record pid %s reaped: %w", pid, failure)
+		}
+		resultsTotal.WithLabelValues(result.ActionKind, result.Status).Inc()
+		return nil
+	}
+	if result.ActionKind == "reap" {
+		resultsTotal.WithLabelValues(result.ActionKind, result.Status).Inc()
+		engine.Logger.Warn("dawn did not reap a pid; it is asked again on a later sweep", "device_id", key.DeviceID, "installation_id", key.InstallationID, "pid", pid.String(),
+			"status", result.Status, "error", result.Error)
+		return nil
+	}
 	if result.Reported != nil {
 		failure := engine.Inventory.ApplyReport(operation, key, result.NamespaceID, at, reportOf(result.Reported))
 		switch {
