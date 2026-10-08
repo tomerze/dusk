@@ -22,7 +22,37 @@ import (
 	"dusk/services/twilight/web"
 )
 
-func apiOptions(settings config.Config, pool *pgxpool.Pool, backend api.Backend, logger *slog.Logger) (api.Options, error) {
+const developmentVariable = "TWILIGHT_DEV"
+
+func developmentMode(environment []string) bool {
+	for _, entry := range environment {
+		if name, value, found := strings.Cut(entry, "="); found && name == developmentVariable {
+			return value == "1"
+		}
+	}
+	return false
+}
+
+func loopbackListen(address string) bool {
+	host, _, failure := net.SplitHostPort(address)
+	if failure != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	parsed := net.ParseIP(host)
+	return parsed != nil && parsed.IsLoopback()
+}
+
+func checkDevelopment(settings config.Config, development bool) error {
+	if development && !loopbackListen(settings.Listen) {
+		return fmt.Errorf("%s=1 serves an admin session to anyone who asks, so listen must be a loopback address, not %s", developmentVariable, settings.Listen)
+	}
+	return nil
+}
+
+func apiOptions(settings config.Config, development bool, pool *pgxpool.Pool, backend api.Backend, logger *slog.Logger) (api.Options, error) {
 	principals, failure := api.ParsePrincipalRoles(settings.Principals)
 	if failure != nil {
 		return api.Options{}, failure
@@ -40,6 +70,7 @@ func apiOptions(settings config.Config, pool *pgxpool.Pool, backend api.Backend,
 		Tokens:          tokens.NewStore(pool),
 		Sessions:        api.NewPostgresSessions(pool),
 		Principals:      principals,
+		Development:     development,
 		SessionLifetime: time.Duration(settings.Sessions.LifetimeSeconds) * time.Second,
 		SessionIdle:     time.Duration(settings.Sessions.IdleSeconds) * time.Second,
 		MaxStreams:      settings.MaxStreams,
@@ -66,6 +97,9 @@ func apiOptions(settings config.Config, pool *pgxpool.Pool, backend api.Backend,
 			Issuer: settings.OIDC.Issuer, ClientID: settings.OIDC.ClientID, ClientSecret: secret, RedirectURL: settings.OIDC.RedirectURL,
 			Scopes: settings.OIDC.Scopes, RoleClaim: settings.OIDC.RoleClaim, RoleMap: roles, HTTPClient: &http.Client{Timeout: 10 * time.Second},
 		}
+	}
+	if development {
+		logger.Warn("development mode: GET /api/v1/auth/login grants an admin session to any loopback caller", "listen", settings.Listen)
 	}
 	return options, nil
 }

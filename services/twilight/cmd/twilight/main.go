@@ -268,6 +268,10 @@ func serve(operation context.Context, arguments, environment []string, output, d
 	if failure != nil {
 		return failure
 	}
+	development := developmentMode(environment)
+	if failure := checkDevelopment(settings, development); failure != nil {
+		return failure
+	}
 	logger := newLogger(settings.LogLevel, output).With("instance", settings.Instance)
 	signals, stopSignals := signal.NotifyContext(operation, syscall.SIGTERM, os.Interrupt)
 	defer stopSignals()
@@ -323,7 +327,7 @@ func serve(operation context.Context, arguments, environment []string, output, d
 		Dawn: dawnClient, KafkaOptions: options, Validator: validator,
 		NodeState: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState), Logger: logger,
 	})
-	apiConfiguration, failure := apiOptions(settings, pool, core.Service(), logger)
+	apiConfiguration, failure := apiOptions(settings, development, pool, core.Service(), logger)
 	if failure != nil {
 		return failure
 	}
@@ -386,7 +390,7 @@ func serve(operation context.Context, arguments, environment []string, output, d
 		}()
 	}
 	logger.Info("twilight started", "version", version, "revision", buildRevision(), "listen", publicListener.Addr().String(), "tls", settings.TLS.Certificate != "",
-		"oidc", settings.OIDC.Issuer != "", "health_listen", listener.Addr().String(), "reconcile", settings.Reconcile.Enabled)
+		"oidc", settings.OIDC.Issuer != "", "development", development, "health_listen", listener.Addr().String(), "reconcile", settings.Reconcile.Enabled)
 
 	var result error
 	select {
