@@ -2,6 +2,7 @@ pub mod audit;
 pub mod backoff;
 pub mod census;
 pub mod config;
+pub mod consumers;
 pub mod contracts;
 pub mod directory;
 pub mod events;
