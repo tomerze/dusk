@@ -6,6 +6,7 @@ pub mod directory;
 pub mod events;
 pub mod kafka;
 pub mod limits;
+pub mod node_state;
 pub mod peer;
 pub mod proxy;
 pub mod sni;
