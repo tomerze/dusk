@@ -17,6 +17,7 @@ mod backoff;
 pub mod client;
 mod file;
 mod node_key;
+mod tls;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
