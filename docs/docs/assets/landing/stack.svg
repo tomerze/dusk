@@ -61,20 +61,34 @@
     </linearGradient>
   </defs>
   <g class="dusk-stack__fleet">
-    <path class="dusk-stack__uplink" d="M70 36L172 154.5" />
-    <path class="dusk-stack__uplink" d="M124 18L189.3 150" />
-    <path class="dusk-stack__uplink" d="M180 28L207.2 152.5" />
-    <path class="dusk-stack__uplink" d="M238 14L225.8 149" />
-    <path class="dusk-stack__uplink" d="M294 26L243.7 152" />
-    <path class="dusk-stack__uplink" d="M348 16L261 149.5" />
-    <path class="dusk-stack__uplink" d="M388 40L273.8 155.5" />
-    <circle class="dusk-stack__node" cx="70" cy="36" r="5" />
-    <circle class="dusk-stack__node" cx="124" cy="18" r="5" />
-    <circle class="dusk-stack__node" cx="180" cy="28" r="5" />
-    <circle class="dusk-stack__node" cx="238" cy="14" r="5" />
-    <circle class="dusk-stack__node" cx="294" cy="26" r="5" />
-    <circle class="dusk-stack__node" cx="348" cy="16" r="5" />
-    <circle class="dusk-stack__node" cx="388" cy="40" r="5" />
+    <path class="dusk-stack__uplink" d="M48 34L150 152" />
+    <path class="dusk-stack__uplink" d="M75.8 16L160.8 149" />
+    <path class="dusk-stack__uplink" d="M103.7 26L171.5 155" />
+    <path class="dusk-stack__uplink" d="M131.5 12L182.3 148" />
+    <path class="dusk-stack__uplink" d="M159.4 30L193.1 153" />
+    <path class="dusk-stack__uplink" d="M187.2 18L203.8 150" />
+    <path class="dusk-stack__uplink" d="M215.1 38L214.6 156" />
+    <path class="dusk-stack__uplink" d="M242.9 14L225.4 149" />
+    <path class="dusk-stack__uplink" d="M270.8 28L236.2 154" />
+    <path class="dusk-stack__uplink" d="M298.6 20L246.9 151" />
+    <path class="dusk-stack__uplink" d="M326.5 34L257.7 155" />
+    <path class="dusk-stack__uplink" d="M354.3 16L268.5 148" />
+    <path class="dusk-stack__uplink" d="M382.2 26L279.2 152" />
+    <path class="dusk-stack__uplink" d="M410 40L290 150" />
+    <circle class="dusk-stack__node" cx="48" cy="34" r="4" />
+    <circle class="dusk-stack__node" cx="75.8" cy="16" r="4" />
+    <circle class="dusk-stack__node" cx="103.7" cy="26" r="4" />
+    <circle class="dusk-stack__node" cx="131.5" cy="12" r="4" />
+    <circle class="dusk-stack__node" cx="159.4" cy="30" r="4" />
+    <circle class="dusk-stack__node" cx="187.2" cy="18" r="4" />
+    <circle class="dusk-stack__node" cx="215.1" cy="38" r="4" />
+    <circle class="dusk-stack__node" cx="242.9" cy="14" r="4" />
+    <circle class="dusk-stack__node" cx="270.8" cy="28" r="4" />
+    <circle class="dusk-stack__node" cx="298.6" cy="20" r="4" />
+    <circle class="dusk-stack__node" cx="326.5" cy="34" r="4" />
+    <circle class="dusk-stack__node" cx="354.3" cy="16" r="4" />
+    <circle class="dusk-stack__node" cx="382.2" cy="26" r="4" />
+    <circle class="dusk-stack__node" cx="410" cy="40" r="4" />
   </g>
   <g class="dusk-plate" data-layer="observability">
     <polygon
