@@ -39,6 +39,47 @@ See [The shell](../development/shell.md).
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive prompt - reedline UI, builtins, output rendering, host of [Ask Dusk](../features/ask-dusk.md) - and the `Shell` that drives the `sh` process a client attaches to. Both are the `sh` program's client side. |
 | `dusk_cli` | The `dusk` [CLI](cli.md). |
 | `dusk_py` | The [Python](python-api.md) extension (PyO3, built with maturin). |
+| `dusk_connection` | `Connection` - a client's link to a node, over plain TCP or over TLS. See [below](#dusk_connection). |
+
+### `dusk_connection`
+
+`Connection::connect(address)` connects to a node at a `SocketAddr` over plain
+TCP. `Connection::connect_tls(host, port, tls)` connects over TLS 1.3 or 1.2, to
+a server that terminates TLS in front of a node; `host` is a host name or an IP
+address, and each address it resolves to is tried in turn. Either way
+`connection.client()` hands out the node's `Dusk` capability:
+
+```rust
+use dusk_connection::{Connection, TlsClient};
+
+let connection = Connection::connect_tls(
+    "node.example.internal",
+    8444,
+    TlsClient {
+        server_name: "node.example.internal".to_string(),
+        ca: "/etc/client/ca.pem".into(),
+        certificate: Some("/etc/client/client.pem".into()),
+        key: Some("/etc/client/client.key".into()),
+    },
+)
+.await?;
+let dusk = connection.client().await;
+```
+
+`server_name` is the name the server's certificate must carry, and `ca` a PEM
+file of the certificates it must chain to; `certificate` and `key`, PEM files of
+this client's certificate chain and its private key, go together. `connect_tls`
+fails at once when a file can't be read. The files are read again on every
+connect and reconnect, so a certificate renewed on disk is used without a new
+connection.
+
+The link is made on the first call, not by `connect` or `connect_tls`. A link
+that can't be made - a closed port, a name that does not resolve, a refused
+handshake, no answer within 10 seconds - or that breaks fails the call with
+`Disconnected`, and the next call makes it again, after a random wait that
+grows with each failure in a row, up to 30 seconds. Once
+`connection.disconnect()` has run, a `Dusk` kept from the connection never
+connects again: its calls fail.
 
 ## Impls (`impls/`)
 
