@@ -83,13 +83,7 @@
         stroke-linejoin="round"
         points="0,65.5 46,35.5 46,40.5 0,70.5"
       />
-      <polygon
-        fill="#eef2f8"
-        stroke="#eef2f8"
-        stroke-width="0.6"
-        stroke-linejoin="round"
-        points="0,5.5 46,35.5 0,65.5 -46,35.5"
-      />
+      <polygon fill="#eef2f8" points="0,5.5 46,35.5 0,65.5 -46,35.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#4a5668"
@@ -112,13 +106,7 @@
         stroke-linejoin="round"
         points="0,46.5 46,16.5 46,21.5 0,51.5"
       />
-      <polygon
-        fill="#4ea6e6"
-        stroke="#4ea6e6"
-        stroke-width="0.6"
-        stroke-linejoin="round"
-        points="0,-13.5 46,16.5 0,46.5 -46,16.5"
-      />
+      <polygon fill="#4ea6e6" points="0,-13.5 46,16.5 0,46.5 -46,16.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#0d3a5e"
@@ -141,13 +129,7 @@
         stroke-linejoin="round"
         points="0,27.5 46,-2.5 46,2.5 0,32.5"
       />
-      <polygon
-        fill="#a98bcc"
-        stroke="#a98bcc"
-        stroke-width="0.6"
-        stroke-linejoin="round"
-        points="0,-32.5 46,-2.5 0,27.5 -46,-2.5"
-      />
+      <polygon fill="#a98bcc" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#3b2466"
@@ -170,13 +152,7 @@
         stroke-linejoin="round"
         points="0,8.5 46,-21.5 46,-16.5 0,13.5"
       />
-      <polygon
-        fill="#ffd9a8"
-        stroke="#ffd9a8"
-        stroke-width="0.6"
-        stroke-linejoin="round"
-        points="0,-51.5 46,-21.5 0,8.5 -46,-21.5"
-      />
+      <polygon fill="#ffd9a8" points="0,-51.5 46,-21.5 0,8.5 -46,-21.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#7a4a12"
@@ -199,13 +175,7 @@
         stroke-linejoin="round"
         points="0,-10.5 46,-40.5 46,-35.5 0,-5.5"
       />
-      <polygon
-        fill="#28378f"
-        stroke="#28378f"
-        stroke-width="0.6"
-        stroke-linejoin="round"
-        points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5"
-      />
+      <polygon fill="#28378f" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#f7f1d8"

@@ -232,29 +232,58 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
   }).observe(fleet.parentElement);
 }
 
-const suns = [...document.querySelectorAll(".dusk-hero__sun")];
-const headings = [...document.querySelectorAll(".dusk-section > h2")];
 const still = matchMedia("(prefers-reduced-motion: reduce)");
+const tracked = [
+  ...[...document.querySelectorAll(".dusk-hero__sun")].map((element) => ({
+    element,
+    name: "--dusk-sunk",
+    aim: () => Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
+  })),
+  ...[...document.querySelectorAll(".dusk-section > h2")].map((element) => ({
+    element,
+    name: "--dusk-passed",
+    aim: () => {
+      const box = element.getBoundingClientRect();
+      const passed =
+        (window.innerHeight - box.top) / (window.innerHeight + box.height);
+      return Math.max(0, Math.min(1, passed));
+    },
+  })),
+].map((item) => ({ ...item, target: item.aim(), value: item.aim() }));
+let gliding = false;
+let lastGlide = 0;
+const glide = (now) => {
+  const ease = 1 - Math.exp((lastGlide - now) / 120);
+  lastGlide = now;
+  gliding = false;
+  for (const item of tracked) {
+    item.value += (item.target - item.value) * ease;
+    if (Math.abs(item.target - item.value) > 0.0005) {
+      gliding = true;
+    } else {
+      item.value = item.target;
+    }
+    item.element.style.setProperty(item.name, item.value);
+  }
+  if (gliding) {
+    requestAnimationFrame(glide);
+  }
+};
 const follow = () => {
   if (still.matches) {
     return;
   }
-  for (const sun of suns) {
-    sun.style.setProperty(
-      "--dusk-sunk",
-      Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
-    );
+  for (const item of tracked) {
+    item.target = item.aim();
   }
-  for (const heading of headings) {
-    const box = heading.getBoundingClientRect();
-    const passed =
-      (window.innerHeight - box.top) / (window.innerHeight + box.height);
-    heading.style.setProperty(
-      "--dusk-passed",
-      Math.max(0, Math.min(1, passed)),
-    );
+  if (!gliding) {
+    gliding = true;
+    lastGlide = performance.now();
+    requestAnimationFrame(glide);
   }
 };
 window.addEventListener("scroll", follow, { passive: true });
 window.addEventListener("resize", follow);
-follow();
+for (const item of tracked) {
+  item.element.style.setProperty(item.name, item.value);
+}

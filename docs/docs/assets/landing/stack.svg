@@ -96,9 +96,6 @@
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-observability)"
-      stroke="url(#dusk-plate-observability)"
-      stroke-width="1.5"
-      stroke-linejoin="round"
       points="220,446 400,520 220,594 40,520"
     />
     <polygon
@@ -143,9 +140,6 @@
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-data)"
-      stroke="url(#dusk-plate-data)"
-      stroke-width="1.5"
-      stroke-linejoin="round"
       points="220,354 400,428 220,502 40,428"
     />
     <polygon
@@ -190,9 +184,6 @@
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-twilight)"
-      stroke="url(#dusk-plate-twilight)"
-      stroke-width="1.5"
-      stroke-linejoin="round"
       points="220,262 400,336 220,410 40,336"
     />
     <polygon
@@ -237,9 +228,6 @@
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-dawn)"
-      stroke="url(#dusk-plate-dawn)"
-      stroke-width="1.5"
-      stroke-linejoin="round"
       points="220,170 400,244 220,318 40,244"
     />
     <polygon
@@ -284,9 +272,6 @@
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-nightfall)"
-      stroke="url(#dusk-plate-nightfall)"
-      stroke-width="1.5"
-      stroke-linejoin="round"
       points="220,78 400,152 220,226 40,152"
     />
     <polygon
