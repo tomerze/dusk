@@ -15,8 +15,8 @@ Seamlessly drop it in at any scale.
 { .dusk-hero__lead }
 
 Dusk can monitor and manage fleets deployed on everything from
-microcontrollers to supercomputers. And you can run it inside applications
-you already ship
+microcontrollers to supercomputers. Run it inside applications you already
+ship.
 { .dusk-hero__pitch }
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
