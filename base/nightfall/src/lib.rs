@@ -19,6 +19,10 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 dusk_program_proc::metadata!("nightfall", VERSION, nightfall_capnp::PROGRAM_ID);
 
+pub mod provision_capnp {
+    include!(concat!(env!("OUT_DIR"), "/capnp/provision_capnp.rs"));
+}
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
