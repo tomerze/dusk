@@ -36,3 +36,23 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
     observer.observe(layer);
   }
 });
+
+const visibility = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    entry.target.classList.toggle("is-offscreen", !entry.isIntersecting);
+    for (const network of entry.target.querySelectorAll(
+      ".dusk-fleet__network",
+    )) {
+      if (entry.isIntersecting) {
+        network.unpauseAnimations();
+      } else {
+        network.pauseAnimations();
+      }
+    }
+  }
+});
+for (const section of document.querySelectorAll(
+  ".dusk-hero, .dusk-fleet, .dusk-stack",
+)) {
+  visibility.observe(section);
+}

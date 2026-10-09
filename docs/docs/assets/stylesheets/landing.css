@@ -822,6 +822,12 @@
   }
 }
 
+.is-offscreen .dusk-float,
+.is-offscreen .dusk-node__pulse,
+.is-offscreen .dusk-stack__uplink {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-landing .dusk-section > h2 {
