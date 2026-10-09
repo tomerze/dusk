@@ -14,4 +14,6 @@ metrics = "0.24"
 nightfall_membrane = { path = "membrane", public = true }
 nightfall_provisioning = { path = "provisioning", public = true }
 rand = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+toml = { version = "0.9", public = true }
 tracing = "0.1.41"
