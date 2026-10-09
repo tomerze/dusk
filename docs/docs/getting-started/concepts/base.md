@@ -75,6 +75,44 @@ kvs set deploy.stage canary  # store a string
 kvs scan                     # list every key
 ```
 
+## `cp`
+
+Copies one file between the client and the node, like `docker cp`. A path that
+starts with `:` is on the node; any other path is on the client that runs the
+command, and a relative client path is relative to where that client runs.
+
+```sh
+cp report.txt :/tmp/report.txt        # upload to the node
+cp :/var/log/app.log app.log          # download from the node
+cp :/etc/app.conf :/etc/app.conf.bak  # copy on the node
+```
+
+`cp` is built for connections that drop. If the destination already exists and
+is no longer than the source, `cp` compares the SHA-256 of the destination with
+the SHA-256 of the same number of bytes at the start of the source. If they
+match, the destination is the start of an interrupted copy, and `cp` sends only
+the rest; run the same command again to finish it. If they don't, or the
+destination is longer than the source, `cp` overwrites it from the start.
+
+When the bytes are sent, `cp` compares the SHA-256 of the whole destination with
+the SHA-256 of the source and fails if they differ, leaving the destination as it
+is. A copy that succeeds prints a record of what it did:
+
+| Field | Value |
+|-------|-------|
+| `source` | The source, as it was typed. |
+| `destination` | The destination, as it was typed. |
+| `length` | The length of the file, in bytes. |
+| `resumed` | The byte `cp` started sending from: `0` for a whole copy, and the length of the destination it found when it resumed one. |
+| `sha256` | The SHA-256 of the file, in hex. |
+
+A path on the client is reached through the client that ran `cp`, so it works
+only while that client is connected. A `cp` in the node's init script has no
+client at all, and can only copy between two paths on the node.
+
+`kill` stops a copy that is still running, and leaves the destination as far as
+it got; the next `cp` to it resumes from there.
+
 ## `kill`
 
 Sends a signal to a process by pid. The default signal is `15` (Terminate),

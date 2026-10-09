@@ -812,3 +812,107 @@ async fn test_kvs_sensitive_value_stays_out_of_the_logs() {
         })
         .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_kvs_set_persistent_fails_without_a_file() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async move {
+            let address: std::net::SocketAddr =
+                format!("{}:{}", LISTEN_ADDRESS, port).parse().unwrap();
+            let connection = Connection::connect(address).await.unwrap();
+            let client = connection.client().await;
+
+            let key = key_id("persistent.without.file");
+            let error = run_to_exit(
+                &client,
+                KvsArgs::set(
+                    key,
+                    &Value::String("1".to_string()),
+                    dusk_program_kvs::kvs::FLAG_PERSISTENT,
+                    false,
+                )
+                .unwrap()
+                .as_program_args()
+                .unwrap(),
+            )
+            .await;
+            assert!(
+                error
+                    .to_string()
+                    .contains("this node keeps no persistent kvs keys"),
+                "kvs set --persistent names why it failed: {error}"
+            );
+            let (pid, values, _) =
+                run_action(&client, KvsArgs::exists(key).as_program_args().unwrap()).await;
+            assert_eq!(
+                values,
+                vec![Value::Bool(false)],
+                "the failed set stored nothing"
+            );
+            stop(&client, pid).await;
+
+            connection.disconnect().await.unwrap();
+        })
+        .await;
+}
+
+#[test]
+fn test_one_file_holds_one_kvs_launcher_at_a_time() {
+    let path = format!(
+        "{}/dusk-kvs-launcher-{}",
+        std::env::temp_dir().display(),
+        std::process::id()
+    );
+    let config = || dusk_program_kvs::KvsConfig {
+        persistent: Some(path.clone()),
+    };
+    let first = dusk_program_kvs::Launcher::new(config()).unwrap();
+    let on_another_thread = std::thread::scope(|scope| {
+        scope
+            .spawn(|| dusk_program_kvs::Launcher::new(config()).err())
+            .join()
+            .unwrap()
+    });
+    let Some(error) = on_another_thread else {
+        panic!("a second node in the process took a file another node holds");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("another node of this process keeps its persistent kvs keys"),
+        "unexpected error: {error:#}"
+    );
+    let Err(error) = dusk_program_kvs::Launcher::new(dusk_program_kvs::KvsConfig {
+        persistent: Some(format!("{path}-other")),
+    }) else {
+        panic!("one thread registered two persistent files");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("already keeps its persistent kvs keys"),
+        "unexpected error: {error:#}"
+    );
+    drop(first);
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| dusk_program_kvs::Launcher::new(config()).map(drop))
+            .join()
+            .unwrap()
+    })
+    .expect("a node takes a file whose last launcher was dropped");
+
+    std::mem::forget(dusk_program_kvs::Launcher::new(config()).unwrap());
+    dusk_program_kvs::kvs::release_persistent(dusk_core::driver::tid());
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| dusk_program_kvs::Launcher::new(config()).map(drop))
+            .join()
+            .unwrap()
+    })
+    .expect("a node takes a file whose last node's thread released it, launcher leaked or not");
+}

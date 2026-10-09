@@ -20,6 +20,9 @@ portable-atomic = { version = "1", default-features = false, features = ["critic
 dusk_capnp = { path = "../dusk_capnp/", public = true}
 dusk_program = { path = "../dusk_program/", public = true}
 
+[build-dependencies]
+getrandom = "0.3"
+
 [features]
 ffi = []
 # The high-frequency executor trace hooks in `trace.rs` (poll, task exec

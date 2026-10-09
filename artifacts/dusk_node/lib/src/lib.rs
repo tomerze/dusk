@@ -16,7 +16,13 @@ use dusk_windows as dusk_impl;
 fn dusk_main(handle: u64, _user: *mut c_void) -> Result<DuskImplExit, DuskMainFailed> {
     Ok(dusk_impl::run(
         handle,
-        dusk_base::default_launcher_set,
+        || {
+            dusk_base::launcher_set(dusk_base::dusk_program_kvs::KvsConfig {
+                persistent: option_env!("DUSK_NODE_KVS_PERSISTENT")
+                    .filter(|path| !path.is_empty())
+                    .map(Into::into),
+            })
+        },
         InitArgs::new(&compile_sh!(env!("DUSK_NODE_INIT_SCRIPT")))
             .and_then(|a| a.as_program_args())
             .map_err(|_| DuskMainFailed::InitArgs)?,

@@ -30,7 +30,9 @@ into, which `init` and `sh` both take in their args, is `sh`'s own `bytecode.cap
 See [The shell](../development/shell.md).
 
 `dusk_base` ties them together: it re-exports the programs and provides
-`default_launcher_set()`, the set a node links.
+`default_launcher_set()`, the set a node links, and `launcher_set(kvs_config)`,
+the same set with the kvs launcher's `KvsConfig` - the file a node keeps its
+persistent kvs keys in.
 
 ## Clients (`dusk/src/`)
 

@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 anyhow = "1.0"
 dusk_program = { path = "../dusk_program", public = true }
+dusk_program_cp = { path = "../../../base/cp", public = true }
 dusk_program_date = { path = "../../../base/date", public = true }
 dusk_program_echo = { path = "../../../base/echo", public = true }
 dusk_program_false = { path = "../../../base/false", public = true }
@@ -24,6 +25,7 @@ dusk_program_true = { path = "../../../base/true", public = true }
 
 [features]
 client = [
+    "dusk_program_cp/client",
     "dusk_program_date/client",
     "dusk_program_echo/client",
     "dusk_program_false/client",

@@ -86,7 +86,7 @@ dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
                dusk_program, dusk_program_proc, dusk_connection, dusk_llm,
                dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
-               true, false, init, nightfall, logs)
+               true, false, init, nightfall, logs, kvs, programs, echo, cp)
 impls/nix/     The Linux impl (Embassy executor, the NixDriver)
 impls/std/     The std impl (Embassy executor, the StdDriver)
 impls/windows/ The Windows impl (Embassy executor, the WindowsDriver)
@@ -120,7 +120,8 @@ which links Dusk Core, the Base programs, and one impl. There is one library
 artifact, `dusk_node` in `artifacts/dusk_node/lib`, and one binary wrapping it in
 `artifacts/dusk_node/bin`. Which impl they link is a cargo feature on the library
 - `impl_nix`, `impl_std` or `impl_windows` - defaulting to `impl_nix`. Exactly one
-may be enabled: every impl defines `_dusk_hostname`, `_dusk_tid` and `_dusk_exit`, so two in
+may be enabled: every impl defines `_dusk_hostname`, `_dusk_tid`, `_dusk_fs_driver` and
+`_dusk_exit`, so two in
 one link is a duplicate symbol. Nothing enforces it - selecting none fails on an
 unresolved `dusk_impl`, selecting two on a duplicate definition of it.
 
@@ -163,6 +164,8 @@ When a client connects, it receives a `Dusk` capability - the node's whole API:
 | `hostname()` | The node's hostname. |
 | `time()` / `settime(ms)` | Read or set the node's wall-clock. |
 | `programs()` | Enumerate the programs the node can run. |
+| `dusk()` | A new `Dusk` capability on the same namespace - one per client when a proxy serves one node to several. |
+| `fleetToken()` | The fleet token the node was built with - `DUSK_FLEET_TOKEN`, or a random one per build directory - which a program reads with `dusk_core::fleet_token::fleet_token()`. |
 
 ### Portals and streams
 
@@ -196,6 +199,9 @@ Everything platform-specific lives behind the `Driver` trait
 - `tid()` - which thread is calling: the same number for the whole life of a
   thread, a different one for every thread running a node at the same time. The
   logs program routes each record to the node registered under it.
+- `fs_driver()` - the node's file system, a `Box<dyn FsDriver>` whose `open`
+  returns a `Box<dyn File>`; reads and writes name their offset, as 9P's do.
+  `cp` uses it, and kvs-internal writes the persistent kvs file through it.
 - `exit(exit_code)` - halt the node.
 
 An impl registers its driver once with `dusk_driver_impl!`. See
@@ -284,7 +290,7 @@ back into the client that defined it for as long as the function is defined. See
 `dusk_core` is `no_std` and depends on no impl, yet it must call into one. It does
 so through a link-time shim. `dusk_driver_impl!` defines a `lazy_static` singleton
 for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
+`_dusk_tid`, `_dusk_fs_driver` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
 as `unsafe extern "Rust"` and calls through them. The linker resolves them to
 whichever impl is in the final binary.
 
@@ -443,8 +449,11 @@ run and talk to a node."
 ### `dusk_node` - the server, three ways
 
 `dusk_node` packages Dusk Core, the Base programs, and an impl into a runnable
-node. Its body is tiny - `default_launcher_set()` builds every Base program at
-its default configuration (building the logs launcher inside it also registers
+node. Its body is tiny - `dusk_base::launcher_set` builds every Base program at
+its default configuration but the kvs launcher's, whose `KvsConfig.persistent`
+names the file the node keeps its persistent kvs keys in, taken from
+`DUSK_NODE_KVS_PERSISTENT` while the node is built and unset when that is empty
+or unset (building the logs launcher inside it also registers
 that node's log buffer under the calling thread's `dusk_core::driver::tid()`,
 unconditionally, until the launcher set is dropped, and the first one in a
 process installs the global tracing subscriber that routes each record by `tid()`
@@ -460,7 +469,13 @@ prints none of them), and
 fn dusk_main(handle: u64, _user: *mut c_void) -> Result<DuskImplExit, DuskMainFailed> {
     Ok(dusk_impl::run(
         handle,
-        dusk_base::default_launcher_set,
+        || {
+            dusk_base::launcher_set(dusk_base::dusk_program_kvs::KvsConfig {
+                persistent: option_env!("DUSK_NODE_KVS_PERSISTENT")
+                    .filter(|path| !path.is_empty())
+                    .map(Into::into),
+            })
+        },
         InitArgs::new(&compile_sh!(env!("DUSK_NODE_INIT_SCRIPT")))
             .and_then(|a| a.as_program_args())
             .map_err(|_| DuskMainFailed::InitArgs)?,
@@ -498,8 +513,24 @@ the C signature as the extension point a node built from the template may
 define - it can read the pointer as anything it likes.
 
 For custom launcher arguments (e.g. a different `LogsConfig`), skip
-`default_launcher_set` and assemble the set yourself with
-`LauncherSet::from_launchers`.
+`dusk_base::launcher_set` and assemble the set yourself with
+`LauncherSet::from_launchers`. `dusk_base::default_launcher_set()` is
+`launcher_set` with a default `KvsConfig` - no persistent file - and is what the
+test harness builds its nodes with.
+
+The kvs launcher built with a file registers it under the calling thread's
+`tid()`, as the logs launcher registers its buffer - refusing a file another
+thread's launcher holds - and `get_kvs` binds the namespace's kvs to it the
+first time it is asked for it on that thread, which on a node is `init`'s
+`main`. Once the launcher is dropped the kvs closes the file and refuses
+persistent sets; each impl's `run` also releases its thread's file with
+`release_persistent` once the executor returns, for a launcher set a parked
+request still holds. The file is opened on the first kvs operation after
+that, through `dusk_core::driver::fs_driver()` and nothing else: persistent keys
+are copied into the in-memory map - all but those Dusk already wrote in this
+run, whose copies are dropped from the file, as are the copies of keys Dusk
+writes later, each logged at warn - and every set or delete while a file is
+bound holds the file's lock, so the map and the file change together.
 
 Because its crate type is `["rlib", "staticlib"]`, you can consume it
 three ways:

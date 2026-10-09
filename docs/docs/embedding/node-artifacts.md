@@ -153,6 +153,17 @@ The script is compiled into the node while it is built: a script that does not
 compile fails the build, and changing the variable rebuilds the node. A script of
 several commands separates them with `;`.
 
+#### DUSK_NODE_KVS_PERSISTENT
+
+The file the node keeps its [persistent kvs keys](../features/kvs.md#persistent-keys)
+in, e.g. `-DDUSK_NODE_KVS_PERSISTENT=/var/lib/dusk/kvs`. The node creates the
+file; its directory must exist and be writable by the node. A relative path
+resolves against the working directory the node runs in. Two nodes on one device
+need two files. Empty - the default, and what the presets leave it - leaves it to
+cargo, as in [Building with cargo](#building-with-cargo): with no
+`DUSK_NODE_KVS_PERSISTENT` in the environment either, the node keeps no
+persistent keys. Changing the variable rebuilds the node.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
@@ -198,6 +209,18 @@ DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
   --target <target> -p dusk_node --no-default-features --features impl_nix
 ```
 
+The node's persistent kvs file is the `DUSK_NODE_KVS_PERSISTENT` environment
+variable, read while the node is built; unset or empty, the node keeps no
+persistent kvs keys. The template passes it to the kvs launcher as the
+`persistent` field of `KvsConfig`, through `dusk_base::launcher_set`, which
+builds every Base program as `dusk_base::default_launcher_set` does except for
+the kvs launcher's config:
+
+```sh
+DUSK_NODE_KVS_PERSISTENT=/var/lib/dusk/kvs cargo build --profile prod \
+  --target <target> -p dusk_node_bin
+```
+
 A build without a `.git` directory - a Docker build whose context leaves it
 out - cannot ask git for the revision it is built from, which every program
 records. Pass it in `DUSK_GIT_REV`, at least 16 hex digits, taken from a
@@ -218,6 +241,76 @@ docker build --build-arg GIT_REV=$(git rev-parse HEAD) .
 
 When `DUSK_GIT_REV` is set the build does not run git at all; when it is not set
 and git cannot answer, the build stops with an error that names `DUSK_GIT_REV`.
+
+### The fleet token
+
+Every node carries a **fleet token**: a secret compiled into `dusk_core`, the
+same in every node of one build. It is how a node proves it was built by whoever
+runs the fleet the first time it enrolls in one. A program on the node reads it
+with `dusk_core::fleet_token::fleet_token()`, and a client holding the node's
+`Dusk` capability with
+[`Dusk.fleetToken`](../sdk-reference/capnp-schemas.md#duskcapnp). The node
+itself uses it for one thing: the key of its
+[persistent kvs file](../features/kvs.md#the-file) derives from it, so a node
+built with another token - a new random one included - cannot read the
+persistent keys an earlier build kept.
+
+Set it as `DUSK_FLEET_TOKEN` in the environment the build runs in:
+
+```sh
+DUSK_FLEET_TOKEN="$(cat fleet-token)" cargo build --profile prod \
+  --target <target> -p dusk_node_bin
+```
+
+A CMake build hands its environment to cargo, so the variable in the
+environment of `cmake --build` reaches it the same way. It is not a CMake
+variable, because a cache variable would leave the secret in `CMakeCache.txt`.
+
+A Docker build passes it as a build secret, never a build argument: the image's
+history keeps the build arguments a `RUN` used. Mount the secret as the
+variable in the `RUN` that builds the node:
+
+```dockerfile
+RUN --mount=type=secret,id=fleet-token,env=DUSK_FLEET_TOKEN,required=true \
+    cargo build --profile prod --target <target> -p dusk_node_bin
+```
+
+and pass it from a file on the build host:
+
+```sh
+docker build --secret id=fleet-token,src=fleet-token .
+```
+
+The `env` option of a secret mount needs Dockerfile syntax 1.10.0 or newer -
+start the `Dockerfile` with `# syntax=docker/dockerfile:1.10` on a BuildKit
+whose built-in frontend is older. `required=true` fails the build when the
+secret is missing, where it would otherwise build nodes with a made-up token.
+
+Changing `DUSK_FLEET_TOKEN` rebuilds `dusk_core` and everything that links it.
+An empty value, or one that is not UTF-8, fails the build. The build never
+prints the token.
+
+When `DUSK_FLEET_TOKEN` is not set, the build makes one up: 32 random bytes,
+written as 64 hex digits, kept as `random_fleet_token` in `dusk_core`'s build
+output directory, `<target dir>/<target>/<profile directory>/build/dusk_core-<hash>/out/`.
+The target directory is `target/` for cargo and `<CMake build directory>/cargo/`
+for CMake; the profile directory is the profile's name, except `debug` for
+`dev`; `<target>/` is left out of a cargo build without `--target`. Every later
+build that cargo puts in that directory reuses the token, and setting the
+variable and later unsetting it brings the same one back. A build that cargo
+puts in another directory makes another token: after `cargo clean`, in another
+target directory, for another profile, target or set of `dusk_core` features,
+and after a change of toolchain or of a crate `dusk_core` depends on. Set
+`DUSK_FLEET_TOKEN` for any fleet whose nodes are built more than once.
+
+**One secret in every node.** Every node of a build holds the same token, and
+it is easy to take from any of them: it is in the binary, and every client that
+connects to a node can ask for it with `Dusk.fleetToken`. Whoever extracts it
+once can enroll as many nodes as they like, as if they were yours. Keep a node's
+port off networks you do not trust. Building with a new token gives the nodes
+built from then on a new one; it does not stop the leaked token working, and the
+nodes already shipped still carry it. Only whoever accepts enrollments can stop
+accepting it.
 
 ## 3. Link
 
