@@ -146,6 +146,7 @@
 }
 
 .dusk-hero {
+  container-type: inline-size;
   position: relative;
   overflow: hidden;
   padding: 3rem var(--dusk-gutter) 0;
@@ -297,7 +298,7 @@
 .dusk-landing .dusk-hero__wordmark {
   margin: 0;
   padding-bottom: 0.06em;
-  font-size: clamp(4rem, 12vw, 6.6rem);
+  font-size: clamp(4rem, 12cqi, 6.6rem);
   font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.055em;
@@ -318,7 +319,7 @@
 }
 .dusk-landing .dusk-hero__lead {
   margin: 1.1rem 0 0;
-  font-size: clamp(1.1rem, 3.6vw, 2.1rem);
+  font-size: clamp(1.1rem, 3.6cqi, 2.1rem);
   font-weight: 750;
   line-height: 1.18;
   letter-spacing: -0.025em;
@@ -476,13 +477,14 @@
 }
 
 .dusk-section {
+  container-type: inline-size;
   padding: 5rem var(--dusk-gutter);
 }
 .dusk-landing .dusk-section > h2 {
   display: table;
   margin: 0 auto;
   padding: 0;
-  font-size: clamp(3.6rem, 10vw, 6.4rem);
+  font-size: clamp(3.6rem, 10cqi, 6.4rem);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.055em;
