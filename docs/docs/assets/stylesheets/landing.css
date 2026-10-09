@@ -561,6 +561,7 @@
   margin: 0 auto;
 }
 .dusk-stack__figure {
+  container-type: inline-size;
   width: 100%;
   max-width: 30rem;
   margin: 0 auto;
@@ -570,6 +571,17 @@
   width: 100%;
   height: auto;
   overflow: visible;
+}
+.dusk-stack__diagram--wide {
+  display: none;
+}
+@container (min-width: 25rem) {
+  .dusk-stack__diagram--narrow {
+    display: none;
+  }
+  .dusk-stack__diagram--wide {
+    display: block;
+  }
 }
 .dusk-plate {
   animation: dusk-hover 5s ease-in-out infinite alternate;
@@ -642,16 +654,6 @@
   fill: var(--dusk-ink);
   font-size: 18px;
   font-weight: 700;
-}
-@media screen and (max-width: 35.9375em) {
-  .dusk-stack__figure {
-    overflow: hidden;
-  }
-  .dusk-landing .dusk-stack__diagram {
-    width: 188%;
-    max-width: none;
-    margin-left: -7.4%;
-  }
 }
 .dusk-stack__node {
   fill: var(--dusk-gold);

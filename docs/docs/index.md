@@ -168,6 +168,7 @@ connect the tools you already have.
 </div>
 
 <div class="dusk-stack__figure">
+--8<-- "assets/landing/stack-narrow.svg"
 --8<-- "assets/landing/stack.svg"
 </div>
 
