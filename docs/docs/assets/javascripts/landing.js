@@ -351,11 +351,6 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
 
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 const tracked = [
-  ...[...document.querySelectorAll(".dusk-hero__sun")].map((element) => ({
-    element,
-    name: "--dusk-sunk",
-    aim: () => Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
-  })),
   ...[...document.querySelectorAll(".dusk-section > h2")].map((element) => ({
     element,
     name: "--dusk-passed",

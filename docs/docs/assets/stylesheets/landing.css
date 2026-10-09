@@ -5,6 +5,7 @@
   --dusk-button: 8.4rem;
   --dusk-float: 2rem;
   --dusk-orbit: 0.6rem;
+  --dusk-hill: 3.6rem;
 }
 .dusk-landing {
   --dusk-gold: #f0b441;
@@ -149,7 +150,6 @@
 
 .dusk-hero {
   container-type: inline-size;
-  overflow: hidden;
   padding: 3rem var(--dusk-gutter) 0;
   background: var(--dusk-sky);
   text-align: center;
@@ -302,27 +302,29 @@
 }
 .dusk-hero__horizon {
   position: relative;
-  height: clamp(7rem, 22vw, 8.5rem);
-  margin: 1.5rem -0.8rem 0;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  margin: 0 calc(-1 * var(--dusk-gutter));
+  overflow: clip;
 }
 .dusk-hero__sun {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: min(22rem, 86vw);
+  width: min(22rem, 86cqi);
   height: auto;
-  transform: translate(-50%, calc(var(--dusk-sunk, 0) * 30%));
 }
 .dusk-hero__horizon::after {
   content: "";
   position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 3.6rem;
+  inset: auto 0 -1px;
+  block-size: var(--dusk-hill);
   background-color: var(--dusk-ground);
   -webkit-mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
   mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
+}
+@keyframes dusk-sink {
+  to {
+    translate: 0 30%;
+  }
 }
 
 .dusk-platforms {
@@ -985,6 +987,16 @@
   outline: 2px solid #f0b441;
   outline-offset: 3px;
   border-radius: 0.2rem;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .dusk-hero__sun {
+      animation: dusk-sink linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 60svh;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
