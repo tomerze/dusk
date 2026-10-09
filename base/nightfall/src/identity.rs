@@ -20,18 +20,21 @@ const INSTALLATION_ID: u64 = key_id("nightfall.installation_id");
 const PRIVATE_KEY: u64 = key_id("nightfall.private_key");
 const STAGED_PRIVATE_KEY: u64 = key_id("nightfall.staged_private_key");
 const CERTIFICATE_CHAIN: u64 = key_id("nightfall.certificate_chain");
+const HARDWARE_FINGERPRINT: u64 = key_id("nightfall.hardware_fingerprint");
+const DEVICE_ID: u64 = key_id("dusk.device.id");
 
 const KEPT: u8 = FLAG_STICKY | FLAG_PERSISTENT;
 const KEPT_SECRET: u8 = KEPT | FLAG_SENSITIVE;
 
-const IDENTITY_KEY_NAMES: [&str; 4] = [
+const IDENTITY_KEY_NAMES: [&str; 5] = [
     "nightfall.installation_id",
     "nightfall.private_key",
     "nightfall.staged_private_key",
     "nightfall.certificate_chain",
+    "nightfall.hardware_fingerprint",
 ];
 
-pub(crate) static IDENTITY_KEYS: [u64; 4] = dusk_program_kvs_internal::key_ids(IDENTITY_KEY_NAMES);
+pub(crate) static IDENTITY_KEYS: [u64; 5] = dusk_program_kvs_internal::key_ids(IDENTITY_KEY_NAMES);
 
 #[cfg(feature = "client")]
 dusk_program_kvs_internal::known_keys!(IDENTITY_KEY_LIST, &IDENTITY_KEY_NAMES);
@@ -103,6 +106,15 @@ pub(crate) fn encode_hex(bytes: &[u8]) -> String {
         text.push_str(&format!("{byte:02x}"));
     }
     text
+}
+
+fn is_machine_id(text: &str) -> bool {
+    let trimmed = text.trim();
+    !trimmed.is_empty()
+        && !trimmed.eq_ignore_ascii_case("uninitialized")
+        && !trimmed
+            .chars()
+            .all(|character| character == '0' || character == '-')
 }
 
 pub(crate) fn identity_from_names<'name>(
@@ -396,6 +408,43 @@ pub(crate) async fn store(kvs: &Kvs, identity: &Identity, pkcs8: &[u8]) -> anyho
         .await
         .context("couldn't remove the staged private key")?;
     Ok(())
+}
+
+pub(crate) async fn hardware_fingerprint(kvs: &Kvs) -> anyhow::Result<[u8; 32]> {
+    if let Some(Value::String(machine_id)) = kvs.get(DEVICE_ID).await
+        && is_machine_id(&machine_id)
+    {
+        let digest = ring::digest::digest(&ring::digest::SHA256, machine_id.trim().as_bytes());
+        let mut fingerprint = [0u8; 32];
+        fingerprint.copy_from_slice(digest.as_ref());
+        return Ok(fingerprint);
+    }
+    match kvs.get(HARDWARE_FINGERPRINT).await {
+        Some(Value::Bytes(stored)) if stored.len() == 32 => {
+            let mut fingerprint = [0u8; 32];
+            fingerprint.copy_from_slice(&stored);
+            return Ok(fingerprint);
+        }
+        Some(_) => {
+            tracing::error!("nightfall.hardware_fingerprint does not hold 32 bytes; replacing it")
+        }
+        None => {}
+    }
+    let mut fingerprint = [0u8; 32];
+    ring::rand::SystemRandom::new()
+        .fill(&mut fingerprint)
+        .map_err(|_| anyhow::anyhow!("the system random number generator failed"))?;
+    kvs.set(
+        HARDWARE_FINGERPRINT,
+        Value::Bytes(fingerprint.to_vec()),
+        KEPT,
+    )
+    .await
+    .context("couldn't store the hardware fingerprint")?;
+    tracing::warn!(
+        "the platform reports no machine id; a random hardware fingerprint stands in for it, so a reinstall gets a new device id"
+    );
+    Ok(fingerprint)
 }
 
 #[cfg(test)]
@@ -826,6 +875,66 @@ mod tests {
             assert!(block_on(load(kvs)).unwrap().is_some());
             block_on(kvs.set(key, value.clone(), KEPT)).unwrap();
             assert!(block_on(load(kvs)).unwrap().is_none(), "{value:?}");
+        }
+    }
+
+    #[test]
+    fn the_hardware_fingerprint_is_the_sha256_of_the_machine_id() {
+        let store_under_test = PersistentKvs::new("machine-id");
+        let kvs = &store_under_test.kvs;
+        let machine_id = "4c4c4544004d3610804bc4c04f4e4d32";
+        block_on(kvs.set(
+            DEVICE_ID,
+            Value::String(format!("  {machine_id}\n")),
+            FLAG_STICKY,
+        ))
+        .unwrap();
+        let fingerprint = block_on(hardware_fingerprint(kvs)).unwrap();
+        assert_eq!(
+            fingerprint.as_slice(),
+            ring::digest::digest(&ring::digest::SHA256, machine_id.as_bytes()).as_ref()
+        );
+        assert!(!block_on(kvs.exists(HARDWARE_FINGERPRINT)));
+    }
+
+    #[test]
+    fn without_a_machine_id_a_random_fingerprint_is_kept_and_reused() {
+        let store_under_test = PersistentKvs::new("no-machine-id");
+        let kvs = &store_under_test.kvs;
+        let first = block_on(hardware_fingerprint(kvs)).unwrap();
+        assert_eq!(
+            block_on(kvs.get_with_flags(HARDWARE_FINGERPRINT)),
+            Some((Value::Bytes(first.to_vec()), KEPT))
+        );
+        block_on(kvs.set(
+            DEVICE_ID,
+            Value::String(String::from("uninitialized")),
+            FLAG_STICKY,
+        ))
+        .unwrap();
+        assert_eq!(block_on(hardware_fingerprint(kvs)).unwrap(), first);
+        let another_machine = std::thread::spawn(|| {
+            let other = PersistentKvs::new("another-machine");
+            block_on(hardware_fingerprint(&other.kvs)).unwrap()
+        })
+        .join()
+        .unwrap();
+        assert_ne!(another_machine, first);
+    }
+
+    #[test]
+    fn placeholder_machine_ids_do_not_count() {
+        assert!(is_machine_id("4c4c4544004d3610804bc4c04f4e4d32"));
+        assert!(is_machine_id("  4c4c4544004d3610804bc4c04f4e4d32\n"));
+        for placeholder in [
+            "",
+            "   ",
+            "uninitialized",
+            "UNINITIALIZED\n",
+            "00000000000000000000000000000000",
+            "00000000-0000-0000-0000-000000000000",
+        ] {
+            assert!(!is_machine_id(placeholder), "{placeholder:?}");
         }
     }
 
