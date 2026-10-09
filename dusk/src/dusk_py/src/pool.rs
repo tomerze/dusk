@@ -56,6 +56,14 @@ impl Pool {
         Ok(Pool { workers })
     }
 
+    #[cfg(test)]
+    pub fn loads(&self) -> Vec<usize> {
+        self.workers
+            .iter()
+            .map(|worker| worker.load.load(Ordering::SeqCst))
+            .collect()
+    }
+
     pub fn spawn<Make, Task>(&self, make: Make) -> Result<(), String>
     where
         Make: FnOnce() -> Task + Send + 'static,
@@ -122,4 +130,91 @@ pub fn pool() -> Result<Arc<Pool>, String> {
     );
     *current = Some((process, pool.clone()));
     Ok(pool)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    fn wait_until(condition: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !condition() {
+            assert!(Instant::now() < deadline, "the condition never held");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn test_clients_share_the_workers_instead_of_spawning_threads() {
+        let pool = Pool::new(2).unwrap();
+        let threads = Arc::new(Mutex::new(HashSet::new()));
+        let started = Arc::new(AtomicUsize::new(0));
+        let (release, _) = tokio::sync::broadcast::channel::<()>(1);
+        for _ in 0..64 {
+            let threads = threads.clone();
+            let started = started.clone();
+            let mut released = release.subscribe();
+            pool.spawn(move || async move {
+                let current = std::thread::current();
+                threads
+                    .lock()
+                    .unwrap()
+                    .insert((current.id(), current.name().map(String::from)));
+                started.fetch_add(1, Ordering::SeqCst);
+                if let Err(error) = released.recv().await {
+                    panic!("the test never released the client: {error}");
+                }
+            })
+            .unwrap();
+        }
+        wait_until(|| started.load(Ordering::SeqCst) == 64);
+        let threads = threads.lock().unwrap().clone();
+        assert_eq!(threads.len(), 2, "{threads:?}");
+        assert!(
+            threads.iter().all(|(_, name)| name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("dusk-py-"))),
+            "{threads:?}"
+        );
+        assert_eq!(pool.loads(), vec![32, 32]);
+        release.send(()).unwrap();
+        wait_until(|| pool.loads() == vec![0, 0]);
+    }
+
+    #[test]
+    fn test_a_client_goes_to_the_least_loaded_worker() {
+        let pool = Pool::new(3).unwrap();
+        let (release, _) = tokio::sync::broadcast::channel::<()>(1);
+        for _ in 0..2 {
+            let mut released = release.subscribe();
+            pool.spawn(move || async move {
+                if let Err(error) = released.recv().await {
+                    panic!("the test never released the client: {error}");
+                }
+            })
+            .unwrap();
+        }
+        wait_until(|| pool.loads().iter().sum::<usize>() == 2);
+        let mut loads = pool.loads();
+        loads.sort();
+        assert_eq!(loads, vec![0, 1, 1]);
+        release.send(()).unwrap();
+        wait_until(|| pool.loads() == vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn test_the_pool_size_comes_from_the_environment_value() {
+        assert_eq!(size_from(Some(String::from("4"))), Ok(4));
+        assert_eq!(size_from(Some(String::from(" 2 "))), Ok(2));
+        assert!(size_from(None).unwrap() >= 1);
+        for value in ["0", "-1", "many", ""] {
+            assert!(
+                size_from(Some(String::from(value))).is_err(),
+                "{value:?} was accepted"
+            );
+        }
+    }
 }
