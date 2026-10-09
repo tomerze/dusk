@@ -15,6 +15,7 @@ type Terminated = Watch<CriticalSectionRawMutex, bool, 16>;
 mod backoff;
 #[cfg(feature = "client")]
 pub mod client;
+pub mod connect;
 mod file;
 mod identity;
 mod link;
@@ -46,6 +47,46 @@ impl Args {
         }
         Args { data }
     }
+
+    pub fn connect(arguments: &connect::ConnectArgs) -> Self {
+        let mut data = ArgsDataBuilder::new_default();
+        {
+            let mut root = data.init_root().init_connect();
+            root.set_fleet(&arguments.fleet);
+            root.set_fleet_server_name(arguments.fleet_server_name.as_deref().unwrap_or(""));
+            root.set_provision(&arguments.provision);
+            root.set_provision_server_name(
+                arguments.provision_server_name.as_deref().unwrap_or(""),
+            );
+            root.set_trust_anchors(&arguments.trust_anchors);
+            root.set_install_token_file(arguments.install_token_file.as_deref().unwrap_or(""));
+            root.set_heartbeat_timeout_seconds(arguments.heartbeat_timeout_seconds);
+        }
+        Args { data }
+    }
+}
+
+fn read_connect(
+    reader: nightfall_capnp::nightfall_args::connect::Reader<'_>,
+) -> capnp::Result<connect::ConnectArgs> {
+    let optional = |text: alloc::string::String| (!text.is_empty()).then_some(text);
+    Ok(connect::ConnectArgs {
+        fleet: reader.get_fleet()?.to_string()?,
+        fleet_server_name: optional(reader.get_fleet_server_name()?.to_string()?),
+        provision: reader.get_provision()?.to_string()?,
+        provision_server_name: optional(reader.get_provision_server_name()?.to_string()?),
+        trust_anchors: reader.get_trust_anchors()?.to_string()?,
+        install_token_file: optional(reader.get_install_token_file()?.to_string()?),
+        heartbeat_timeout_seconds: reader.get_heartbeat_timeout_seconds(),
+    })
+}
+
+enum Mode {
+    Listen {
+        address: alloc::string::String,
+        port: u16,
+    },
+    Connect(connect::ConnectArgs),
 }
 
 #[dusk_program_proc::impl_args_rpc_server]
@@ -116,14 +157,70 @@ impl dusk_program::process::ProcessMixin for Process {
         signal_receiver: SignalReceiver<'async_trait>,
         ready: Ready,
     ) -> anyhow::Result<()> {
-        let (address, port) = self
+        let mode = self
             .ctx
             .program_args
             .with_data::<nightfall_capnp::nightfall_args::data::Owned, _, _>(|data| {
-                let address = data.get_address()?.to_string()?;
-                let port = data.get_port();
-                Ok((address, port))
+                if data.has_connect() {
+                    return Ok(Mode::Connect(read_connect(data.get_connect()?)?));
+                }
+                Ok(Mode::Listen {
+                    address: data.get_address()?.to_string()?,
+                    port: data.get_port(),
+                })
             })?;
+        match mode {
+            Mode::Listen { address, port } => {
+                self.listen(&address, port, signal_receiver, ready).await
+            }
+            Mode::Connect(arguments) => self.connect(&arguments, signal_receiver, ready).await,
+        }
+    }
+}
+
+impl Process {
+    async fn connect(
+        &self,
+        arguments: &connect::ConnectArgs,
+        signal_receiver: SignalReceiver<'_>,
+        ready: Ready,
+    ) -> anyhow::Result<()> {
+        let settings = connect::Settings::new(arguments)
+            .map_err(|reason| anyhow::anyhow!("nightfall can't link to the fleet: {reason}"))?;
+        let kvs = dusk_program_kvs_internal::get_kvs(self.namespace().id);
+        anyhow::ensure!(
+            kvs.keeps_persistent_keys().await,
+            "nightfall can't link to the fleet: this node keeps no persistent kvs keys to hold its identity"
+        );
+        let fleet = settings.fleet.to_string();
+        self.ctx
+            .name
+            .lock(|name| *name.borrow_mut() = Some(alloc::format!("nightfall[connect {fleet}]")));
+        ready.sender().send(true);
+        let terminate = async {
+            loop {
+                if let Signal::Terminate = signal_receiver.receive().await {
+                    return;
+                }
+            }
+        };
+        dusk_program::embassy_futures::select::select(
+            connect::run(settings, self.namespace().clone(), kvs),
+            terminate,
+        )
+        .await;
+        tracing::info!(fleet, "stopped linking to the fleet");
+        self.terminated.sender().send(true);
+        Ok(())
+    }
+
+    async fn listen(
+        &self,
+        address: &str,
+        port: u16,
+        signal_receiver: SignalReceiver<'_>,
+        ready: Ready,
+    ) -> anyhow::Result<()> {
         let ip_address: std::net::IpAddr = address.parse()?;
         let listener = async_io::Async::<std::net::TcpListener>::bind(std::net::SocketAddr::new(
             ip_address, port,
