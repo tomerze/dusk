@@ -50,6 +50,19 @@
 {% block footer %}
   <nav class="dusk-sitemap" aria-label="Documentation">
     <div class="dusk-sitemap__inner">
+      <div class="dusk-sitemap__brand">
+        <a class="dusk-sitemap__wordmark"
+           href="{{ nav.homepage.url | url }}"
+           aria-label="{{ config.site_name }}">
+        <img class="dusk-sitemap__d"
+             src="{{ 'assets/landing/logo-d.svg' | url }}"
+             alt="">usk</a>
+        <p>The one solution for every fleet.</p>
+        <a class="dusk-sitemap__github" href="{{ config.repo_url }}">
+          {% include ".icons/fontawesome/brands/github.svg" %}
+          Dusk on GitHub
+        </a>
+      </div>
       <div class="dusk-sitemap__sections">
         {% for section in nav if section.children %}
           <div class="dusk-sitemap__section">

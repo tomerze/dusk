@@ -921,6 +921,8 @@
   background-color: #0f0c1f;
 }
 .dusk-sitemap__inner {
+  display: grid;
+  gap: 2.4rem;
   max-width: 60rem;
   margin: 0 auto;
   padding: 2.4rem 0.8rem 1.6rem;
@@ -930,7 +932,45 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.6rem 1.2rem;
 }
+.dusk-sitemap__wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  color: #f0b441;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+.dusk-sitemap__wordmark:hover,
+.dusk-sitemap__wordmark:focus {
+  color: #f0b441;
+}
+.dusk-sitemap__d {
+  width: auto;
+  height: 0.7275em;
+  margin-right: 0.035em;
+}
+.dusk-sitemap__brand p {
+  margin: 0.7rem 0 1rem;
+  color: var(--md-footer-fg-color--light);
+  font-size: 0.7rem;
+}
+.dusk-sitemap__github {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--md-footer-fg-color--light);
+  font-size: 0.7rem;
+}
+.dusk-sitemap__github svg {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
 @media screen and (min-width: 45em) {
+  .dusk-sitemap__inner {
+    grid-template-columns: 12rem minmax(0, 1fr);
+  }
   .dusk-sitemap__sections {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
