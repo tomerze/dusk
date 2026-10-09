@@ -116,23 +116,23 @@
         Data
       </text>
       <polygon
-        fill="#8d6fb1"
-        stroke="#8d6fb1"
+        fill="#9d64a4"
+        stroke="#9d64a4"
         stroke-width="0.6"
         stroke-linejoin="round"
         points="-46,-2.5 0,27.5 0,32.5 -46,2.5"
       />
       <polygon
-        fill="#735892"
-        stroke="#735892"
+        fill="#7f4f85"
+        stroke="#7f4f85"
         stroke-width="0.6"
         stroke-linejoin="round"
         points="0,27.5 46,-2.5 46,2.5 0,32.5"
       />
-      <polygon fill="#a98bcc" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
+      <polygon fill="#bf7fc6" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
       <text
         class="dusk-fleet__hub-print"
-        fill="#3b2466"
+        fill="#45214a"
         text-anchor="middle"
         transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 13.3)"
       >

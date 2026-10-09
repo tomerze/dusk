@@ -2,7 +2,7 @@
   --dusk-gold: #f0b441;
   --dusk-nightfall: #28378f;
   --dusk-dawn: #ffd9a8;
-  --dusk-twilight: #a98bcc;
+  --dusk-twilight: #bf7fc6;
   --dusk-data: #4ea6e6;
   --dusk-observability: #f2f5fa;
   overflow-x: clip;
@@ -24,7 +24,7 @@
   --dusk-tiny: #aaa1cc;
   --dusk-ink-nightfall: #2c3a9e;
   --dusk-ink-dawn: #b86f1a;
-  --dusk-ink-twilight: #7a56a9;
+  --dusk-ink-twilight: #8f4a96;
   --dusk-ink-data: #1f6fa8;
   --dusk-ink-observability: #5b6b85;
   --dusk-ink-gold: #9a6b00;
@@ -47,7 +47,7 @@
   --dusk-tiny: #7a72ad;
   --dusk-ink-nightfall: #9fb0ff;
   --dusk-ink-dawn: #ffd9a8;
-  --dusk-ink-twilight: #cdb3ec;
+  --dusk-ink-twilight: #e3b3e6;
   --dusk-ink-data: #8ccbff;
   --dusk-ink-observability: #eef2f8;
   --dusk-ink-gold: #f0b441;
@@ -619,9 +619,6 @@
 }
 .dusk-plate__veil {
   fill: var(--md-default-bg-color);
-  stroke: var(--md-default-bg-color);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
   opacity: 0;
 }
 .dusk-plate__leader {

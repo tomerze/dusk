@@ -48,8 +48,8 @@
       <stop offset="1" stop-color="#ffd9a8" />
     </linearGradient>
     <linearGradient id="dusk-plate-twilight" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#cbb3e4" />
-      <stop offset="1" stop-color="#a98bcc" />
+      <stop offset="0" stop-color="#dcaae0" />
+      <stop offset="1" stop-color="#bf7fc6" />
     </linearGradient>
     <linearGradient id="dusk-plate-data" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#93cdf4" />
@@ -114,7 +114,7 @@
     />
     <polygon
       class="dusk-plate__veil"
-      points="220,446 400,520 400,538 220,612 40,538 40,520"
+      points="220,444 402,519 402,539 220,614 38,539 38,519"
     />
     <g
       class="dusk-plate__print"
@@ -158,7 +158,7 @@
     />
     <polygon
       class="dusk-plate__veil"
-      points="220,354 400,428 400,446 220,520 40,446 40,428"
+      points="220,352 402,427 402,447 220,522 38,447 38,427"
     />
     <g
       class="dusk-plate__print"
@@ -181,16 +181,16 @@
   <g class="dusk-plate" data-layer="twilight">
     <polygon
       class="dusk-plate__left"
-      fill="#8d6fb1"
-      stroke="#8d6fb1"
+      fill="#9d64a4"
+      stroke="#9d64a4"
       stroke-width="1.5"
       stroke-linejoin="round"
       points="40,336 220,410 220,428 40,354"
     />
     <polygon
       class="dusk-plate__right"
-      fill="#735892"
-      stroke="#735892"
+      fill="#7f4f85"
+      stroke="#7f4f85"
       stroke-width="1.5"
       stroke-linejoin="round"
       points="220,410 400,336 400,354 220,428"
@@ -202,12 +202,12 @@
     />
     <polygon
       class="dusk-plate__veil"
-      points="220,262 400,336 400,354 220,428 40,354 40,336"
+      points="220,260 402,335 402,355 220,430 38,355 38,335"
     />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 336)"
-      style="--dusk-print: #3b2466"
+      style="--dusk-print: #45214a"
     >
       <use
         class="dusk-plate__print-icon"
@@ -246,7 +246,7 @@
     />
     <polygon
       class="dusk-plate__veil"
-      points="220,170 400,244 400,262 220,336 40,262 40,244"
+      points="220,168 402,243 402,263 220,338 38,263 38,243"
     />
     <g
       class="dusk-plate__print"
@@ -290,7 +290,7 @@
     />
     <polygon
       class="dusk-plate__veil"
-      points="220,78 400,152 400,170 220,244 40,170 40,152"
+      points="220,76 402,151 402,171 220,246 38,171 38,151"
     />
     <g
       class="dusk-plate__print"
