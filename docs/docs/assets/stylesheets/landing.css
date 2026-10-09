@@ -474,7 +474,7 @@
 .dusk-landing .dusk-os__title {
   display: table;
   margin: 0 auto;
-  padding: 0;
+  padding: 0 0.1em;
   font-size: clamp(3.6rem, 10vw, 6.4rem);
   font-weight: 800;
   line-height: 1;
