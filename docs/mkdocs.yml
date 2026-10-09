@@ -13,6 +13,9 @@ markdown_extensions:
       options:
         custom_icons:
           - !relative $docs_dir/assets/.icons
+  - pymdownx.snippets:
+      base_path: !relative $docs_dir
+      check_paths: true
   - pymdownx.highlight:
       anchor_linenums: true
       pygments_lang_class: true

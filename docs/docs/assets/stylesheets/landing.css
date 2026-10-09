@@ -11,6 +11,13 @@
     #f9c99a 100%
   );
   --dusk-ground: #ece5d8;
+  --dusk-node-fill: #fffdf8;
+  --dusk-node-line: #d3c9b8;
+  --dusk-node-glyph: #4a4658;
+  --dusk-link: rgba(85, 74, 150, 0.34);
+  --dusk-link-faint: rgba(85, 74, 150, 0.13);
+  --dusk-tiny: #aaa1cc;
+  --dusk-stars: none;
 }
 [data-md-color-scheme="slate"] .dusk-landing {
   --dusk-sky: linear-gradient(
@@ -22,6 +29,38 @@
     #7c3a42 100%
   );
   --dusk-ground: #0f0c1f;
+  --dusk-node-fill: #1d1838;
+  --dusk-node-line: #3d3569;
+  --dusk-node-glyph: #d2cce8;
+  --dusk-link: rgba(165, 155, 235, 0.36);
+  --dusk-link-faint: rgba(165, 155, 235, 0.13);
+  --dusk-tiny: #7a72ad;
+  --dusk-stars:
+    radial-gradient(
+      1.5px 1.5px at 8% 14%,
+      rgba(255, 255, 255, 0.55),
+      transparent
+    ),
+    radial-gradient(1px 1px at 21% 63%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(
+      1.5px 1.5px at 34% 9%,
+      rgba(255, 255, 255, 0.45),
+      transparent
+    ),
+    radial-gradient(1px 1px at 47% 88%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(
+      1.5px 1.5px at 63% 22%,
+      rgba(255, 255, 255, 0.5),
+      transparent
+    ),
+    radial-gradient(1px 1px at 76% 71%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(
+      1.5px 1.5px at 89% 12%,
+      rgba(255, 255, 255, 0.45),
+      transparent
+    ),
+    radial-gradient(1px 1px at 94% 52%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1px 1px at 4% 82%, rgba(255, 255, 255, 0.4), transparent);
 }
 
 .dusk-landing ~ .md-main .md-content {
@@ -89,6 +128,10 @@
   .dusk-navbar__links {
     display: flex;
   }
+}
+
+.dusk-landing svg text {
+  font-family: var(--md-text-font-family, inherit);
 }
 
 .dusk-hero {
@@ -375,8 +418,137 @@
   }
 }
 
+.dusk-section {
+  padding: 5rem 0.8rem;
+}
+.dusk-landing .dusk-section > h2 {
+  display: table;
+  margin: 0 auto;
+  padding: 0;
+  font-size: clamp(3.6rem, 10vw, 6.4rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.055em;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.dusk-landing .dusk-fleet > h2 {
+  color: #a86f12;
+  background-image: linear-gradient(
+    170deg,
+    #f8cc6a 0%,
+    #f0b441 38%,
+    #a86f12 100%
+  );
+  background-size: 200% 200%;
+  animation: dusk-shimmer linear both;
+  animation-timeline: view();
+}
+@keyframes dusk-shimmer {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
+  }
+}
+.dusk-landing .dusk-section > h2 + p {
+  max-width: 32rem;
+  margin: 1rem auto 3rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--md-default-fg-color--light);
+}
+
+.dusk-fleet {
+  background-color: var(--dusk-ground);
+  background-image: var(--dusk-stars);
+  padding-top: 3rem;
+  padding-bottom: 2.5rem;
+}
+.dusk-fleet__figure {
+  max-width: 62rem;
+  margin: 0 auto;
+}
+.dusk-fleet__network {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.dusk-fleet__network--tall {
+  display: none;
+  max-width: 26rem;
+  margin: 0 auto;
+}
+@media screen and (max-width: 47.9375em) {
+  .dusk-fleet__network--wide {
+    display: none;
+  }
+  .dusk-fleet__network--tall {
+    display: block;
+  }
+}
+.dusk-fleet__link {
+  fill: none;
+  stroke: var(--dusk-link);
+  stroke-width: 1.4;
+}
+.dusk-fleet__link--faint {
+  stroke: var(--dusk-link-faint);
+  stroke-width: 1;
+}
+.dusk-fleet__tiny circle {
+  fill: var(--dusk-tiny);
+}
+.dusk-fleet__hub-glow {
+  fill: var(--dusk-gold);
+  opacity: 0.22;
+  filter: blur(22px);
+}
+.dusk-fleet__hub-print {
+  font-size: 7.2px;
+  font-weight: 800;
+}
+.dusk-fleet__hub-pill {
+  fill: var(--dusk-ground);
+  stroke: var(--dusk-node-line);
+  stroke-width: 1;
+}
+.dusk-fleet__hub-label {
+  fill: var(--md-default-fg-color);
+  font-size: 16px;
+  font-weight: 700;
+}
+.dusk-node__ring {
+  fill: var(--dusk-node-fill);
+  stroke: var(--dusk-node-line);
+  stroke-width: 1.2;
+}
+.dusk-node__glyph {
+  fill: none;
+  stroke: var(--dusk-node-glyph);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dusk-node__online {
+  fill: var(--dusk-gold);
+}
+.dusk-node__label {
+  fill: var(--md-default-fg-color--light);
+  font-size: 15px;
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: var(--dusk-ground);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .dusk-landing .dusk-float {
+  .dusk-landing .dusk-float,
+  .dusk-landing .dusk-section > h2 {
     animation: none;
   }
 }

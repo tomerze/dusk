@@ -65,6 +65,20 @@ ship.
 
 </section>
 
+<section class="dusk-section dusk-fleet" markdown>
+
+## Fleet
+
+Each of these devices is a node: it runs Dusk, and you can reach it from a
+single place.
+
+<div class="dusk-fleet__figure">
+--8<-- "assets/landing/fleet.svg"
+--8<-- "assets/landing/fleet-phone.svg"
+</div>
+
+</section>
+
 <div class="grid cards" markdown>
 
 -   **Embed Dusk**
