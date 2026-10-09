@@ -408,18 +408,18 @@
   text-wrap: balance;
 }
 .dusk-landing .dusk-platforms__grid ul {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1.6rem 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.4rem 2rem;
   max-width: 32rem;
   margin: 0 auto;
   padding: 0;
   list-style: none;
 }
-.dusk-landing .dusk-platforms__grid ul li {
+.dusk-landing .dusk-platforms__grid li {
   --md-icon-size: 1.5rem;
   display: flex;
-  grid-column: span 2;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
@@ -445,35 +445,6 @@
   text-decoration: underline;
   text-decoration-thickness: 0.09em;
   text-underline-offset: 0.22em;
-}
-@media screen and (max-width: 44.9375em) {
-  .dusk-landing .dusk-platforms__grid ul li {
-    gap: 0.4rem;
-    font-size: 0.85rem;
-  }
-  .dusk-landing .dusk-platforms__grid ul li:nth-child(1) {
-    order: -2;
-  }
-  .dusk-landing .dusk-platforms__grid ul li:nth-child(3) {
-    order: -1;
-  }
-  .dusk-landing .dusk-platforms__grid ul li:nth-child(5) {
-    order: 1;
-  }
-  .dusk-landing .dusk-platforms__grid ul li:nth-child(n + 7) {
-    grid-column: span 3;
-    order: 2;
-  }
-}
-@media screen and (min-width: 45em) {
-  .dusk-landing .dusk-platforms__grid ul {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-    column-gap: 1rem;
-  }
-  .dusk-landing .dusk-platforms__grid ul li:nth-child(5),
-  .dusk-landing .dusk-platforms__grid ul li:nth-child(8) {
-    grid-column: 2 / span 2;
-  }
 }
 
 .dusk-section {
@@ -916,7 +887,8 @@
   background-color: var(--dusk-ground);
 }
 .dusk-landing .grid.cards {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   max-width: 60rem;
   margin: 0 auto;
@@ -925,8 +897,8 @@
   --dusk-card-tone: var(--dusk-gold);
   --dusk-card-ink: var(--dusk-ink-gold);
   display: flex;
+  flex: 1 1 16rem;
   flex-direction: column;
-  grid-column: span 2;
   padding: 1.3rem 1.4rem;
   border: 2px solid var(--dusk-card-tone);
   border-radius: 0.25rem;
@@ -950,9 +922,6 @@
 }
 .dusk-landing .grid.cards > ul > li:hover {
   border-color: var(--dusk-card-tone);
-}
-.dusk-landing .grid.cards > ul > li:nth-child(-n + 2) {
-  grid-column: span 3;
 }
 .dusk-landing .grid.cards > ul > li > p {
   margin: 0;
@@ -989,15 +958,6 @@
   --md-icon-size: 1.8rem;
   margin-bottom: 0.5rem;
   color: var(--dusk-card-ink);
-}
-@media screen and (max-width: 44.9375em) {
-  .dusk-landing .grid.cards {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .dusk-landing .grid.cards > ul > li,
-  .dusk-landing .grid.cards > ul > li:nth-child(-n + 2) {
-    grid-column: auto;
-  }
 }
 
 .dusk-sitemap {
