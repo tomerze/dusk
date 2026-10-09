@@ -507,7 +507,7 @@
 }
 .dusk-fleet__hub-glow {
   fill: var(--dusk-gold);
-  opacity: 0.22;
+  opacity: 0.06;
   filter: blur(22px);
 }
 .dusk-fleet__labels text {
