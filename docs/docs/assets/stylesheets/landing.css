@@ -626,6 +626,9 @@
   stroke-width: 1.5;
   opacity: 0.6;
 }
+.dusk-plate__print {
+  transition: opacity 0.45s ease;
+}
 .dusk-plate__print text {
   fill: var(--dusk-print);
   font-size: 20px;
@@ -772,6 +775,9 @@
   .dusk-stack.is-focused .dusk-plate:not(.is-active) use,
   .dusk-stack.is-focused .dusk-plate:not(.is-active) path {
     opacity: 0.3;
+  }
+  .dusk-stack.is-focused .dusk-plate:not(.is-active) .dusk-plate__print {
+    opacity: 0;
   }
   .dusk-stack.is-focused .dusk-plate.is-active {
     transform: translateX(-24px);
