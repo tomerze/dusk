@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{net::SocketAddr, rc::Rc, sync::Mutex};
 use tokio::net::TcpStream;
+use tracing::Instrument as _;
 
 enum LinkState {
     Open(Option<Disconnector<rpc_twoparty_capnp::Side>>),
@@ -145,6 +146,7 @@ async fn dial(host: &str, port: u16) -> anyhow::Result<TcpStream> {
 struct LinkStream<Stream>(Stream);
 
 fn link_failure(error: std::io::Error) -> std::io::Error {
+    tracing::warn!(error = %error, "the link failed");
     std::io::Error::new(std::io::ErrorKind::ConnectionAborted, error.to_string())
 }
 
@@ -158,6 +160,7 @@ impl<Stream: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for LinkStream<S
             std::task::Poll::Ready(Err(error))
                 if error.kind() == std::io::ErrorKind::UnexpectedEof =>
             {
+                tracing::debug!("the peer closed the link without close_notify");
                 std::task::Poll::Ready(Ok(()))
             }
             polled => polled.map_err(link_failure),
@@ -221,14 +224,25 @@ where
         }
     };
     if let Some(replaced) = replaced {
-        tokio::task::spawn_local(async move {
-            if let Err(error) = replaced.await {
-                tracing::warn!(error = %error, "couldn't close the link a reconnect replaced");
+        tokio::task::spawn_local(
+            async move {
+                if let Err(error) = replaced.await {
+                    tracing::warn!(error = %error, "couldn't close the link a reconnect replaced");
+                }
             }
-        });
+            .instrument(tracing::Span::current()),
+        );
     }
     let client: Client = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
-    tokio::task::spawn_local(rpc_system);
+    tokio::task::spawn_local(
+        async move {
+            match rpc_system.await {
+                Ok(()) => tracing::info!("link down"),
+                Err(error) => tracing::warn!(error = %error, "link down"),
+            }
+        }
+        .instrument(tracing::Span::current()),
+    );
     Ok(client)
 }
 
@@ -290,18 +304,40 @@ async fn open_with_backoff(
     disconnector_store: DisconnectorStore,
     attempts: Rc<Cell<Attempts>>,
 ) -> capnp::Result<Client> {
-    let previous = attempts.get();
-    let in_a_row = match previous.ended {
-        Some(ended) if ended.elapsed() < RECONNECT_CAP => previous.in_a_row.saturating_add(1),
-        _ => 0,
+    let span = match &target {
+        Target::Plain(address) => tracing::info_span!("link", address = %address),
+        Target::Tls {
+            host,
+            port,
+            server_name,
+            ..
+        } => tracing::info_span!(
+            "link",
+            host = host.as_str(),
+            port,
+            server_name = %server_name.to_str()
+        ),
     };
-    tokio::time::sleep(reconnect_delay(in_a_row)).await;
-    let opened = open(target, disconnector_store).await;
-    attempts.set(Attempts {
-        in_a_row,
-        ended: Some(Instant::now()),
-    });
-    opened
+    async move {
+        let previous = attempts.get();
+        let in_a_row = match previous.ended {
+            Some(ended) if ended.elapsed() < RECONNECT_CAP => previous.in_a_row.saturating_add(1),
+            _ => 0,
+        };
+        tokio::time::sleep(reconnect_delay(in_a_row)).await;
+        let opened = open(target, disconnector_store).await;
+        attempts.set(Attempts {
+            in_a_row,
+            ended: Some(Instant::now()),
+        });
+        match &opened {
+            Ok(_) => tracing::info!(in_a_row, "link up"),
+            Err(error) => tracing::warn!(error = %error, in_a_row, "couldn't open the link"),
+        }
+        opened
+    }
+    .instrument(span)
+    .await
 }
 
 pub struct Connection {
