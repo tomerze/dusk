@@ -181,11 +181,16 @@ where
     ));
     let mut rpc_system = RpcSystem::new(rpc_network, None);
     let disconnector = rpc_system.get_disconnector();
-    {
-        let mut disconnector_option_guard = disconnector_store
-            .lock()
-            .map_err(|error| capnp::Error::failed(error.to_string()))?;
-        *disconnector_option_guard = Some(disconnector);
+    let replaced = disconnector_store
+        .lock()
+        .map_err(|error| capnp::Error::failed(error.to_string()))?
+        .replace(disconnector);
+    if let Some(replaced) = replaced {
+        tokio::task::spawn_local(async move {
+            if let Err(error) = replaced.await {
+                tracing::warn!(error = %error, "couldn't close the link a reconnect replaced");
+            }
+        });
     }
     let client: Client = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
     tokio::task::spawn_local(rpc_system);

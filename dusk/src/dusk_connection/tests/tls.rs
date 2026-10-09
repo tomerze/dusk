@@ -5,7 +5,7 @@ use dusk_connection::{Connection, TlsClient};
 use futures::io::AsyncReadExt;
 use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -92,6 +92,7 @@ impl Authority {
 
 struct Node {
     name: String,
+    accepted: Rc<Accepted>,
 }
 
 impl dusk::Server for Node {
@@ -100,6 +101,11 @@ impl dusk::Server for Node {
         _params: dusk::HostnameParams,
         mut results: dusk::HostnameResults,
     ) -> Promise<(), capnp::Error> {
+        if self.accepted.unreachable.get() {
+            return Promise::err(capnp::Error::disconnected(
+                "node 1 is not connected".to_string(),
+            ));
+        }
         results.get().set_result(self.name.as_str());
         Promise::ok(())
     }
@@ -109,6 +115,7 @@ impl dusk::Server for Node {
 struct Accepted {
     peers: RefCell<Vec<Option<CertificateDer<'static>>>>,
     connections: RefCell<Vec<JoinHandle<()>>>,
+    unreachable: Cell<bool>,
 }
 
 fn provider() -> Arc<rustls::crypto::CryptoProvider> {
@@ -158,7 +165,10 @@ async fn serve(authority: &Authority, server: Leaf) -> (u16, Rc<Accepted>) {
                 rpc_twoparty_capnp::Side::Server,
                 Default::default(),
             ));
-            let bootstrap: dusk::Client = capnp_rpc::new_client(Node { name });
+            let bootstrap: dusk::Client = capnp_rpc::new_client(Node {
+                name,
+                accepted: recorder.clone(),
+            });
             let system = RpcSystem::new(network, Some(bootstrap.client));
             recorder
                 .connections
@@ -469,6 +479,50 @@ async fn test_a_refused_handshake_is_tried_again_on_the_next_call() {
             }
             assert_eq!(answer.unwrap(), "connection-1");
             connection.disconnect().await.unwrap();
+        })
+        .await;
+}
+
+async fn wait_until_open_links_are_at_most(accepted: &Accepted, limit: usize) {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let open = accepted
+            .connections
+            .borrow()
+            .iter()
+            .filter(|connection| !connection.is_finished())
+            .count();
+        if open <= limit {
+            return;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "{open} links are still open, expected at most {limit}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_a_reconnect_closes_the_link_it_replaces() {
+    let fixture = Fixture::new();
+    let tls = fixture.client(&fixture.authority.leaf(&["client.test"]));
+    tokio::task::LocalSet::new()
+        .run_until(async move {
+            let (port, accepted) =
+                serve(&fixture.authority, fixture.authority.leaf(&[SERVER_NAME])).await;
+            accepted.unreachable.set(true);
+            let connection = Connection::connect_tls("127.0.0.1", port, tls)
+                .await
+                .unwrap();
+            for _ in 0..5 {
+                let error = hostname(&connection).await.unwrap_err();
+                assert_eq!(error.kind, capnp::ErrorKind::Disconnected, "{error}");
+            }
+            assert_eq!(accepted.peers.borrow().len(), 5);
+            wait_until_open_links_are_at_most(&accepted, 1).await;
+            connection.disconnect().await.unwrap();
+            wait_until_open_links_are_at_most(&accepted, 0).await;
         })
         .await;
 }
