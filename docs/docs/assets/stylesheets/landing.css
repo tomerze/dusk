@@ -3,6 +3,8 @@
   --dusk-gutter: 0.8rem;
   --dusk-measure: 46rem;
   --dusk-button: 8.4rem;
+  --dusk-float: 2rem;
+  --dusk-orbit: 0.6rem;
 }
 .dusk-landing {
   --dusk-gold: #f0b441;
@@ -147,155 +149,27 @@
 
 .dusk-hero {
   container-type: inline-size;
-  position: relative;
   overflow: hidden;
   padding: 3rem var(--dusk-gutter) 0;
   background: var(--dusk-sky);
   text-align: center;
 }
-.dusk-hero__floats {
-  position: absolute;
-  top: 1.2rem;
-  right: 0;
-  left: 0;
-  max-width: 72rem;
-  height: 25rem;
-  margin: 0 auto;
-  pointer-events: none;
-}
-.dusk-hero__floats p {
-  margin: 0;
-}
-.dusk-landing .dusk-float {
-  --md-icon-size: 2.2rem;
-  position: absolute;
-  color: var(--dusk-ink, var(--dusk-gold));
-  opacity: 0.9;
-  animation: dusk-orbit 10s linear infinite;
-}
-.dusk-landing .dusk-float:nth-child(1) {
-  --md-icon-size: 46px;
-  top: 6%;
-  left: 5%;
-  animation-duration: 11s;
-}
-.dusk-landing .dusk-float:nth-child(2) {
-  --md-icon-size: 38px;
-  top: 40%;
-  left: 15%;
-  animation-duration: 8s;
-  animation-direction: reverse;
-}
-.dusk-landing .dusk-float:nth-child(3) {
-  --md-icon-size: 34px;
-  top: 66%;
-  left: 3%;
-  animation-duration: 13s;
-}
-.dusk-landing .dusk-float:nth-child(4) {
-  --md-icon-size: 34px;
-  top: 90%;
-  left: 11%;
-  animation-duration: 9s;
-  animation-direction: reverse;
-}
-.dusk-landing .dusk-float:nth-child(5) {
-  --md-icon-size: 44px;
-  top: 8%;
-  right: 6%;
-  animation-duration: 10s;
-  animation-direction: reverse;
-}
-.dusk-landing .dusk-float:nth-child(6) {
-  --md-icon-size: 38px;
-  top: 44%;
-  right: 15%;
-  animation-duration: 12s;
-}
-.dusk-landing .dusk-float:nth-child(7) {
-  --md-icon-size: 36px;
-  top: 70%;
-  right: 4%;
-  animation-duration: 7s;
-  animation-direction: reverse;
-}
-.dusk-landing .dusk-float:nth-child(8) {
-  --md-icon-size: 32px;
-  top: 92%;
-  right: 13%;
-  animation-duration: 14s;
-}
-@keyframes dusk-orbit {
-  from {
-    transform: rotate(0deg) translateX(12px) rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg) translateX(12px) rotate(-360deg);
-  }
-}
-@media screen and (max-width: 59.9375em) {
-  .dusk-hero__floats {
-    top: 0;
-    bottom: 0;
-    height: auto;
-  }
-  .dusk-landing .dusk-float {
-    display: none;
-  }
-  .dusk-landing .dusk-float[data-layer="nightfall"],
-  .dusk-landing .dusk-float[data-layer="dawn"],
-  .dusk-landing .dusk-float[data-layer="twilight"],
-  .dusk-landing .dusk-float[data-layer="data"] {
-    --md-icon-size: 34px;
-    top: auto;
-    display: inline-flex;
-  }
-  .dusk-landing .dusk-float[data-layer="nightfall"] {
-    --md-icon-size: 30px;
-    right: auto;
-    bottom: 5.6rem;
-    left: 11%;
-  }
-  .dusk-landing .dusk-float[data-layer="data"] {
-    right: 13%;
-    bottom: 5.4rem;
-    left: auto;
-  }
-  .dusk-landing .dusk-float[data-layer="dawn"] {
-    right: auto;
-    bottom: 2.4rem;
-    left: 6%;
-  }
-  .dusk-landing .dusk-float[data-layer="twilight"] {
-    --md-icon-size: 30px;
-    right: 5%;
-    bottom: 2.4rem;
-    left: auto;
-  }
-}
-@media screen and (max-width: 23.6875em) {
-  .dusk-landing .dusk-float[data-layer="nightfall"] {
-    bottom: 10rem;
-    left: calc((100% - 8.4rem) / 4 - 15px);
-  }
-  .dusk-landing .dusk-float[data-layer="data"] {
-    right: calc((100% - 8.4rem) / 4 - 17px);
-    bottom: 9.4rem;
-  }
-  .dusk-landing .dusk-float[data-layer="dawn"] {
-    bottom: 3.1rem;
-  }
-  .dusk-landing .dusk-float[data-layer="twilight"] {
-    bottom: 5.55rem;
-  }
-}
 .dusk-hero__inner {
-  position: relative;
-  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "title title"
+    "lead lead"
+    "pitch pitch"
+    "actions actions"
+    "start end";
+  column-gap: calc(2 * var(--dusk-orbit));
   max-width: var(--dusk-measure);
   margin: 0 auto;
 }
 .dusk-landing .dusk-hero__wordmark {
+  grid-area: title;
+  justify-self: center;
   margin: 0;
   padding-bottom: 0.06em;
   font-size: clamp(4rem, 12cqi, 6.6rem);
@@ -318,6 +192,7 @@
   vertical-align: baseline;
 }
 .dusk-landing .dusk-hero__lead {
+  grid-area: lead;
   margin: 1.1rem 0 0;
   font-size: clamp(1.1rem, 3.6cqi, 2.1rem);
   font-weight: 750;
@@ -327,14 +202,17 @@
   text-wrap: balance;
 }
 .dusk-landing .dusk-hero__pitch {
+  grid-area: pitch;
+  justify-self: center;
   max-width: 33rem;
   text-wrap: balance;
-  margin: 1.2rem auto 0;
+  margin: 1.2rem 0 0;
   font-size: 0.95rem;
   line-height: 1.6;
   color: var(--md-default-fg-color--light);
 }
 .dusk-landing .dusk-hero__actions {
+  grid-area: actions;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -367,6 +245,60 @@
   top: -0.06em;
   margin: -0.5em 0 -0.5em 0.25em;
   vertical-align: middle;
+}
+.dusk-landing .dusk-hero__floats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: calc(2 * var(--dusk-orbit));
+  margin: 1.5rem 0 0;
+  padding: var(--dusk-orbit);
+  pointer-events: none;
+}
+.dusk-hero__floats[data-side="start"] {
+  grid-area: start;
+}
+.dusk-hero__floats[data-side="end"] {
+  grid-area: end;
+}
+.dusk-landing .dusk-float {
+  --md-icon-size: var(--dusk-float);
+  color: var(--dusk-ink, var(--dusk-gold));
+  opacity: 0.9;
+  animation: dusk-orbit var(--dusk-pace, 10s) linear infinite
+    var(--dusk-turn, normal);
+}
+@keyframes dusk-orbit {
+  from {
+    transform: rotate(0deg) translateX(var(--dusk-orbit)) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(var(--dusk-orbit)) rotate(-360deg);
+  }
+}
+@media screen and (min-width: 76.25em) {
+  :root {
+    --dusk-float: 2.4rem;
+  }
+  .dusk-hero__inner {
+    grid-template-columns:
+      minmax(0, 1fr) minmax(0, var(--dusk-measure))
+      minmax(0, 1fr);
+    grid-template-areas:
+      "start title end"
+      "start lead end"
+      "start pitch end"
+      "start actions end";
+    max-width: 72rem;
+  }
+  .dusk-landing .dusk-hero__floats {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    align-content: space-evenly;
+    justify-content: space-evenly;
+    margin: 0;
+  }
 }
 .dusk-hero__horizon {
   position: relative;

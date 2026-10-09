@@ -7,17 +7,6 @@ hide:
 
 <section class="dusk-hero" markdown>
 
-<div class="dusk-hero__floats" aria-hidden="true" markdown>
-:dusk-nightfall:{ .dusk-float data-layer="nightfall" }
-:dusk-dawn:{ .dusk-float data-layer="dawn" }
-:dusk-data:{ .dusk-float data-layer="data" }
-:dusk-phone:{ .dusk-float }
-:dusk-twilight:{ .dusk-float data-layer="twilight" }
-:dusk-observability:{ .dusk-float data-layer="observability" }
-:dusk-microcontroller:{ .dusk-float }
-:dusk-server:{ .dusk-float }
-</div>
-
 <div class="dusk-hero__inner" markdown>
 
 # ![](assets/landing/logo-d.svg){ .dusk-hero__d }usk { #dusk .dusk-hero__wordmark aria-label="Dusk" }
@@ -34,6 +23,18 @@ ship.
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
 [View on :fontawesome-brands-github:](https://github.com/tomerze/dusk){ .md-button .dusk-button-ghost title="View on GitHub" }
 { .dusk-hero__actions }
+
+:dusk-nightfall:{ .dusk-float data-layer="nightfall" style="--dusk-pace: 11s" }
+:dusk-phone:{ .dusk-float style="--dusk-pace: 8s; --dusk-turn: reverse" }
+:dusk-dawn:{ .dusk-float data-layer="dawn" style="--dusk-pace: 13s" }
+:dusk-microcontroller:{ .dusk-float style="--dusk-pace: 9s; --dusk-turn: reverse" }
+{ .dusk-hero__floats data-side="start" aria-hidden="true" }
+
+:dusk-twilight:{ .dusk-float data-layer="twilight" style="--dusk-pace: 10s; --dusk-turn: reverse" }
+:dusk-server:{ .dusk-float style="--dusk-pace: 12s" }
+:dusk-data:{ .dusk-float data-layer="data" style="--dusk-pace: 7s; --dusk-turn: reverse" }
+:dusk-observability:{ .dusk-float data-layer="observability" style="--dusk-pace: 14s" }
+{ .dusk-hero__floats data-side="end" aria-hidden="true" }
 
 </div>
 
