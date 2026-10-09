@@ -6,6 +6,7 @@
   --dusk-float: 2rem;
   --dusk-orbit: 0.6rem;
   --dusk-hill: 3.6rem;
+  --dusk-line: 3px;
 }
 .dusk-landing {
   --dusk-gold: #f0b441;
@@ -657,9 +658,6 @@
 .dusk-stack__node {
   fill: var(--dusk-gold);
 }
-.dusk-stack__layers {
-  clip-path: inset(-2rem -2rem -1rem -2rem);
-}
 .dusk-stack__head {
   --dusk-track: color-mix(in srgb, var(--dusk-ink) 38%, transparent);
   position: sticky;
@@ -667,19 +665,6 @@
   top: 50svh;
   z-index: 1;
   height: 0;
-}
-.dusk-stack__head::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100vh;
-  background-color: color-mix(
-    in srgb,
-    var(--md-default-bg-color) 62%,
-    transparent
-  );
 }
 .dusk-stack__head::after {
   content: "";
@@ -706,9 +691,28 @@
   transform: none;
 }
 .dusk-layer {
-  padding: 1rem 0 1rem 1.2rem;
-  border-left: 3px solid var(--dusk-ink);
+  position: relative;
+  padding: 1rem 0 1rem calc(var(--dusk-line) + 1.2rem);
   transition: opacity 0.45s ease;
+}
+.dusk-layer::before,
+.dusk-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  inline-size: var(--dusk-line);
+}
+.dusk-layer::before {
+  background-color: color-mix(in srgb, var(--dusk-ink) 60%, transparent);
+}
+.dusk-layer::after {
+  background-color: var(--dusk-ink);
+  transform-origin: top;
+}
+@keyframes dusk-fill {
+  from {
+    transform: scaleY(0);
+  }
 }
 .dusk-landing .dusk-layer h3 {
   display: flex;
@@ -994,6 +998,10 @@
       animation: dusk-sink linear both;
       animation-timeline: scroll(root);
       animation-range: 0 60svh;
+    }
+    .dusk-layer::after {
+      animation: dusk-fill linear both;
+      animation-timeline: view(block 50svh calc(100% - 50svh));
     }
   }
   @media (prefers-reduced-motion: no-preference) and (hover: none) {
