@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "scope",
+    "device_id",
+    "installation_id",
+    "lifecycle",
+    "reason",
+    "actor"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.node-state/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "scope": { "enum": ["device", "installation"] },
+    "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+    "installation_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/installation_id" }, { "type": "null" }]
+    },
+    "lifecycle": { "enum": ["enrolled", "active", "quarantined", "retired", "revoked"] },
+    "reason": { "type": ["string", "null"] },
+    "actor": { "type": "string", "minLength": 1 }
+  },
+  "if": {
+    "required": ["scope"],
+    "properties": { "scope": { "const": "installation" } }
+  },
+  "then": { "properties": { "installation_id": { "type": "string" } } },
+  "else": { "properties": { "installation_id": { "type": "null" } } }
+}

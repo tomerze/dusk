@@ -1,0 +1,21 @@
+{
+  "schema": "dusk.census/v1",
+  "id": "01a112fe-d1b9-70d8-89f8-2855bdf9fe6d",
+  "time": "2026-10-06T09:14:29.512408146Z",
+  "record": "chunk",
+  "instance": "nightfall-0",
+  "generation": 1791278040000000,
+  "index": 0,
+  "sessions": [
+    {
+      "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+      "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+      "namespace_id": "5d2e9a1c7b3f8e04",
+      "epoch": 1791278043512408,
+      "connected_at": "2026-10-06T09:14:03.498120554Z",
+      "last_seen": "2026-10-06T09:14:27.001006233Z",
+      "tenant": "retail-eu",
+      "inner_address": "nightfall-0.nightfall-inner.dusk.svc:8444"
+    }
+  ]
+}

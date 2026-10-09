@@ -1,0 +1,11 @@
+{
+  "schema": "dusk.node-state/v1",
+  "id": "01a112fe-d1bc-73b3-8e1a-43737647c068",
+  "time": "2026-10-06T09:14:52.512408169Z",
+  "scope": "installation",
+  "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+  "installation_id": null,
+  "lifecycle": "quarantined",
+  "reason": "quarantine campaign",
+  "actor": "campaign:0192f3a4-5b6c-7d8e-9f01-23456789abcd"
+}

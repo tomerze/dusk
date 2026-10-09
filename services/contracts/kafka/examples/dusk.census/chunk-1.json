@@ -1,0 +1,20 @@
+{
+  "schema": "dusk.census/v1",
+  "id": "01a112fe-d1b9-70d8-89f8-2856082f7543",
+  "time": "2026-10-06T09:14:29.512408146Z",
+  "record": "chunk",
+  "instance": "nightfall-0",
+  "generation": 1791278040000000,
+  "index": 1,
+  "sessions": [
+    {
+      "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+      "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+      "namespace_id": "00000000000000ff",
+      "epoch": 1791278051003117,
+      "connected_at": "2026-10-06T09:14:11.003117000Z",
+      "last_seen": "2026-10-06T09:14:26.990001245Z",
+      "tenant": "retail-eu"
+    }
+  ]
+}

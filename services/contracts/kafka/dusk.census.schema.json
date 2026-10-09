@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["record"],
+  "properties": { "record": { "enum": ["header", "chunk"] } },
+  "allOf": [
+    {
+      "if": { "required": ["record"], "properties": { "record": { "const": "header" } } },
+      "then": { "$ref": "#/$defs/header" }
+    },
+    {
+      "if": { "required": ["record"], "properties": { "record": { "const": "chunk" } } },
+      "then": { "$ref": "#/$defs/chunk" }
+    }
+  ],
+  "$defs": {
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "time",
+        "record",
+        "instance",
+        "inner_address",
+        "relay_address",
+        "generation",
+        "snapshot_epoch",
+        "started_at",
+        "full",
+        "chunk_count",
+        "session_count",
+        "heartbeat_seconds"
+      ],
+      "properties": {
+        "schema": { "const": "dusk.census/v1" },
+        "id": { "$ref": "common.schema.json#/$defs/id" },
+        "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "record": { "const": "header" },
+        "instance": { "$ref": "common.schema.json#/$defs/instance" },
+        "inner_address": { "$ref": "common.schema.json#/$defs/inner_address" },
+        "relay_address": {
+          "description": "The address other nightfall instances relay inner connections to.",
+          "$ref": "common.schema.json#/$defs/inner_address"
+        },
+        "generation": { "type": "integer", "minimum": 0, "maximum": 9007199254740992 },
+        "snapshot_epoch": { "$ref": "common.schema.json#/$defs/epoch" },
+        "started_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "full": { "type": "boolean" },
+        "chunk_count": { "type": "integer", "minimum": 0 },
+        "session_count": { "type": "integer", "minimum": 0 },
+        "heartbeat_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "chunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "time", "record", "instance", "generation", "index", "sessions"],
+      "properties": {
+        "schema": { "const": "dusk.census/v1" },
+        "id": { "$ref": "common.schema.json#/$defs/id" },
+        "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "record": { "const": "chunk" },
+        "instance": { "$ref": "common.schema.json#/$defs/instance" },
+        "generation": { "type": "integer", "minimum": 0, "maximum": 9007199254740992 },
+        "index": { "type": "integer", "minimum": 0 },
+        "sessions": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": { "$ref": "#/$defs/session" }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device_id",
+        "installation_id",
+        "namespace_id",
+        "epoch",
+        "connected_at",
+        "last_seen",
+        "tenant"
+      ],
+      "properties": {
+        "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+        "installation_id": { "$ref": "common.schema.json#/$defs/installation_id" },
+        "namespace_id": { "$ref": "common.schema.json#/$defs/namespace_id" },
+        "epoch": { "$ref": "common.schema.json#/$defs/epoch" },
+        "connected_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "last_seen": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "tenant": {
+          "anyOf": [{ "$ref": "common.schema.json#/$defs/tenant" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}
