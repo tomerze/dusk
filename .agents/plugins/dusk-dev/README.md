@@ -59,7 +59,7 @@ agents are Claude Code's; Codex reads the skills.
 | part | where |
 |---|---|
 | project instructions | `skills/dusk-developer` - the orientation map for the codebase and the working agreements every change is held to. The repository's root `AGENTS.md` carries none of it: it points here, which is how Codex and anything else without a skill loader find it |
-| skills | `skills/` - `activate` loads what there is to know about dusk; `drive-issue` takes a GitHub issue to a merged pull request; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code |
+| skills | `skills/` - `activate` loads what there is to know about dusk; `drive-issue` takes a GitHub issue to a merged pull request; `atomic-commit`, `splice`, `what`, `honest-to-god`; `authoring-a-program` and `adding-a-driver-method` for the code; `stack` for the Dusk stack's services, contracts and infrastructure |
 | agents | `agents/` - `race-screen`, which dispatches `race-inspector` when a diff could race, and `self-review`, the one code review |
 | hooks | `hooks/` - one script per event; `python3 hooks/selftest.py` runs them against canned input |
 
