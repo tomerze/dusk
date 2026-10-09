@@ -511,10 +511,6 @@
   opacity: 0.22;
   filter: blur(22px);
 }
-.dusk-fleet__hub-print {
-  font-size: 7.2px;
-  font-weight: 800;
-}
 .dusk-fleet__hub-label {
   fill: var(--md-default-fg-color--light);
   font-weight: 700;

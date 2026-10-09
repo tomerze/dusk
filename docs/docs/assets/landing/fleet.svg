@@ -84,14 +84,6 @@
         points="0,65.5 46,35.5 46,40.5 0,70.5"
       />
       <polygon fill="#eef2f8" points="0,5.5 46,35.5 0,65.5 -46,35.5" />
-      <text
-        class="dusk-fleet__hub-print"
-        fill="#4a5668"
-        text-anchor="middle"
-        transform="matrix(0.8 0.5 -0.8 0.5 -19.3 51.3)"
-      >
-        Observability
-      </text>
       <polygon
         fill="#3b8bc8"
         stroke="#3b8bc8"
@@ -107,14 +99,6 @@
         points="0,46.5 46,16.5 46,21.5 0,51.5"
       />
       <polygon fill="#4ea6e6" points="0,-13.5 46,16.5 0,46.5 -46,16.5" />
-      <text
-        class="dusk-fleet__hub-print"
-        fill="#0d3a5e"
-        text-anchor="middle"
-        transform="matrix(0.8 0.5 -0.8 0.5 -19.3 32.3)"
-      >
-        Data
-      </text>
       <polygon
         fill="#9d64a4"
         stroke="#9d64a4"
@@ -130,14 +114,6 @@
         points="0,27.5 46,-2.5 46,2.5 0,32.5"
       />
       <polygon fill="#bf7fc6" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
-      <text
-        class="dusk-fleet__hub-print"
-        fill="#45214a"
-        text-anchor="middle"
-        transform="matrix(0.8 0.5 -0.8 0.5 -19.3 13.3)"
-      >
-        Twilight
-      </text>
       <polygon
         fill="#e7bb84"
         stroke="#e7bb84"
@@ -153,14 +129,6 @@
         points="0,8.5 46,-21.5 46,-16.5 0,13.5"
       />
       <polygon fill="#ffd9a8" points="0,-51.5 46,-21.5 0,8.5 -46,-21.5" />
-      <text
-        class="dusk-fleet__hub-print"
-        fill="#7a4a12"
-        text-anchor="middle"
-        transform="matrix(0.8 0.5 -0.8 0.5 -19.3 -5.7)"
-      >
-        Dawn
-      </text>
       <polygon
         fill="#1f2b72"
         stroke="#1f2b72"
@@ -176,14 +144,6 @@
         points="0,-10.5 46,-40.5 46,-35.5 0,-5.5"
       />
       <polygon fill="#28378f" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
-      <text
-        class="dusk-fleet__hub-print"
-        fill="#f7f1d8"
-        text-anchor="middle"
-        transform="matrix(0.8 0.5 -0.8 0.5 -19.3 -24.7)"
-      >
-        Nightfall
-      </text>
     </symbol>
   </defs>
   <circle class="dusk-fleet__hub-glow" cx="500" cy="268" r="112" />
