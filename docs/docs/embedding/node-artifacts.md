@@ -153,6 +153,17 @@ The script is compiled into the node while it is built: a script that does not
 compile fails the build, and changing the variable rebuilds the node. A script of
 several commands separates them with `;`.
 
+#### DUSK_NODE_KVS_PERSISTENT
+
+The file the node keeps its [persistent kvs keys](../features/kvs.md#persistent-keys)
+in, e.g. `-DDUSK_NODE_KVS_PERSISTENT=/var/lib/dusk/kvs`. The node creates the
+file; its directory must exist and be writable by the node. A relative path
+resolves against the working directory the node runs in. Two nodes on one device
+need two files. Empty - the default, and what the presets leave it - leaves it to
+cargo, as in [Building with cargo](#building-with-cargo): with no
+`DUSK_NODE_KVS_PERSISTENT` in the environment either, the node keeps no
+persistent keys. Changing the variable rebuilds the node.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
@@ -198,6 +209,18 @@ DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
   --target <target> -p dusk_node --no-default-features --features impl_nix
 ```
 
+The node's persistent kvs file is the `DUSK_NODE_KVS_PERSISTENT` environment
+variable, read while the node is built; unset or empty, the node keeps no
+persistent kvs keys. The template passes it to the kvs launcher as the
+`persistent` field of `KvsConfig`, through `dusk_base::launcher_set`, which
+builds every Base program as `dusk_base::default_launcher_set` does except for
+the kvs launcher's config:
+
+```sh
+DUSK_NODE_KVS_PERSISTENT=/var/lib/dusk/kvs cargo build --profile prod \
+  --target <target> -p dusk_node_bin
+```
+
 A build without a `.git` directory - a Docker build whose context leaves it
 out - cannot ask git for the revision it is built from, which every program
 records. Pass it in `DUSK_GIT_REV`, at least 16 hex digits, taken from a
@@ -226,8 +249,11 @@ same in every node of one build. It is how a node proves it was built by whoever
 runs the fleet the first time it enrolls in one. A program on the node reads it
 with `dusk_core::fleet_token::fleet_token()`, and a client holding the node's
 `Dusk` capability with
-[`Dusk.fleetToken`](../sdk-reference/capnp-schemas.md#duskcapnp). Nothing in
-the node reads it on its own.
+[`Dusk.fleetToken`](../sdk-reference/capnp-schemas.md#duskcapnp). The node
+itself uses it for one thing: the key of its
+[persistent kvs file](../features/kvs.md#the-file) derives from it, so a node
+built with another token - a new random one included - cannot read the
+persistent keys an earlier build kept.
 
 Set it as `DUSK_FLEET_TOKEN` in the environment the build runs in:
 
