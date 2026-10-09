@@ -8,6 +8,7 @@ pub mod events;
 pub mod inner;
 pub mod kafka;
 pub mod limits;
+pub mod listener;
 pub mod node_state;
 pub mod peer;
 pub mod proxy;
