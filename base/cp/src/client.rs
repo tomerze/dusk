@@ -24,6 +24,11 @@ fn set_location(mut builder: cp_capnp::location::Builder, path: &str) {
     }
 }
 
+enum Side {
+    Source,
+    Destination,
+}
+
 impl Args {
     pub fn new(source: &str, destination: &str) -> Self {
         let mut data = ArgsDataBuilder::new_default();
@@ -33,6 +38,29 @@ impl Args {
             set_location(root.init_destination(), destination);
         }
         Args { data }
+    }
+
+    fn ensure_given(&self, action: &str, path: &str, sides: &[Side]) -> Result<(), ::capnp::Error> {
+        let data = self.data.get_root_as_reader()?;
+        for side in sides {
+            let location = match side {
+                Side::Source => data.get_source()?,
+                Side::Destination => data.get_destination()?,
+            };
+            if let cp_capnp::location::Which::Client(own) = location.which()?
+                && own?.to_str()? == path
+            {
+                return Ok(());
+            }
+        }
+        tracing::warn!(
+            action,
+            path,
+            "refused a node that asked for a path this cp was not given"
+        );
+        Err(::capnp::Error::failed(format!(
+            "refused to {action} `{path}`: this cp was not given that path"
+        )))
     }
 }
 
@@ -65,6 +93,7 @@ impl Args {
         let path = dusk_capnp::pry!(
             dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_path()).to_string()
         );
+        dusk_capnp::pry!(self.ensure_given("stat", &path, &[Side::Source, Side::Destination]));
         match std::fs::metadata(&path) {
             Ok(metadata) => {
                 results.get().set_exists(true);
@@ -89,6 +118,7 @@ impl Args {
     ) -> Promise<(), ::capnp::Error> {
         let params = dusk_capnp::pry!(params.get());
         let path = dusk_capnp::pry!(dusk_capnp::pry!(params.get_path()).to_string());
+        dusk_capnp::pry!(self.ensure_given("hash", &path, &[Side::Source, Side::Destination]));
         let length = params.get_length();
         Promise::from_future(async move {
             let hash = tokio::task::spawn_blocking(move || hash_file(&path, length))
@@ -107,6 +137,7 @@ impl Args {
     ) -> Promise<(), ::capnp::Error> {
         let params = dusk_capnp::pry!(params.get());
         let path = dusk_capnp::pry!(dusk_capnp::pry!(params.get_path()).to_string());
+        dusk_capnp::pry!(self.ensure_given("read", &path, &[Side::Source]));
         let offset = params.get_offset();
         let end = params.get_end();
         let sink = dusk_capnp::pry!(params.get_sink());
@@ -152,6 +183,7 @@ impl Args {
     ) -> Promise<(), ::capnp::Error> {
         let params = dusk_capnp::pry!(params.get());
         let path = dusk_capnp::pry!(dusk_capnp::pry!(params.get_path()).to_string());
+        dusk_capnp::pry!(self.ensure_given("write", &path, &[Side::Destination]));
         let offset = params.get_offset();
         Promise::from_future(async move {
             let file: anyhow::Result<tokio::fs::File> = async {
