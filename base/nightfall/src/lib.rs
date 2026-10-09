@@ -16,6 +16,7 @@ mod backoff;
 #[cfg(feature = "client")]
 pub mod client;
 mod file;
+mod node_key;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
