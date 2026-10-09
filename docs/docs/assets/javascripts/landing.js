@@ -402,6 +402,7 @@ const read = () => {
   layers.forEach((layer, index) => {
     const reached = (middle - boxes[index].top) / boxes[index].height;
     layer.style.setProperty("--dusk-read", Math.max(0, Math.min(1, reached)));
+    layer.classList.toggle("is-reading", reached >= 0 && reached < 1);
   });
 };
 window.addEventListener("scroll", read, { passive: true });
