@@ -350,6 +350,14 @@
   width: min(22rem, 86vw);
   height: auto;
   transform: translateX(-50%);
+  animation: dusk-sunset linear both;
+  animation-timeline: scroll(root);
+  animation-range: 0 60vh;
+}
+@keyframes dusk-sunset {
+  to {
+    transform: translate(-50%, 30%);
+  }
 }
 .dusk-hero__horizon::after {
   content: "";
@@ -1011,6 +1019,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
+  .dusk-hero__sun,
   .dusk-landing .dusk-section > h2 {
     animation: none;
   }
