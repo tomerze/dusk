@@ -766,9 +766,16 @@
     0 0 0 3px var(--dusk-track),
     0 0 12px var(--dusk-ink);
   opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease,
+    background-color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 .dusk-stack__head.is-reading::after {
   opacity: 1;
+  transform: none;
 }
 .dusk-layer {
   padding: 1rem 0 1rem 1.2rem;
