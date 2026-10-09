@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 dusk_program = { path = "../../../dusk/src/dusk_program", public = true }
+dusk_core = { path = "../../../dusk/src/dusk_core" }
 nohash-hasher = { version = "0.2", default-features = false, public = false }
 tracing = { version = "0.1.41", default-features = false }
 linkme = { version = "0.3", optional = true, public = true }

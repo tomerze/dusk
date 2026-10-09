@@ -1,6 +1,6 @@
 use dusk_program::embassy_futures::block_on;
 use dusk_program::value::Value;
-use dusk_program_kvs_internal::{Kvs, key_id};
+use dusk_program_kvs_internal::{FLAG_STICKY, Kvs, key_id};
 
 pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
     let values: Vec<(&str, Value)> = [
@@ -12,7 +12,7 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
     .collect();
     tracing::info!(values = ?values, "dusk device");
     for (name, value) in values {
-        block_on(kvs.set(key_id(name), value));
+        block_on(kvs.set(key_id(name), value, FLAG_STICKY));
     }
 }
 

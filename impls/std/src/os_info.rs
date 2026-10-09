@@ -1,6 +1,6 @@
 use dusk_program::embassy_futures::block_on;
 use dusk_program::value::Value;
-use dusk_program_kvs_internal::{Kvs, key_id};
+use dusk_program_kvs_internal::{FLAG_STICKY, Kvs, key_id};
 
 pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
@@ -11,7 +11,7 @@ pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
 fn set_kvs_values(kvs: &Kvs, source: &str, values: Vec<(String, Value)>) {
     tracing::info!(source, values = ?values, "dusk os");
     for (name, value) in values {
-        block_on(kvs.set(key_id(&name), value));
+        block_on(kvs.set(key_id(&name), value, FLAG_STICKY));
     }
 }
 
