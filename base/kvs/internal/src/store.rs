@@ -429,3 +429,333 @@ async fn append(file: &dyn File, mut offset: u64, mut data: &[u8]) -> anyhow::Re
     }
     file.sync().await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::collections::BTreeMap;
+    use alloc::sync::Arc;
+    use core::cell::RefCell;
+    use dusk_core::driver::Stat;
+    use dusk_program::embassy_futures::block_on;
+    use dusk_program::embassy_sync::blocking_mutex::Mutex as BlockingMutex;
+    use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+    const PATH: &str = "kvs";
+    const SECRET: &[u8] = b"fleet token";
+    const SALT: &[u8] = b"device id";
+
+    type Contents = Arc<BlockingMutex<CriticalSectionRawMutex, RefCell<Vec<u8>>>>;
+
+    type Files = Arc<BlockingMutex<CriticalSectionRawMutex, RefCell<BTreeMap<String, Contents>>>>;
+
+    #[derive(Clone)]
+    struct MemoryFileSystem {
+        files: Files,
+    }
+
+    impl Default for MemoryFileSystem {
+        fn default() -> Self {
+            MemoryFileSystem {
+                files: Arc::new(BlockingMutex::new(RefCell::new(BTreeMap::new()))),
+            }
+        }
+    }
+
+    struct MemoryFile {
+        contents: Contents,
+    }
+
+    impl MemoryFileSystem {
+        fn bytes(&self, path: &str) -> Vec<u8> {
+            self.files
+                .lock(|files| files.borrow()[path].lock(|contents| contents.borrow().clone()))
+        }
+
+        fn replace(&self, path: &str, bytes: Vec<u8>) {
+            self.files
+                .lock(|files| files.borrow()[path].lock(|contents| *contents.borrow_mut() = bytes));
+        }
+
+        fn exists(&self, path: &str) -> bool {
+            self.files.lock(|files| files.borrow().contains_key(path))
+        }
+    }
+
+    #[dusk_program::async_trait::async_trait]
+    impl FsDriver for MemoryFileSystem {
+        async fn open(&self, path: &str, mode: OpenMode) -> anyhow::Result<Box<dyn File>> {
+            self.files.lock(|files| {
+                let mut files = files.borrow_mut();
+                if !files.contains_key(path) {
+                    anyhow::ensure!(mode.create, "no file `{path}`");
+                    files.insert(
+                        String::from(path),
+                        Arc::new(BlockingMutex::new(RefCell::new(Vec::new()))),
+                    );
+                }
+                let contents = files[path].clone();
+                if mode.truncate {
+                    contents.lock(|contents| contents.borrow_mut().clear());
+                }
+                Ok(Box::new(MemoryFile { contents }) as Box<dyn File>)
+            })
+        }
+
+        async fn stat(&self, path: &str) -> anyhow::Result<Stat> {
+            anyhow::bail!("the log never stats `{path}`")
+        }
+
+        async fn remove(&self, path: &str) -> anyhow::Result<()> {
+            anyhow::bail!("the log never removes `{path}`")
+        }
+
+        async fn rename(&self, from: &str, to: &str) -> anyhow::Result<()> {
+            self.files.lock(|files| {
+                let mut files = files.borrow_mut();
+                let contents = files
+                    .remove(from)
+                    .ok_or_else(|| anyhow::anyhow!("no file `{from}`"))?;
+                files.insert(String::from(to), contents);
+                Ok(())
+            })
+        }
+
+        async fn create_dir(&self, path: &str) -> anyhow::Result<()> {
+            anyhow::bail!("the log never creates `{path}`")
+        }
+
+        async fn read_dir(&self, path: &str) -> anyhow::Result<Vec<Stat>> {
+            anyhow::bail!("the log never reads `{path}`")
+        }
+    }
+
+    #[dusk_program::async_trait::async_trait]
+    impl File for MemoryFile {
+        async fn read(&self, offset: u64, buffer: &mut [u8]) -> anyhow::Result<usize> {
+            Ok(self.contents.lock(|contents| {
+                let contents = contents.borrow();
+                let start = (offset as usize).min(contents.len());
+                let read = buffer.len().min(contents.len() - start);
+                buffer[..read].copy_from_slice(&contents[start..start + read]);
+                read
+            }))
+        }
+
+        async fn write(&self, offset: u64, data: &[u8]) -> anyhow::Result<usize> {
+            self.contents.lock(|contents| {
+                let mut contents = contents.borrow_mut();
+                let end = offset as usize + data.len();
+                if contents.len() < end {
+                    contents.resize(end, 0);
+                }
+                contents[offset as usize..end].copy_from_slice(data);
+            });
+            Ok(data.len())
+        }
+
+        async fn stat(&self) -> anyhow::Result<Stat> {
+            anyhow::bail!("the log never stats its file")
+        }
+
+        async fn truncate(&self, length: u64) -> anyhow::Result<()> {
+            self.contents
+                .lock(|contents| contents.borrow_mut().resize(length as usize, 0));
+            Ok(())
+        }
+
+        async fn sync(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn open(
+        file_system: &MemoryFileSystem,
+        secret: &[u8],
+        salt: Option<&[u8]>,
+    ) -> anyhow::Result<Log> {
+        block_on(Log::open(file_system, PATH, secret, salt, 7))
+    }
+
+    fn text(value: &str) -> Value {
+        Value::String(String::from(value))
+    }
+
+    fn stored(log: &Log, key: u64) -> Option<(Value, u8)> {
+        log.entries
+            .get(&key)
+            .map(|stored| (stored.value.clone(), stored.flags))
+    }
+
+    #[test]
+    fn a_reopened_log_holds_what_was_written() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        block_on(log.write(1, Some((text("first"), 4)))).unwrap();
+        block_on(log.write(2, Some((Value::Uint(7), 6)))).unwrap();
+        block_on(log.write(1, Some((text("second"), 4)))).unwrap();
+        block_on(log.write(3, Some((Value::Bool(true), 4)))).unwrap();
+        block_on(log.write(3, None)).unwrap();
+        drop(log);
+
+        let log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        assert_eq!(stored(&log, 1), Some((text("second"), 4)));
+        assert_eq!(stored(&log, 2), Some((Value::Uint(7), 6)));
+        assert_eq!(stored(&log, 3), None, "a deleted key stays deleted");
+        assert_eq!(log.sequence, 5);
+        assert_eq!(log.length, file_system.bytes(PATH).len() as u64);
+    }
+
+    #[test]
+    fn the_file_holds_no_value_in_the_clear() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        block_on(log.write(1, Some((text("a value worth hiding"), 4)))).unwrap();
+        let bytes = file_system.bytes(PATH);
+        let value = b"a value worth hiding";
+        assert!(!bytes.windows(value.len()).any(|window| window == value));
+    }
+
+    #[test]
+    fn a_torn_last_record_is_dropped_and_the_log_goes_on() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        block_on(log.write(1, Some((text("kept"), 4)))).unwrap();
+        let first = file_system.bytes(PATH).len();
+        block_on(log.write(2, Some((text("torn"), 4)))).unwrap();
+        drop(log);
+        let mut bytes = file_system.bytes(PATH);
+        bytes.truncate(bytes.len() - 5);
+        file_system.replace(PATH, bytes);
+
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        assert_eq!(stored(&log, 1), Some((text("kept"), 4)));
+        assert_eq!(stored(&log, 2), None, "the torn record is gone");
+        assert_eq!(
+            file_system.bytes(PATH).len(),
+            first,
+            "the file is cut back to its last whole record"
+        );
+
+        block_on(log.write(2, Some((text("written again"), 4)))).unwrap();
+        drop(log);
+        let log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        assert_eq!(stored(&log, 2), Some((text("written again"), 4)));
+    }
+
+    #[test]
+    fn a_torn_length_is_dropped() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        block_on(log.write(1, Some((text("kept"), 4)))).unwrap();
+        drop(log);
+        let mut bytes = file_system.bytes(PATH);
+        let whole = bytes.len();
+        bytes.extend_from_slice(&[9, 0]);
+        file_system.replace(PATH, bytes);
+
+        let log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        assert_eq!(stored(&log, 1), Some((text("kept"), 4)));
+        assert_eq!(file_system.bytes(PATH).len(), whole);
+    }
+
+    #[test]
+    fn damage_keeps_the_records_before_it() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        block_on(log.write(1, Some((text("before"), 4)))).unwrap();
+        let first = file_system.bytes(PATH).len();
+        block_on(log.write(2, Some((text("damaged"), 4)))).unwrap();
+        block_on(log.write(3, Some((text("after"), 4)))).unwrap();
+        drop(log);
+        let mut bytes = file_system.bytes(PATH);
+        bytes[first + LENGTH_SIZE + NONCE_SIZE + 2] ^= 0xff;
+        file_system.replace(PATH, bytes);
+
+        let log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        assert_eq!(stored(&log, 1), Some((text("before"), 4)));
+        assert_eq!(stored(&log, 2), None);
+        assert_eq!(stored(&log, 3), None);
+        assert_eq!(file_system.bytes(PATH).len(), first);
+    }
+
+    #[test]
+    fn another_key_refuses_the_file_and_leaves_it_alone() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        block_on(log.write(1, Some((text("secret"), 4)))).unwrap();
+        drop(log);
+        let bytes = file_system.bytes(PATH);
+
+        for (secret, salt) in [
+            (b"another fleet token".as_slice(), Some(SALT)),
+            (SECRET, Some(b"another device id".as_slice())),
+            (SECRET, None),
+        ] {
+            let Err(error) = open(&file_system, secret, salt) else {
+                panic!("a log written under another key opened");
+            };
+            assert!(
+                format!("{error:#}").contains("does not open under this node's key"),
+                "unexpected error: {error:#}"
+            );
+            assert_eq!(
+                file_system.bytes(PATH),
+                bytes,
+                "a refused file is left as it is"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_file_opens_empty() {
+        let file_system = MemoryFileSystem::default();
+        let log = open(&file_system, SECRET, None).unwrap();
+        assert!(log.entries.is_empty());
+        assert_eq!(log.length, 0);
+        assert!(file_system.exists(PATH), "opening creates the file");
+    }
+
+    #[test]
+    fn compaction_keeps_the_live_records_only() {
+        let file_system = MemoryFileSystem::default();
+        let mut log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        let large = Value::Bytes(alloc::vec![7; 4096]);
+        block_on(log.write(2, Some((text("untouched"), 6)))).unwrap();
+        let mut compacted = false;
+        for round in 0..64u64 {
+            block_on(log.write(1, Some((large.clone(), 4)))).unwrap();
+            block_on(log.write(3, Some((Value::Uint(round), 4)))).unwrap();
+            let before = log.length;
+            if log.needs_compaction() {
+                block_on(log.compact(&file_system));
+            }
+            if log.length < before {
+                compacted = true;
+                assert_eq!(
+                    log.length, log.live,
+                    "a compacted file holds live records only"
+                );
+                assert_eq!(log.length, file_system.bytes(PATH).len() as u64);
+            }
+        }
+        assert!(
+            compacted,
+            "64 rewrites of a 4 KiB value never compacted the log"
+        );
+        assert!(
+            !file_system.exists("kvs.tmp"),
+            "the compacted file replaced the log"
+        );
+        let sequence = log.sequence;
+        block_on(log.write(4, Some((text("after compaction"), 4)))).unwrap();
+        drop(log);
+
+        let log = open(&file_system, SECRET, Some(SALT)).unwrap();
+        assert_eq!(stored(&log, 1), Some((large, 4)));
+        assert_eq!(stored(&log, 2), Some((text("untouched"), 6)));
+        assert_eq!(stored(&log, 3), Some((Value::Uint(63), 4)));
+        assert_eq!(stored(&log, 4), Some((text("after compaction"), 4)));
+        assert_eq!(log.sequence, sequence + 1);
+    }
+}

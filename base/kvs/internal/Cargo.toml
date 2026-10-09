@@ -16,5 +16,8 @@ nohash-hasher = { version = "0.2", default-features = false, public = false }
 tracing = { version = "0.1.41", default-features = false }
 linkme = { version = "0.3", optional = true, public = true }
 
+[dev-dependencies]
+critical-section = { version = "1", features = ["std"] }
+
 [features]
 client = ["linkme"]
