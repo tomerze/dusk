@@ -4,6 +4,8 @@
 # Capnp implementations treat it like the `stream` keyword introduced in newer capnp versions.
 using StreamResult = import "/capnp/stream.capnp".StreamResult;
 
+annotation sensitive @0xfd6ee50f2bba77d2 (field, param) :Void;
+
 struct Value {
   struct Record {
     struct Field { 
