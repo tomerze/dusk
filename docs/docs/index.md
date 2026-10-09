@@ -70,8 +70,7 @@ supercomputers. Run it inside the software you already ship.
 
 ## Fleet
 
-Each of these is a node: it runs Dusk, and you can reach it from a single
-place.
+Whatever runs Dusk is a node. Reach them all from one place.
 
 <div class="dusk-fleet__figure">
 --8<-- "assets/landing/fleet.svg"
