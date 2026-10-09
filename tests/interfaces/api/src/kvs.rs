@@ -295,3 +295,336 @@ async fn test_kvs_portal_interface() {
         })
         .await;
 }
+
+async fn run_to_exit(client: &dusk::Client, program_args: Rc<ProgramArgs>) -> capnp::Error {
+    let mut process_request = client.process_request();
+    program_args
+        .with_reader(|reader| process_request.get().set_program_args(reader))
+        .unwrap();
+    let process = process_request
+        .send()
+        .promise
+        .await
+        .unwrap()
+        .get()
+        .unwrap()
+        .get_result()
+        .unwrap();
+    let pid = process
+        .pid_request()
+        .send()
+        .promise
+        .await
+        .unwrap()
+        .get()
+        .unwrap()
+        .get_result();
+    let Err(error) = process.run_request().send().promise.await else {
+        panic!("process {pid} was expected to fail");
+    };
+    let mut waitpid_request = client.waitpid_request();
+    waitpid_request.get().set_pid(pid);
+    assert!(
+        waitpid_request.send().promise.await.is_err(),
+        "waitpid must answer the failure of process {pid}"
+    );
+    error
+}
+
+async fn scanned_flags(client: &dusk::Client, key: u64) -> Value {
+    let (pid, values, daemonize) =
+        run_action(client, KvsArgs::scan().as_program_args().unwrap()).await;
+    assert!(!daemonize);
+    stop(client, pid).await;
+    for value in values {
+        let Value::Record(page) = value else {
+            panic!("kvs scan sent {value:?} where a page of keys belongs");
+        };
+        let (Some(Value::List(ids)), Some(Value::List(flags))) = (
+            page.fields.get(b"ID".as_slice()),
+            page.fields.get(b"Flags".as_slice()),
+        ) else {
+            panic!("kvs scan must send ID and Flags columns: {page:?}");
+        };
+        if let Some(index) = ids.iter().position(|id| *id == Value::Uint(key)) {
+            return flags[index].clone();
+        }
+    }
+    panic!("kvs scan did not list {}", key_display(key));
+}
+
+async fn get_value(client: &dusk::Client, key: u64) -> Value {
+    let (pid, values, _) =
+        run_action(client, KvsArgs::get(&[key]).as_program_args().unwrap()).await;
+    stop(client, pid).await;
+    let [Value::Record(page)] = values.as_slice() else {
+        panic!("kvs get sent {values:?} where one page of keys belongs");
+    };
+    let Some(Value::List(column)) = page.fields.get(b"Value".as_slice()) else {
+        panic!("kvs get must send a Value column: {page:?}");
+    };
+    column[0].clone()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_kvs_sticky_keys() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async move {
+            let address: std::net::SocketAddr =
+                format!("{}:{}", LISTEN_ADDRESS, port).parse().unwrap();
+            let connection = Connection::connect(address).await.unwrap();
+            let client = connection.client().await;
+
+            let key = key_id("dusk.namespace_id");
+            let namespace_id = get_value(&client, key).await;
+            assert!(
+                matches!(namespace_id, Value::Uint(_)),
+                "init records the namespace id: {namespace_id:?}"
+            );
+            assert_eq!(
+                scanned_flags(&client, key).await,
+                Value::String("sticky".to_string()),
+                "a key dusk writes is sticky"
+            );
+
+            let forged = Value::String("forged".to_string());
+            let error = run_to_exit(
+                &client,
+                KvsArgs::set(key, &forged, false)
+                    .unwrap()
+                    .as_program_args()
+                    .unwrap(),
+            )
+            .await;
+            assert!(
+                error.to_string().contains("is sticky"),
+                "kvs set must refuse a sticky key: {error}"
+            );
+            let error = run_to_exit(
+                &client,
+                KvsArgs::delete(key, false).as_program_args().unwrap(),
+            )
+            .await;
+            assert!(
+                error.to_string().contains("is sticky"),
+                "kvs delete must refuse a sticky key: {error}"
+            );
+            assert_eq!(
+                get_value(&client, key).await,
+                namespace_id,
+                "a refused set and delete leave the key as dusk wrote it"
+            );
+
+            let (pid, values, daemonize) = run_action(
+                &client,
+                KvsArgs::set(key, &forged, true)
+                    .unwrap()
+                    .as_program_args()
+                    .unwrap(),
+            )
+            .await;
+            assert!(values.is_empty(), "set streamed {values:?}");
+            assert!(!daemonize);
+            stop(&client, pid).await;
+            assert_eq!(
+                get_value(&client, key).await,
+                forged,
+                "--forbidden-unstick sets a sticky key"
+            );
+            assert_eq!(
+                scanned_flags(&client, key).await,
+                Value::String("sticky".to_string()),
+                "a name dusk owns stays sticky after an override"
+            );
+            let error = run_to_exit(
+                &client,
+                KvsArgs::set(key, &namespace_id, false)
+                    .unwrap()
+                    .as_program_args()
+                    .unwrap(),
+            )
+            .await;
+            assert!(
+                error.to_string().contains("is sticky"),
+                "kvs set must still refuse a name dusk owns after an override: {error}"
+            );
+
+            let (pid, values, _) = run_action(
+                &client,
+                KvsArgs::delete(key, true).as_program_args().unwrap(),
+            )
+            .await;
+            assert_eq!(
+                values,
+                vec![Value::Bool(true)],
+                "--forbidden-unstick deletes a key dusk owns"
+            );
+            stop(&client, pid).await;
+
+            let absent = key_id("dusk.os.windows.edition");
+            assert_eq!(
+                key_display(absent),
+                "dusk.os.windows.edition",
+                "init's list of the names it owns names them for a client"
+            );
+            let (pid, values, _) =
+                run_action(&client, KvsArgs::exists(absent).as_program_args().unwrap()).await;
+            assert_eq!(
+                values,
+                vec![Value::Bool(false)],
+                "a linux node writes no windows key"
+            );
+            stop(&client, pid).await;
+            let error = run_to_exit(
+                &client,
+                KvsArgs::set(absent, &forged, false)
+                    .unwrap()
+                    .as_program_args()
+                    .unwrap(),
+            )
+            .await;
+            assert!(
+                error.to_string().contains("is sticky"),
+                "kvs set must refuse a name dusk owns that holds no value yet: {error}"
+            );
+            let error = run_to_exit(
+                &client,
+                KvsArgs::delete(absent, false).as_program_args().unwrap(),
+            )
+            .await;
+            assert!(
+                error.to_string().contains("is sticky"),
+                "kvs delete must refuse a name dusk owns that holds no value yet: {error}"
+            );
+            let (pid, values, _) = run_action(
+                &client,
+                KvsArgs::set(absent, &forged, true)
+                    .unwrap()
+                    .as_program_args()
+                    .unwrap(),
+            )
+            .await;
+            assert!(values.is_empty(), "set streamed {values:?}");
+            stop(&client, pid).await;
+            assert_eq!(
+                get_value(&client, absent).await,
+                forged,
+                "--forbidden-unstick sets a name dusk owns that held no value"
+            );
+
+            let arch = key_id("dusk.target.arch");
+            assert_eq!(
+                scanned_flags(&client, arch).await,
+                Value::String("sticky".to_string()),
+                "init writes dusk.target.arch sticky"
+            );
+            let (pid, values, _) = run_action(
+                &client,
+                KvsArgs::delete(arch, true).as_program_args().unwrap(),
+            )
+            .await;
+            assert_eq!(
+                values,
+                vec![Value::Bool(true)],
+                "--forbidden-unstick deletes a sticky key"
+            );
+            stop(&client, pid).await;
+            let (pid, values, _) =
+                run_action(&client, KvsArgs::exists(arch).as_program_args().unwrap()).await;
+            assert_eq!(values, vec![Value::Bool(false)], "the sticky key is gone");
+            stop(&client, pid).await;
+
+            let (bound, portal) = start(&client, KvsArgs::bind().as_program_args().unwrap()).await;
+            let kvs = portal.cast_to::<kvs_capnp::kvs_portal::Client>();
+            let os = key_id("dusk.target.os");
+            let mut set_request = kvs.set_request();
+            set_request.get().set_key(os);
+            forged
+                .write_to_builder(set_request.get().init_value())
+                .unwrap();
+            let Err(error) = set_request.send().promise.await else {
+                panic!("the portal set a sticky key without forbiddenUnstick");
+            };
+            assert!(
+                error.to_string().contains("is sticky"),
+                "the portal's set must refuse a sticky key: {error}"
+            );
+            let mut delete_request = kvs.delete_request();
+            delete_request.get().set_key(os);
+            let Err(error) = delete_request.send().promise.await else {
+                panic!("the portal deleted a sticky key without forbiddenUnstick");
+            };
+            assert!(
+                error.to_string().contains("is sticky"),
+                "the portal's delete must refuse a sticky key: {error}"
+            );
+            let mut set_request = kvs.set_request();
+            set_request.get().set_key(os);
+            set_request.get().set_forbidden_unstick(true);
+            forged
+                .write_to_builder(set_request.get().init_value())
+                .unwrap();
+            set_request.send().promise.await.unwrap();
+            let mut get_request = kvs.get_request();
+            get_request.get().set_key(os);
+            let reply = get_request.send().promise.await.unwrap();
+            assert_eq!(
+                Value::from_reader(reply.get().unwrap().get_value().unwrap()).unwrap(),
+                forged,
+                "the portal's set with forbiddenUnstick sets a sticky key"
+            );
+            stop(&client, bound).await;
+
+            connection.disconnect().await.unwrap();
+        })
+        .await;
+}
+
+#[test]
+fn test_a_launcher_owns_its_names_for_its_own_node_until_it_is_dropped() {
+    let written = key_id("logs.written");
+    std::thread::spawn(move || {
+        let kvs = dusk_program_kvs::kvs::Kvs::new();
+        let launcher =
+            dusk_program_logs::Launcher::new(dusk_program_logs::LogsConfig::default()).unwrap();
+        assert!(
+            dusk_program::embassy_futures::block_on(kvs.set_unless_sticky(
+                written,
+                Value::Uint(1),
+                0
+            ))
+            .is_err(),
+            "logs owns logs.written for the node on its thread"
+        );
+        std::thread::spawn(move || {
+            let other = dusk_program_kvs::kvs::Kvs::new();
+            assert!(
+                dusk_program::embassy_futures::block_on(other.set_unless_sticky(
+                    written,
+                    Value::Uint(1),
+                    0
+                ))
+                .is_ok(),
+                "a node on another thread does not share the ownership"
+            );
+        })
+        .join()
+        .unwrap();
+        drop(launcher);
+        assert!(
+            dusk_program::embassy_futures::block_on(kvs.set_unless_sticky(
+                written,
+                Value::Uint(1),
+                0
+            ))
+            .is_ok(),
+            "a dropped launcher's names are free again"
+        );
+    })
+    .join()
+    .unwrap();
+}
