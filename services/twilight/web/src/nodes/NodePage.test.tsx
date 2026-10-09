@@ -1,6 +1,9 @@
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { CampaignNode } from '../api/types'
+import { toDetail } from '../mocks/nodes'
 import { renderApp } from '../test/app'
 import { serveMockApi } from '../test/server'
 
@@ -82,5 +85,35 @@ describe("a node's processes", () => {
     expect(rowOf('18446744073709551557').getByText('not yet')).toBeVisible()
     expect(rowOf('18446744073709551557').getByRole('button', { name: 'Copy pid' })).toBeVisible()
     expect(within(table).getAllByText('not sent').length).toBeGreaterThan(0)
+  })
+})
+
+describe("a node's facts", () => {
+  it('shows and copies an integer past 2^53 exactly as twilight sent it', async () => {
+    const user = userEvent.setup()
+    const node = api.current().nodes[0]
+    if (node === undefined) {
+      throw new Error('the mock has no nodes')
+    }
+    node.facts['dusk.namespace_id'] = 'namespace placeholder'
+    const body = JSON.stringify(toDetail(node)).replace(
+      '"namespace placeholder"',
+      '18446744073709551557',
+    )
+    api.server.use(
+      http.get(
+        `/api/v1/nodes/${node.device_id}/${node.installation_id}`,
+        () => new HttpResponse(body, { headers: { 'Content-Type': 'application/json' } }),
+      ),
+    )
+    renderApp(`/nodes/${node.device_id}/${node.installation_id}?tab=facts`)
+    const table = await screen.findByRole('table', { name: 'Facts' })
+    const row = within(table).getByText('dusk.namespace_id').closest('tr')
+    if (row === null) {
+      throw new Error('dusk.namespace_id is not in a row')
+    }
+    expect(within(row).getByText('18446744073709551557')).toBeVisible()
+    await user.click(within(row).getByRole('button', { name: 'Copy dusk.namespace_id' }))
+    expect(await navigator.clipboard.readText()).toBe('18446744073709551557')
   })
 })
