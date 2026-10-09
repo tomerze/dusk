@@ -84,5 +84,5 @@ interface Dusk {
     time @6 () -> (unix_time_ms :UInt64);
     settime @7 (unix_time_ms: UInt64) -> ();
     programs @8 () -> (program_entries :List(ProgramEntry));
-    id @9 () -> (result :UInt64);
+    namespaceId @9 () -> (result :UInt64);
 }
