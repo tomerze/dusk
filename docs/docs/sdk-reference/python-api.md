@@ -105,7 +105,9 @@ while a command is running stops that command and keeps the prompt open. Set
 ### `node.disconnect() -> None`
 
 Closes the connection. The node and any processes it was running are unaffected;
-this just tears down the client side.
+this just tears down the client side. That includes this object's commands that
+are still running: their `ShellOutput`s end where they got to, and nothing of
+the object reconnects afterwards.
 
 ### `Dusk.help(program_name: str = "") -> list | dict` *(static)*
 
