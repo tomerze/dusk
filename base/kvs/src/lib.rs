@@ -1,7 +1,7 @@
 //! A key-value store, one per namespace, shared by every program on the node.
 //!
 //! Keys are named on the client and travel as ids ([`kvs::key_id`]); the node
-//! holds no key strings. In memory only, and lost when the node restarts.
+//! holds no key strings.
 //! Two names can hash to one id and silently share an entry.
 #![allow(internal_features)]
 #![feature(prelude_import)]
@@ -10,7 +10,7 @@
 use alloc::rc::Rc;
 use core::cell::{Cell, RefCell};
 
-use dusk_program::{ready::Ready, signal::SignalReceiver};
+use dusk_program::{IntoCapnp, ready::Ready, signal::SignalReceiver};
 
 extern crate alloc;
 extern crate capnp;
@@ -37,6 +37,9 @@ fn flag_names(flags: u8) -> alloc::string::String {
     }
     if flags & kvs::FLAG_SENSITIVE != 0 {
         names.push("sensitive");
+    }
+    if flags & kvs::FLAG_PERSISTENT != 0 {
+        names.push("persistent");
     }
     names.join(", ")
 }
@@ -288,17 +291,15 @@ impl dusk_program::process::ProcessMixin for Process {
                 }
                 set_key(&self.kvs, key, value, flags, forbidden_unstick)
                     .await
-                    .map_err(|sticky| {
-                        anyhow::anyhow!("{sticky}. `kvs set --forbidden-unstick` sets it anyway")
+                    .map_err(|error| {
+                        unstick_hint(error, "`kvs set --forbidden-unstick` sets it anyway")
                     })?;
             }
             kvs_capnp::kvs_args::data::Which::Delete(key) => {
                 let deleted = delete_key(&self.kvs, key, forbidden_unstick)
                     .await
-                    .map_err(|sticky| {
-                        anyhow::anyhow!(
-                            "{sticky}. `kvs delete --forbidden-unstick` deletes it anyway"
-                        )
+                    .map_err(|error| {
+                        unstick_hint(error, "`kvs delete --forbidden-unstick` deletes it anyway")
                     })?;
                 *self.result.borrow_mut() = Some(Value::Bool(deleted));
             }
@@ -326,31 +327,34 @@ async fn set_key(
     value: Value,
     flags: u8,
     forbidden_unstick: bool,
-) -> Result<(), kvs::Sticky> {
-    if let Err(sticky) = kvs.set_unless_sticky(key, value.clone(), flags).await {
-        if !forbidden_unstick {
-            return Err(sticky);
+) -> anyhow::Result<()> {
+    if let Err(error) = kvs.set_unless_sticky(key, value.clone(), flags).await {
+        if !forbidden_unstick || !error.is::<kvs::Sticky>() {
+            return Err(error);
         }
-        kvs.set(key, value, flags).await;
+        kvs.set(key, value, flags).await?;
         tracing::warn!(key, "forbidden-unstick overwrote a sticky key");
     }
     Ok(())
 }
 
-async fn delete_key(
-    kvs: &kvs::Kvs,
-    key: u64,
-    forbidden_unstick: bool,
-) -> Result<bool, kvs::Sticky> {
+async fn delete_key(kvs: &kvs::Kvs, key: u64, forbidden_unstick: bool) -> anyhow::Result<bool> {
     match kvs.delete_unless_sticky(key).await {
-        Err(sticky) if forbidden_unstick => {
-            let deleted = kvs.delete(key).await;
+        Err(error) if forbidden_unstick && error.is::<kvs::Sticky>() => {
+            let deleted = kvs.delete(key).await?;
             if deleted {
-                tracing::warn!(key = sticky.key, "forbidden-unstick removed a sticky key");
+                tracing::warn!(key, "forbidden-unstick removed a sticky key");
             }
             Ok(deleted)
         }
         deleted => deleted,
+    }
+}
+
+fn unstick_hint(error: anyhow::Error, hint: &str) -> anyhow::Error {
+    match error.downcast_ref::<kvs::Sticky>() {
+        Some(sticky) => anyhow::anyhow!("{sticky}. {hint}"),
+        None => error,
     }
 }
 
@@ -396,9 +400,8 @@ impl Portal {
         Promise::from_future(async move {
             set_key(&kvs, key, value, flags, forbidden_unstick)
                 .await
-                .map_err(|sticky| {
-                    ::capnp::Error::failed(format!("{sticky}. `forbiddenUnstick` sets it anyway"))
-                })
+                .map_err(|error| unstick_hint(error, "`forbiddenUnstick` sets it anyway"))
+                .into_capnp()
         })
     }
 
@@ -414,11 +417,8 @@ impl Portal {
         Promise::from_future(async move {
             let deleted = delete_key(&kvs, key, forbidden_unstick)
                 .await
-                .map_err(|sticky| {
-                    ::capnp::Error::failed(format!(
-                        "{sticky}. `forbiddenUnstick` deletes it anyway"
-                    ))
-                })?;
+                .map_err(|error| unstick_hint(error, "`forbiddenUnstick` deletes it anyway"))
+                .into_capnp()?;
             results.get().set_deleted(deleted);
             Ok(())
         })

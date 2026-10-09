@@ -30,7 +30,9 @@ pub(crate) fn set_kvs_device_info(kvs: &Kvs) {
     .collect();
     tracing::info!(values = ?values, "dusk device");
     for (name, value) in values {
-        block_on(kvs.set(key_id(name), value, FLAG_STICKY));
+        if let Err(error) = block_on(kvs.set(key_id(name), value, FLAG_STICKY)) {
+            tracing::warn!(name, error = %format!("{error:#}"), "couldn't record a key in the kvs");
+        }
     }
 }
 

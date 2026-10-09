@@ -25,6 +25,28 @@ const SET: u8 = 1;
 const READ_SIZE: usize = 64 * 1024;
 const COMPACTION_SLACK: u64 = 64 * 1024;
 
+pub(crate) enum State {
+    Closed,
+    Open(Box<Log>),
+    Unavailable(String),
+    Released,
+}
+
+impl State {
+    pub(crate) fn log(&mut self) -> anyhow::Result<&mut Log> {
+        match self {
+            State::Open(log) => Ok(log),
+            State::Unavailable(reason) => {
+                anyhow::bail!("the persistent kvs file is unavailable: {reason}")
+            }
+            State::Closed => anyhow::bail!("the persistent kvs file is not open"),
+            State::Released => {
+                anyhow::bail!("the kvs launcher that named the persistent kvs file is gone")
+            }
+        }
+    }
+}
+
 pub(crate) struct Stored {
     pub(crate) value: Value,
     pub(crate) flags: u8,
