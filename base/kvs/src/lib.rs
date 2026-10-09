@@ -350,11 +350,12 @@ impl Portal {
         let key = dusk_capnp::pry!(params.get()).get_key();
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            let value = kvs
-                .get(key)
+            let (value, flags) = kvs
+                .get_with_flags(key)
                 .await
                 .ok_or_else(|| ::capnp::Error::failed(format!("key {key:#018x} not found")))?;
             value.write_to_builder(results.get().init_value())?;
+            results.get().set_flags(flags);
             Ok(())
         })
     }
@@ -368,9 +369,13 @@ impl Portal {
         let key = params.get_key();
         let value = dusk_capnp::pry!(Value::from_reader(dusk_capnp::pry!(params.get_value())));
         let forbidden_unstick = params.get_forbidden_unstick();
+        let flags = params.get_flags();
+        if let Some(refusal) = client_flags_refusal(flags) {
+            return Promise::err(::capnp::Error::failed(refusal));
+        }
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            set_key(&kvs, key, value, 0, forbidden_unstick)
+            set_key(&kvs, key, value, flags, forbidden_unstick)
                 .await
                 .map_err(|sticky| {
                     ::capnp::Error::failed(format!("{sticky}. `forbiddenUnstick` sets it anyway"))
