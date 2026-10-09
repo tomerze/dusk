@@ -102,7 +102,7 @@ vendor/        External libs submodules
 | `dusk_windows` | The Windows impl: the same, implementing `WindowsDriver`, and reading the hostname with `GetComputerNameW`. |
 | `dusk_std` | The std impl: hosts the Embassy executor, implements `StdDriver`, enables `embassy-time/std`, and aborts rather than unwinding on `exit`. Nothing in it is platform-specific but the device id, which it reads through the `machine-uid` crate on the targets that crate supports - Linux, macOS, Windows, the BSDs and illumos - and the time zone, which it reads through the `iana-time-zone` crate everywhere but Windows, so it compiles for every target with std and threads - ESP-IDF, Windows, Android, iOS, the BSDs, illumos and Linux. |
 | `dusk_program_sh` (`client::prompt`, `client::shell`) | The interactive shell client, as the `sh` program's own client side - the prompt UI and the `Shell` that drives the shell server a client attaches to. |
-| `dusk_connection` | `Connection` - the client's TCP/RPC link to a node. |
+| `dusk_connection` | `Connection` - the client's RPC link to a node: plain TCP with `connect`, or TLS (rustls with ring) with `connect_tls`. |
 | `dusk_cli` | The `dusk` CLI binary (package `dusk_cli_bin`, bin `dusk`). |
 | `dusk_py` | The Python extension (the `dusk` module, built with maturin). |
 | `dusk_build` | Build-script helpers for compiling `.capnp` schemas. |
@@ -537,6 +537,12 @@ node.disconnect()
 dusk.Dusk.help()                      # static: enumerate programs, no connection
 ```
 
+The address is a host name or an IP literal. The keyword arguments `server_name`,
+`ca`, `certificate` and `key` connect over TLS; they map one to one onto
+`dusk_connection`'s `TlsClient`, and the extension adds nothing else for TLS.
+Errors are `RuntimeError`, with the Cap'n Proto kind at the start of the message
+when the failure is a capnp one.
+
 ### The Rust SDK - talking to programs directly
 
 Rust callers can drive a node *below* the shell's text interface. Once you hold
@@ -551,10 +557,10 @@ This is the lower-level path for complex programs: hold the `Dusk` capability,
 build typed `ProgramArgs`, call typed portals, and field the program's callbacks -
 the same surface the CLI and Python bindings are built on.
 
-> How a client establishes a connection and obtains that `Dusk` capability is
-> intentionally left undocumented here - the transport/connection layer is slated
-> for rework (encryption among other things), so anything written now would go
-> stale.
+A client gets that `Dusk` capability from `dusk_connection`:
+`Connection::connect` to a node's address over plain TCP, or
+`Connection::connect_tls` over TLS, then `connection.client()`.
+`docs/docs/sdk-reference/crates.md` shows both.
 
 ## The client / server split (`no_std` vs `std`)
 
