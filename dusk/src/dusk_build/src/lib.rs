@@ -3,6 +3,10 @@ use std::process::Command;
 
 pub use dusk_capnp::CapnpDep;
 
+mod revision;
+
+use revision::{fail_without_revision, short_revision};
+
 /// Run a program crate's full build: emit the git revision, then compile each
 /// of its Cap'n Proto schemas. A program's `build.rs` should be a single call
 /// to this.
@@ -22,6 +26,20 @@ pub fn build(schemas: &[(&str, &[CapnpDep])]) {
 /// `env!("GIT_REV")` in the calling crate. Also registers rerun-if-changed
 /// hooks so the value refreshes when the checked-out commit changes.
 pub fn emit_git_rev() {
+    println!("cargo:rerun-if-env-changed=DUSK_GIT_REV");
+    match std::env::var("DUSK_GIT_REV") {
+        Ok(revision) if !revision.is_empty() => {
+            let Some(short) = short_revision(&revision) else {
+                fail_without_revision(&format!("DUSK_GIT_REV is `{revision}`"));
+            };
+            println!("cargo:rustc-env=GIT_REV={short}");
+            return;
+        }
+        Ok(_) | Err(std::env::VarError::NotPresent) => {}
+        Err(std::env::VarError::NotUnicode(_)) => {
+            fail_without_revision("DUSK_GIT_REV is not UTF-8");
+        }
+    }
     let git = |args: &[&str]| {
         Command::new("git")
             .args(args)
@@ -29,8 +47,22 @@ pub fn emit_git_rev() {
             .expect("failed to execute git")
     };
 
-    let git_hash = String::from_utf8(git(&["rev-parse", "HEAD"]).stdout).unwrap();
-    println!("cargo:rustc-env=GIT_REV={}", &git_hash.trim()[..16]);
+    let output = match Command::new("git").args(["rev-parse", "HEAD"]).output() {
+        Ok(output) if output.status.success() => output,
+        Ok(output) => fail_without_revision(&format!(
+            "`git rev-parse HEAD` failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        Err(error) => fail_without_revision(&format!("couldn't run git: {error}")),
+    };
+    let revision = String::from_utf8_lossy(&output.stdout);
+    let Some(short) = short_revision(revision.trim()) else {
+        fail_without_revision(&format!(
+            "`git rev-parse HEAD` printed `{}`",
+            revision.trim()
+        ));
+    };
+    println!("cargo:rustc-env=GIT_REV={short}");
 
     // Rebuild when the checked-out commit changes: watch HEAD (catches branch
     // switches) and the ref file it points to (catches new commits on the
