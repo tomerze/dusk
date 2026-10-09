@@ -1,0 +1,55 @@
+.banner {
+  position: sticky;
+  top: var(--app-shell-header-offset, 0);
+  z-index: 50;
+  padding: 10px 28px;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.inner {
+  max-width: 1624px;
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.message {
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: #ffffff;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+.acknowledge {
+  color: #8f1b12;
+}
+
+@media (max-width: 48em) {
+  .banner {
+    padding: 10px 16px;
+  }
+
+  .inner {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

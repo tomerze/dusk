@@ -32,6 +32,7 @@ import { useLiveStream } from '../api/live'
 import { useOverview } from '../api/queries'
 import type { Me } from '../api/types'
 import { Brand } from './Brand'
+import { CriticalBanner } from './CriticalBanner'
 import classes from './Layout.module.css'
 
 interface NavigationItem {
@@ -215,6 +216,7 @@ export function Layout({ me }: { me: Me }) {
         </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main className={classes.main}>
+        <CriticalBanner waiting={overview.data?.alerts_unacknowledged.critical ?? 0} />
         <div className={classes.content} key={location.pathname}>
           <Outlet />
         </div>
