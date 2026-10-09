@@ -363,3 +363,52 @@ jobs:
 
       - name: prod overlay
         run: kubectl kustomize infra/k8s/overlays/prod > /dev/null
+
+  docker:
+    name: Docker (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: dusk-nightfall
+            dockerfile: services/nightfall/Dockerfile
+            arguments: --build-arg CPUSET=
+          - image: dusk-dawn
+            dockerfile: services/dawn/Dockerfile
+            arguments: --build-arg CPUSET=
+          - image: dusk-twilight
+            dockerfile: services/twilight/Dockerfile
+            arguments: --build-arg CPUSET=
+          - image: dusk-node
+            dockerfile: infra/node/Dockerfile
+            arguments: >-
+              --build-arg CPUSET=
+              --build-arg FLEET=fleet.dusk.test:8443
+              --build-arg PROVISION=provision.dusk.test:8443
+              --secret id=fleet-token,env=DUSK_FLEET_TOKEN
+          - image: dusk-vector
+            dockerfile: infra/vector/Dockerfile
+          - image: dusk-grafana
+            dockerfile: infra/grafana/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Generate a throwaway fleet token
+        if: matrix.image == 'dusk-node'
+        run: |
+          token=$(openssl rand -hex 32)
+          echo "::add-mask::$token"
+          echo "DUSK_FLEET_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: docker build
+        run: >
+          docker build
+          --file ${{ matrix.dockerfile }}
+          --build-arg GIT_REV=${{ github.sha }}
+          ${{ matrix.arguments }}
+          --tag ${{ matrix.image }}:ci
+          .
