@@ -113,12 +113,12 @@
       >
         Dawn
       </text>
-      <polygon fill="#2a3994" points="-46,-40.5 0,-10.5 0,-5.5 -46,-35.5" />
-      <polygon fill="#202c76" points="0,-10.5 46,-40.5 46,-35.5 0,-5.5" />
-      <polygon fill="#3446b4" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
+      <polygon fill="#1f2b72" points="-46,-40.5 0,-10.5 0,-5.5 -46,-35.5" />
+      <polygon fill="#172057" points="0,-10.5 46,-40.5 46,-35.5 0,-5.5" />
+      <polygon fill="#28378f" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
       <text
         class="dusk-fleet__hub-print"
-        fill="#e4e8ff"
+        fill="#f7f1d8"
         text-anchor="middle"
         transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 -24.7)"
       >
