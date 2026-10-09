@@ -28,7 +28,7 @@ dusk_program_proc::metadata!("kvs", VERSION, kvs_capnp::PROGRAM_ID);
 /// How many key ids travel in one value of a scan's stream.
 const SCAN_PAGE_SIZE: usize = 64;
 
-const CLIENT_FLAGS: u8 = kvs::FLAG_SENSITIVE;
+const CLIENT_FLAGS: u8 = kvs::FLAG_SENSITIVE | kvs::FLAG_PERSISTENT;
 
 fn flag_names(flags: u8) -> alloc::string::String {
     let mut names = alloc::vec::Vec::new();

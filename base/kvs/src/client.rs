@@ -60,6 +60,8 @@ enum KvsAction {
         #[arg(long)]
         sensitive: bool,
         #[arg(long)]
+        persistent: bool,
+        #[arg(long)]
         forbidden_unstick: bool,
     },
     /// Remove a key
@@ -198,13 +200,16 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
                 key,
                 value,
                 sensitive,
+                persistent,
                 forbidden_unstick,
             } => {
-                let flags = if sensitive {
-                    crate::kvs::FLAG_SENSITIVE
-                } else {
-                    0
-                };
+                let mut flags = 0;
+                if sensitive {
+                    flags |= crate::kvs::FLAG_SENSITIVE;
+                }
+                if persistent {
+                    flags |= crate::kvs::FLAG_PERSISTENT;
+                }
                 Args::set(
                     key_parse(&key),
                     &Value::String(value),
@@ -233,7 +238,8 @@ pub fn sh_entry() -> ShEntry {
             short_description: "key-value store",
             long_description: r#"
 The `kvs` program reads and writes a key-value store held by the node.
-The key-value store is in-memory and shared across all programs on the node.
+The key-value store is shared across all programs on the node, and held in
+memory unless a key is persistent.
 
 * `kvs get <key>` prints every key whose name starts with `<key>`, with its
   value, and fails if there is none. A `*` in `<key>` stands for any run of
@@ -247,14 +253,19 @@ The key-value store is in-memory and shared across all programs on the node.
 * `kvs set --sensitive <key> <value>` marks the value a secret: `kvs` never
   writes it into a log or a trace. `kvs get` still prints it. A later `kvs set`
   without `--sensitive` clears the mark.
+* `kvs set --persistent <key> <value>` keeps the key in the node's encrypted
+  file as well, so it is still there after the node restarts. It fails on a
+  node built without one. A later `kvs set` without `--persistent` takes the
+  key out of the file.
 * `kvs delete <key>` removes `<key>` and reports whether it was present. It
   refuses a sticky key; `kvs delete --forbidden-unstick <key>` removes it
   anyway.
 * `kvs exists <key>` reports whether `<key>` is present.
 * `kvs scan` lists every key: its name where the program that writes it
   registered one, the id it travels as, and its flags - `sticky` for a key
-  only Dusk sets, `sensitive` for a secret. A `<key>` anywhere above may be
-  that id, as `0x…`, instead of a name.
+  only Dusk sets, `sensitive` for a secret, `persistent` for a key the node
+  keeps in its file. A `<key>` anywhere above may be that id, as `0x…`,
+  instead of a name.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.
