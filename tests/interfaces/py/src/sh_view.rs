@@ -262,3 +262,50 @@ fn commands_on_one_object_run_at_the_same_time() {
         "four 2-second sleeps ran side by side, not one after another:\n{output}"
     );
 }
+
+#[test]
+fn cp_copies_a_file_both_ways_and_resumes_a_cut_off_copy() {
+    let port = gen_port();
+    let _node = DuskNixImpl::new(LISTEN_ADDRESS, port);
+    let (ok, output) = python(&format!(
+        r#"
+import os
+import tempfile
+import dusk
+
+node = dusk.Dusk("{LISTEN_ADDRESS}", {port})
+content = os.urandom(200_000)
+
+def holds(path):
+    with open(path, "rb") as copied:
+        return copied.read() == content
+
+def cut(path):
+    with open(path, "r+b") as copied:
+        copied.truncate(1000)
+
+with tempfile.TemporaryDirectory() as directory:
+    source = os.path.join(directory, "source")
+    on_node = os.path.join(directory, "on-node")
+    back = os.path.join(directory, "back")
+    with open(source, "wb") as written:
+        written.write(content)
+
+    list(node.sh(f"cp {{source}} :{{on_node}}"))
+    assert holds(on_node)
+    list(node.sh(f"cp :{{on_node}} {{back}}"))
+    assert holds(back)
+
+    cut(back)
+    list(node.sh(f"cp :{{on_node}} {{back}}"))
+    assert holds(back)
+    cut(on_node)
+    list(node.sh(f"cp {{source}} :{{on_node}}"))
+    assert holds(on_node)
+node.disconnect()
+print("copied")
+"#
+    ));
+    assert!(ok, "{output}");
+    assert!(output.contains("copied"), "{output}");
+}

@@ -110,6 +110,13 @@ A path on the client is reached through the client that ran `cp`, so it works
 only while that client is connected. A `cp` in the node's init script has no
 client at all, and can only copy between two paths on the node.
 
+The client answers the node only for the client paths in the command it ran:
+it reads only the source, writes only the destination, and looks at the size
+and SHA-256 of those two alone. A node that asks it about any other path gets
+an error naming the path - `refused to read`, `write`, `stat` or `hash` it -
+so running `cp` against a node never lets that node read or overwrite any other
+file on the client.
+
 `kill` stops a copy that is still running, and leaves the destination as far as
 it got; the next `cp` to it resumes from there.
 
