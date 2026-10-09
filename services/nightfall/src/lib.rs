@@ -1,5 +1,6 @@
 pub mod backoff;
 pub mod config;
+pub mod contracts;
 pub mod kafka;
 pub mod limits;
 pub mod peer;
