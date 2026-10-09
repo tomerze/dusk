@@ -200,9 +200,13 @@ impl Kvs {
 
     /// The value stored under `key`, or `None` if the key is absent.
     pub async fn get(&self, key: u64) -> Option<Value> {
+        self.get_with_flags(key).await.map(|(value, _)| value)
+    }
+
+    pub async fn get_with_flags(&self, key: u64) -> Option<(Value, u8)> {
         let entry = self.entries.read().await.get(&key).cloned()?;
-        let value = entry.lock().await.0.clone();
-        Some(value)
+        let (value, flags) = entry.lock().await.clone();
+        Some((value, self.flags_of(key, flags)))
     }
 
     /// Store `value` under `key`, replacing whatever was there.
