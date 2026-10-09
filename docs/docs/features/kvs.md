@@ -151,8 +151,8 @@ before `init` runs. Which of them a node has depends
 on its impl and on the platform it was built for; the table names the impls in
 Dusk's repository that write each one. The impl logs them at `info`: each source
 of `dusk.os.*` keys once, as `dusk os`, with a `source` field naming it -
-`process`, `time zone`, `uname`, `credentials`, `resource limits`, `os-release`,
-`boot id`, `pid 1`, `glibc`, `Android system properties`, `sysctl`,
+`process`, `time zone`, `locale`, `uname`, `credentials`, `resource limits`,
+`os-release`, `boot id`, `pid 1`, `glibc`, `Android system properties`, `sysctl`,
 `windows version`, `windows emulation`, `computer name`, `windows session` - and
 a `values` field listing the keys and values it wrote; and the `dusk.device.*`
 keys together once, as `dusk device`, with a `values` field. A source that fails
@@ -171,6 +171,7 @@ keys hold, platform by platform.
 | `dusk.os.process.working_directory` | `nix`, `std`, `windows` | The directory the node was started in. |
 | `dusk.os.process.parent_pid` | `nix`; `std` on Unix; `windows` | The process id of the process that started the node - e.g. `1` when init or systemd runs it. |
 | `dusk.os.time_zone` | `nix`; `std` except on Windows; `windows` | The system's time zone: its IANA name, e.g. `Europe/Berlin`, or on Windows the Windows time zone name, e.g. `Pacific Standard Time`. |
+| `dusk.os.locale` | `nix`, `std`, `windows` | The locale the node runs with. With `std`, and with `nix` everywhere but macOS and iOS, the value of the first of the environment variables `LC_ALL`, `LC_MESSAGES` and `LANG` that is set and not empty, e.g. `en_US.UTF-8`; a node that has none of them has no key. With `nix` on macOS and iOS, the identifier of the user's current locale, e.g. `en_US`. With `windows`, the user's default locale name, e.g. `en-US`. |
 | `dusk.os.nix.uname.sysname` | `nix` | The `sysname` field of `uname(2)`, e.g. `Linux`. |
 | `dusk.os.nix.uname.nodename` | `nix` | The `nodename` field of `uname(2)`: the name of the device on the network. |
 | `dusk.os.nix.uname.release` | `nix` | The `release` field of `uname(2)`: the kernel release. |
