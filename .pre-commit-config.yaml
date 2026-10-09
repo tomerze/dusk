@@ -11,6 +11,17 @@ repos:
           files: ^dusk/include/.*\.(c|h)$
   -   repo: local
       hooks:
+      -   id: gofmt
+          name: gofmt (twilight)
+          entry: bash -c 'unformatted=$(gofmt -l "$@") && test -z "$unformatted" || { echo "$unformatted"; exit 1; }' --
+          language: system
+          files: ^services/twilight/.*\.go$
+      -   id: go-vet
+          name: go vet (twilight)
+          entry: go -C services/twilight vet ./...
+          language: system
+          files: ^services/twilight/.*\.go$
+          pass_filenames: false
       -   id: clang-tidy
           name: clang-tidy
           entry: clang-tidy
