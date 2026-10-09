@@ -26,6 +26,7 @@ are about to do:
 | `splice` | cutting a pull request that grew past what one person can read |
 | `authoring-a-program` | writing a program under `base/` |
 | `adding-a-driver-method` | adding a method to the `Driver` trait |
+| `web-frontend` | anything a browser renders: the docs site's pages, CSS, JavaScript and drawings |
 | `what` | reporting where things stand |
 | `honest-to-god` | saying only what is true, in as few words as it takes |
 
