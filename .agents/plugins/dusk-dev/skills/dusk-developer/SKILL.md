@@ -164,6 +164,7 @@ When a client connects, it receives a `Dusk` capability - the node's whole API:
 | `time()` / `settime(ms)` | Read or set the node's wall-clock. |
 | `programs()` | Enumerate the programs the node can run. |
 | `namespaceId()` | The node's namespace id, random per run. |
+| `dusk()` | A new `Dusk` capability on the same namespace - one per client when a proxy serves one node to several. |
 
 ### Portals and streams
 

@@ -291,6 +291,18 @@ impl dusk::Server for DuskServer {
         Promise::ok(())
     }
 
+    fn dusk(
+        &mut self,
+        _params: dusk::DuskParams,
+        mut results: dusk::DuskResults,
+    ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.dusk", "rpc call");
+        let dusk_client: dusk::Client =
+            dusk_capnp::capnp_rpc::new_client(DuskServer::new(self.namespace.clone()));
+        results.get().set_result(dusk_client);
+        Promise::ok(())
+    }
+
     fn settime(
         &mut self,
         params: dusk::SettimeParams,
