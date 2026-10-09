@@ -1,29 +1,6 @@
+use crate::{connected, python};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
-use std::process::Command;
 use std::time::{Duration, Instant};
-
-fn python(code: &str) -> (bool, String) {
-    let interpreter = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.venv/bin/python");
-    let output = Command::new(interpreter)
-        .arg("-c")
-        .arg(code)
-        .output()
-        .expect("run python");
-    (
-        output.status.success(),
-        format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ),
-    )
-}
-
-fn connected(port: u16, body: &str) -> (bool, String) {
-    python(&format!(
-        "import dusk\nnode = dusk.Dusk(\"{LISTEN_ADDRESS}\", {port})\n{body}\nnode.disconnect()\n"
-    ))
-}
 
 #[test]
 fn a_command_returns_its_values() {

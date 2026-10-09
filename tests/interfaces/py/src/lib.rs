@@ -1,21 +1,34 @@
 #![allow(unused_imports)]
 
 #[cfg(test)]
+mod client_api;
+#[cfg(test)]
 mod sh_view;
 
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use std::process::Command;
 
-#[allow(dead_code)]
-fn run_python_code(code: &str) -> bool {
-    let python = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.venv/bin/python");
-    let status = Command::new(python)
+pub fn python(code: &str) -> (bool, String) {
+    let interpreter = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../.venv/bin/python");
+    let output = Command::new(interpreter)
         .arg("-c")
         .arg(code)
-        .status()
-        .expect("failed to run python code");
+        .output()
+        .expect("run python");
+    (
+        output.status.success(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+    )
+}
 
-    status.success()
+pub fn connected(port: u16, body: &str) -> (bool, String) {
+    python(&format!(
+        "import dusk\nnode = dusk.Dusk(\"{LISTEN_ADDRESS}\", {port})\n{body}\nnode.disconnect()\n"
+    ))
 }
 
 #[test]
@@ -34,7 +47,8 @@ client.disconnect()
         port = port
     );
 
-    assert!(run_python_code(&code));
+    let (ok, output) = python(&code);
+    assert!(ok, "{output}");
 }
 
 /// Drives the REST API of a real `dusk_gw` process against a real node.
@@ -146,7 +160,8 @@ finally:
 "#
     );
 
-    assert!(run_python_code(&code));
+    let (ok, output) = python(&code);
+    assert!(ok, "{output}");
 }
 
 #[test]
@@ -167,5 +182,6 @@ another_client.disconnect()
         port = port
     );
 
-    assert!(run_python_code(&code));
+    let (ok, output) = python(&code);
+    assert!(ok, "{output}");
 }
