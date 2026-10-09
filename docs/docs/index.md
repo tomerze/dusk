@@ -75,7 +75,6 @@ single place.
 
 <div class="dusk-fleet__figure">
 --8<-- "assets/landing/fleet.svg"
---8<-- "assets/landing/fleet-phone.svg"
 </div>
 
 </section>

@@ -539,17 +539,28 @@
   width: 100%;
   height: auto;
 }
-.dusk-fleet__network--tall {
-  display: none;
-  max-width: 26rem;
-  margin: 0 auto;
+.dusk-arm {
+  animation: dusk-float 9s ease-in-out infinite alternate;
 }
-@media screen and (max-width: 47.9375em) {
-  .dusk-fleet__network--wide {
-    display: none;
+.dusk-arm:nth-child(2n) {
+  animation-duration: 11s;
+  animation-delay: -4s;
+}
+.dusk-arm:nth-child(3n) {
+  animation-delay: -7s;
+}
+.dusk-arm:nth-child(4n + 1) {
+  animation-direction: alternate-reverse;
+}
+@keyframes dusk-float {
+  from {
+    transform: translate(0, 0);
   }
-  .dusk-fleet__network--tall {
-    display: block;
+  50% {
+    transform: translate(3px, -4px);
+  }
+  to {
+    transform: translate(-3px, 3px);
   }
 }
 .dusk-fleet__link {
@@ -579,14 +590,9 @@
   font-size: 7.2px;
   font-weight: 800;
 }
-.dusk-fleet__hub-pill {
-  fill: var(--dusk-ground);
-  stroke: var(--dusk-node-line);
-  stroke-width: 1;
-}
 .dusk-fleet__hub-label {
-  fill: var(--md-default-fg-color);
-  font-size: 16px;
+  fill: var(--md-default-fg-color--light);
+  font-size: 15px;
   font-weight: 700;
 }
 .dusk-node__ring {
@@ -1004,6 +1010,7 @@
 }
 
 .is-offscreen .dusk-float,
+.is-offscreen .dusk-arm,
 .is-offscreen .dusk-node__pulse,
 .is-offscreen .dusk-stack__uplink {
   animation-play-state: paused;
@@ -1020,7 +1027,8 @@
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-hero__sun,
-  .dusk-landing .dusk-section > h2 {
+  .dusk-landing .dusk-section > h2,
+  .dusk-arm {
     animation: none;
   }
   .dusk-packet,
