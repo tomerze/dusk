@@ -93,14 +93,14 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
       requestAnimationFrame(settle);
     }
   };
-  window.addEventListener("pointermove", (event) => {
-    const box = disc.getBoundingClientRect();
-    const across = event.clientX - (box.left + box.width / 2);
-    const above = box.top + box.height / 2 - event.clientY;
-    if (Math.hypot(across, above) < box.width / 2) {
-      return;
+  const nudge = () => {
+    if (!settling) {
+      settling = true;
+      last = performance.now();
+      requestAnimationFrame(settle);
     }
-    const aim = (Math.atan2(across, above) * 180) / Math.PI;
+  };
+  const turnTo = (aim) => {
     let turn = (aim - target) % 360;
     if (turn > 180) {
       turn -= 360;
@@ -108,11 +108,30 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
       turn += 360;
     }
     target += turn;
-    if (!settling) {
-      settling = true;
-      last = performance.now();
-      requestAnimationFrame(settle);
+    nudge();
+  };
+  if (matchMedia("(hover: none)").matches) {
+    window.addEventListener(
+      "scroll",
+      () => {
+        target = window.scrollY * 0.2;
+        nudge();
+      },
+      { passive: true },
+    );
+    continue;
+  }
+  window.addEventListener("pointermove", (event) => {
+    if (event.pointerType === "touch") {
+      return;
     }
+    const box = disc.getBoundingClientRect();
+    const across = event.clientX - (box.left + box.width / 2);
+    const above = box.top + box.height / 2 - event.clientY;
+    if (Math.hypot(across, above) < box.width / 2) {
+      return;
+    }
+    turnTo((Math.atan2(across, above) * 180) / Math.PI);
   });
 }
 
@@ -126,11 +145,12 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
   const glow = fleet.querySelector(".dusk-fleet__hub-glow");
   const hubLabel = fleet.querySelector(".dusk-fleet__hub-label");
   const layout = (width) => {
-    const margin = 56;
-    const scale = width < 600 ? 0.8 : 1;
+    const narrow = matchMedia("(max-width: 37.4375em)").matches;
+    const margin = narrow ? 50 : 56;
+    const scale = narrow ? 0.8 : 1;
     const ring = 36.77 * scale;
     const rx = width / 2 - margin;
-    const spacing = scale < 1 ? 136 : 120;
+    const spacing = narrow ? 170 : 120;
     const around = (arms.length * spacing) / (2 * Math.PI);
     const hubSize = Math.min(190, Math.max(150, width * 0.16));
     const ry = Math.max(
