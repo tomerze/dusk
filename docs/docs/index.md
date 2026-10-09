@@ -26,9 +26,9 @@ The one solution for every fleet.<br>
 Seamlessly drop it in at any scale.
 { .dusk-hero__lead }
 
-Dusk monitors and manages fleets of anything that runs it - apps, games,
-agent harnesses, services, and hardware from microcontrollers to
-supercomputers. Run it inside the software you already ship.
+Dusk can monitor and manage fleets deployed on everything from
+microcontrollers to supercomputers. Run it inside applications you already
+ship.
 { .dusk-hero__pitch }
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
