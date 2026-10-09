@@ -16,9 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# No job here compiles the workspace, so there is no cargo cache and no
-# target directory to keep: cargo fmt parses sources and never runs a build
-# script, and the other four jobs never invoke cargo at all.
 jobs:
   python-lint:
     name: Python (ruff)
@@ -286,3 +283,65 @@ jobs:
 
       - name: pytest
         run: uv run --no-project --with pytest --with jsonschema --with referencing pytest services/contracts/tests -q
+
+  rust:
+    name: Rust (clippy, nextest; the nightfall packages build once pull request #174 is merged)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: cargo clippy
+        run: >
+          cargo clippy --locked
+          --package nightfall
+          --package nightfall_membrane
+          --package nightfall_ledger
+          --package nightfall_provisioning
+          --package dusk_program_nightfall
+          --package dusk_connection
+          --package dusk_capnp
+          --package dusk_py
+          --package dusk_api_tests
+          --package dusk_py_tests
+          -- -D warnings
+
+      - name: cargo nextest
+        run: >
+          cargo nextest run --locked
+          --package nightfall
+          --package nightfall_membrane
+          --package nightfall_ledger
+          --package nightfall_provisioning
+          --package dusk_program_nightfall
+          --package dusk_connection
+          --package dusk_capnp
+          --package dusk_py
+          --package dusk_api_tests
+          --package dusk_py_tests
