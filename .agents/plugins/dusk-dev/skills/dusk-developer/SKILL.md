@@ -320,7 +320,12 @@ foreground command of the init script `init` runs through `sh` - accepts the
 connection and spawns a `session` task that shares the node's single
 namespace and hands the client a `Dusk` capability (a `DuskServer` exposed as the
 Cap'n Proto bootstrap capability). The transport underneath is being reworked, so
-don't lean on its specifics.
+don't lean on its specifics. A node can dial out instead: `nightfall -c` connects
+to a nightfall server over TLS 1.3 and runs one `session` over that connection,
+reconnecting when it drops, and keeps the node's certificate and key in
+persistent kvs keys under `nightfall.` - names its launcher owns with
+`own_keys` - so it refuses to start on a node without a persistent kvs file. Its
+provisioning schema is `base/nightfall/capnp/provision.capnp`.
 
 **`Dusk.process` → run.** `Dusk.process(programArgs)` asks the registry for the
 namespace's `LauncherSet` (`dusk_core::launchers::launchers(namespace_id)`) and

@@ -39,6 +39,18 @@ interface Dusk {
   the node was built with. Every client that holds the node's `Dusk` capability
   can call it.
 
+### `sensitive`
+
+```capnp
+annotation sensitive @0xfd6ee50f2bba77d2 (field, param) :Void;
+```
+
+Marks a field or a method parameter whose value is a secret. Whatever records the
+calls a node receives or makes must keep the value out of its records, and out of
+any hash it keeps of the call's parameters. A parameter's annotation is on its
+field in the method's implicit params struct, so whatever reads the annotations of
+struct fields reads both.
+
 ### `Process`
 
 A handle to a running process:

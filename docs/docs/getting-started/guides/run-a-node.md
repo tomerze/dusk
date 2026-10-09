@@ -52,3 +52,7 @@ same processes. A session wraps a `DuskServer` as a Cap'n Proto bootstrap
 capability and runs an RPC system over the stream, so the client ends up holding
 a `Dusk` capability. Once connected, a client can
 [drive the node](connect-a-client.md).
+
+A node can dial out instead of listening, to a nightfall server that drives it
+over that one connection - see
+[Connect a node to nightfall](connect-to-nightfall.md).

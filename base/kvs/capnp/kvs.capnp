@@ -15,7 +15,7 @@ struct KvsArgs {
       get @0 :List(UInt64);
       set :group {
         key @1 :UInt64;
-        value @2 :Dusk.Value;
+        value @2 :Dusk.Value $Dusk.sensitive;
         flags @8 :UInt8;
       }
       delete @3 :UInt64;
@@ -26,13 +26,13 @@ struct KvsArgs {
     forbiddenUnstick @7 :Bool;
   }
   interface Server {
-    transpose @0 (keys :List(UInt64), output :Dusk.Stream, values :List(Dusk.Value), flags :List(UInt8)) -> ();
+    transpose @0 (keys :List(UInt64), output :Dusk.Stream, values :List(Dusk.Value) $Dusk.sensitive, flags :List(UInt8)) -> ();
   }
 }
 
 interface KvsPortal extends(Dusk.Portal, Sh.OutputPortal) {
   get @0 (key :UInt64) -> (value :Dusk.Value, flags :UInt8);
-  set @1 (key :UInt64, value :Dusk.Value, forbiddenUnstick :Bool, flags :UInt8) -> ();
+  set @1 (key :UInt64, value :Dusk.Value $Dusk.sensitive, forbiddenUnstick :Bool, flags :UInt8) -> ();
   delete @2 (key :UInt64, forbiddenUnstick :Bool) -> (deleted :Bool);
   exists @3 (key :UInt64) -> (exists :Bool);
   scan @4 (output :Dusk.Stream) -> ();

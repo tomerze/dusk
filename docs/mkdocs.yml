@@ -71,6 +71,7 @@ nav:
       - Quickstart: getting-started/guides/quickstart.md
       - Connect a client: getting-started/guides/connect-a-client.md
       - Run a standalone node: getting-started/guides/run-a-node.md
+      - Connect a node to nightfall: getting-started/guides/connect-to-nightfall.md
   - Embedding:
       - embedding/index.md
       - The C library: getting-started/guides/embed.md
