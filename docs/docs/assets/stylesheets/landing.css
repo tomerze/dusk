@@ -745,11 +745,13 @@
   }
   .dusk-stack__menu {
     position: sticky;
-    top: calc(50vh - 5rem);
-    display: block;
+    top: var(--dusk-header);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    block-size: calc(100svh - var(--dusk-header));
     grid-column: 1;
     grid-row: 1;
-    margin-top: 6rem;
   }
   .dusk-landing .dusk-stack__links {
     display: flex;
@@ -781,7 +783,10 @@
   }
   .dusk-stack__figure {
     position: sticky;
-    top: max(3.5rem, calc(50vh - 15rem));
+    top: var(--dusk-header);
+    display: flex;
+    align-items: center;
+    block-size: calc(100svh - var(--dusk-header));
     grid-column: 3;
     grid-row: 1;
     max-width: none;
@@ -790,7 +795,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-height: 56vh;
+    min-height: 56svh;
   }
   .dusk-stack.is-focused .dusk-plate:not(.is-active) {
     filter: var(--dusk-dim);
