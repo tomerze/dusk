@@ -11,7 +11,6 @@ use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use tokio::sync::Mutex as TokioMutex;
@@ -75,24 +74,12 @@ struct Dusk {
 
 #[pymethods]
 impl Dusk {
-    /// Create a new Dusk client and connect to the server.
-    ///
-    /// Args:
-    ///     address: The IP address
-    ///     port: The port number
-    ///
-    /// Returns:
-    ///     A Dusk client instance
     #[new]
     #[pyo3(signature = (address, port, sh_server_pid=None))]
     fn new(py: Python, address: String, port: u16, sh_server_pid: Option<u64>) -> PyResult<Self> {
-        let address = std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
-            std::net::Ipv4Addr::from_str(&address)
-                .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
-            port,
-        ));
         let options = Options {
             address,
+            port,
             sh_server_pid: sh_server_pid.unwrap_or(DEFAULT_PID),
         };
 
