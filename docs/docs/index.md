@@ -24,6 +24,10 @@ ship.
 
 </div>
 
+<div class="dusk-hero__horizon" markdown>
+![](assets/landing/sun.svg){ .dusk-hero__sun }
+</div>
+
 </section>
 
 <div class="grid cards" markdown>

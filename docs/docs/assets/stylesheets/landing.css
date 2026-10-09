@@ -2,6 +2,27 @@
   --dusk-gold: #f0b441;
   overflow-x: clip;
 }
+[data-md-color-scheme="default"] .dusk-landing {
+  --dusk-sky: linear-gradient(
+    180deg,
+    #f6f4ee 0%,
+    #f8efe2 40%,
+    #fbdfc0 76%,
+    #f9c99a 100%
+  );
+  --dusk-ground: #ece5d8;
+}
+[data-md-color-scheme="slate"] .dusk-landing {
+  --dusk-sky: linear-gradient(
+    180deg,
+    #14112a 0%,
+    #1b1537 36%,
+    #2f1f4a 64%,
+    #57294a 86%,
+    #7c3a42 100%
+  );
+  --dusk-ground: #0f0c1f;
+}
 
 .dusk-landing ~ .md-main .md-content {
   display: none;
@@ -71,10 +92,15 @@
 }
 
 .dusk-hero {
+  position: relative;
+  overflow: hidden;
   padding: 3rem 0.8rem 0;
+  background: var(--dusk-sky);
   text-align: center;
 }
 .dusk-hero__inner {
+  position: relative;
+  z-index: 1;
   max-width: 46rem;
   margin: 0 auto;
 }
@@ -124,6 +150,12 @@
   gap: 0.6rem;
   margin: 2rem 0 0;
 }
+.dusk-hero__inner > p:last-child .md-button {
+  width: 8.4rem;
+  padding-right: 0;
+  padding-left: 0;
+  text-align: center;
+}
 .dusk-landing .md-button {
   border-radius: 0.6rem;
   padding: 0.7em 1.8em;
@@ -144,4 +176,32 @@
   top: -0.06em;
   margin: -0.5em 0 -0.5em 0.25em;
   vertical-align: middle;
+}
+.dusk-hero__horizon {
+  position: relative;
+  height: clamp(7rem, 22vw, 8.5rem);
+  margin: 1.5rem -0.8rem 0;
+}
+.dusk-hero__sun {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(22rem, 86vw);
+  height: auto;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 3rem rgba(240, 150, 64, 0.45));
+}
+.dusk-hero__horizon p {
+  margin: 0;
+}
+.dusk-hero__horizon::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3.6rem;
+  background-color: var(--dusk-ground);
+  -webkit-mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
+  mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
 }
