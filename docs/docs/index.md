@@ -70,7 +70,7 @@ supercomputers. Run it inside the software you already ship.
 
 ## Fleet
 
-Whatever runs Dusk is a node. Reach them all from one place.
+Place a Dusk Node in everything you deploy, that's your Dusk Fleet
 
 <div class="dusk-fleet__figure">
 --8<-- "assets/landing/fleet.svg"
