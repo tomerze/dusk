@@ -88,4 +88,5 @@ interface Dusk {
     programs @8 () -> (program_entries :List(ProgramEntry));
     namespaceId @9 () -> (result :UInt64);
     dusk @10 () -> (result :Dusk);
+    fleetToken @11 () -> (result :Text);
 }
