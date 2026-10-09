@@ -7,6 +7,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
+pub const TREE_SCHEMAS: &str = env!("NIGHTFALL_TREE_SCHEMAS");
+
 struct Ledger {
     entries: RefCell<Vec<AuditEntry>>,
     capacity: Cell<usize>,
