@@ -10,7 +10,12 @@ use std::time::Duration;
 use std::{net::SocketAddr, rc::Rc, sync::Mutex};
 use tokio::net::TcpStream;
 
-type DisconnectorStore = Rc<Mutex<Option<Disconnector<rpc_twoparty_capnp::Side>>>>;
+enum LinkState {
+    Open(Option<Disconnector<rpc_twoparty_capnp::Side>>),
+    Disconnected,
+}
+
+type DisconnectorStore = Rc<Mutex<LinkState>>;
 
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -181,10 +186,17 @@ where
     ));
     let mut rpc_system = RpcSystem::new(rpc_network, None);
     let disconnector = rpc_system.get_disconnector();
-    let replaced = disconnector_store
+    let replaced = match &mut *disconnector_store
         .lock()
         .map_err(|error| capnp::Error::failed(error.to_string()))?
-        .replace(disconnector);
+    {
+        LinkState::Open(stored) => stored.replace(disconnector),
+        LinkState::Disconnected => {
+            return Err(capnp::Error::failed(
+                "this connection was disconnected".to_string(),
+            ));
+        }
+    };
     if let Some(replaced) = replaced {
         tokio::task::spawn_local(async move {
             if let Err(error) = replaced.await {
@@ -257,7 +269,7 @@ pub struct Connection {
 
 impl Connection {
     fn with_target(target: Target) -> Result<Self> {
-        let disconnector_store: DisconnectorStore = Rc::new(Mutex::new(None));
+        let disconnector_store: DisconnectorStore = Rc::new(Mutex::new(LinkState::Open(None)));
         let disconnector_store_clone = disconnector_store.clone();
         let (client, _) = capnp_rpc::auto_reconnect(move || {
             Ok(capnp_rpc::new_future_client(open(
@@ -294,11 +306,16 @@ impl Connection {
     }
 
     pub async fn disconnect(self) -> Result<()> {
-        let disconnector_option = self
-            .disconnector_store
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to lock mutex: {}", e))?
-            .take();
+        let disconnector_option = match std::mem::replace(
+            &mut *self
+                .disconnector_store
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Failed to lock mutex: {}", e))?,
+            LinkState::Disconnected,
+        ) {
+            LinkState::Open(disconnector) => disconnector,
+            LinkState::Disconnected => None,
+        };
         match disconnector_option {
             Some(disconnector) => disconnector.await.map_err(anyhow::Error::from),
             None => Ok(()), // Already disconnected

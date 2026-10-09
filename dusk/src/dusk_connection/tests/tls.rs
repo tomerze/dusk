@@ -526,3 +526,38 @@ async fn test_a_reconnect_closes_the_link_it_replaces() {
         })
         .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_a_client_kept_after_disconnect_does_not_open_another_link() {
+    let fixture = Fixture::new();
+    let tls = fixture.client(&fixture.authority.leaf(&["client.test"]));
+    tokio::task::LocalSet::new()
+        .run_until(async move {
+            let (port, accepted) =
+                serve(&fixture.authority, fixture.authority.leaf(&[SERVER_NAME])).await;
+            let connection = Connection::connect_tls("127.0.0.1", port, tls)
+                .await
+                .unwrap();
+            let kept = connection.client().await;
+            assert_eq!(hostname(&connection).await.unwrap(), "connection-1");
+            connection.disconnect().await.unwrap();
+            let mut kinds = Vec::new();
+            for _ in 0..3 {
+                let Err(error) = kept.hostname_request().send().promise.await else {
+                    panic!("a client kept after disconnect still answered");
+                };
+                kinds.push(error.kind);
+            }
+            assert_eq!(
+                kinds,
+                vec![
+                    capnp::ErrorKind::Disconnected,
+                    capnp::ErrorKind::Failed,
+                    capnp::ErrorKind::Failed
+                ]
+            );
+            assert!(accepted.peers.borrow().len() <= 2);
+            wait_until_open_links_are_at_most(&accepted, 0).await;
+        })
+        .await;
+}
