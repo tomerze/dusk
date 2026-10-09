@@ -147,6 +147,9 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
 
 for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
   const arms = [...fleet.querySelectorAll(".dusk-arm")];
+  const labels = [
+    ...fleet.querySelectorAll(".dusk-fleet__labels .dusk-node__label"),
+  ];
   const tinyLinks = [...fleet.querySelectorAll(".dusk-fleet__tiny path")];
   const tinyDots = [
     ...fleet.querySelectorAll(".dusk-fleet__tiny circle:not(.dusk-packet)"),
@@ -204,8 +207,7 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       return {
         x: cx + (px - cx) * out,
         y: cy + (py - cy) * out,
-        half:
-          arm.querySelector(".dusk-node__label").getComputedTextLength() / 2,
+        half: labels[index].getComputedTextLength() / 2,
         end: Math.min(fraction, 1 - fraction, Math.abs(fraction - 0.5)) < 0.1,
       };
     });
@@ -282,14 +284,13 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
         light.setAttribute("cx", dotX);
         light.setAttribute("cy", dotY);
       }
-      const label = arm.querySelector(".dusk-node__label");
+      const label = labels[index];
       label.setAttribute("x", x);
       label.setAttribute("y", y + below);
       taken.push([x, y, 70 * scale]);
     });
     const placed = [];
-    for (const [index, arm] of arms.entries()) {
-      const label = arm.querySelector(".dusk-node__label");
+    for (const [index, label] of labels.entries()) {
       const half = label.getComputedTextLength() / 2;
       const x = Number(label.getAttribute("x"));
       let y = Number(label.getAttribute("y"));

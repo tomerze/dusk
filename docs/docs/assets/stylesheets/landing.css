@@ -538,7 +538,8 @@
   width: 100%;
   height: auto;
 }
-.dusk-arm {
+.dusk-arm,
+.dusk-node__label {
   animation: dusk-float 9s ease-in-out infinite alternate;
 }
 .dusk-arm:nth-child(2n) {
@@ -619,10 +620,12 @@
   fill: var(--md-default-fg-color--light);
   font-size: 15px;
   font-weight: 500;
+}
+.dusk-fleet__labels text {
   paint-order: stroke;
   stroke: var(--dusk-ground);
-  stroke-width: 2px;
-  stroke-opacity: 0.7;
+  stroke-width: 1.5px;
+  stroke-opacity: 0.6;
   stroke-linejoin: round;
 }
 @media screen and (max-width: 37.4375em) {
@@ -1081,6 +1084,7 @@
 
 .is-offscreen .dusk-float,
 .is-offscreen .dusk-arm,
+.is-offscreen .dusk-node__label,
 .is-offscreen .dusk-node__pulse,
 .is-offscreen .dusk-plate {
   animation-play-state: paused;
@@ -1097,6 +1101,7 @@
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-arm,
+  .dusk-node__label,
   .dusk-plate {
     animation: none;
   }
