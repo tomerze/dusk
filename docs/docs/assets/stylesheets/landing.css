@@ -375,8 +375,8 @@
 .dusk-landing .dusk-platforms__grid ul {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1.2rem 0.5rem;
-  max-width: 40rem;
+  gap: 1.6rem 0.5rem;
+  max-width: 32rem;
   margin: 0 auto;
   padding: 0;
   list-style: none;
