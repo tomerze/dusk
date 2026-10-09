@@ -20,7 +20,9 @@ node.disconnect()
 Connects to a node at `address:port` and takes hold of a shell server on it: the
 node's default one at `defaultPid`, or the one at `sh_server_pid` - started
 there if nothing is running it yet. The constructor blocks until the connection is established and
-the node answers, and raises if it can't reach the node.
+the node answers, and raises if it can't reach the node. A node that has not
+answered within 60 seconds counts as one it can't reach: the constructor raises
+a `Disconnected` `RuntimeError`.
 
 `address` is a host name, an IPv4 address or an IPv6 address (`"::1"`, without
 brackets). Over plain TCP the constructor resolves a host name and tries each
