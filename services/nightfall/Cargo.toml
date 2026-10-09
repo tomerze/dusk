@@ -8,11 +8,16 @@ license.workspace = true
 name = "nightfall"
 path = "src/lib.rs"
 
+[[bin]]
+name = "nightfall"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = { version = "1.0", public = true }
 arc-swap = { version = "1.7", public = true }
 capnp = "0.21.7"
 capnp-rpc = "0.21.0"
+clap = { version = "4.5", features = ["derive"] }
 dusk_capnp = { path = "../../dusk/src/dusk_capnp" }
 futures = "0.3"
 http-body-util = "0.1"
@@ -39,6 +44,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["loggin
 tokio-util = { version = "0.7", features = ["compat"], public = true }
 toml = { version = "0.9", public = true }
 tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 uuid = { version = "1.17", features = ["v4", "v7"] }
 x509-parser = "0.18"
 
