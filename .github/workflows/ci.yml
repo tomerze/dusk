@@ -181,3 +181,30 @@ jobs:
       # vendor/capnproto submodule nor a target directory.
       - name: cargo fmt
         run: cargo fmt --all -- --check
+
+  go:
+    name: Go (gofmt, vet, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/twilight
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/twilight/go.mod
+          cache-dependency-path: services/twilight/go.sum
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          test -z "$unformatted" || { echo "$unformatted"; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -short ./...
