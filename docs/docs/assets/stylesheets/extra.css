@@ -4,47 +4,47 @@
 
 /* ---------- Light (default) ---------- */
 [data-md-color-scheme="default"] {
-  --md-default-bg-color:        #f6f4ee;   /* warm off-white - pure white was harsh and this flatters the gold */
-  --md-primary-fg-color:        #f6f4ee;   /* header matches the page */
+  --md-default-bg-color: #f6f4ee; /* warm off-white - pure white was harsh and this flatters the gold */
+  --md-primary-fg-color: #f6f4ee; /* header matches the page */
   --md-primary-fg-color--light: #f6f4ee;
-  --md-primary-fg-color--dark:  #f0b441;
-  --md-primary-bg-color:        #1c1c22;   /* header text/icons */
+  --md-primary-fg-color--dark: #f0b441;
+  --md-primary-bg-color: #1c1c22; /* header text/icons */
   --md-primary-bg-color--light: #55555f;
 
-  --md-accent-fg-color:         #9a6b00;   /* gold fails contrast on the light bg, so links/accent darken to amber */
-  --md-typeset-a-color:         #9a6b00;
+  --md-accent-fg-color: #9a6b00; /* gold fails contrast on the light bg, so links/accent darken to amber */
+  --md-typeset-a-color: #9a6b00;
 }
 
 /* ---------- Dark (slate) ---------- */
 [data-md-color-scheme="slate"] {
-  --md-default-bg-color:        #14112a;
-  --md-default-bg-color--light:  #1d1838;
+  --md-default-bg-color: #14112a;
+  --md-default-bg-color--light: #1d1838;
   --md-default-bg-color--lighter: #29234a;
-  --md-code-bg-color:           #1d1838;
-  --md-footer-bg-color:         #0f0c1f;
-  --md-footer-bg-color--dark:   #0f0c1f;
+  --md-code-bg-color: #1d1838;
+  --md-footer-bg-color: #0f0c1f;
+  --md-footer-bg-color--dark: #0f0c1f;
 
-  --md-primary-fg-color:        #14112a;   /* header bg */
+  --md-primary-fg-color: #14112a; /* header bg */
   --md-primary-fg-color--light: #1d1838;
-  --md-primary-fg-color--dark:  #0f0c1f;
-  --md-primary-bg-color:        #e9e6f2;   /* header text */
+  --md-primary-fg-color--dark: #0f0c1f;
+  --md-primary-bg-color: #e9e6f2; /* header text */
   --md-primary-bg-color--light: #9e9ab5;
 
-  --md-accent-fg-color:         #f0b441;   /* gold passes contrast on dark */
-  --md-typeset-a-color:         #f0b441;
+  --md-accent-fg-color: #f0b441; /* gold passes contrast on dark */
+  --md-typeset-a-color: #f0b441;
 }
 
 /* ---------- Gold primary buttons (hero CTA) ---------- */
 .md-typeset .md-button--primary {
   background-color: #f0b441;
-  border-color:     #f0b441;
-  color:            #221a05;
+  border-color: #f0b441;
+  color: #221a05;
 }
 .md-typeset .md-button--primary:hover,
 .md-typeset .md-button--primary:focus {
   background-color: #e0a52e;
-  border-color:     #e0a52e;
-  color:            #221a05;
+  border-color: #e0a52e;
+  color: #221a05;
 }
 
 /* ---------- Gold rule under page titles ---------- */
@@ -79,7 +79,7 @@
 }
 .dusk-hero {
   padding: 0 0 1.5rem;
-  margin-top: -0.8rem;   /* pull the title up toward the top bar */
+  margin-top: -0.8rem; /* pull the title up toward the top bar */
 }
 .dusk-hero h1 {
   font-size: 3rem;
@@ -87,14 +87,14 @@
   line-height: 1.1;
   letter-spacing: -0.02em;
   margin-bottom: 0.6rem;
-  color: #a86f12;   /* fallback if background-clip: text is unsupported */
+  color: #a86f12; /* fallback if background-clip: text is unsupported */
   background: linear-gradient(170deg, #f0b441 0%, #a86f12 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .dusk-hero h1::after {
-  display: none;   /* the hero title skips the gold rule */
+  display: none; /* the hero title skips the gold rule */
 }
 /* Pull the sub-header up under the title: zero its top margin so the gap is
    just the H1's small bottom margin. */
@@ -113,7 +113,7 @@
   max-width: 40rem;
   font-size: 1.15rem;
   color: var(--md-default-fg-color--light);
-  margin-bottom: 1.3rem;   /* gap that separates the pitch from the action block */
+  margin-bottom: 1.3rem; /* gap that separates the pitch from the action block */
 }
 /* Para 2 ("Drop it in…") leads into the buttons, so group it with the CTA by
    sitting it close to the buttons. Both paragraphs share the same font size. */
@@ -124,7 +124,7 @@
    the two read as one grouped pitch. */
 .dusk-hero .tagline.lead {
   font-size: 1.35rem;
-  line-height: 1.15;   /* tight, so when it wraps on a phone the two lines sit
+  line-height: 1.15; /* tight, so when it wraps on a phone the two lines sit
                           closer than the gap up to the title */
   margin-bottom: 0.6rem;
 }
@@ -153,9 +153,15 @@
 .dusk-hero .tagline .emph {
   font-size: 1.3em;
   font-weight: 600;
-  color: var(--md-default-fg-color--light);   /* fallback for browsers without color-mix() */
+  color: var(
+    --md-default-fg-color--light
+  ); /* fallback for browsers without color-mix() */
   /* halfway between --light and --lighter, kept mode-adaptive via color-mix */
-  color: color-mix(in srgb, var(--md-default-fg-color--light), var(--md-default-fg-color--lighter));
+  color: color-mix(
+    in srgb,
+    var(--md-default-fg-color--light),
+    var(--md-default-fg-color--lighter)
+  );
 }
 
 .dusk-hero .md-button {
@@ -189,7 +195,7 @@
   --md-icon-size: 1.8em;
   vertical-align: middle;
   position: relative;
-  top: -0.06em;                    /* nudge up a touch */
+  top: -0.06em; /* nudge up a touch */
   /* negative top/bottom so the oversized logo overflows instead of making this
      button taller than "Get started"; left margin is the gap from the text. */
   margin: -0.5em 0 -0.5em 0.25em;
@@ -230,24 +236,30 @@
 }
 .md-header__button.md-logo {
   margin: 0;
-  padding: 0 0.2rem 0 0;   /* no vertical padding → bar hugs the 3rem logo */
+  padding: 0 0.2rem 0 0; /* no vertical padding → bar hugs the 3rem logo */
 }
 .md-header__title {
   font-size: 1.15rem;
 }
 /* The logo↔title gap is set by [dir=ltr] .md-header__title (specificity 0,2,0),
    which outranks a plain .md-header__title - so match it to close the gap. */
-[dir=ltr] .md-header__title {
+[dir="ltr"] .md-header__title {
   margin-left: 0;
 }
 
 /* GitHub lives in the footer now; hide the header repo link. repo_url stays
    set so the per-page edit/view actions still work. */
-.md-header__source { display: none; }
+.md-header__source {
+  display: none;
+}
 
 /* Search box first, theme toggle to its right. */
-.md-search         { order: 1; }
-.md-header__option { order: 2; }
+.md-search {
+  order: 1;
+}
+.md-header__option {
+  order: 2;
+}
 
 /* Search field in light mode. Material styles it as translucent white, which
    assumes a dark header - on our white header it (and its hover state) all but
