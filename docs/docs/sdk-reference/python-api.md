@@ -156,6 +156,30 @@ still yields them. A command that never finishes on its own (`logs stream
 <url>`) blocks where it is displayed, exactly as `list()` on it would; iterate
 it instead.
 
+## `DUSK_PY_WORKERS`
+
+The connections of every `Dusk` object in a process share a fixed pool of
+worker threads, started when the first object is made: making an object never
+starts a thread of its own, so a process can hold thousands of connections. The
+pool has one thread per CPU the process may use; set `DUSK_PY_WORKERS` to a
+whole number above 0, before the first object is made, to choose another size.
+Any other value makes the object being made raise `RuntimeError` naming the
+variable, and the next object reads the variable again. A process forked after
+its first object starts a pool of its own with its first object; an object made
+before the fork belongs to the parent, and using it in the child blocks for
+ever.
+
+Each worker also runs the blocking work of the objects on it - name lookups,
+the file writes of a `logs stream file://...`, and a prompt's terminal reads -
+on up to 64 threads of its own, started as they are needed. The objects on a
+worker share them: while 64 of them are busy on one worker, its other objects'
+lookups and file writes wait for one of them to finish. More workers spread
+that work further.
+
+Each object has at most 64 commands in progress and holds at most 64 more that
+its connection has not picked up yet; `sh` or `prompt` on an object that already
+holds 64 waiting raises `RuntimeError` instead of queueing more.
+
 ## `DUSK_NON_INTERACTIVE`
 
 Some programs are interactive: `logs view`, `sh --prompt` and `node.prompt()` take over the
