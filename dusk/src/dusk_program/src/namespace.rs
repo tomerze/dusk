@@ -191,7 +191,7 @@ impl Namespace {
                 .ok_or_else(|| anyhow::anyhow!("couldn't find process"))?;
             if entry.suspended.try_get().unwrap_or(false) {
                 self.exit(pid, Ok(())).await;
-                self.unregister(pid).await;
+                self.unregister(pid, &entry.exit).await;
                 info!(pid, "process swept by sweep signal");
             }
             return Ok(());
@@ -202,7 +202,7 @@ impl Namespace {
                 .await
                 .ok_or_else(|| anyhow::anyhow!("couldn't find process"))?;
             if let Some(exit) = entry.exit.try_get().flatten() {
-                self.unregister(pid).await;
+                self.unregister(pid, &entry.exit).await;
                 info!(pid, error = exit.err(), "process reaped by reap signal");
             }
             return Ok(());
@@ -263,8 +263,12 @@ impl Namespace {
         entry.suspended.sender().send(false);
     }
 
-    pub async fn unregister(&self, pid: u64) -> Option<PsEntry> {
-        self.ps_map.lock().await.remove(&pid)
+    pub async fn unregister(&self, pid: u64, exit: &ExitWatch) -> Option<PsEntry> {
+        let mut ps_map = self.ps_map.lock().await;
+        match ps_map.get(&pid) {
+            Some(entry) if Rc::ptr_eq(&entry.exit, exit) => ps_map.remove(&pid),
+            _ => None,
+        }
     }
 
     /// Send SIGTERM to every process in the namespace, yielding between each so
