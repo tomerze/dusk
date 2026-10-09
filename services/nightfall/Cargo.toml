@@ -15,9 +15,13 @@ capnp = "0.21.7"
 capnp-rpc = "0.21.0"
 dusk_capnp = { path = "../../dusk/src/dusk_capnp" }
 futures = "0.3"
+http-body-util = "0.1"
+hyper = { version = "1.6", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 jsonschema = { version = "0.58", default-features = false }
 libc = "0.2"
 metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false, public = true }
 nightfall_ledger = { path = "ledger", public = true }
 nightfall_membrane = { path = "membrane", public = true }
 nightfall_provisioning = { path = "provisioning", public = true }
