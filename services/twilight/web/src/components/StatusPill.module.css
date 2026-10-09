@@ -1,0 +1,7 @@
+.pill {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: max-content;
+}
