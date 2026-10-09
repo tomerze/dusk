@@ -58,7 +58,7 @@ const visibility = new IntersectionObserver((entries) => {
   for (const entry of entries) {
     entry.target.classList.toggle("is-offscreen", !entry.isIntersecting);
     for (const network of entry.target.querySelectorAll(
-      ".dusk-fleet__network",
+      ".dusk-fleet__network, .dusk-stack__diagram",
     )) {
       if (entry.isIntersecting) {
         network.unpauseAnimations();

@@ -714,20 +714,8 @@
     margin-left: -7.4%;
   }
 }
-.dusk-stack__uplink {
-  stroke: var(--dusk-gold);
-  stroke-width: 1.4;
-  stroke-dasharray: 3 5;
-  opacity: 0.75;
-  animation: dusk-flow 1.2s linear infinite;
-}
 .dusk-stack__node {
   fill: var(--dusk-gold);
-}
-@keyframes dusk-flow {
-  to {
-    stroke-dashoffset: -16;
-  }
 }
 .dusk-stack__layers {
   clip-path: inset(-2rem -2rem -1rem -2rem);
@@ -1064,8 +1052,7 @@
 
 .is-offscreen .dusk-float,
 .is-offscreen .dusk-arm,
-.is-offscreen .dusk-node__pulse,
-.is-offscreen .dusk-stack__uplink {
+.is-offscreen .dusk-node__pulse {
   animation-play-state: paused;
 }
 
@@ -1085,9 +1072,6 @@
   .dusk-packet,
   .dusk-node__pulse {
     display: none;
-  }
-  .dusk-stack__uplink {
-    animation: none;
   }
   .dusk-plate,
   .dusk-plate *,
