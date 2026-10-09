@@ -92,6 +92,15 @@ These are checked as each action is taken:
   assuming a size - they differ by more than an order of magnitude. Reclaiming
   space means deleting the user's build caches, so **ask first**, and name the
   measured sizes and which branches are already merged so the choice is theirs.
+- **Build in a worktree with `CARGO_INCREMENTAL=0`.** Each worktree builds
+  into a `target` of its own, and incremental caches are most of a debug one:
+  in one measurement they were 26 GB of the main checkout's 37 GB
+  `target/debug`, while a worktree that built and tested the nightfall crates
+  with `CARGO_INCREMENTAL=0` held 17 GB and no incremental cache at all. A
+  fresh worktree also has `vendor/capnproto` empty: run
+  `git submodule update --init vendor/capnproto` before its first Rust build.
+  When several sessions share the machine, cap each build with
+  `CARGO_BUILD_JOBS=4` and run one heavy build per worktree at a time.
 
 ## The Dusk stack's toolchains
 
