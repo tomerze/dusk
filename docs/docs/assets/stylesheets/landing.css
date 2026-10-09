@@ -1,5 +1,10 @@
 .dusk-landing {
   --dusk-gold: #f0b441;
+  --dusk-nightfall: #3446b4;
+  --dusk-dawn: #ffd9a8;
+  --dusk-twilight: #a98bcc;
+  --dusk-data: #4ea6e6;
+  --dusk-observability: #f2f5fa;
   overflow-x: clip;
 }
 [data-md-color-scheme="default"] .dusk-landing {
@@ -18,6 +23,11 @@
   --dusk-link-faint: rgba(85, 74, 150, 0.13);
   --dusk-tiny: #aaa1cc;
   --dusk-stars: none;
+  --dusk-ink-nightfall: #2c3a9e;
+  --dusk-ink-dawn: #b86f1a;
+  --dusk-ink-twilight: #7a56a9;
+  --dusk-ink-data: #1f6fa8;
+  --dusk-ink-observability: #5b6b85;
 }
 [data-md-color-scheme="slate"] .dusk-landing {
   --dusk-sky: linear-gradient(
@@ -61,6 +71,26 @@
     ),
     radial-gradient(1px 1px at 94% 52%, rgba(255, 255, 255, 0.35), transparent),
     radial-gradient(1px 1px at 4% 82%, rgba(255, 255, 255, 0.4), transparent);
+  --dusk-ink-nightfall: #9fb0ff;
+  --dusk-ink-dawn: #ffd9a8;
+  --dusk-ink-twilight: #cdb3ec;
+  --dusk-ink-data: #8ccbff;
+  --dusk-ink-observability: #eef2f8;
+}
+.dusk-landing [data-layer="nightfall"] {
+  --dusk-ink: var(--dusk-ink-nightfall);
+}
+.dusk-landing [data-layer="dawn"] {
+  --dusk-ink: var(--dusk-ink-dawn);
+}
+.dusk-landing [data-layer="twilight"] {
+  --dusk-ink: var(--dusk-ink-twilight);
+}
+.dusk-landing [data-layer="data"] {
+  --dusk-ink: var(--dusk-ink-data);
+}
+.dusk-landing [data-layer="observability"] {
+  --dusk-ink: var(--dusk-ink-observability);
 }
 
 .dusk-landing ~ .md-main .md-content {
@@ -453,6 +483,32 @@
     background-position: 100% 100%;
   }
 }
+.dusk-landing .dusk-stack > h2 {
+  color: var(--dusk-ink-twilight);
+  background-image: linear-gradient(
+    180deg,
+    var(--dusk-ink-nightfall) 0 26.4%,
+    transparent 26.4% 29%,
+    var(--dusk-ink-dawn) 29% 41.6%,
+    transparent 41.6% 44.2%,
+    var(--dusk-ink-twilight) 44.2% 56.8%,
+    transparent 56.8% 59.4%,
+    var(--dusk-ink-data) 59.4% 72%,
+    transparent 72% 74.6%,
+    var(--dusk-ink-observability) 74.6% 100%
+  );
+  background-size: 100% 100%;
+  animation: dusk-cycle linear both;
+  animation-timeline: view();
+}
+@keyframes dusk-cycle {
+  from {
+    background-position-y: 0;
+  }
+  to {
+    background-position-y: -100%;
+  }
+}
 .dusk-landing .dusk-section > h2 + p {
   max-width: 32rem;
   margin: 1rem auto 3rem;
@@ -568,6 +624,155 @@
   }
 }
 
+.dusk-stack__body {
+  display: grid;
+  gap: 2.5rem;
+  max-width: 60rem;
+  margin: 0 auto;
+}
+.dusk-stack__figure {
+  order: -1;
+  width: 100%;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+.dusk-stack__diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.dusk-plate__edge {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.2;
+}
+.dusk-plate__leader {
+  stroke: var(--dusk-ink);
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+.dusk-plate__print text {
+  fill: var(--dusk-print);
+  font-size: 20px;
+  font-weight: 800;
+}
+.dusk-plate__print-icon {
+  fill: none;
+  stroke: var(--dusk-print);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dusk-plate__name {
+  fill: var(--dusk-ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+@media screen and (max-width: 35.9375em) {
+  .dusk-stack__figure {
+    overflow: hidden;
+  }
+  .dusk-landing .dusk-stack__diagram {
+    width: 188%;
+    max-width: none;
+    margin-left: -7.4%;
+  }
+}
+.dusk-stack__uplink {
+  stroke: var(--dusk-gold);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 5;
+  opacity: 0.75;
+  animation: dusk-flow 1.2s linear infinite;
+}
+.dusk-stack__node {
+  fill: var(--dusk-gold);
+}
+@keyframes dusk-flow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+.dusk-layer {
+  padding: 0.4rem 0 0.4rem 1.2rem;
+  border-left: 3px solid var(--dusk-ink);
+}
+.dusk-layer + .dusk-layer {
+  margin-top: 2rem;
+}
+.dusk-landing .dusk-layer h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--dusk-ink);
+}
+.dusk-landing .dusk-layer h3 .twemoji {
+  --md-icon-size: 1.7rem;
+  color: var(--dusk-ink);
+}
+.dusk-stack__menu {
+  display: none;
+}
+.dusk-landing .dusk-layer > p {
+  max-width: 26rem;
+  margin: 0.8rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+}
+.dusk-landing .dusk-layer > .dusk-layer__role {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+@media screen and (min-width: 60em) {
+  .dusk-stack__body {
+    grid-template-columns: 7rem minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: start;
+    gap: 2.4rem;
+    max-width: 64rem;
+  }
+  .dusk-stack__menu {
+    position: sticky;
+    top: calc(50vh - 5rem);
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    margin-top: 6rem;
+  }
+  .dusk-landing .dusk-stack__menu p {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin: 0;
+  }
+  .dusk-stack__menu a {
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.2rem;
+    color: var(--md-default-fg-color--light);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .dusk-stack__menu a:hover {
+    color: var(--dusk-ink);
+  }
+  .dusk-stack__layers {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .dusk-stack__figure {
+    grid-column: 3;
+    grid-row: 1;
+    max-width: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-landing .dusk-section > h2 {
@@ -576,5 +781,8 @@
   .dusk-packet,
   .dusk-node__pulse {
     display: none;
+  }
+  .dusk-stack__uplink {
+    animation: none;
   }
 }

@@ -79,6 +79,94 @@ single place.
 
 </section>
 
+<section class="dusk-section dusk-stack" markdown>
+
+## Stack
+
+Five layers connect your fleet to the people who run it.
+
+<div class="dusk-stack__body" markdown>
+
+<nav class="dusk-stack__menu" aria-label="Stack layers" markdown>
+[Nightfall](#nightfall){ data-layer="nightfall" }
+[Dawn](#dawn){ data-layer="dawn" }
+[Twilight](#twilight){ data-layer="twilight" }
+[Data](#data){ data-layer="data" }
+[Observability](#observability){ data-layer="observability" }
+</nav>
+
+<div class="dusk-stack__layers" markdown>
+
+<article class="dusk-layer" data-layer="nightfall" markdown>
+
+### :dusk-nightfall: Nightfall
+
+Security layer
+{ .dusk-layer__role }
+
+Every device connects through Nightfall. It checks who can do what on which
+device, and records every action taken.
+
+</article>
+
+<article class="dusk-layer" data-layer="dawn" markdown>
+
+### :dusk-dawn: Dawn
+
+Client layer
+{ .dusk-layer__role }
+
+Dawn carries out the work on your devices: it runs commands, streams logs back
+and collects files.
+
+</article>
+
+<article class="dusk-layer" data-layer="twilight" markdown>
+
+### :dusk-twilight: Twilight
+
+Orchestration layer
+{ .dusk-layer__role }
+
+Tell Twilight what your fleet should look like. It rolls changes out in
+phases, watches their health, and stops when something goes wrong.
+
+</article>
+
+<article class="dusk-layer" data-layer="data" markdown>
+
+### :dusk-data: Data
+
+Inventory, events and files
+{ .dusk-layer__role }
+
+Everything your devices report, stored on your own infrastructure and ready
+to send anywhere else you need it.
+
+</article>
+
+<article class="dusk-layer" data-layer="observability" markdown>
+
+### :dusk-observability: Observability
+
+Dashboards and alerts
+{ .dusk-layer__role }
+
+See the whole fleet at a glance. Use Grafana and SigNoz out of the box, or
+connect the tools you already have.
+
+</article>
+
+</div>
+
+<div class="dusk-stack__figure">
+--8<-- "assets/landing/stack.svg"
+</div>
+
+</div>
+
+</section>
+
 <div class="grid cards" markdown>
 
 -   **Embed Dusk**

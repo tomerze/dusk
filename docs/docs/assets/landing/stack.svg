@@ -1,0 +1,255 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="dusk-stack__diagram"
+  viewBox="0 0 720 640"
+  role="img"
+  aria-labelledby="dusk-stack-diagram-title"
+>
+  <title id="dusk-stack-diagram-title">
+    The Dusk stack, top to bottom: Nightfall, the security layer; Dawn, the
+    client layer; Twilight, the orchestration layer; the data layer; the
+    observability layer. The fleet connects in at the top.
+  </title>
+  <defs>
+    <symbol id="dusk-stack-icon-nightfall" viewBox="0 0 24 24">
+      <path
+        d="M12 2.8 19.4 5.6v5.9c0 4.4-3.1 8-7.4 9.8-4.3-1.8-7.4-5.4-7.4-9.8V5.6Z"
+      />
+      <path d="M13.6 8.2a3.6 3.6 0 1 0 2.2 5.6 3 3 0 0 1-2.2-5.6Z" />
+    </symbol>
+    <symbol id="dusk-stack-icon-dawn" viewBox="0 0 24 24">
+      <path d="M7 17a5 5 0 0 1 10 0" />
+      <path d="M2.5 17h19M5 21h14" />
+      <path d="M12 3v6M9.2 5.8 12 3l2.8 2.8" />
+      <path d="m4.9 10.3 1.4 1.4M19.1 10.3l-1.4 1.4" />
+    </symbol>
+    <symbol id="dusk-stack-icon-twilight" viewBox="0 0 24 24">
+      <path d="M7 17a5 5 0 0 1 10 0" />
+      <path d="M2.5 17h19M5 21h14" />
+      <path d="M12 3v6M9.2 6.2 12 9l2.8-2.8" />
+      <path d="m4.9 10.3 1.4 1.4M19.1 10.3l-1.4 1.4" />
+    </symbol>
+    <symbol id="dusk-stack-icon-data" viewBox="0 0 24 24">
+      <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8" />
+      <path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13" />
+      <path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8" />
+    </symbol>
+    <symbol id="dusk-stack-icon-observability" viewBox="0 0 24 24">
+      <path
+        d="M2.2 12S5.8 5.2 12 5.2 21.8 12 21.8 12 18.2 18.8 12 18.8 2.2 12 2.2 12Z"
+      />
+      <circle cx="12" cy="12" r="3.2" />
+    </symbol>
+    <linearGradient id="dusk-plate-nightfall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6273dc" />
+      <stop offset="1" stop-color="#3446b4" />
+    </linearGradient>
+    <linearGradient id="dusk-plate-dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff1dc" />
+      <stop offset="1" stop-color="#ffd9a8" />
+    </linearGradient>
+    <linearGradient id="dusk-plate-twilight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cbb3e4" />
+      <stop offset="1" stop-color="#a98bcc" />
+    </linearGradient>
+    <linearGradient id="dusk-plate-data" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#93cdf4" />
+      <stop offset="1" stop-color="#4ea6e6" />
+    </linearGradient>
+    <linearGradient id="dusk-plate-observability" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#e7ecf4" />
+    </linearGradient>
+  </defs>
+  <g class="dusk-plate" data-layer="observability">
+    <polygon
+      class="dusk-plate__left"
+      fill="#c9d2e0"
+      points="40,520 220,594 220,612 40,538"
+    />
+    <polygon
+      class="dusk-plate__right"
+      fill="#adb8c9"
+      points="220,594 400,520 400,538 220,612"
+    />
+    <polygon
+      class="dusk-plate__top"
+      fill="url(#dusk-plate-observability)"
+      points="220,446 400,520 220,594 40,520"
+    />
+    <path class="dusk-plate__edge" d="M40 520L220 594L400 520" />
+    <g
+      class="dusk-plate__print"
+      transform="matrix(0.925 0.38 -0.925 0.38 69.6 520)"
+      style="--dusk-print: #4a5668"
+    >
+      <use
+        class="dusk-plate__print-icon"
+        href="#dusk-stack-icon-observability"
+        x="0"
+        y="-16"
+        width="18"
+        height="18"
+      />
+      <text x="24" y="0">Observability</text>
+    </g>
+    <path class="dusk-plate__leader" d="M414 520H444" />
+    <text class="dusk-plate__name" x="456" y="527">Observability layer</text>
+  </g>
+  <g class="dusk-plate" data-layer="data">
+    <polygon
+      class="dusk-plate__left"
+      fill="#3b8bc8"
+      points="40,428 220,502 220,520 40,446"
+    />
+    <polygon
+      class="dusk-plate__right"
+      fill="#2f70a3"
+      points="220,502 400,428 400,446 220,520"
+    />
+    <polygon
+      class="dusk-plate__top"
+      fill="url(#dusk-plate-data)"
+      points="220,354 400,428 220,502 40,428"
+    />
+    <path class="dusk-plate__edge" d="M40 428L220 502L400 428" />
+    <g
+      class="dusk-plate__print"
+      transform="matrix(0.925 0.38 -0.925 0.38 69.6 428)"
+      style="--dusk-print: #0d3a5e"
+    >
+      <use
+        class="dusk-plate__print-icon"
+        href="#dusk-stack-icon-data"
+        x="0"
+        y="-16"
+        width="18"
+        height="18"
+      />
+      <text x="24" y="0">Data</text>
+    </g>
+    <path class="dusk-plate__leader" d="M414 428H444" />
+    <text class="dusk-plate__name" x="456" y="435">Data layer</text>
+  </g>
+  <g class="dusk-plate" data-layer="twilight">
+    <polygon
+      class="dusk-plate__left"
+      fill="#8d6fb1"
+      points="40,336 220,410 220,428 40,354"
+    />
+    <polygon
+      class="dusk-plate__right"
+      fill="#735892"
+      points="220,410 400,336 400,354 220,428"
+    />
+    <polygon
+      class="dusk-plate__top"
+      fill="url(#dusk-plate-twilight)"
+      points="220,262 400,336 220,410 40,336"
+    />
+    <path class="dusk-plate__edge" d="M40 336L220 410L400 336" />
+    <g
+      class="dusk-plate__print"
+      transform="matrix(0.925 0.38 -0.925 0.38 69.6 336)"
+      style="--dusk-print: #3b2466"
+    >
+      <use
+        class="dusk-plate__print-icon"
+        href="#dusk-stack-icon-twilight"
+        x="0"
+        y="-16"
+        width="18"
+        height="18"
+      />
+      <text x="24" y="0">Twilight</text>
+    </g>
+    <path class="dusk-plate__leader" d="M414 336H444" />
+    <text class="dusk-plate__name" x="456" y="343">Orchestration layer</text>
+  </g>
+  <g class="dusk-plate" data-layer="dawn">
+    <polygon
+      class="dusk-plate__left"
+      fill="#e7bb84"
+      points="40,244 220,318 220,336 40,262"
+    />
+    <polygon
+      class="dusk-plate__right"
+      fill="#c99d68"
+      points="220,318 400,244 400,262 220,336"
+    />
+    <polygon
+      class="dusk-plate__top"
+      fill="url(#dusk-plate-dawn)"
+      points="220,170 400,244 220,318 40,244"
+    />
+    <path class="dusk-plate__edge" d="M40 244L220 318L400 244" />
+    <g
+      class="dusk-plate__print"
+      transform="matrix(0.925 0.38 -0.925 0.38 69.6 244)"
+      style="--dusk-print: #7a4a12"
+    >
+      <use
+        class="dusk-plate__print-icon"
+        href="#dusk-stack-icon-dawn"
+        x="0"
+        y="-16"
+        width="18"
+        height="18"
+      />
+      <text x="24" y="0">Dawn</text>
+    </g>
+    <path class="dusk-plate__leader" d="M414 244H444" />
+    <text class="dusk-plate__name" x="456" y="251">Client layer</text>
+  </g>
+  <g class="dusk-plate" data-layer="nightfall">
+    <polygon
+      class="dusk-plate__left"
+      fill="#2a3994"
+      points="40,152 220,226 220,244 40,170"
+    />
+    <polygon
+      class="dusk-plate__right"
+      fill="#202c76"
+      points="220,226 400,152 400,170 220,244"
+    />
+    <polygon
+      class="dusk-plate__top"
+      fill="url(#dusk-plate-nightfall)"
+      points="220,78 400,152 220,226 40,152"
+    />
+    <path class="dusk-plate__edge" d="M40 152L220 226L400 152" />
+    <g
+      class="dusk-plate__print"
+      transform="matrix(0.925 0.38 -0.925 0.38 69.6 152)"
+      style="--dusk-print: #e4e8ff"
+    >
+      <use
+        class="dusk-plate__print-icon"
+        href="#dusk-stack-icon-nightfall"
+        x="0"
+        y="-16"
+        width="18"
+        height="18"
+      />
+      <text x="24" y="0">Nightfall</text>
+    </g>
+    <path class="dusk-plate__leader" d="M414 152H444" />
+    <text class="dusk-plate__name" x="456" y="159">Security layer</text>
+  </g>
+  <g class="dusk-stack__fleet">
+    <path class="dusk-stack__uplink" d="M70 36L172 154.5" />
+    <path class="dusk-stack__uplink" d="M124 18L189.3 150" />
+    <path class="dusk-stack__uplink" d="M180 28L207.2 152.5" />
+    <path class="dusk-stack__uplink" d="M238 14L225.8 149" />
+    <path class="dusk-stack__uplink" d="M294 26L243.7 152" />
+    <path class="dusk-stack__uplink" d="M348 16L261 149.5" />
+    <path class="dusk-stack__uplink" d="M388 40L273.8 155.5" />
+    <circle class="dusk-stack__node" cx="70" cy="36" r="5" />
+    <circle class="dusk-stack__node" cx="124" cy="18" r="5" />
+    <circle class="dusk-stack__node" cx="180" cy="28" r="5" />
+    <circle class="dusk-stack__node" cx="238" cy="14" r="5" />
+    <circle class="dusk-stack__node" cx="294" cy="26" r="5" />
+    <circle class="dusk-stack__node" cx="348" cy="16" r="5" />
+    <circle class="dusk-stack__node" cx="388" cy="40" r="5" />
+  </g>
+</svg>
