@@ -1,11 +1,9 @@
 name: CI
 
-# Every push to a pull request runs the full set of checks, as does every push
-# to master.
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, services]
 
 # Every job only reads the repository. Declaring that here overrides whatever
 # the repository's default token permissions are, so a compromised dependency
