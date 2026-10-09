@@ -749,7 +749,6 @@
   clip-path: inset(-2rem -2rem -1rem -2rem);
 }
 .dusk-stack__head {
-  --dusk-track: color-mix(in srgb, var(--dusk-ink) 38%, transparent);
   position: sticky;
   top: 50vh;
   top: 50svh;
@@ -765,7 +764,7 @@
   height: 100vh;
   background-color: color-mix(
     in srgb,
-    var(--md-default-bg-color) 62%,
+    var(--md-default-bg-color) 40%,
     transparent
   );
 }
@@ -778,9 +777,7 @@
   height: 9px;
   border-radius: 50%;
   background-color: var(--dusk-ink);
-  box-shadow:
-    0 0 0 3px var(--dusk-track),
-    0 0 12px var(--dusk-ink);
+  box-shadow: 0 0 12px var(--dusk-ink);
   opacity: 0;
   transform: scale(0.4);
   transition:
