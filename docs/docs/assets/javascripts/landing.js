@@ -161,7 +161,6 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
     const cx = width / 2;
     const cy = margin + 10 + ry;
     const hubHeight = hubSize * 1.41;
-    fleet.setAttribute("viewBox", `0 0 ${width} ${height}`);
     hub.setAttribute("x", cx - hubSize / 2);
     hub.setAttribute("y", cy - hubHeight / 2);
     hub.setAttribute("width", hubSize);
@@ -184,14 +183,74 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       rim.push([length, point]);
       previous = point;
     }
-    arms.forEach((arm, index) => {
+    const below = ring + 21 * scale;
+    const spots = arms.map((arm, index) => {
       const along =
         (((index + 0.5) / arms.length) * length + Math.sin(index * 2.1) * 6) %
         length;
       const [, [px, py]] = rim.find(([at]) => at >= along);
       const out = 1 + 0.05 * Math.sin(index * 1.9);
-      const x = cx + (px - cx) * out;
-      const y = cy + (py - cy) * out;
+      const fraction = (index + 0.5) / arms.length;
+      return {
+        x: cx + (px - cx) * out,
+        y: cy + (py - cy) * out,
+        half:
+          arm.querySelector(".dusk-node__label").getComputedTextLength() / 2,
+        end: Math.min(fraction, 1 - fraction, Math.abs(fraction - 0.5)) < 0.1,
+      };
+    });
+    let top = 0;
+    let bottom = height;
+    if (narrow) {
+      const clearance = 14;
+      const outer = ring + 5 * scale;
+      const boxes = (spot, y) => [
+        [spot.x - outer, y - outer, spot.x + outer, y + outer],
+        [spot.x - spot.half, y + below - 10, spot.x + spot.half, y + below + 3],
+      ];
+      const hubBand = [
+        -Infinity,
+        cy - hubHeight / 2,
+        Infinity,
+        cy + hubHeight / 2 + 40,
+      ];
+      const overlaps = (one, other) =>
+        one[0] < other[2] + clearance &&
+        other[0] < one[2] + clearance &&
+        one[1] < other[3] + clearance &&
+        other[1] < one[3] + clearance;
+      for (const spot of spots.filter((spot) => spot.end)) {
+        const obstacles = [
+          hubBand,
+          ...spots
+            .filter((other) => other !== spot)
+            .flatMap((other) => boxes(other, other.y)),
+        ];
+        const toward = Math.sign(cy - spot.y);
+        while (
+          !boxes(spot, spot.y + toward * 2).some((own) =>
+            obstacles.some((obstacle) => overlaps(own, obstacle)),
+          )
+        ) {
+          spot.y += toward * 2;
+        }
+      }
+      spots.forEach((spot, index) => {
+        const mirror = spots[spots.length - 1 - index];
+        if (spot.end) {
+          const reach = Math.max(
+            Math.abs(spot.y - cy),
+            Math.abs(mirror.y - cy),
+          );
+          spot.y = cy + Math.sign(spot.y - cy) * reach;
+        }
+      });
+      top = Math.min(...spots.map((spot) => spot.y - ring)) - 24;
+      bottom = Math.max(...spots.map((spot) => spot.y + below + 3)) + 24;
+    }
+    fleet.setAttribute("viewBox", `0 ${top} ${width} ${bottom - top}`);
+    arms.forEach((arm, index) => {
+      const { x, y } = spots[index];
       const dx = x - cx;
       const dy = y - cy;
       const reach = Math.hypot(dx, dy);
@@ -215,7 +274,7 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       }
       const label = arm.querySelector(".dusk-node__label");
       label.setAttribute("x", x);
-      label.setAttribute("y", y + ring + 21 * scale);
+      label.setAttribute("y", y + below);
       taken.push([x, y, 70 * scale]);
     });
     let seed = 7;
@@ -232,6 +291,8 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
         x = cx + rx * 1.1 * out * Math.cos(angle);
         y = cy + ry * 1.1 * out * Math.sin(angle);
         if (
+          y > top + 8 &&
+          y < bottom - 8 &&
           Math.hypot(x - cx, y - cy) > hubSize * 0.75 &&
           taken.every(([tx, ty, room]) => Math.hypot(tx - x, ty - y) > room)
         ) {
