@@ -345,3 +345,21 @@ jobs:
           --package dusk_py
           --package dusk_api_tests
           --package dusk_py_tests
+
+  kustomize:
+    name: Kubernetes (kustomize)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-kubectl@v5
+        with:
+          version: v1.37.1
+
+      - name: dev overlay
+        run: kubectl kustomize infra/k8s/overlays/dev > /dev/null
+
+      - name: prod overlay
+        run: kubectl kustomize infra/k8s/overlays/prod > /dev/null
