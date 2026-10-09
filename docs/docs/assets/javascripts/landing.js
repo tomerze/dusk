@@ -198,6 +198,25 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       label.setAttribute("y", y + ring + 21 * scale);
       taken.push([x, y, 70 * scale]);
     });
+    const placed = [];
+    for (const [index, arm] of arms.entries()) {
+      const label = arm.querySelector(".dusk-node__label");
+      const half = label.getComputedTextLength() / 2;
+      const x = Number(label.getAttribute("x"));
+      let y = Number(label.getAttribute("y"));
+      const clashes = (top) =>
+        placed.some(
+          (other) =>
+            Math.abs(other.y - top) < 18 * scale &&
+            x - half < other.right + 18 * scale &&
+            other.left < x + half + 18 * scale,
+        );
+      if (clashes(y)) {
+        y = taken[index][1] - ring - 10 * scale;
+        label.setAttribute("y", y);
+      }
+      placed.push({ left: x - half, right: x + half, y });
+    }
     let seed = 7;
     const random = () => {
       seed = (seed * 48271) % 2147483647;
@@ -224,12 +243,19 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       tinyLinks[index].setAttribute("d", `M${cx} ${cy}L${x} ${y}`);
     });
   };
+  let current = 0;
   new ResizeObserver((entries) => {
     const width = entries[0].contentRect.width;
     if (width > 0) {
+      current = width;
       layout(width);
     }
   }).observe(fleet.parentElement);
+  document.fonts.ready.then(() => {
+    if (current > 0) {
+      layout(current);
+    }
+  });
 }
 
 const still = matchMedia("(prefers-reduced-motion: reduce)");
