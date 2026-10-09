@@ -574,6 +574,14 @@
   stroke-width: 5px;
   stroke-linejoin: round;
 }
+@media screen and (max-width: 37.4375em) {
+  .dusk-fleet__figure {
+    margin: 0 -0.8rem;
+  }
+  .dusk-node__label {
+    font-size: 13px;
+  }
+}
 @keyframes dusk-pulse {
   from {
     transform: scale(1);
