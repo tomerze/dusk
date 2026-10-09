@@ -93,14 +93,14 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
       requestAnimationFrame(settle);
     }
   };
-  window.addEventListener("pointermove", (event) => {
-    const box = disc.getBoundingClientRect();
-    const across = event.clientX - (box.left + box.width / 2);
-    const above = box.top + box.height / 2 - event.clientY;
-    if (Math.hypot(across, above) < box.width / 2) {
-      return;
+  const nudge = () => {
+    if (!settling) {
+      settling = true;
+      last = performance.now();
+      requestAnimationFrame(settle);
     }
-    const aim = (Math.atan2(across, above) * 180) / Math.PI;
+  };
+  const turnTo = (aim) => {
     let turn = (aim - target) % 360;
     if (turn > 180) {
       turn -= 360;
@@ -108,11 +108,30 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
       turn += 360;
     }
     target += turn;
-    if (!settling) {
-      settling = true;
-      last = performance.now();
-      requestAnimationFrame(settle);
+    nudge();
+  };
+  if (matchMedia("(hover: none)").matches) {
+    window.addEventListener(
+      "scroll",
+      () => {
+        target = window.scrollY * 0.2;
+        nudge();
+      },
+      { passive: true },
+    );
+    continue;
+  }
+  window.addEventListener("pointermove", (event) => {
+    if (event.pointerType === "touch") {
+      return;
     }
+    const box = disc.getBoundingClientRect();
+    const across = event.clientX - (box.left + box.width / 2);
+    const above = box.top + box.height / 2 - event.clientY;
+    if (Math.hypot(across, above) < box.width / 2) {
+      return;
+    }
+    turnTo((Math.atan2(across, above) * 180) / Math.PI);
   });
 }
 
