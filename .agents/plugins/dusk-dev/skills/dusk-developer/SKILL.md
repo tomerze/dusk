@@ -86,7 +86,7 @@ dusk/src/      Core crates and client crates (dusk_core, dusk_capnp,
                dusk_program, dusk_program_proc, dusk_connection, dusk_llm,
                dusk_cli, dusk_py, dusk_build)
 base/          The built-in programs (sh, ps, kill, sleep, date, hostname,
-               true, false, init, nightfall, logs)
+               true, false, init, nightfall, logs, kvs, programs, echo, cp)
 impls/nix/     The Linux impl (Embassy executor, the NixDriver)
 impls/std/     The std impl (Embassy executor, the StdDriver)
 impls/windows/ The Windows impl (Embassy executor, the WindowsDriver)
@@ -120,7 +120,8 @@ which links Dusk Core, the Base programs, and one impl. There is one library
 artifact, `dusk_node` in `artifacts/dusk_node/lib`, and one binary wrapping it in
 `artifacts/dusk_node/bin`. Which impl they link is a cargo feature on the library
 - `impl_nix`, `impl_std` or `impl_windows` - defaulting to `impl_nix`. Exactly one
-may be enabled: every impl defines `_dusk_hostname`, `_dusk_tid` and `_dusk_exit`, so two in
+may be enabled: every impl defines `_dusk_hostname`, `_dusk_tid`, `_dusk_fs_driver` and
+`_dusk_exit`, so two in
 one link is a duplicate symbol. Nothing enforces it - selecting none fails on an
 unresolved `dusk_impl`, selecting two on a duplicate definition of it.
 
@@ -196,6 +197,9 @@ Everything platform-specific lives behind the `Driver` trait
 - `tid()` - which thread is calling: the same number for the whole life of a
   thread, a different one for every thread running a node at the same time. The
   logs program routes each record to the node registered under it.
+- `fs_driver()` - the node's file system, a `Box<dyn FsDriver>` whose `open`
+  returns a `Box<dyn File>`; reads and writes name their offset, as 9P's do.
+  `cp` is the program that uses it.
 - `exit(exit_code)` - halt the node.
 
 An impl registers its driver once with `dusk_driver_impl!`. See
@@ -284,7 +288,7 @@ back into the client that defined it for as long as the function is defined. See
 `dusk_core` is `no_std` and depends on no impl, yet it must call into one. It does
 so through a link-time shim. `dusk_driver_impl!` defines a `lazy_static` singleton
 for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
+`_dusk_tid`, `_dusk_fs_driver` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
 as `unsafe extern "Rust"` and calls through them. The linker resolves them to
 whichever impl is in the final binary.
 

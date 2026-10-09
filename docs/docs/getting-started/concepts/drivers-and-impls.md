@@ -15,16 +15,51 @@ supercomputers - the programs and the policy are shared; only the driver changes
   The logs program uses it to send each record to the node running on that
   thread. An impl with one node and no threads returns the same number every
   time,
+- **`fs_driver()`** - the node's file system, as a `Box<dyn FsDriver>`,
 - **`exit(exit_code)`** - halt the node.
 
 An impl implements `Driver` and registers it once with `dusk_driver_impl!`.
+
+## The file system
+
+`fs_driver()` hands a program the node's file system through two
+`#[async_trait]` traits in `dusk_core::driver`, modelled on the operations of
+Plan 9's 9P without speaking it:
+
+| `FsDriver` | |
+|---|---|
+| `open(path, mode)` | Open a file and return it as a `Box<dyn File>`. `OpenMode` says whether to `read`, `write`, `create` it if it is missing, and `truncate` it. |
+| `stat(path)` | A `Stat`: the `name`, `length` in bytes, whether it `is_directory`, its `mode` bits and when it was `modified`, in milliseconds since the Unix epoch. |
+| `remove(path)` | Remove a file or an empty directory. |
+| `rename(from, to)` | Rename a file or directory. |
+| `create_dir(path)` | Create a directory. |
+| `read_dir(path)` | The `Stat` of every entry in a directory. |
+
+| `File` | |
+|---|---|
+| `read(offset, buffer)` | Read into `buffer` from `offset`, returning how many bytes were read; `0` at the end of the file. |
+| `write(offset, data)` | Write `data` at `offset`, returning how many bytes were written. |
+| `stat()` | The file's `Stat`. |
+| `truncate(length)` | Cut or extend the file to `length` bytes. |
+| `sync()` | Make every write so far durable. |
+
+Reads and writes name their offset, as 9P's do; a `File` has no cursor, so two
+tasks can use one without moving each other's position.
+
+Every future these traits return is `Send`, as `Driver` is. The file systems of
+the three impls in this repository call `std::fs` inside those futures, so a
+read or write runs on the executor's thread until the disk answers - a slow disk
+holds up every other task on the node for that long. The nix impl reads and
+writes with `pread` and `pwrite`; the std and Windows impls seek and read under a
+lock. The std and Windows impls have no Unix permission bits, and report a
+`mode` of `0o444` for a read-only file and `0o666` for any other.
 
 ## The extern-shim pattern
 
 `dusk_core` is `no_std` and depends on **no** impl, yet it has to call into one.
 It does this through a link-time shim. `dusk_driver_impl!` defines a `lazy_static`
 singleton for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols as
+`_dusk_tid`, `_dusk_fs_driver` and `_dusk_exit`. `dusk_core::driver` declares those same symbols as
 `unsafe extern "Rust"` and calls through them. The linker resolves the symbols to
 whichever impl is linked into the final binary. Callers in `dusk_core`, programs,
 and other `no_std` crates only ever name `dusk_core::driver::*` and get whatever

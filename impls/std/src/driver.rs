@@ -1,4 +1,5 @@
-use dusk_core::driver::Driver;
+use crate::fs::StdFsDriver;
+use dusk_core::driver::{Driver, FsDriver};
 use dusk_program::anyhow::{Ok, Result};
 
 pub(crate) struct StdDriver;
@@ -12,6 +13,10 @@ impl Driver for StdDriver {
 
     fn tid(&self) -> u64 {
         std::thread::current().id().as_u64().get()
+    }
+
+    fn fs_driver(&self) -> Result<Box<dyn FsDriver>> {
+        Ok(Box::new(StdFsDriver))
     }
 
     fn exit(&self, exit_code: i32) {
