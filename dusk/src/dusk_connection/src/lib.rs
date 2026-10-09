@@ -202,9 +202,12 @@ async fn open(target: Target, disconnector_store: DisconnectorStore) -> capnp::R
                         "couldn't connect to {address}: no answer within {} seconds",
                         CONNECT_TIMEOUT.as_secs()
                     ))
-                })??;
-            stream.set_nodelay(true)?;
-            serve(stream, &disconnector_store)
+                })?
+                .map_err(|error| capnp::Error::disconnected(error.to_string()))?;
+            stream
+                .set_nodelay(true)
+                .map_err(|error| capnp::Error::disconnected(error.to_string()))?;
+            serve(LinkStream(stream), &disconnector_store)
         }
         Target::Tls {
             host,
