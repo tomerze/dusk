@@ -438,6 +438,14 @@ for (const head of document.querySelectorAll(".dusk-stack__head")) {
   read();
 }
 
+for (const stage of document.querySelectorAll(".dusk-os__stage")) {
+  new ResizeObserver(() => {
+    stage
+      .closest(".dusk-os")
+      .style.setProperty("--dusk-os-height", `${stage.offsetHeight}px`);
+  }).observe(stage);
+}
+
 const namespaceId = Array.from(
   crypto.getRandomValues(new Uint8Array(8)),
   (byte) => byte.toString(16).padStart(2, "0"),
@@ -479,4 +487,26 @@ for (const element of document.querySelectorAll(".dusk-os__latency")) {
     setTimeout(flicker, 250 + Math.random() * 550);
   };
   flicker();
+}
+
+if (
+  !CSS.supports("animation-timeline: view()") &&
+  !matchMedia("(prefers-reduced-motion: reduce)").matches
+) {
+  for (const tour of document.querySelectorAll(".dusk-os__tour")) {
+    tour.closest(".dusk-os").classList.add("is-touring");
+    const stage = tour.querySelector(".dusk-os__stage");
+    const follow = () => {
+      const progress =
+        (stage.getBoundingClientRect().top - tour.getBoundingClientRect().top) /
+        (tour.offsetHeight - stage.offsetHeight);
+      tour.style.setProperty(
+        "--dusk-os-progress",
+        Math.max(0, Math.min(1, progress)),
+      );
+    };
+    window.addEventListener("scroll", follow, { passive: true });
+    window.addEventListener("resize", follow);
+    follow();
+  }
 }
