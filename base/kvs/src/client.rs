@@ -57,10 +57,14 @@ enum KvsAction {
     Set {
         key: String,
         value: String,
+        #[arg(long)]
+        forbidden_unstick: bool,
     },
     /// Remove a key
     Delete {
         key: String,
+        #[arg(long)]
+        forbidden_unstick: bool,
     },
     /// Report whether a key is present
     Exists {
@@ -188,8 +192,15 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
                 keys.sort_by_cached_key(|id| key_display(*id));
                 Args::get(&keys)
             }
-            KvsAction::Set { key, value } => Args::set(key_parse(&key), &Value::String(value))?,
-            KvsAction::Delete { key } => Args::delete(key_parse(&key)),
+            KvsAction::Set {
+                key,
+                value,
+                forbidden_unstick,
+            } => Args::set(key_parse(&key), &Value::String(value), forbidden_unstick)?,
+            KvsAction::Delete {
+                key,
+                forbidden_unstick,
+            } => Args::delete(key_parse(&key), forbidden_unstick),
             KvsAction::Exists { key } => Args::exists(key_parse(&key)),
             KvsAction::Scan => Args::scan(),
             KvsAction::Bind => Args::bind(),
@@ -214,12 +225,18 @@ The key-value store is in-memory and shared across all programs on the node.
   characters: `kvs get *` prints every key, and `kvs get dusk.*.uname` every
   key named `dusk.`, then anything, then `.uname`.
 * `kvs set <key> <value>` stores `<value>` under `<key>`. Values typed at the
-  prompt are stored as strings.
-* `kvs delete <key>` removes `<key>` and reports whether it was present.
+  prompt are stored as strings. It refuses a sticky key: one only Dusk sets,
+  like `dusk.hostname`.
+* `kvs set --forbidden-unstick <key> <value>` sets a sticky key anyway. The
+  key holds the value until Dusk sets it again, and stays sticky.
+* `kvs delete <key>` removes `<key>` and reports whether it was present. It
+  refuses a sticky key; `kvs delete --forbidden-unstick <key>` removes it
+  anyway.
 * `kvs exists <key>` reports whether `<key>` is present.
 * `kvs scan` lists every key: its name where the program that writes it
-  registered one, and the id it travels as. A `<key>` anywhere above may be
-  that id, as `0x…`, instead of a name.
+  registered one, the id it travels as, and its flags - `sticky` for a key
+  only Dusk sets. A `<key>` anywhere above may be that id, as `0x…`, instead
+  of a name.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.

@@ -62,6 +62,7 @@ pub fn run(
             dusk_program::embassy_futures::block_on(kvs.set(
                 dusk_program_kvs_internal::key_id("dusk.impl"),
                 Value::String(String::from("std")),
+                dusk_program_kvs_internal::FLAG_STICKY,
             ));
             os_info::set_kvs_os_info(&kvs);
             device_info::set_kvs_device_info(&kvs);
