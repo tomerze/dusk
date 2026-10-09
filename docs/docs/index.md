@@ -8,7 +8,7 @@ hide:
 
 <div class="dusk-hero__inner" markdown>
 
-# Dusk { #dusk .dusk-hero__wordmark }
+# ![](assets/landing/logo-d.svg){ .dusk-hero__d }usk { #dusk .dusk-hero__wordmark aria-label="Dusk" }
 
 The one solution for every fleet.<br>
 Seamlessly drop it in at any scale.

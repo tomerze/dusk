@@ -94,6 +94,12 @@
 .dusk-landing .dusk-hero__wordmark::after {
   display: none;
 }
+.dusk-landing .dusk-hero__d {
+  width: auto;
+  height: 0.7275em;
+  margin-right: 0.035em;
+  vertical-align: baseline;
+}
 .dusk-landing .dusk-hero__lead {
   margin: 1.1rem 0 0;
   font-size: clamp(1.1rem, 3.6vw, 2.1rem);
