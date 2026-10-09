@@ -1,3 +1,9 @@
+:root {
+  --dusk-header: 3.4rem;
+  --dusk-gutter: 0.8rem;
+  --dusk-measure: 46rem;
+  --dusk-button: 8.4rem;
+}
 .dusk-landing {
   --dusk-gold: #f0b441;
   --dusk-nightfall: #28378f;
@@ -89,7 +95,7 @@
 }
 .dusk-navbar .md-header__inner.md-grid {
   max-width: 61rem;
-  height: 3.4rem;
+  height: var(--dusk-header);
   padding: 0 0.6rem;
 }
 .dusk-navbar .md-header__title {
@@ -142,7 +148,7 @@
 .dusk-hero {
   position: relative;
   overflow: hidden;
-  padding: 3rem 0.8rem 0;
+  padding: 3rem var(--dusk-gutter) 0;
   background: var(--dusk-sky);
   text-align: center;
 }
@@ -285,7 +291,7 @@
 .dusk-hero__inner {
   position: relative;
   z-index: 1;
-  max-width: 46rem;
+  max-width: var(--dusk-measure);
   margin: 0 auto;
 }
 .dusk-landing .dusk-hero__wordmark {
@@ -335,7 +341,7 @@
   margin: 2rem 0 0;
 }
 .dusk-hero__inner > p:last-child .md-button {
-  width: 8.4rem;
+  width: var(--dusk-button);
   padding-right: 0;
   padding-left: 0;
   text-align: center;
@@ -387,7 +393,7 @@
 }
 
 .dusk-platforms {
-  padding: 2.4rem 0.8rem 1rem;
+  padding: 2.4rem var(--dusk-gutter) 1rem;
   background-color: var(--dusk-ground);
   text-align: center;
 }
@@ -470,7 +476,7 @@
 }
 
 .dusk-section {
-  padding: 5rem 0.8rem;
+  padding: 5rem var(--dusk-gutter);
 }
 .dusk-landing .dusk-section > h2 {
   display: table;
@@ -1005,7 +1011,7 @@
   gap: 2.4rem;
   max-width: 60rem;
   margin: 0 auto;
-  padding: 2.4rem 0.8rem 1.6rem;
+  padding: 2.4rem var(--dusk-gutter) 1.6rem;
 }
 .dusk-sitemap__sections {
   display: grid;
