@@ -118,7 +118,9 @@ class ConnectionRegistry:
 
             connection_factory = Dusk
 
-        connection = connection_factory(host, port)
+        return self.register(owner, connection_factory(host, port))
+
+    def register(self, owner: object, connection: "Connection") -> tuple[str, bool]:
         with self._lock:
             descriptor = self.mint()
             owner_connections = self._connections.get(owner)
