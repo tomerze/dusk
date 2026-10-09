@@ -395,16 +395,32 @@ for (const item of tracked) {
   item.element.style.setProperty(item.name, item.value);
 }
 
-const layers = [...document.querySelectorAll(".dusk-layer")];
-const read = () => {
-  const middle = window.innerHeight / 2;
-  const boxes = layers.map((layer) => layer.getBoundingClientRect());
-  layers.forEach((layer, index) => {
-    const reached = (middle - boxes[index].top) / boxes[index].height;
-    layer.style.setProperty("--dusk-read", Math.max(0, Math.min(1, reached)));
-    layer.classList.toggle("is-reading", reached >= 0 && reached < 1);
-  });
-};
-window.addEventListener("scroll", read, { passive: true });
-window.addEventListener("resize", read);
-read();
+for (const head of document.querySelectorAll(".dusk-stack__head")) {
+  const layers = [...head.parentElement.querySelectorAll(".dusk-layer")];
+  let reading = null;
+  const read = () => {
+    const at = head.getBoundingClientRect().top;
+    const start = layers[0].getBoundingClientRect().top;
+    const end = layers.at(-1).getBoundingClientRect().bottom;
+    const layer =
+      at > start + 1 && at < end - 1
+        ? layers.find(
+            (candidate) => candidate.getBoundingClientRect().bottom > at,
+          )
+        : null;
+    if (layer === reading) {
+      return;
+    }
+    reading = layer;
+    head.classList.toggle("is-reading", Boolean(layer));
+    if (layer) {
+      head.style.setProperty(
+        "--dusk-ink",
+        getComputedStyle(layer).getPropertyValue("--dusk-ink"),
+      );
+    }
+  };
+  window.addEventListener("scroll", read, { passive: true });
+  window.addEventListener("resize", read);
+  read();
+}

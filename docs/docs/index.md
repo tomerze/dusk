@@ -96,6 +96,8 @@ Five layers connect your fleet to the people who run it.
 
 <div class="dusk-stack__layers" markdown>
 
+<div class="dusk-stack__head" aria-hidden="true"></div>
+
 <article class="dusk-layer" data-layer="nightfall" markdown>
 
 ### :dusk-nightfall: Nightfall
