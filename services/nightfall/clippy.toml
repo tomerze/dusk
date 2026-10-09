@@ -1,0 +1,6 @@
+disallowed-methods = [
+    { path = "rustls::ServerConfig::builder", reason = "build every rustls configuration with builder_with_provider and the ring provider" },
+    { path = "rustls::ClientConfig::builder", reason = "build every rustls configuration with builder_with_provider and the ring provider" },
+    { path = "rustls::server::WebPkiClientVerifier::builder", reason = "build every verifier with builder_with_provider and the ring provider" },
+    { path = "rustls::client::WebPkiServerVerifier::builder", reason = "build every verifier with builder_with_provider and the ring provider" },
+]
