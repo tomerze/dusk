@@ -10,6 +10,7 @@ dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
+dusk_program_kvs_internal = { path = "../kvs/internal" }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 anyhow = { version = "1.0", public = true }
 async-io = "2.6.0"
@@ -27,9 +28,10 @@ clap = { version = "4", features = ["derive"], optional = true }
 
 [dev-dependencies]
 time = "0.3"
+dusk_nix = { path = "../../impls/nix" }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
 
 [features]
-client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc"]
+client = ["linkme", "dusk_program_sh/client", "clap", "dusk_program_sh_proc", "dusk_program_kvs_internal/client"]

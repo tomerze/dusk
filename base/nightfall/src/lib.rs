@@ -50,12 +50,28 @@ impl Args {
 #[dusk_program_proc::impl_args_rpc_server]
 impl Args {}
 
-#[derive(dusk_program_proc::Launcher, Default)]
-pub struct Launcher;
+#[derive(dusk_program_proc::Launcher)]
+pub struct Launcher {
+    tid: u64,
+}
+
+impl Default for Launcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Launcher {
     pub fn new() -> Self {
-        Self
+        let tid = dusk_core::driver::tid();
+        dusk_program_kvs_internal::own_keys(tid, &identity::IDENTITY_KEYS);
+        Self { tid }
+    }
+}
+
+impl Drop for Launcher {
+    fn drop(&mut self) {
+        dusk_program_kvs_internal::disown_keys(self.tid, &identity::IDENTITY_KEYS);
     }
 }
 

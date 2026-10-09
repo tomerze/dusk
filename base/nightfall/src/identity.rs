@@ -2,6 +2,10 @@ use std::prelude::rust_2024::*;
 
 use std::sync::Arc;
 
+use anyhow::Context as _;
+use dusk_program::value::Value;
+use dusk_program_kvs_internal::{FLAG_PERSISTENT, FLAG_SENSITIVE, FLAG_STICKY, Kvs, key_id};
+use ring::rand::SecureRandom as _;
 use rustls::pki_types::CertificateDer;
 use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::FromDer as _;
@@ -11,6 +15,26 @@ use crate::node_key::{CsrSigningKey, NodeKey, TlsSigningKey};
 pub(crate) const DEVICE_URI_PREFIX: &str = "urn:dusk:device:";
 pub(crate) const INSTALLATION_URI_PREFIX: &str = "urn:dusk:installation:";
 const TENANT_URI_PREFIX: &str = "urn:dusk:tenant:";
+
+const INSTALLATION_ID: u64 = key_id("nightfall.installation_id");
+const PRIVATE_KEY: u64 = key_id("nightfall.private_key");
+const STAGED_PRIVATE_KEY: u64 = key_id("nightfall.staged_private_key");
+const CERTIFICATE_CHAIN: u64 = key_id("nightfall.certificate_chain");
+
+const KEPT: u8 = FLAG_STICKY | FLAG_PERSISTENT;
+const KEPT_SECRET: u8 = KEPT | FLAG_SENSITIVE;
+
+const IDENTITY_KEY_NAMES: [&str; 4] = [
+    "nightfall.installation_id",
+    "nightfall.private_key",
+    "nightfall.staged_private_key",
+    "nightfall.certificate_chain",
+];
+
+pub(crate) static IDENTITY_KEYS: [u64; 4] = dusk_program_kvs_internal::key_ids(IDENTITY_KEY_NAMES);
+
+#[cfg(feature = "client")]
+dusk_program_kvs_internal::known_keys!(IDENTITY_KEY_LIST, &IDENTITY_KEY_NAMES);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CertificateIdentity {
@@ -210,13 +234,217 @@ pub(crate) fn renew_point(not_before_unix_ms: u64, not_after_unix_ms: u64, rando
     not_before_unix_ms.saturating_add(u64::try_from(offset).unwrap_or(u64::MAX))
 }
 
+pub(crate) async fn installation_id(kvs: &Kvs) -> Option<String> {
+    match kvs.get(INSTALLATION_ID).await? {
+        Value::String(installation_id) if is_identifier(&installation_id) => Some(installation_id),
+        _ => {
+            tracing::error!(
+                "nightfall.installation_id does not hold 32 lowercase hex digits; ignoring it"
+            );
+            None
+        }
+    }
+}
+
+async fn private_key(kvs: &Kvs, key: u64, name: &str) -> Option<(NodeKey, Vec<u8>)> {
+    let Value::Bytes(pkcs8) = kvs.get(key).await? else {
+        tracing::error!(name, "the key holds no bytes; ignoring it");
+        return None;
+    };
+    match NodeKey::from_pkcs8(&pkcs8) {
+        Ok(node_key) => Some((node_key, pkcs8)),
+        Err(reason) => {
+            tracing::error!(
+                name,
+                reason,
+                "the stored private key is unusable; ignoring it"
+            );
+            None
+        }
+    }
+}
+
+fn certificate_chain(stored: Value) -> Option<Vec<CertificateDer<'static>>> {
+    let chain = match stored {
+        Value::List(certificates) => certificates
+            .into_iter()
+            .map(|certificate| match certificate {
+                Value::Bytes(der) => Some(CertificateDer::from(der)),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>(),
+        _ => None,
+    };
+    match chain {
+        Some(chain) if !chain.is_empty() => Some(chain),
+        _ => {
+            tracing::error!(
+                "nightfall.certificate_chain does not hold a list of certificates; ignoring it"
+            );
+            None
+        }
+    }
+}
+
+pub(crate) async fn load(kvs: &Kvs) -> anyhow::Result<Option<Identity>> {
+    let Some(stored) = kvs.get(CERTIFICATE_CHAIN).await else {
+        tracing::info!("the kvs holds no certificate");
+        return Ok(None);
+    };
+    let Some(chain) = certificate_chain(stored) else {
+        return Ok(None);
+    };
+    let leaf = match parse_leaf(&chain[0]) {
+        Ok(leaf) => leaf,
+        Err(reason) => {
+            tracing::error!(reason, "the stored certificate is unusable");
+            return Ok(None);
+        }
+    };
+    let device_id = leaf.identity.device_id.clone();
+    let installation_id = leaf.identity.installation_id.clone();
+    let current = private_key(kvs, PRIVATE_KEY, "nightfall.private_key").await;
+    let staged = private_key(kvs, STAGED_PRIVATE_KEY, "nightfall.staged_private_key").await;
+    let key = match (current, staged) {
+        (_, Some((staged, pkcs8))) if staged.public_key() == leaf.public_key.as_slice() => {
+            kvs.set(PRIVATE_KEY, Value::Bytes(pkcs8), KEPT_SECRET)
+                .await
+                .context("couldn't store the staged private key as the current one")?;
+            kvs.delete(STAGED_PRIVATE_KEY)
+                .await
+                .context("couldn't remove the staged private key")?;
+            tracing::info!(
+                device_id,
+                installation_id,
+                "finished a key replacement that was interrupted"
+            );
+            staged
+        }
+        (Some((current, _)), staged) if current.public_key() == leaf.public_key.as_slice() => {
+            if staged.is_some() {
+                kvs.delete(STAGED_PRIVATE_KEY)
+                    .await
+                    .context("couldn't remove the staged private key")?;
+                tracing::info!(
+                    device_id,
+                    installation_id,
+                    "discarded a private key a provisioning attempt left behind"
+                );
+            }
+            current
+        }
+        _ => {
+            tracing::error!(
+                device_id,
+                installation_id,
+                "no stored private key matches the stored certificate"
+            );
+            return Ok(None);
+        }
+    };
+    if self::installation_id(kvs).await.as_deref() != Some(installation_id.as_str()) {
+        kvs.set(
+            INSTALLATION_ID,
+            Value::String(installation_id.clone()),
+            KEPT,
+        )
+        .await
+        .context("couldn't store the installation id")?;
+        tracing::info!(
+            device_id,
+            installation_id,
+            "stored the installation id of the stored certificate"
+        );
+    }
+    Ok(Some(Identity {
+        leaf,
+        chain,
+        key: Arc::new(key),
+    }))
+}
+
+pub(crate) async fn stage(kvs: &Kvs, pkcs8: &[u8]) -> anyhow::Result<()> {
+    kvs.set(
+        STAGED_PRIVATE_KEY,
+        Value::Bytes(pkcs8.to_vec()),
+        KEPT_SECRET,
+    )
+    .await
+    .context("couldn't stage the new private key in the kvs")
+}
+
+pub(crate) async fn store(kvs: &Kvs, identity: &Identity, pkcs8: &[u8]) -> anyhow::Result<()> {
+    let chain = identity
+        .chain
+        .iter()
+        .map(|certificate| Value::Bytes(certificate.to_vec()))
+        .collect();
+    kvs.set(CERTIFICATE_CHAIN, Value::List(chain), KEPT)
+        .await
+        .context("couldn't store the certificate chain")?;
+    kvs.set(
+        INSTALLATION_ID,
+        Value::String(identity.installation_id().to_string()),
+        KEPT,
+    )
+    .await
+    .context("couldn't store the installation id")?;
+    kvs.set(PRIVATE_KEY, Value::Bytes(pkcs8.to_vec()), KEPT_SECRET)
+        .await
+        .context("couldn't store the private key")?;
+    kvs.delete(STAGED_PRIVATE_KEY)
+        .await
+        .context("couldn't remove the staged private key")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dusk_nix as _;
+    use futures::executor::block_on;
     use x509_parser::extensions::ParsedExtension;
 
     const DEVICE: &str = "00112233445566778899aabbccddeeff";
     const INSTALLATION: &str = "ffeeddccbbaa99887766554433221100";
+    const ANOTHER_INSTALLATION: &str = "0123456789abcdef0123456789abcdef";
+
+    struct PersistentKvs {
+        kvs: Arc<Kvs>,
+        tid: u64,
+        path: std::path::PathBuf,
+    }
+
+    impl PersistentKvs {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "dusk-nightfall-identity-{name}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            let tid = dusk_core::driver::tid();
+            dusk_program_kvs_internal::register_persistent(tid, path.to_str().unwrap()).unwrap();
+            let mut namespace_id = [0u8; 8];
+            ring::rand::SystemRandom::new()
+                .fill(&mut namespace_id)
+                .unwrap();
+            let kvs = dusk_program_kvs_internal::get_kvs(u64::from_le_bytes(namespace_id));
+            assert!(block_on(kvs.keeps_persistent_keys()));
+            PersistentKvs { kvs, tid, path }
+        }
+    }
+
+    impl Drop for PersistentKvs {
+        fn drop(&mut self) {
+            dusk_program_kvs_internal::release_persistent(self.tid);
+            if let Err(error) = std::fs::remove_file(&self.path) {
+                eprintln!("couldn't remove {}: {error}", self.path.display());
+            }
+        }
+    }
 
     struct Authority {
         issuer: rcgen::Issuer<'static, rcgen::KeyPair>,
@@ -263,6 +491,26 @@ mod tests {
                 .unwrap()
                 .der()
                 .clone()
+        }
+
+        fn identity(&self, installation_id: &str) -> (Identity, Vec<u8>) {
+            let (key, pkcs8) = NodeKey::generate().unwrap();
+            let now = now_seconds();
+            let der = self.issue(
+                &[
+                    &device_uri(),
+                    &format!("{INSTALLATION_URI_PREFIX}{installation_id}"),
+                ],
+                None,
+                &key,
+                (now - 10, now + 3600),
+            );
+            let identity = Identity {
+                leaf: parse_leaf(&der).unwrap(),
+                chain: vec![der],
+                key: Arc::new(key),
+            };
+            (identity, pkcs8)
         }
     }
 
@@ -470,6 +718,115 @@ mod tests {
         );
         assert!(parse_leaf(&backwards).is_err());
         assert!(parse_leaf(b"not a certificate").is_err());
+    }
+
+    #[test]
+    fn a_stored_identity_loads_back_with_its_flags() {
+        let store_under_test = PersistentKvs::new("load");
+        let kvs = &store_under_test.kvs;
+        assert!(block_on(load(kvs)).unwrap().is_none());
+        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
+        block_on(stage(kvs, &pkcs8)).unwrap();
+        block_on(store(kvs, &identity, &pkcs8)).unwrap();
+        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        assert_eq!(loaded.device_id(), DEVICE);
+        assert_eq!(loaded.installation_id(), INSTALLATION);
+        assert_eq!(loaded.key.public_key(), identity.key.public_key());
+        assert_eq!(loaded.leaf.fingerprint, identity.leaf.fingerprint);
+        loaded.certified_key().keys_match().unwrap();
+        for (key, flags) in [
+            (INSTALLATION_ID, KEPT),
+            (CERTIFICATE_CHAIN, KEPT),
+            (PRIVATE_KEY, KEPT_SECRET),
+        ] {
+            assert_eq!(block_on(kvs.get_with_flags(key)).unwrap().1, flags);
+        }
+        assert!(!block_on(kvs.exists(STAGED_PRIVATE_KEY)));
+        assert_eq!(
+            block_on(kvs.get(INSTALLATION_ID)),
+            Some(Value::String(INSTALLATION.to_string()))
+        );
+    }
+
+    #[test]
+    fn a_key_replacement_cut_short_after_the_certificate_is_finished() {
+        let store_under_test = PersistentKvs::new("interrupted");
+        let kvs = &store_under_test.kvs;
+        let authority = Authority::new();
+        let (first, first_pkcs8) = authority.identity(INSTALLATION);
+        block_on(store(kvs, &first, &first_pkcs8)).unwrap();
+        let (second, second_pkcs8) = authority.identity(INSTALLATION);
+        block_on(stage(kvs, &second_pkcs8)).unwrap();
+        let chain = Value::List(vec![Value::Bytes(second.chain[0].to_vec())]);
+        block_on(kvs.set(CERTIFICATE_CHAIN, chain, KEPT)).unwrap();
+        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        assert_eq!(loaded.key.public_key(), second.key.public_key());
+        assert!(!block_on(kvs.exists(STAGED_PRIVATE_KEY)));
+        assert_eq!(
+            block_on(kvs.get_with_flags(PRIVATE_KEY)),
+            Some((Value::Bytes(second_pkcs8), KEPT_SECRET))
+        );
+    }
+
+    #[test]
+    fn a_key_left_by_a_failed_attempt_is_discarded() {
+        let store_under_test = PersistentKvs::new("leftover");
+        let kvs = &store_under_test.kvs;
+        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
+        block_on(store(kvs, &identity, &pkcs8)).unwrap();
+        let (_, leftover) = NodeKey::generate().unwrap();
+        block_on(stage(kvs, &leftover)).unwrap();
+        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        assert_eq!(loaded.key.public_key(), identity.key.public_key());
+        assert!(!block_on(kvs.exists(STAGED_PRIVATE_KEY)));
+    }
+
+    #[test]
+    fn the_certificate_decides_the_installation_id() {
+        let store_under_test = PersistentKvs::new("installation");
+        let kvs = &store_under_test.kvs;
+        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
+        block_on(store(kvs, &identity, &pkcs8)).unwrap();
+        block_on(kvs.set(
+            INSTALLATION_ID,
+            Value::String(ANOTHER_INSTALLATION.to_string()),
+            KEPT,
+        ))
+        .unwrap();
+        assert_eq!(
+            block_on(installation_id(kvs)).as_deref(),
+            Some(ANOTHER_INSTALLATION)
+        );
+        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        assert_eq!(loaded.installation_id(), INSTALLATION);
+        assert_eq!(
+            block_on(installation_id(kvs)).as_deref(),
+            Some(INSTALLATION)
+        );
+    }
+
+    #[test]
+    fn an_unusable_identity_loads_as_none() {
+        let store_under_test = PersistentKvs::new("unusable");
+        let kvs = &store_under_test.kvs;
+        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
+        let (_, other_pkcs8) = NodeKey::generate().unwrap();
+        for (key, value) in [
+            (PRIVATE_KEY, Value::Bytes(other_pkcs8)),
+            (PRIVATE_KEY, Value::Bytes(b"garbage".to_vec())),
+            (PRIVATE_KEY, Value::String(String::from("not bytes"))),
+            (CERTIFICATE_CHAIN, Value::List(Vec::new())),
+            (
+                CERTIFICATE_CHAIN,
+                Value::List(vec![Value::Bytes(b"not a certificate".to_vec())]),
+            ),
+            (CERTIFICATE_CHAIN, Value::Bytes(identity.chain[0].to_vec())),
+        ] {
+            block_on(store(kvs, &identity, &pkcs8)).unwrap();
+            assert!(block_on(load(kvs)).unwrap().is_some());
+            block_on(kvs.set(key, value.clone(), KEPT)).unwrap();
+            assert!(block_on(load(kvs)).unwrap().is_none(), "{value:?}");
+        }
     }
 
     #[test]
