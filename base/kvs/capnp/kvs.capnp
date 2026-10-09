@@ -25,7 +25,7 @@ struct KvsArgs {
     forbiddenUnstick @7 :Bool;
   }
   interface Server {
-    transpose @0 (keys :List(UInt64), output :Dusk.Stream, values :List(Dusk.Value)) -> ();
+    transpose @0 (keys :List(UInt64), output :Dusk.Stream, values :List(Dusk.Value), flags :List(UInt8)) -> ();
   }
 }
 

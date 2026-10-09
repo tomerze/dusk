@@ -26,6 +26,14 @@ dusk_program_proc::metadata!("kvs", VERSION, kvs_capnp::PROGRAM_ID);
 /// How many key ids travel in one value of a scan's stream.
 const SCAN_PAGE_SIZE: usize = 64;
 
+fn flag_names(flags: u8) -> alloc::string::String {
+    let mut names = alloc::vec::Vec::new();
+    if flags & kvs::FLAG_STICKY != 0 {
+        names.push("sticky");
+    }
+    names.join(", ")
+}
+
 #[derive(dusk_program_proc::Args)]
 pub struct Args {
     #[data]
@@ -119,10 +127,20 @@ impl Args {
                 Value::List(keys.iter().map(Value::Uint).collect()),
             )
         };
-        let page = Record::with_fields(
-            kvs_capnp::SCAN_TYPE_ID,
-            [(b"Key".to_vec(), Value::List(names)), column],
-        );
+        let mut fields = alloc::vec![(b"Key".to_vec(), Value::List(names)), column];
+        if parameters.has_flags() {
+            let flags = dusk_capnp::pry!(parameters.get_flags());
+            fields.push((
+                b"Flags".to_vec(),
+                Value::List(
+                    flags
+                        .iter()
+                        .map(|flags| Value::String(flag_names(flags)))
+                        .collect(),
+                ),
+            ));
+        }
+        let page = Record::with_fields(kvs_capnp::SCAN_TYPE_ID, fields);
 
         Promise::from_future(async move {
             let mut send_request = output.send_request();
@@ -385,7 +403,7 @@ impl Portal {
             let keys = kvs.scan().await;
             for page in keys.chunks(SCAN_PAGE_SIZE) {
                 let mut send_request = output.send_request();
-                Value::List(page.iter().copied().map(Value::Uint).collect())
+                Value::List(page.iter().map(|(key, _)| Value::Uint(*key)).collect())
                     .write_to_builder(send_request.get().init_value())?;
                 send_request.send().await?;
             }
@@ -412,15 +430,17 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
         let process = self.process.clone();
         Promise::from_future(async move {
             let rows = if process.scanning.get() {
-                Some((process.kvs.scan().await, None))
+                let (keys, flags): (alloc::vec::Vec<u64>, alloc::vec::Vec<u8>) =
+                    process.kvs.scan().await.into_iter().unzip();
+                Some((keys, None, Some(flags)))
             } else if found.is_empty() {
                 None
             } else {
                 let (keys, values): (alloc::vec::Vec<u64>, alloc::vec::Vec<Value>) =
                     found.into_iter().unzip();
-                Some((keys, Some(values)))
+                Some((keys, Some(values), None))
             };
-            if let Some((keys, values)) = rows {
+            if let Some((keys, values, flags)) = rows {
                 let untransposed = |error: ::capnp::Error| {
                     if !matches!(
                         error.kind,
@@ -451,8 +471,10 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                 let mut value_pages = values
                     .as_deref()
                     .map(|values| values.chunks(SCAN_PAGE_SIZE));
+                let mut flag_pages = flags.as_deref().map(|flags| flags.chunks(SCAN_PAGE_SIZE));
                 for key_page in keys.chunks(SCAN_PAGE_SIZE) {
                     let value_page = value_pages.as_mut().and_then(Iterator::next);
+                    let flag_page = flag_pages.as_mut().and_then(Iterator::next);
                     if let Some(server) = &server {
                         let mut request = server.transpose_request();
                         {
@@ -463,6 +485,13 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                                     builder.reborrow().init_values(value_page.len() as u32);
                                 for (index, value) in value_page.iter().enumerate() {
                                     value.write_to_builder(values.reborrow().get(index as u32))?;
+                                }
+                            }
+                            if let Some(flag_page) = flag_page {
+                                let mut flags =
+                                    builder.reborrow().init_flags(flag_page.len() as u32);
+                                for (index, entry_flags) in flag_page.iter().enumerate() {
+                                    flags.set(index as u32, *entry_flags);
                                 }
                             }
                             let mut keys = builder.init_keys(key_page.len() as u32);
@@ -482,6 +511,17 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                     )];
                     if let Some(value_page) = value_page {
                         fields.push((b"Value".to_vec(), Value::List(value_page.to_vec())));
+                    }
+                    if let Some(flag_page) = flag_page {
+                        fields.push((
+                            b"Flags".to_vec(),
+                            Value::List(
+                                flag_page
+                                    .iter()
+                                    .map(|flags| Value::String(flag_names(*flags)))
+                                    .collect(),
+                            ),
+                        ));
                     }
                     let mut send_request = stream.send_request();
                     Value::Record(Record::with_fields(kvs_capnp::SCAN_TYPE_ID, fields))

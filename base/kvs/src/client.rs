@@ -234,8 +234,9 @@ The key-value store is in-memory and shared across all programs on the node.
   anyway.
 * `kvs exists <key>` reports whether `<key>` is present.
 * `kvs scan` lists every key: its name where the program that writes it
-  registered one, and the id it travels as. A `<key>` anywhere above may be
-  that id, as `0x…`, instead of a name.
+  registered one, the id it travels as, and its flags - `sticky` for a key
+  only Dusk sets. A `<key>` anywhere above may be that id, as `0x…`, instead
+  of a name.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.

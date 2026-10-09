@@ -261,9 +261,22 @@ impl Kvs {
         self.entries.read().await.contains_key(&key)
     }
 
+    fn flags_of(&self, key: u64, flags: u8) -> u8 {
+        if owned(self.tid, key) {
+            flags | FLAG_STICKY
+        } else {
+            flags
+        }
+    }
+
     /// Every key present at one instant, in no particular order.
-    pub async fn scan(&self) -> alloc::vec::Vec<u64> {
-        self.entries.read().await.keys().copied().collect()
+    pub async fn scan(&self) -> alloc::vec::Vec<(u64, u8)> {
+        let entries = self.entries.read().await;
+        let mut keys = alloc::vec::Vec::with_capacity(entries.len());
+        for (key, entry) in entries.iter() {
+            keys.push((*key, self.flags_of(*key, entry.lock().await.1)));
+        }
+        keys
     }
 }
 
