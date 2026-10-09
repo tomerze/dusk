@@ -68,59 +68,59 @@
       <circle cx="9" cy="-2.5" r="1.8" />
       <circle cx="14" cy="2.5" r="1.8" />
     </symbol>
-    <symbol id="dusk-glyph-stack" viewBox="-50 -50 100 100">
-      <polygon fill="#c9d2e0" points="-46,26 0,45 0,50 -46,31" />
-      <polygon fill="#adb8c9" points="0,45 46,26 46,31 0,50" />
-      <polygon fill="#eef2f8" points="0,7 46,26 0,45 -46,26" />
+    <symbol id="dusk-glyph-stack" viewBox="-50 -70.5 100 141">
+      <polygon fill="#c9d2e0" points="-46,35.5 0,65.5 0,70.5 -46,40.5" />
+      <polygon fill="#adb8c9" points="0,65.5 46,35.5 46,40.5 0,70.5" />
+      <polygon fill="#eef2f8" points="0,5.5 46,35.5 0,65.5 -46,35.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#4a5668"
         text-anchor="middle"
-        transform="matrix(0.924 0.382 -0.924 0.382 -20 34.3)"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 51.3)"
       >
         Observability
       </text>
-      <polygon fill="#3b8bc8" points="-46,13 0,32 0,37 -46,18" />
-      <polygon fill="#2f70a3" points="0,32 46,13 46,18 0,37" />
-      <polygon fill="#4ea6e6" points="0,-6 46,13 0,32 -46,13" />
+      <polygon fill="#3b8bc8" points="-46,16.5 0,46.5 0,51.5 -46,21.5" />
+      <polygon fill="#2f70a3" points="0,46.5 46,16.5 46,21.5 0,51.5" />
+      <polygon fill="#4ea6e6" points="0,-13.5 46,16.5 0,46.5 -46,16.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#0d3a5e"
         text-anchor="middle"
-        transform="matrix(0.924 0.382 -0.924 0.382 -20 21.3)"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 32.3)"
       >
         Data
       </text>
-      <polygon fill="#8d6fb1" points="-46,0 0,19 0,24 -46,5" />
-      <polygon fill="#735892" points="0,19 46,0 46,5 0,24" />
-      <polygon fill="#a98bcc" points="0,-19 46,0 0,19 -46,0" />
+      <polygon fill="#8d6fb1" points="-46,-2.5 0,27.5 0,32.5 -46,2.5" />
+      <polygon fill="#735892" points="0,27.5 46,-2.5 46,2.5 0,32.5" />
+      <polygon fill="#a98bcc" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#3b2466"
         text-anchor="middle"
-        transform="matrix(0.924 0.382 -0.924 0.382 -20 8.3)"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 13.3)"
       >
         Twilight
       </text>
-      <polygon fill="#e7bb84" points="-46,-13 0,6 0,11 -46,-8" />
-      <polygon fill="#c99d68" points="0,6 46,-13 46,-8 0,11" />
-      <polygon fill="#ffd9a8" points="0,-32 46,-13 0,6 -46,-13" />
+      <polygon fill="#e7bb84" points="-46,-21.5 0,8.5 0,13.5 -46,-16.5" />
+      <polygon fill="#c99d68" points="0,8.5 46,-21.5 46,-16.5 0,13.5" />
+      <polygon fill="#ffd9a8" points="0,-51.5 46,-21.5 0,8.5 -46,-21.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#7a4a12"
         text-anchor="middle"
-        transform="matrix(0.924 0.382 -0.924 0.382 -20 -4.7)"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 -5.7)"
       >
         Dawn
       </text>
-      <polygon fill="#2a3994" points="-46,-26 0,-7 0,-2 -46,-21" />
-      <polygon fill="#202c76" points="0,-7 46,-26 46,-21 0,-2" />
-      <polygon fill="#3446b4" points="0,-45 46,-26 0,-7 -46,-26" />
+      <polygon fill="#2a3994" points="-46,-40.5 0,-10.5 0,-5.5 -46,-35.5" />
+      <polygon fill="#202c76" points="0,-10.5 46,-40.5 46,-35.5 0,-5.5" />
+      <polygon fill="#3446b4" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
       <text
         class="dusk-fleet__hub-print"
         fill="#e4e8ff"
         text-anchor="middle"
-        transform="matrix(0.924 0.382 -0.924 0.382 -20 -17.7)"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 -24.7)"
       >
         Nightfall
       </text>
@@ -835,11 +835,11 @@
     class="dusk-fleet__hub"
     href="#dusk-glyph-stack"
     x="505"
-    y="205"
+    y="166"
     width="190"
-    height="190"
+    height="268"
   />
   <text class="dusk-fleet__hub-label" x="600" y="421" text-anchor="middle">
-    Dusk stack
+    Dusk Stack
   </text>
 </svg>

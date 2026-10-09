@@ -3,6 +3,7 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
   const diagram = stack.querySelector(".dusk-stack__diagram");
   const plates = [...diagram.querySelectorAll(".dusk-plate")];
   const fleet = diagram.querySelector(".dusk-stack__fleet");
+  const calm = matchMedia("(prefers-reduced-motion: reduce)");
   const visible = new Set();
   const observer = new IntersectionObserver(
     (entries) => {
@@ -15,6 +16,14 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
       }
       const current = visible.values().next().value;
       const layer = current ? current.dataset.layer : "";
+      const before = calm.matches
+        ? []
+        : [...diagram.querySelectorAll(".dusk-plate, .dusk-plate *")].map(
+            (part) => {
+              const style = getComputedStyle(part);
+              return [part, style.transform, style.opacity];
+            },
+          );
       stack.classList.toggle("is-focused", Boolean(current));
       for (const part of parts) {
         part.classList.toggle("is-active", part.dataset.layer === layer);
@@ -27,6 +36,18 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
       for (const plate of plates) {
         if (plate.dataset.layer === layer) {
           diagram.insertBefore(plate, fleet);
+        }
+      }
+      for (const [part, transform, opacity] of before) {
+        const style = getComputedStyle(part);
+        if (style.transform !== transform || style.opacity !== opacity) {
+          part.animate(
+            [
+              { transform, opacity },
+              { transform: style.transform, opacity: style.opacity },
+            ],
+            { duration: 450, easing: "ease" },
+          );
         }
       }
     },
@@ -115,24 +136,26 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
     const rx = width / 2 - margin;
     const spacing = scale < 1 ? 136 : 120;
     const around = (arms.length * spacing) / (2 * Math.PI);
+    const hubSize = Math.min(190, Math.max(150, width * 0.16));
     const ry = Math.max(
-      200 * scale,
+      hubSize * 0.7 + 90 * scale,
       Math.sqrt(Math.max(0, 2 * around * around - rx * rx)),
     );
     const height = 2 * ry + 2 * margin + 60 * scale;
     const cx = width / 2;
     const cy = margin + 10 + ry;
-    const hubSize = Math.min(190, Math.max(150, width * 0.16));
+    const hubHeight = hubSize * 1.41;
     fleet.setAttribute("viewBox", `0 0 ${width} ${height}`);
     hub.setAttribute("x", cx - hubSize / 2);
-    hub.setAttribute("y", cy - hubSize / 2);
+    hub.setAttribute("y", cy - hubHeight / 2);
     hub.setAttribute("width", hubSize);
-    hub.setAttribute("height", hubSize);
+    hub.setAttribute("height", hubHeight);
     glow.setAttribute("cx", cx);
     glow.setAttribute("cy", cy);
-    glow.setAttribute("r", hubSize * 0.62);
+    glow.setAttribute("r", hubSize * 0.7);
     hubLabel.setAttribute("x", cx);
-    hubLabel.setAttribute("y", cy + hubSize / 2 + 26);
+    hubLabel.setAttribute("y", cy + hubHeight / 2 + 24);
+    const taken = [];
     const rim = [];
     let length = 0;
     let previous;
@@ -177,12 +200,29 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       const label = arm.querySelector(".dusk-node__label");
       label.setAttribute("x", x);
       label.setAttribute("y", y + ring + 21 * scale);
+      taken.push([x, y, 70 * scale]);
     });
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 48271) % 2147483647;
+      return seed / 2147483647;
+    };
     tinyDots.forEach((dot, index) => {
-      const angle = index * 2.39996;
-      const out = 0.3 + 0.8 * ((index * 0.618034) % 1);
-      const x = cx + rx * 1.08 * out * Math.cos(angle);
-      const y = cy + ry * 1.08 * out * Math.sin(angle);
+      let x = cx;
+      let y = cy;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const angle = random() * 2 * Math.PI;
+        const out = 0.2 + 0.9 * Math.sqrt(random());
+        x = cx + rx * 1.1 * out * Math.cos(angle);
+        y = cy + ry * 1.1 * out * Math.sin(angle);
+        if (
+          Math.hypot(x - cx, y - cy) > hubSize * 0.75 &&
+          taken.every(([tx, ty, room]) => Math.hypot(tx - x, ty - y) > room)
+        ) {
+          break;
+        }
+      }
+      taken.push([x, y, 44]);
       dot.setAttribute("cx", x);
       dot.setAttribute("cy", y);
       tinyLinks[index].setAttribute("d", `M${cx} ${cy}L${x} ${y}`);
@@ -195,3 +235,30 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
     }
   }).observe(fleet.parentElement);
 }
+
+const suns = [...document.querySelectorAll(".dusk-hero__sun")];
+const headings = [...document.querySelectorAll(".dusk-section > h2")];
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const follow = () => {
+  if (still.matches) {
+    return;
+  }
+  for (const sun of suns) {
+    sun.style.setProperty(
+      "--dusk-sunk",
+      Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
+    );
+  }
+  for (const heading of headings) {
+    const box = heading.getBoundingClientRect();
+    const passed =
+      (window.innerHeight - box.top) / (window.innerHeight + box.height);
+    heading.style.setProperty(
+      "--dusk-passed",
+      Math.max(0, Math.min(1, passed)),
+    );
+  }
+};
+window.addEventListener("scroll", follow, { passive: true });
+window.addEventListener("resize", follow);
+follow();

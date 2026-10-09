@@ -53,11 +53,6 @@
       transparent
     ),
     radial-gradient(1px 1px at 21% 63%, rgba(255, 255, 255, 0.4), transparent),
-    radial-gradient(
-      1.5px 1.5px at 34% 9%,
-      rgba(255, 255, 255, 0.45),
-      transparent
-    ),
     radial-gradient(1px 1px at 47% 88%, rgba(255, 255, 255, 0.35), transparent),
     radial-gradient(
       1.5px 1.5px at 63% 22%,
@@ -349,15 +344,7 @@
   bottom: 0;
   width: min(22rem, 86vw);
   height: auto;
-  transform: translateX(-50%);
-  animation: dusk-sunset linear both;
-  animation-timeline: scroll(root);
-  animation-range: 0 60vh;
-}
-@keyframes dusk-sunset {
-  to {
-    transform: translate(-50%, 30%);
-  }
+  transform: translate(-50%, calc(var(--dusk-sunk, 0) * 30%));
 }
 .dusk-hero__horizon::after {
   content: "";
@@ -478,16 +465,8 @@
     #a86f12 100%
   );
   background-size: 200% 200%;
-  animation: dusk-shimmer linear both;
-  animation-timeline: view();
-}
-@keyframes dusk-shimmer {
-  from {
-    background-position: 0% 0%;
-  }
-  to {
-    background-position: 100% 100%;
-  }
+  background-position: calc(var(--dusk-passed, 0) * 100%)
+    calc(var(--dusk-passed, 0) * 100%);
 }
 .dusk-landing .dusk-stack > h2 {
   color: var(--dusk-ink-twilight);
@@ -504,16 +483,7 @@
     var(--dusk-ink-observability) 74.6% 100%
   );
   background-size: 100% 100%;
-  animation: dusk-cycle linear both;
-  animation-timeline: view();
-}
-@keyframes dusk-cycle {
-  from {
-    background-position-y: 0;
-  }
-  to {
-    background-position-y: -100%;
-  }
+  background-position-y: calc(var(--dusk-passed, 0) * -100%);
 }
 .dusk-landing .dusk-section > h2 + p {
   max-width: 32rem;
@@ -653,17 +623,6 @@
   width: 100%;
   height: auto;
   overflow: visible;
-}
-.dusk-plate {
-  transition: transform 0.45s ease;
-}
-.dusk-plate polygon,
-.dusk-plate text,
-.dusk-plate path {
-  transition:
-    fill 0.45s ease,
-    stroke 0.45s ease,
-    opacity 0.45s ease;
 }
 .dusk-plate__edge {
   fill: none;
@@ -1026,8 +985,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
-  .dusk-hero__sun,
-  .dusk-landing .dusk-section > h2,
   .dusk-arm {
     animation: none;
   }
@@ -1038,7 +995,6 @@
   .dusk-stack__uplink {
     animation: none;
   }
-  .dusk-plate,
   .dusk-layer {
     transition: none;
   }
