@@ -16,6 +16,7 @@ mod backoff;
 #[cfg(feature = "client")]
 pub mod client;
 mod file;
+mod link;
 mod node_key;
 mod tls;
 
