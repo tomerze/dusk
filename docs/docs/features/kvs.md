@@ -123,6 +123,37 @@ another thread of the same process, built with other programs, does not see it.
 A value set with `FLAG_STICKY` in its flags is sticky too, under a name nobody
 owns, until a set without the flag replaces it.
 
+### Sensitive keys
+
+A **sensitive** key holds a secret - a token, a password, a key. Mark one when
+you set it:
+
+```sh
+kvs set --sensitive deploy.token 9f2c41d07be3
+```
+
+Neither `kvs` nor the store under it writes a sensitive value into the node's
+[logs](logs.md) or a trace: they log the key, never the value. `kvs get` still
+answers the value to whoever asks for it, and `kvs scan` names the flag
+`sensitive`. The mark
+belongs to the set that made it: a later `kvs set` without `--sensitive`
+replaces the value and clears the mark.
+
+Sensitive keeps the value out of the node's own records; it does not hide it
+from a client. Every client that connects to the node can read it with `kvs
+get`.
+
+A program on the node marks a key the same way, passing `FLAG_SENSITIVE` in
+the flags of `dusk_program_kvs_internal::Kvs::set`, and a client driving a
+`kvs bind` process passes it in the `flags` of `KvsPortal.set`. A program that
+reads a key with `Kvs::get_with_flags`, and a client that reads one with
+`KvsPortal.get`, gets its flags with its value, and keeps a sensitive one out of
+its own logs too.
+
+`sensitive` is the one flag a client sets. `kvs set` and `KvsPortal.set` refuse
+any other - `sticky` included, which only a program on the node sets - with
+`flags 0x01 hold a flag a client cannot set; a client may set sensitive`.
+
 ## Reading keys by name
 
 `kvs get` reads every key whose name starts with what you type, and answers a
