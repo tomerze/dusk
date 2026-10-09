@@ -5,6 +5,7 @@ use dusk_program_kvs_internal::{Kvs, key_id};
 pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
     set_kvs_time_zone(kvs);
+    set_kvs_locale(kvs);
     set_kvs_uname(kvs);
     set_kvs_credentials(kvs);
     set_kvs_limits(kvs);
@@ -64,6 +65,74 @@ fn set_kvs_time_zone(kvs: &Kvs) {
         ),
         Err(error) => tracing::warn!(error = %error, "reading the time zone failed"),
     }
+}
+
+fn set_kvs_locale(kvs: &Kvs) {
+    if let Some(locale) = locale() {
+        set_kvs_values(
+            kvs,
+            "locale",
+            vec![(String::from("dusk.os.locale"), Value::String(locale))],
+        );
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+fn locale() -> Option<String> {
+    let locale = first_locale(|name| std::env::var(name).ok());
+    if locale.is_none() {
+        tracing::info!("the node runs with no locale set");
+    }
+    locale
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+fn first_locale(lookup: impl Fn(&str) -> Option<String>) -> Option<String> {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|name| lookup(name).filter(|value| !value.is_empty()))
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn locale() -> Option<String> {
+    use core::ffi::{CStr, c_char, c_void};
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFLocaleCopyCurrent() -> *const c_void;
+        fn CFLocaleGetIdentifier(locale: *const c_void) -> *const c_void;
+        fn CFStringGetCString(
+            string: *const c_void,
+            buffer: *mut c_char,
+            buffer_size: isize,
+            encoding: u32,
+        ) -> u8;
+        fn CFRelease(object: *const c_void);
+    }
+    const UTF8_ENCODING: u32 = 0x0800_0100;
+    let mut buffer = [0 as c_char; 256];
+    let copied = unsafe {
+        let locale = CFLocaleCopyCurrent();
+        if locale.is_null() {
+            tracing::warn!("CFLocaleCopyCurrent returned no locale");
+            return None;
+        }
+        let identifier = CFLocaleGetIdentifier(locale);
+        let copied = !identifier.is_null()
+            && CFStringGetCString(
+                identifier,
+                buffer.as_mut_ptr(),
+                buffer.len() as isize,
+                UTF8_ENCODING,
+            ) != 0;
+        CFRelease(locale);
+        copied
+    };
+    if !copied {
+        tracing::warn!("couldn't read the identifier of the current locale");
+        return None;
+    }
+    let identifier = unsafe { CStr::from_ptr(buffer.as_ptr()) };
+    Some(identifier.to_string_lossy().into_owned())
 }
 
 fn set_kvs_uname(kvs: &Kvs) {
@@ -295,4 +364,56 @@ fn set_kvs_apple_sysctls(kvs: &Kvs) {
         }
     }
     set_kvs_values(kvs, "sysctl", values);
+}
+
+#[cfg(all(test, not(any(target_os = "macos", target_os = "ios"))))]
+mod tests {
+    use super::*;
+
+    fn environment<'variables>(
+        variables: &'variables [(&'variables str, &'variables str)],
+    ) -> impl Fn(&str) -> Option<String> + 'variables {
+        move |name| {
+            variables
+                .iter()
+                .find(|(variable, _)| *variable == name)
+                .map(|(_, value)| String::from(*value))
+        }
+    }
+
+    #[test]
+    fn the_locale_is_lc_all_then_lc_messages_then_lang() {
+        let every = [
+            ("LANG", "en_US.UTF-8"),
+            ("LC_MESSAGES", "de_DE.UTF-8"),
+            ("LC_ALL", "fr_FR.UTF-8"),
+        ];
+        assert_eq!(
+            first_locale(environment(&every)).as_deref(),
+            Some("fr_FR.UTF-8")
+        );
+        assert_eq!(
+            first_locale(environment(&every[..2])).as_deref(),
+            Some("de_DE.UTF-8")
+        );
+        assert_eq!(
+            first_locale(environment(&every[..1])).as_deref(),
+            Some("en_US.UTF-8")
+        );
+        assert_eq!(first_locale(environment(&[])), None);
+    }
+
+    #[test]
+    fn an_empty_variable_counts_as_unset() {
+        assert_eq!(
+            first_locale(environment(&[
+                ("LC_ALL", ""),
+                ("LC_MESSAGES", ""),
+                ("LANG", "C.UTF-8")
+            ]))
+            .as_deref(),
+            Some("C.UTF-8")
+        );
+        assert_eq!(first_locale(environment(&[("LANG", "")])), None);
+    }
 }
