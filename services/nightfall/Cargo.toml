@@ -9,4 +9,9 @@ name = "nightfall"
 path = "src/lib.rs"
 
 [dependencies]
+anyhow = { version = "1.0", public = true }
+metrics = "0.24"
+nightfall_membrane = { path = "membrane", public = true }
+nightfall_provisioning = { path = "provisioning", public = true }
 rand = "0.9"
+tracing = "0.1.41"
