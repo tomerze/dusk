@@ -470,7 +470,8 @@
 .dusk-section {
   padding: 5rem 0.8rem;
 }
-.dusk-landing .dusk-section > h2 {
+.dusk-landing .dusk-section > h2,
+.dusk-landing .dusk-os__title {
   display: table;
   margin: 0 auto;
   padding: 0;
@@ -482,18 +483,23 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.dusk-landing .dusk-fleet > h2 {
+.dusk-landing .dusk-fleet > h2,
+.dusk-landing .dusk-os__title {
   color: #a86f12;
-  background-image: linear-gradient(
-    100deg,
-    #a86f12 0%,
-    #f0b441 35%,
-    #fff1c4 50%,
-    #f0b441 65%,
-    #a86f12 100%
-  );
-  background-size: 300% 100%;
-  background-position-x: calc(var(--dusk-passed, 0) * 100%);
+  background-image:
+    var(--dusk-title-ink, none),
+    linear-gradient(
+      100deg,
+      #a86f12 0%,
+      #f0b441 35%,
+      #fff1c4 50%,
+      #f0b441 65%,
+      #a86f12 100%
+    );
+  background-size:
+    100% 100%,
+    300% 100%;
+  background-position-x: 0, calc(var(--dusk-passed, 0) * 100%);
 }
 .dusk-landing .dusk-stack > h2 {
   color: var(--dusk-ink-twilight);
@@ -641,6 +647,171 @@
     transform: scale(3.4);
     opacity: 0;
   }
+}
+
+@property --dusk-os-title-ink {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+.dusk-os {
+  --dusk-os-fill: #f4a83c;
+  --dusk-os-ink: var(--dusk-ground);
+  --dusk-os-pin: 90svh;
+  --dusk-os-from: calc(var(--dusk-os-height, 100lvh) - 100lvh);
+  --dusk-os-sun: max(17rem, 50vw + 7.5rem);
+  --dusk-os-start: calc(1.4 / 17);
+  --dusk-os-sun-top: calc(100% - 10.9rem);
+  --dusk-os-lead-colour: var(--md-default-bg-color);
+  background-color: var(--dusk-ground);
+}
+.dusk-os__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5rem 0.8rem;
+  overflow-x: clip;
+  background-color: var(--dusk-os-fill);
+  text-align: center;
+}
+.dusk-landing .dusk-os__title {
+  position: relative;
+  z-index: 1;
+  --dusk-title-ink: linear-gradient(
+    180deg,
+    color-mix(
+      in srgb,
+      var(--dusk-os-ink) calc(var(--dusk-os-title-ink) * 100%),
+      transparent
+    ),
+    color-mix(
+      in srgb,
+      var(--md-default-bg-color) calc(var(--dusk-os-title-ink) * 100%),
+      transparent
+    )
+  );
+}
+.dusk-landing .dusk-os__lead {
+  position: relative;
+  z-index: 1;
+  max-width: 32rem;
+  margin: 1rem auto 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dusk-os-lead-colour);
+  text-wrap: balance;
+}
+.dusk-os__terminals {
+  position: relative;
+  width: 100%;
+  max-width: 40rem;
+  margin-top: 2.5rem;
+}
+.dusk-os__dot {
+  display: none;
+}
+.dusk-os__terminal {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 0.8rem;
+  background-color: #14112a;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 1.5rem 3rem rgba(20, 12, 2, 0.45);
+  text-align: left;
+}
+.dusk-os__terminal--ps,
+.dusk-landing .dusk-os__session--wide {
+  display: none;
+}
+.dusk-os__bar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  background-color: #1d1838;
+}
+.dusk-os__bar span {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background-color: #3d3569;
+}
+.dusk-landing .dusk-os__session {
+  margin: 0;
+  padding: 0.9rem 0.9rem 1.1rem;
+  overflow-x: auto;
+  color: #d2cce8;
+  font-family: "JetBrains Mono", var(--md-code-font-family);
+  font-size: 0.6rem;
+  font-variant-ligatures: none;
+  line-height: 1.32;
+  white-space: pre;
+}
+@media screen and (min-width: 76.25em) {
+  .dusk-os {
+    --dusk-os-sun: 17rem;
+    --dusk-os-start: calc(1.4 / 17);
+    --dusk-os-sun-top: 3.5rem;
+  }
+  .dusk-os__terminals {
+    display: grid;
+    max-width: 62rem;
+    margin-top: 1.6rem;
+  }
+  .dusk-os__terminal {
+    grid-area: 1 / 1;
+    width: max-content;
+  }
+  .dusk-os__terminal--ps {
+    display: block;
+    align-self: start;
+    justify-self: end;
+    margin-right: -5rem;
+  }
+  .dusk-os__terminal--cp {
+    justify-self: start;
+    margin: 6rem 0 0 3rem;
+  }
+  .dusk-landing .dusk-os__session {
+    font-size: 0.56rem;
+  }
+  .dusk-landing .dusk-os__session--narrow {
+    display: none;
+  }
+  .dusk-landing .dusk-os__session--wide {
+    display: block;
+  }
+}
+.dusk-os__cell {
+  display: inline-block;
+  width: 1ch;
+  text-indent: -0.5ch;
+}
+.dusk-os__yellow {
+  color: #f5c542;
+}
+.dusk-os__cyan {
+  color: #3fc5d6;
+}
+.dusk-os__bright-cyan {
+  color: #6ef2ff;
+}
+.dusk-os__green {
+  color: #5af78e;
+}
+.dusk-os__white {
+  color: #ece8f7;
+}
+.dusk-os__blue {
+  color: #9fb0ff;
+}
+.dusk-os__gray {
+  color: #7d7896;
+}
+.dusk-os__bold {
+  font-weight: 700;
 }
 
 .dusk-stack__body {
