@@ -16,6 +16,7 @@ struct KvsArgs {
       set :group {
         key @1 :UInt64;
         value @2 :Dusk.Value;
+        flags @8 :UInt8;
       }
       delete @3 :UInt64;
       exists @4 :UInt64;

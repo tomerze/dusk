@@ -130,7 +130,7 @@ async fn test_kvs_args_interface() {
 
             let (pid, values, daemonize) = run_action(
                 &client,
-                KvsArgs::set(key, &Value::String("1".to_string()), false)
+                KvsArgs::set(key, &Value::String("1".to_string()), 0, false)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -394,7 +394,7 @@ async fn test_kvs_sticky_keys() {
             let forged = Value::String("forged".to_string());
             let error = run_to_exit(
                 &client,
-                KvsArgs::set(key, &forged, false)
+                KvsArgs::set(key, &forged, 0, false)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -421,7 +421,7 @@ async fn test_kvs_sticky_keys() {
 
             let (pid, values, daemonize) = run_action(
                 &client,
-                KvsArgs::set(key, &forged, true)
+                KvsArgs::set(key, &forged, 0, true)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -442,7 +442,7 @@ async fn test_kvs_sticky_keys() {
             );
             let error = run_to_exit(
                 &client,
-                KvsArgs::set(key, &namespace_id, false)
+                KvsArgs::set(key, &namespace_id, 0, false)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -481,7 +481,7 @@ async fn test_kvs_sticky_keys() {
             stop(&client, pid).await;
             let error = run_to_exit(
                 &client,
-                KvsArgs::set(absent, &forged, false)
+                KvsArgs::set(absent, &forged, 0, false)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -502,7 +502,7 @@ async fn test_kvs_sticky_keys() {
             );
             let (pid, values, _) = run_action(
                 &client,
-                KvsArgs::set(absent, &forged, true)
+                KvsArgs::set(absent, &forged, 0, true)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),

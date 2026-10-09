@@ -26,6 +26,8 @@ pub const SALT: u64 = 0x9396_8e6e_30a5_93d6;
 
 pub const FLAG_STICKY: u8 = 1;
 
+pub const FLAG_SENSITIVE: u8 = 2;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sticky {
     pub key: u64,
