@@ -1005,6 +1005,14 @@
   animation-play-state: paused;
 }
 
+.dusk-landing a:focus-visible,
+.dusk-navbar a:focus-visible,
+.dusk-sitemap a:focus-visible {
+  outline: 2px solid #f0b441;
+  outline-offset: 3px;
+  border-radius: 0.2rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-landing .dusk-section > h2 {
