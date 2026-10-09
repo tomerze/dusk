@@ -17,6 +17,8 @@ extern crate capnp;
 
 #[cfg(feature = "client")]
 pub mod client;
+mod config;
+pub use config::KvsConfig;
 pub use dusk_program_kvs_internal as kvs;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -166,12 +168,29 @@ impl Args {
     }
 }
 
-#[derive(dusk_program_proc::Launcher, Default)]
-pub struct Launcher;
+#[derive(dusk_program_proc::Launcher)]
+pub struct Launcher {
+    persistent: Option<(u64, u64)>,
+}
 
 impl Launcher {
-    pub fn new() -> Self {
-        Self
+    pub fn new(config: KvsConfig) -> anyhow::Result<Self> {
+        let persistent = match config.persistent {
+            Some(path) => {
+                let tid = dusk_core::driver::tid();
+                Some((tid, kvs::register_persistent(tid, &path)?))
+            }
+            None => None,
+        };
+        Ok(Self { persistent })
+    }
+}
+
+impl Drop for Launcher {
+    fn drop(&mut self) {
+        if let Some((tid, generation)) = self.persistent {
+            kvs::unregister_persistent(tid, generation);
+        }
     }
 }
 

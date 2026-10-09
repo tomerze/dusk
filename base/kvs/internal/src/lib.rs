@@ -6,8 +6,10 @@
 
 extern crate alloc;
 
+use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use core::cell::RefCell;
+use dusk_program::anyhow;
 use dusk_program::embassy_sync::blocking_mutex::Mutex as BlockingMutex;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::lazy_lock::LazyLock;
@@ -327,4 +329,65 @@ pub fn get_kvs(namespace_id: u64) -> Arc<Kvs> {
         registry.insert(namespace_id, Arc::downgrade(&kvs));
         kvs
     })
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct Registration {
+    path: String,
+    generation: u64,
+}
+
+struct Registrations {
+    by_thread: HashMap<u64, Registration, BuildNoHashHasher<u64>>,
+    generation: u64,
+}
+
+static REGISTRATIONS: LazyLock<BlockingMutex<CriticalSectionRawMutex, RefCell<Registrations>>> =
+    LazyLock::new(|| {
+        BlockingMutex::new(RefCell::new(Registrations {
+            by_thread: HashMap::default(),
+            generation: 0,
+        }))
+    });
+
+pub fn register_persistent(tid: u64, path: &str) -> anyhow::Result<u64> {
+    REGISTRATIONS.get().lock(|registrations| {
+        let mut registrations = registrations.borrow_mut();
+        if let Some(registered) = registrations.by_thread.get(&tid) {
+            anyhow::bail!(
+                "thread {tid} already keeps its persistent kvs keys in `{}`",
+                registered.path
+            );
+        }
+        if registrations
+            .by_thread
+            .values()
+            .any(|registered| registered.path == path)
+        {
+            anyhow::bail!("another node of this process keeps its persistent kvs keys in `{path}`");
+        }
+        registrations.generation += 1;
+        let generation = registrations.generation;
+        registrations.by_thread.insert(
+            tid,
+            Registration {
+                path: String::from(path),
+                generation,
+            },
+        );
+        Ok(generation)
+    })
+}
+
+pub fn unregister_persistent(tid: u64, generation: u64) {
+    REGISTRATIONS.get().lock(|registrations| {
+        let mut registrations = registrations.borrow_mut();
+        if registrations
+            .by_thread
+            .get(&tid)
+            .is_some_and(|registered| registered.generation == generation)
+        {
+            registrations.by_thread.remove(&tid);
+        }
+    });
 }

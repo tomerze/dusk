@@ -30,7 +30,9 @@ pub fn default_launcher_set() -> anyhow::Result<LauncherSet> {
         Box::new(dusk_program_hostname::Launcher::new()),
         Box::new(dusk_program_init::Launcher::new()),
         Box::new(dusk_program_kill::Launcher::new()),
-        Box::new(dusk_program_kvs::Launcher::new()),
+        Box::new(dusk_program_kvs::Launcher::new(
+            dusk_program_kvs::KvsConfig::default(),
+        )?),
         Box::new(dusk_program_nightfall::Launcher::new()),
         Box::new(dusk_program_programs::Launcher::new()),
         Box::new(dusk_program_ps::Launcher::new()),
