@@ -10,5 +10,6 @@ pub mod limits;
 pub mod node_state;
 pub mod peer;
 pub mod proxy;
+pub mod rlimit;
 pub mod sni;
 pub mod tls;

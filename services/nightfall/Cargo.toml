@@ -14,6 +14,7 @@ arc-swap = { version = "1.7", public = true }
 capnp = "0.21.7"
 futures = "0.3"
 jsonschema = { version = "0.58", default-features = false }
+libc = "0.2"
 metrics = "0.24"
 nightfall_ledger = { path = "ledger", public = true }
 nightfall_membrane = { path = "membrane", public = true }
