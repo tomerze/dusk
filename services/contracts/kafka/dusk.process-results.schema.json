@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "pid",
+    "campaign_id",
+    "attempt",
+    "device_id",
+    "installation_id",
+    "namespace_id",
+    "action_kind",
+    "status",
+    "delivered",
+    "error",
+    "started_at",
+    "finished_at",
+    "dawn_instance",
+    "output_digest",
+    "output_count",
+    "output_truncated",
+    "reported"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.process-results/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "pid": { "$ref": "common.schema.json#/$defs/pid" },
+    "campaign_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "attempt": {
+      "description": "The campaign attempt the pid was derived for, counted from 1; null for work that is not a campaign attempt.",
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+    "installation_id": { "$ref": "common.schema.json#/$defs/installation_id" },
+    "namespace_id": { "$ref": "common.schema.json#/$defs/namespace_id" },
+    "action_kind": {
+      "enum": [
+        "run_script",
+        "ensure_version",
+        "ensure_config",
+        "quarantine",
+        "collect_facts",
+        "collect_file",
+        "stream_logs",
+        "interactive",
+        "reap"
+      ]
+    },
+    "status": {
+      "description": "started: this dispatch started the shell server at pid and is sending it the script, and the final status follows in another message. duplicate: pid was already in the node's process table, so nothing ran. running: the stream broke after started and the node's logs show no end of the script at pid. ended: the stream broke after started and the node's logs show the script at pid ended, but not how. already_satisfied: the node already reports the desired version, so nothing ran. reaped: the process at pid was killed and taken out of the node's process table.",
+      "enum": [
+        "started",
+        "succeeded",
+        "failed",
+        "duplicate",
+        "running",
+        "ended",
+        "already_satisfied",
+        "unreachable",
+        "timed_out",
+        "denied",
+        "reaped",
+        "error"
+      ]
+    },
+    "delivered": {
+      "description": "The shell server at pid was started by this dispatch.",
+      "type": "boolean"
+    },
+    "error": { "type": ["string", "null"] },
+    "started_at": {
+      "description": "When dawn began this dispatch.",
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "finished_at": {
+      "description": "When dawn produced this message; null only for started.",
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "dawn_instance": { "$ref": "common.schema.json#/$defs/instance" },
+    "output_digest": {
+      "description": "HMAC-SHA256 with the dawn output key over the JSON-encoded output values.",
+      "$ref": "common.schema.json#/$defs/hash"
+    },
+    "output_count": { "type": "integer", "minimum": 0 },
+    "output_truncated": { "type": "boolean" },
+    "reported": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version_key", "version", "config_hash", "services", "facts"],
+          "properties": {
+            "version_key": { "type": ["string", "null"] },
+            "version": { "type": ["string", "null"] },
+            "config_hash": { "type": ["string", "null"] },
+            "services": {
+              "anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }]
+            },
+            "facts": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": { "not": { "const": "dusk.device.id" } }
+                },
+                { "type": "null" }
+              ]
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["status"], "properties": { "status": { "const": "started" } } },
+      "then": {
+        "properties": {
+          "delivered": { "const": true },
+          "finished_at": { "type": "null" }
+        }
+      },
+      "else": { "properties": { "finished_at": { "type": "string" } } }
+    },
+    {
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "enum": ["duplicate", "already_satisfied"] } }
+      },
+      "then": { "properties": { "delivered": { "const": false } } }
+    },
+    {
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "enum": ["running", "ended"] } }
+      },
+      "then": { "properties": { "delivered": { "const": true } } }
+    },
+    {
+      "if": { "required": ["status"], "properties": { "status": { "const": "reaped" } } },
+      "then": { "properties": { "action_kind": { "const": "reap" } } }
+    },
+    {
+      "if": { "required": ["action_kind"], "properties": { "action_kind": { "const": "reap" } } },
+      "then": { "properties": { "delivered": { "const": false } } }
+    }
+  ]
+}

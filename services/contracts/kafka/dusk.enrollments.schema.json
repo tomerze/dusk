@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "operation",
+    "outcome",
+    "reason",
+    "device_id",
+    "installation_id",
+    "tenant",
+    "credential_kind",
+    "credential_ref",
+    "hardware_fingerprint_hash",
+    "remote_address",
+    "cert_serial",
+    "cert_fingerprint",
+    "cert_not_after",
+    "dusk_version",
+    "impl",
+    "target_os",
+    "target_arch",
+    "hostname",
+    "instance"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.enrollments/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "operation": { "enum": ["assign", "enroll", "renew"] },
+    "outcome": { "enum": ["issued", "assigned", "denied", "rate_limited", "error"] },
+    "reason": { "type": ["string", "null"] },
+    "device_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/device_id" }, { "type": "null" }]
+    },
+    "installation_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/installation_id" }, { "type": "null" }]
+    },
+    "tenant": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/tenant" }, { "type": "null" }]
+    },
+    "credential_kind": {
+      "enum": ["fleet_token", "install_token", "tpm_attestation", "certificate"]
+    },
+    "credential_ref": {
+      "description": "The fleet token entry's name or the install token's sub claim, never the secret.",
+      "type": ["string", "null"]
+    },
+    "hardware_fingerprint_hash": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/hash" }, { "type": "null" }]
+    },
+    "remote_address": { "$ref": "common.schema.json#/$defs/remote_address" },
+    "cert_serial": {
+      "description": "The certificate serial number as lowercase hex without separators.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{1,40}$"
+    },
+    "cert_fingerprint": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/hash" }, { "type": "null" }]
+    },
+    "cert_not_after": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "dusk_version": { "type": ["string", "null"] },
+    "impl": { "type": ["string", "null"] },
+    "target_os": { "type": ["string", "null"] },
+    "target_arch": { "type": ["string", "null"] },
+    "hostname": { "type": ["string", "null"] },
+    "instance": { "$ref": "common.schema.json#/$defs/instance" }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["outcome"], "properties": { "outcome": { "const": "issued" } } },
+      "then": {
+        "properties": {
+          "operation": { "enum": ["enroll", "renew"] },
+          "device_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "cert_serial": { "type": "string" },
+          "cert_fingerprint": { "type": "string" },
+          "cert_not_after": { "type": "string" }
+        }
+      },
+      "else": {
+        "properties": {
+          "cert_serial": { "type": "null" },
+          "cert_fingerprint": { "type": "null" },
+          "cert_not_after": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["outcome"], "properties": { "outcome": { "const": "assigned" } } },
+      "then": {
+        "properties": {
+          "operation": { "const": "assign" },
+          "device_id": { "type": "string" },
+          "installation_id": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["operation"], "properties": { "operation": { "const": "renew" } } },
+      "then": { "properties": { "credential_kind": { "const": "certificate" } } },
+      "else": { "properties": { "hardware_fingerprint_hash": { "type": "string" } } }
+    }
+  ]
+}

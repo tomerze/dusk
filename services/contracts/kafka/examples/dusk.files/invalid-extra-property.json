@@ -1,0 +1,19 @@
+{
+  "schema": "dusk.files/v1",
+  "id": "01a112fe-d1bd-704c-9bd1-233faa6ded5e",
+  "time": "2026-10-06T09:16:10.512408247Z",
+  "pid": "13792273858822192861",
+  "campaign_id": "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+  "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+  "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+  "namespace_id": "5d2e9a1c7b3f8e04",
+  "node_path": "/var/log/syslog",
+  "bucket": "dusk-files",
+  "object_key": "files/3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13/a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70/13792273858822192861/0-syslog",
+  "size_bytes": 1048576,
+  "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+  "content_type": "text/plain",
+  "uploaded_at": "2026-10-06T09:16:09.811002004Z",
+  "dawn_instance": "dawn-0",
+  "content": "aGVsbG8="
+}
