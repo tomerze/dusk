@@ -533,6 +533,44 @@ class Runner:
                 extra={**log, "error": described(failure)},
             )
 
+    async def reap(self, node: NodeRef, pids: Sequence[int]) -> None:
+        attempts = [
+            self._results.attempt(node, pid, None, None, "reap") for pid in pids
+        ]
+        log = {
+            "device_id": node.device_id,
+            "installation_id": node.installation_id,
+            "namespace_id": node.namespace_id,
+            "reaped_pids": [pid_field(pid) for pid in pids],
+        }
+        try:
+            async with asyncio.timeout(RELEASE_SECONDS):
+                default = await connect(self._connector, self._settings, node, None)
+                try:
+                    left = set(await reap_pids(default, list(pids)))
+                finally:
+                    await default.close()
+            for attempt in attempts:
+                if attempt.pid in left:
+                    attempt.error = "the process did not exit"
+                else:
+                    attempt.status = "reaped"
+        except asyncio.CancelledError:
+            for attempt in attempts:
+                attempt.error = "dawn stopped before reaping the process"
+                await self._results.finished_despite_cancellation(attempt)
+            raise
+        except Exception as failure:
+            logger.warning(
+                "could not reap processes on a node",
+                extra={**log, "error": described(failure)},
+            )
+            for attempt in attempts:
+                attempt.status = classify(failure, delivered=False)
+                attempt.error = described(failure)
+        for attempt in attempts:
+            await self._results.finished(attempt)
+
 
 async def release(
     connector: Connector,

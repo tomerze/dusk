@@ -726,6 +726,75 @@ def test_a_batch_runs_quarantine_then_scripts_then_config_then_version():
     assert [each.pid[-1] for _, each in batch] == ["4", "2", "5", "3", "1"]
 
 
+async def test_a_reap_kills_and_reaps_each_pid_from_the_default_shell(
+    producer, fleet, node
+):
+    node.processes[PID] = ["sh[server]", "RR"]
+    node.processes[OTHER_PID] = ["sh[server]", "Z"]
+
+    await runner(producer, fleet).reap(node_ref(), [PID, OTHER_PID])
+
+    assert PID not in node.processes
+    assert OTHER_PID not in node.processes
+    assert node.commands_in(DEFAULT_SH_PID) == [
+        f"kill {PID:#x}; kill {OTHER_PID:#x}; ps",
+        f"kill --signal 8 {PID:#x}; kill --signal 8 {OTHER_PID:#x}; ps",
+    ]
+    assert node.shells() == [DEFAULT_SH_PID]
+    assert [(result["pid"], result["status"]) for result in producer.results()] == [
+        (str(PID), "reaped"),
+        (str(OTHER_PID), "reaped"),
+    ]
+    assert all(
+        result["action_kind"] == "reap"
+        and result["delivered"] is False
+        and result["campaign_id"] is None
+        and result["attempt"] is None
+        for result in producer.results()
+    )
+
+
+async def test_a_process_slow_to_exit_is_reaped_once_it_has(producer, fleet, node):
+    node.processes[PID] = ["sh[server]", "RR"]
+    node.slow_to_exit.add(PID)
+
+    await runner(producer, fleet).reap(node_ref(), [PID])
+
+    assert PID not in node.processes
+    assert producer.results()[0]["status"] == "reaped"
+
+
+async def test_a_pid_with_nothing_on_the_node_is_reaped_already(producer, fleet, node):
+    await runner(producer, fleet).reap(node_ref(), [PID])
+
+    assert node.commands_in(DEFAULT_SH_PID) == [f"kill {PID:#x}; ps"]
+    assert producer.results()[0]["status"] == "reaped"
+
+
+async def test_a_process_that_never_exits_is_left_and_reported(
+    producer, fleet, node, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr("dawn.work.REAP_WAIT_SECONDS", 0.001)
+    node.processes[PID] = ["sh[server]", "RR"]
+    node.scripts[f"kill {PID:#x}; ps"] = lambda connection: node.ps()
+
+    await runner(producer, fleet).reap(node_ref(), [PID])
+
+    assert node.processes[PID] == ["sh[server]", "RR"]
+    (result,) = producer.results()
+    assert result["status"] == "error"
+    assert result["error"] == "the process did not exit"
+
+
+async def test_a_reap_on_an_unreachable_node_reports_each_pid(producer, fleet):
+    await runner(producer, fleet).reap(node_ref(), [PID, OTHER_PID])
+
+    assert [result["status"] for result in producer.results()] == [
+        "unreachable",
+        "unreachable",
+    ]
+
+
 async def until(condition, seconds: float = 5.0) -> None:
     loop = asyncio.get_running_loop()
     deadline = loop.time() + seconds
