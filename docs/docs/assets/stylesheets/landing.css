@@ -642,10 +642,25 @@
   height: auto;
   overflow: visible;
 }
+.dusk-plate {
+  transition: transform 0.45s ease;
+}
+.dusk-plate polygon,
+.dusk-plate text,
+.dusk-plate path {
+  transition:
+    fill 0.45s ease,
+    stroke 0.45s ease,
+    opacity 0.45s ease;
+}
 .dusk-plate__edge {
   fill: none;
   stroke: rgba(255, 255, 255, 0.55);
   stroke-width: 1.2;
+}
+.dusk-plate__veil {
+  fill: var(--md-default-bg-color);
+  opacity: 0;
 }
 .dusk-plate__leader {
   stroke: var(--dusk-ink);
@@ -697,6 +712,7 @@
 .dusk-layer {
   padding: 0.4rem 0 0.4rem 1.2rem;
   border-left: 3px solid var(--dusk-ink);
+  transition: opacity 0.45s ease;
 }
 .dusk-layer + .dusk-layer {
   margin-top: 2rem;
@@ -758,18 +774,51 @@
     color: var(--md-default-fg-color--light);
     font-size: 0.75rem;
     font-weight: 500;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
   }
   .dusk-stack__menu a:hover {
     color: var(--dusk-ink);
+  }
+  .dusk-stack__menu a.is-active {
+    background-color: var(--dusk-ink);
+    color: var(--md-default-bg-color);
+    font-weight: 700;
   }
   .dusk-stack__layers {
     grid-column: 2;
     grid-row: 1;
   }
   .dusk-stack__figure {
+    position: sticky;
+    top: max(3.5rem, calc(50vh - 15rem));
     grid-column: 3;
     grid-row: 1;
     max-width: none;
+  }
+  .dusk-layer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 56vh;
+  }
+  .dusk-layer + .dusk-layer {
+    margin-top: 0;
+  }
+  .dusk-stack.is-focused .dusk-plate:not(.is-active) .dusk-plate__veil {
+    opacity: 0.78;
+  }
+  .dusk-stack.is-focused .dusk-plate:not(.is-active) text,
+  .dusk-stack.is-focused .dusk-plate:not(.is-active) use,
+  .dusk-stack.is-focused .dusk-plate:not(.is-active) path {
+    opacity: 0.3;
+  }
+  .dusk-stack.is-focused .dusk-plate.is-active {
+    transform: translateX(-24px);
+  }
+  .dusk-stack.is-focused .dusk-layer:not(.is-active) {
+    opacity: 0.35;
   }
 }
 
@@ -784,5 +833,9 @@
   }
   .dusk-stack__uplink {
     animation: none;
+  }
+  .dusk-plate,
+  .dusk-layer {
+    transition: none;
   }
 }

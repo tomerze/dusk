@@ -47,3 +47,7 @@
   <div class="dusk-landing md-typeset">{{ page.content }}</div>
 {% endblock %}
 {% block content %}{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ 'assets/javascripts/landing.js' | url }}"></script>
+{% endblock %}

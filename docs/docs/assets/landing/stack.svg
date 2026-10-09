@@ -78,6 +78,10 @@
       points="220,446 400,520 220,594 40,520"
     />
     <path class="dusk-plate__edge" d="M40 520L220 594L400 520" />
+    <polygon
+      class="dusk-plate__veil"
+      points="220,446 400,520 400,538 220,612 40,538 40,520"
+    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 520)"
@@ -113,6 +117,10 @@
       points="220,354 400,428 220,502 40,428"
     />
     <path class="dusk-plate__edge" d="M40 428L220 502L400 428" />
+    <polygon
+      class="dusk-plate__veil"
+      points="220,354 400,428 400,446 220,520 40,446 40,428"
+    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 428)"
@@ -148,6 +156,10 @@
       points="220,262 400,336 220,410 40,336"
     />
     <path class="dusk-plate__edge" d="M40 336L220 410L400 336" />
+    <polygon
+      class="dusk-plate__veil"
+      points="220,262 400,336 400,354 220,428 40,354 40,336"
+    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 336)"
@@ -183,6 +195,10 @@
       points="220,170 400,244 220,318 40,244"
     />
     <path class="dusk-plate__edge" d="M40 244L220 318L400 244" />
+    <polygon
+      class="dusk-plate__veil"
+      points="220,170 400,244 400,262 220,336 40,262 40,244"
+    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 244)"
@@ -218,6 +234,10 @@
       points="220,78 400,152 220,226 40,152"
     />
     <path class="dusk-plate__edge" d="M40 152L220 226L400 152" />
+    <polygon
+      class="dusk-plate__veil"
+      points="220,78 400,152 400,170 220,244 40,170 40,152"
+    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 152)"
