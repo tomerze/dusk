@@ -17,6 +17,8 @@ use dusk_program::hashbrown::HashMap;
 use dusk_program::value::Value;
 use nohash_hasher::BuildNoHashHasher;
 
+mod store;
+
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
