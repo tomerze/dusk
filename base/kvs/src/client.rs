@@ -58,6 +58,8 @@ enum KvsAction {
         key: String,
         value: String,
         #[arg(long)]
+        sensitive: bool,
+        #[arg(long)]
         forbidden_unstick: bool,
     },
     /// Remove a key
@@ -195,8 +197,21 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
             KvsAction::Set {
                 key,
                 value,
+                sensitive,
                 forbidden_unstick,
-            } => Args::set(key_parse(&key), &Value::String(value), forbidden_unstick)?,
+            } => {
+                let flags = if sensitive {
+                    crate::kvs::FLAG_SENSITIVE
+                } else {
+                    0
+                };
+                Args::set(
+                    key_parse(&key),
+                    &Value::String(value),
+                    flags,
+                    forbidden_unstick,
+                )?
+            }
             KvsAction::Delete {
                 key,
                 forbidden_unstick,
@@ -229,14 +244,17 @@ The key-value store is in-memory and shared across all programs on the node.
   like `dusk.hostname`.
 * `kvs set --forbidden-unstick <key> <value>` sets a sticky key anyway. The
   key holds the value until Dusk sets it again, and stays sticky.
+* `kvs set --sensitive <key> <value>` marks the value a secret: `kvs` never
+  writes it into a log or a trace. `kvs get` still prints it. A later `kvs set`
+  without `--sensitive` clears the mark.
 * `kvs delete <key>` removes `<key>` and reports whether it was present. It
   refuses a sticky key; `kvs delete --forbidden-unstick <key>` removes it
   anyway.
 * `kvs exists <key>` reports whether `<key>` is present.
 * `kvs scan` lists every key: its name where the program that writes it
   registered one, the id it travels as, and its flags - `sticky` for a key
-  only Dusk sets. A `<key>` anywhere above may be that id, as `0x…`, instead
-  of a name.
+  only Dusk sets, `sensitive` for a secret. A `<key>` anywhere above may be
+  that id, as `0x…`, instead of a name.
 * `kvs bind` runs no operation and leaves the process running, so a client can
   drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
   with `kill <pid>`.

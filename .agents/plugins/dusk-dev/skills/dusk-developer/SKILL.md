@@ -399,6 +399,10 @@ the one command `nightfall -l 9090` - compiled by `compile_sh!` while the artifa
 is built. `nightfall` binds the listener and accepts connections, running in the
 foreground of that script.
 
+A kvs key carrying `FLAG_SENSITIVE` holds a secret: `kvs` and kvs-internal log
+its key and never its value, and `Kvs::get_with_flags` reads a key's flags with
+its value.
+
 The deepest end-to-end trace (a `ps; ps` shell line, from keystroke to spawned
 process) lives in `docs/docs/development/shell.md`.
 

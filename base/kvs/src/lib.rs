@@ -26,12 +26,26 @@ dusk_program_proc::metadata!("kvs", VERSION, kvs_capnp::PROGRAM_ID);
 /// How many key ids travel in one value of a scan's stream.
 const SCAN_PAGE_SIZE: usize = 64;
 
+const CLIENT_FLAGS: u8 = kvs::FLAG_SENSITIVE;
+
 fn flag_names(flags: u8) -> alloc::string::String {
     let mut names = alloc::vec::Vec::new();
     if flags & kvs::FLAG_STICKY != 0 {
         names.push("sticky");
     }
+    if flags & kvs::FLAG_SENSITIVE != 0 {
+        names.push("sensitive");
+    }
     names.join(", ")
+}
+
+fn client_flags_refusal(flags: u8) -> Option<alloc::string::String> {
+    (flags & !CLIENT_FLAGS != 0).then(|| {
+        alloc::format!(
+            "flags {flags:#04x} hold a flag a client cannot set; a client may set {}",
+            flag_names(CLIENT_FLAGS)
+        )
+    })
 }
 
 #[derive(dusk_program_proc::Args)]
@@ -52,13 +66,14 @@ impl Args {
         Args { data }
     }
 
-    pub fn set(key: u64, value: &Value, forbidden_unstick: bool) -> capnp::Result<Self> {
+    pub fn set(key: u64, value: &Value, flags: u8, forbidden_unstick: bool) -> capnp::Result<Self> {
         let mut data = ArgsDataBuilder::new_default();
         {
             let mut root = data.init_root();
             root.set_forbidden_unstick(forbidden_unstick);
             let mut set = root.init_set();
             set.set_key(key);
+            set.set_flags(flags);
             value.write_to_builder(set.init_value())?;
         }
         Ok(Args { data })
@@ -217,9 +232,11 @@ impl dusk_program::process::ProcessMixin for Process {
             .with_data::<kvs_capnp::kvs_args::data::Owned, _, _>(|data| {
                 let action = match data.which()? {
                     Which::Get(keys) => Which::Get(keys?.iter().collect::<alloc::vec::Vec<_>>()),
-                    Which::Set(set) => {
-                        Which::Set((set.get_key(), Value::from_reader(set.get_value()?)?))
-                    }
+                    Which::Set(set) => Which::Set((
+                        set.get_key(),
+                        Value::from_reader(set.get_value()?)?,
+                        set.get_flags(),
+                    )),
                     Which::Delete(key) => Which::Delete(key),
                     Which::Exists(key) => Which::Exists(key),
                     Which::Bind(()) => Which::Bind(()),
@@ -246,8 +263,11 @@ impl dusk_program::process::ProcessMixin for Process {
                 }
                 *self.found.borrow_mut() = found;
             }
-            kvs_capnp::kvs_args::data::Which::Set((key, value)) => {
-                set_key(&self.kvs, key, value, forbidden_unstick)
+            kvs_capnp::kvs_args::data::Which::Set((key, value, flags)) => {
+                if let Some(refusal) = client_flags_refusal(flags) {
+                    anyhow::bail!(refusal);
+                }
+                set_key(&self.kvs, key, value, flags, forbidden_unstick)
                     .await
                     .map_err(|sticky| {
                         anyhow::anyhow!("{sticky}. `kvs set --forbidden-unstick` sets it anyway")
@@ -285,13 +305,14 @@ async fn set_key(
     kvs: &kvs::Kvs,
     key: u64,
     value: Value,
+    flags: u8,
     forbidden_unstick: bool,
 ) -> Result<(), kvs::Sticky> {
-    if let Err(sticky) = kvs.set_unless_sticky(key, value.clone(), 0).await {
+    if let Err(sticky) = kvs.set_unless_sticky(key, value.clone(), flags).await {
         if !forbidden_unstick {
             return Err(sticky);
         }
-        kvs.set(key, value, 0).await;
+        kvs.set(key, value, flags).await;
         tracing::warn!(key, "forbidden-unstick overwrote a sticky key");
     }
     Ok(())
@@ -329,11 +350,12 @@ impl Portal {
         let key = dusk_capnp::pry!(params.get()).get_key();
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            let value = kvs
-                .get(key)
+            let (value, flags) = kvs
+                .get_with_flags(key)
                 .await
                 .ok_or_else(|| ::capnp::Error::failed(format!("key {key:#018x} not found")))?;
             value.write_to_builder(results.get().init_value())?;
+            results.get().set_flags(flags);
             Ok(())
         })
     }
@@ -347,9 +369,13 @@ impl Portal {
         let key = params.get_key();
         let value = dusk_capnp::pry!(Value::from_reader(dusk_capnp::pry!(params.get_value())));
         let forbidden_unstick = params.get_forbidden_unstick();
+        let flags = params.get_flags();
+        if let Some(refusal) = client_flags_refusal(flags) {
+            return Promise::err(::capnp::Error::failed(refusal));
+        }
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            set_key(&kvs, key, value, forbidden_unstick)
+            set_key(&kvs, key, value, flags, forbidden_unstick)
                 .await
                 .map_err(|sticky| {
                     ::capnp::Error::failed(format!("{sticky}. `forbiddenUnstick` sets it anyway"))
