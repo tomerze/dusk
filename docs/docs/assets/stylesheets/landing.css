@@ -451,15 +451,16 @@
   color: var(--dusk-ink-twilight);
   background-image: linear-gradient(
     180deg,
-    var(--dusk-ink-nightfall) 0 26.4%,
-    transparent 26.4% 29%,
-    var(--dusk-ink-dawn) 29% 41.6%,
-    transparent 41.6% 44.2%,
-    var(--dusk-ink-twilight) 44.2% 56.8%,
-    transparent 56.8% 59.4%,
-    var(--dusk-ink-data) 59.4% 72%,
-    transparent 72% 74.6%,
-    var(--dusk-ink-observability) 74.6% 100%
+    var(--dusk-ink-nightfall) 0 18%,
+    transparent 18% 20%,
+    var(--dusk-ink-dawn) 20% 38%,
+    transparent 38% 40%,
+    var(--dusk-ink-twilight) 40% 58%,
+    transparent 58% 60%,
+    var(--dusk-ink-data) 60% 78%,
+    transparent 78% 80%,
+    var(--dusk-ink-observability) 80% 98%,
+    transparent 98% 100%
   );
   background-size: 100% 100%;
   background-position-y: calc(var(--dusk-passed, 0) * -3em);
