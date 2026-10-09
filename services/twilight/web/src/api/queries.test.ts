@@ -6,8 +6,8 @@ import type { ReactNode } from 'react'
 import { createElement } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { testQueryClient } from '../test/render'
-import { historyWindow, useCampaignEvents } from './queries'
-import type { CampaignEvent } from './types'
+import { historyWindow, hostnameChunk, useCampaignEvents, useHostnames } from './queries'
+import type { CampaignEvent, NodeKey, NodeSummary } from './types'
 
 const server = setupServer()
 
@@ -19,6 +19,10 @@ function providers() {
   const client = testQueryClient()
   return ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children)
+}
+
+function hex(value: number) {
+  return value.toString(16).padStart(32, '0')
 }
 
 describe('useCampaignEvents', () => {
@@ -73,5 +77,42 @@ describe('useCampaignEvents', () => {
     )
     expect(requested).toEqual([null, '3'])
     expect(result.current.data?.dropped).toBe(false)
+  })
+})
+
+describe('useHostnames', () => {
+  it(`asks for at most ${hostnameChunk} installations per request and keeps each URL short`, async () => {
+    const urls: string[] = []
+    server.use(
+      http.get('/api/v1/nodes', ({ request }) => {
+        urls.push(request.url)
+        const selector = new URL(request.url).searchParams.get('selector') ?? ''
+        const installations = [...selector.matchAll(/"([0-9a-f]{32})"/g)].map(
+          (match) => match[1] ?? '',
+        )
+        return HttpResponse.json({
+          items: installations.map(
+            (installation) =>
+              ({
+                device_id: installation,
+                installation_id: installation,
+                hostname: `host-${installation.slice(-3)}`,
+              }) as NodeSummary,
+          ),
+          next_cursor: null,
+        })
+      }),
+    )
+    const nodes: NodeKey[] = Array.from(Array(200).keys(), (index) => ({
+      device_id: hex(index),
+      installation_id: hex(index),
+    }))
+    const { result } = renderHook(() => useHostnames(nodes), { wrapper: providers() })
+    await waitFor(() => expect(result.current.size).toBe(200))
+    expect(urls).toHaveLength(Math.ceil(200 / hostnameChunk))
+    for (const url of urls) {
+      expect(url.length).toBeLessThan(4096)
+    }
+    expect(result.current.get(`${hex(199)}/${hex(199)}`)).toBe('host-0c7')
   })
 })
