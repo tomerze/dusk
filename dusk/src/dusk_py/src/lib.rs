@@ -1,11 +1,11 @@
 #![allow(exported_private_dependencies)]
 #![feature(linkage)]
 
+use connection::Options;
 use dusk_capnp::dusk_capnp::dusk::Client;
 use dusk_connection::Connection;
 use dusk_program::anyhow::Result;
 use dusk_program_sh::client::open_prompt;
-use dusk_program_sh::client::shell::Shell;
 use dusk_program_sh::entry::{EntryInfo, sh_entries};
 use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
@@ -17,6 +17,7 @@ use std::thread::JoinHandle;
 use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::mpsc;
 
+mod connection;
 mod ctrl_c;
 mod shell_output;
 use ctrl_c::stop_on_ctrl_c;
@@ -90,14 +91,16 @@ impl Dusk {
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
             port,
         ));
+        let options = Options {
+            address,
+            sh_server_pid: sh_server_pid.unwrap_or(DEFAULT_PID),
+        };
 
         let (message_tx, message_rx) = mpsc::unbounded_channel::<Message>();
         let (init_tx, mut init_rx) = mpsc::unbounded_channel::<Result<()>>();
 
-        let server_pid = sh_server_pid.unwrap_or(DEFAULT_PID);
-        let thread_handle = std::thread::spawn(move || {
-            Self::connection_thread(address, server_pid, message_rx, init_tx)
-        });
+        let thread_handle =
+            std::thread::spawn(move || Self::connection_thread(options, message_rx, init_tx));
 
         // Wait for initialization to complete or fail, releasing the GIL so a
         // slow connect doesn't freeze other Python threads.
@@ -193,61 +196,25 @@ impl Dusk {
     }
 
     fn connection_thread(
-        address: std::net::SocketAddr,
-        server_pid: u64,
+        options: Options,
         mut message_rx: mpsc::UnboundedReceiver<Message>,
         init_tx: mpsc::UnboundedSender<Result<()>>,
     ) -> Result<()> {
         let rt = tokio::runtime::Runtime::new()?;
         let local_set = tokio::task::LocalSet::new();
 
-        async fn init(address: std::net::SocketAddr) -> Result<(Connection, Client)> {
-            let connection = Connection::connect(address).await?;
-            let client = connection.client().await;
-            Ok((connection, client))
-        }
-
         rt.block_on(local_set.run_until(async move {
-            let (connection, client) = match init(address).await {
-                Ok(pair) => pair,
-                Err(e) => {
-                    let _ = init_tx.send(Err(e));
-                    return Ok(());
-                }
-            };
-
-            // The capnp client connects lazily, so `init` returns Ok even
-            // against a server that is down - the refused socket only surfaces
-            // on the first real RPC. Force one round-trip here so connection
-            // setup fails up front, instead of the first command the caller
-            // runs after `Dusk(...)` appears to succeed.
-            if let Err(e) = client.hostname_request().send().promise.await {
-                let _ = connection.disconnect().await;
-                let _ = init_tx.send(Err(e.into()));
-                return Ok(());
-            }
-            let shell = async {
-                let process = Shell::recreate_sh_process(client.clone(), server_pid)
-                .await?;
-                Shell::new(
-                    client.clone(),
-                    process,
-                )
-                .await
-            }
-            .await;
-            let shell = match shell {
-                Ok(shell) => Rc::new(TokioMutex::new(shell)),
+            let server_pid = options.sh_server_pid;
+            let (connection, client, shell) = match connection::open(&options).await {
+                Ok(opened) => opened,
                 Err(error) => {
-                    if let Err(disconnect_error) = connection.disconnect().await {
-                        tracing::warn!(error = %format!("{disconnect_error:#}"), "couldn't disconnect after the shell server failed to start");
-                    }
                     if init_tx.send(Err(error)).is_err() {
                         tracing::warn!("nobody was waiting for the connection to be set up");
                     }
                     return Ok(());
                 }
             };
+            let shell = Rc::new(TokioMutex::new(shell));
             let _ = init_tx.send(Ok(()));
 
             loop {
