@@ -449,18 +449,16 @@ The state goes into `Rc<RefCell<PsResult>>` held on the `Process` struct; the po
 
 ### Pattern C - Accept incoming connections in a `select!` loop
 
-This is the `nightfall` pattern (`base/nightfall/src/lib.rs:79-140`):
+This is the `nightfall` pattern - `Process::listen` in `base/nightfall/src/lib.rs`, which `main` runs with the address and port it read from its args for `nightfall -l`. Abridged - it also names the process after the address and marks itself terminated:
 
 ```rust
-async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
-    let (address, port) = self
-        .ctx
-        .program_args
-        .with_data::<nightfall_capnp::nightfall_args::data::Owned, _, _>(|data| {
-            let address = data.get_address()?.to_string()?;
-            let port = data.get_port();
-            Ok((address, port))
-        })?;
+async fn listen(
+    &self,
+    address: &str,
+    port: u16,
+    signal_receiver: SignalReceiver<'_>,
+    ready: Ready,
+) -> anyhow::Result<()> {
     let ip_address: std::net::IpAddr = address.parse()?;
     let listener = async_io::Async::<std::net::TcpListener>::bind(std::net::SocketAddr::new(
         ip_address, port,
@@ -535,7 +533,7 @@ To get the `Server` capability (e.g. the `dusk::Client` the spawner stashed in `
 
 The instant your portal can answer calls. For most programs this is **after** all initial setup but **before** the signal loop. `Dusk.process(args)` resolves as soon as the process is registered, and callers will start asking for `process.portal()` - `portal()` blocks server-side until `ready` fires. Sending `ready` too early means callers receive a portal that calls into half-initialised state.
 
-`nightfall` is the cleanest example: bind the listener, then `ready`, then enter the `select!` loop (`base/nightfall/src/lib.rs:93-100`).
+`nightfall` is the cleanest example: bind the listener, then `ready`, then enter the `select!` loop (`Process::listen` in `base/nightfall/src/lib.rs`).
 
 ---
 
