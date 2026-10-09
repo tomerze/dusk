@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block extrahead %}
+  <script>
+    try {
+      const palette = __md_get("__palette");
+      const schemes = {{ config.theme.palette | map(attribute="scheme") | list | tojson }};
+      if (palette && (!palette.color || schemes[palette.index] !== palette.color.scheme)) {
+        localStorage.removeItem(__md_scope.pathname + ".__palette");
+      }
+    } catch {}
+  </script>
+{% endblock %}
