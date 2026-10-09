@@ -604,8 +604,12 @@ services:
       GRAFANA_URL: http://grafana:3000
       GRAFANA_PASSWORD_FILE: /secrets/grafana-admin/password
       VERIFY_LAKE: ${VERIFY_LAKE:-}
+      REPOSITORY_DIRECTORY: /repository
     volumes:
       - ../tests:/tests:ro
+      - ../k8s/base/nightfall/permissions.toml:/repository/infra/k8s/base/nightfall/permissions.toml:ro
+      - ../../base:/repository/base:ro
+      - ../../dusk/src/dusk_capnp/capnp:/repository/dusk/src/dusk_capnp/capnp:ro
       - ../grafana/dashboards:/grafana/dashboards:ro
       - ../../services/contracts/kafka:/contracts:ro
       - { <<: *pki, target: /pki/trust-anchors, volume: { subpath: trust-anchors } }
