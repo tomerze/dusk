@@ -86,7 +86,7 @@
       id="dusk-uplink-12"
       d="M382.2 26L279.2 152"
     />
-    <path class="dusk-fleet__link" id="dusk-uplink-13" d="M410 40L290 150" />
+    <path class="dusk-fleet__link" id="dusk-uplink-13" d="M392 48L290 150" />
     <circle class="dusk-packet" r="2.5">
       <animateMotion
         dur="4.2s"
@@ -277,12 +277,12 @@
     <circle class="dusk-stack__node" cx="382.2" cy="26" r="4" />
     <circle
       class="dusk-node__pulse"
-      cx="410"
-      cy="40"
+      cx="392"
+      cy="48"
       r="4"
       style="animation-delay: -1.2s"
     />
-    <circle class="dusk-stack__node" cx="410" cy="40" r="4" />
+    <circle class="dusk-stack__node" cx="392" cy="48" r="4" />
   </g>
   <g class="dusk-plate" data-layer="observability">
     <polygon
