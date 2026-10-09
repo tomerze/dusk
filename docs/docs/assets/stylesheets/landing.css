@@ -662,7 +662,36 @@
   overflow: visible;
 }
 .dusk-plate {
+  animation: dusk-hover 5s ease-in-out infinite alternate;
   transition: transform 0.45s ease;
+}
+.dusk-plate[data-layer="nightfall"] {
+  animation-duration: 5.4s;
+  animation-delay: -1.1s;
+}
+.dusk-plate[data-layer="dawn"] {
+  animation-duration: 4.7s;
+  animation-delay: -3.2s;
+}
+.dusk-plate[data-layer="twilight"] {
+  animation-duration: 5.9s;
+  animation-delay: -0.4s;
+}
+.dusk-plate[data-layer="data"] {
+  animation-duration: 5.1s;
+  animation-delay: -2.6s;
+}
+.dusk-plate[data-layer="observability"] {
+  animation-duration: 4.4s;
+  animation-delay: -1.8s;
+}
+@keyframes dusk-hover {
+  from {
+    translate: 0 3px;
+  }
+  to {
+    translate: 0 -3px;
+  }
 }
 .dusk-plate polygon,
 .dusk-plate text,
@@ -714,20 +743,8 @@
     margin-left: -7.4%;
   }
 }
-.dusk-stack__uplink {
-  stroke: var(--dusk-gold);
-  stroke-width: 1.4;
-  stroke-dasharray: 3 5;
-  opacity: 0.75;
-  animation: dusk-flow 1.2s linear infinite;
-}
 .dusk-stack__node {
   fill: var(--dusk-gold);
-}
-@keyframes dusk-flow {
-  to {
-    stroke-dashoffset: -16;
-  }
 }
 .dusk-stack__layers {
   clip-path: inset(-2rem -2rem -1rem -2rem);
@@ -1065,7 +1082,7 @@
 .is-offscreen .dusk-float,
 .is-offscreen .dusk-arm,
 .is-offscreen .dusk-node__pulse,
-.is-offscreen .dusk-stack__uplink {
+.is-offscreen .dusk-plate {
   animation-play-state: paused;
 }
 
@@ -1079,15 +1096,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
-  .dusk-arm {
+  .dusk-arm,
+  .dusk-plate {
     animation: none;
   }
   .dusk-packet,
   .dusk-node__pulse {
     display: none;
-  }
-  .dusk-stack__uplink {
-    animation: none;
   }
   .dusk-plate,
   .dusk-plate *,

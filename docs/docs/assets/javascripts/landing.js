@@ -36,6 +36,16 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
         }
         front.style.opacity = 0;
         diagram.append(front);
+        for (const animation of front.getAnimations()) {
+          const twin = plate
+            .getAnimations()
+            .find(
+              (original) => original.animationName === animation.animationName,
+            );
+          if (animation.animationName && twin) {
+            animation.currentTime = twin.currentTime;
+          }
+        }
         getComputedStyle(front).opacity;
         front.style.opacity = 1;
       }
@@ -58,7 +68,7 @@ const visibility = new IntersectionObserver((entries) => {
   for (const entry of entries) {
     entry.target.classList.toggle("is-offscreen", !entry.isIntersecting);
     for (const network of entry.target.querySelectorAll(
-      ".dusk-fleet__network",
+      ".dusk-fleet__network, .dusk-stack__diagram",
     )) {
       if (entry.isIntersecting) {
         network.unpauseAnimations();
