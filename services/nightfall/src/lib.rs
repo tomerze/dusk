@@ -1,4 +1,5 @@
 pub mod backoff;
+pub mod census;
 pub mod config;
 pub mod contracts;
 pub mod directory;
