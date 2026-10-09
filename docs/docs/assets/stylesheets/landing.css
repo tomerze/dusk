@@ -680,12 +680,9 @@
   }
 }
 .dusk-layer {
-  padding: 0.4rem 0 0.4rem 1.2rem;
+  padding: 1rem 0 1rem 1.2rem;
   border-left: 3px solid var(--dusk-ink);
   transition: opacity 0.45s ease;
-}
-.dusk-layer + .dusk-layer {
-  margin-top: 2rem;
 }
 .dusk-landing .dusk-layer h3 {
   display: flex;
@@ -772,9 +769,6 @@
     flex-direction: column;
     justify-content: center;
     min-height: 56vh;
-  }
-  .dusk-layer + .dusk-layer {
-    margin-top: 0;
   }
   .dusk-stack.is-focused .dusk-plate:not(.is-active) .dusk-plate__veil {
     opacity: 0.78;
