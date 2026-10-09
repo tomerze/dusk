@@ -1,5 +1,5 @@
 use dusk_capnp::dusk_capnp::dusk;
-use dusk_connection::{CONNECT_TIMEOUT, Connection};
+use dusk_connection::{CONNECT_TIMEOUT, Connection, TlsClient};
 use dusk_program::anyhow;
 use dusk_program_sh::client::shell::Shell;
 
@@ -7,6 +7,7 @@ pub struct Options {
     pub address: String,
     pub port: u16,
     pub sh_server_pid: u64,
+    pub tls: Option<TlsClient>,
 }
 
 async fn connect(host: &str, port: u16) -> anyhow::Result<Connection> {
@@ -64,7 +65,10 @@ async fn connect(host: &str, port: u16) -> anyhow::Result<Connection> {
 }
 
 pub async fn open(options: &Options) -> anyhow::Result<(Connection, dusk::Client, Shell)> {
-    let connection = connect(&options.address, options.port).await?;
+    let connection = match &options.tls {
+        None => connect(&options.address, options.port).await?,
+        Some(tls) => Connection::connect_tls(&options.address, options.port, tls.clone()).await?,
+    };
     let dusk = connection.client().await;
     let attached = async {
         let process = Shell::recreate_sh_process(dusk.clone(), options.sh_server_pid).await?;

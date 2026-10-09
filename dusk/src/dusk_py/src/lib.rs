@@ -3,13 +3,14 @@
 
 use connection::Options;
 use dusk_capnp::dusk_capnp::dusk::Client;
-use dusk_connection::Connection;
+use dusk_connection::{Connection, TlsClient};
 use dusk_program::anyhow::Result;
 use dusk_program_sh::client::open_prompt;
 use dusk_program_sh::entry::{EntryInfo, sh_entries};
 use dusk_program_sh::sh_capnp::DEFAULT_PID;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -75,12 +76,37 @@ struct Dusk {
 #[pymethods]
 impl Dusk {
     #[new]
-    #[pyo3(signature = (address, port, sh_server_pid=None))]
-    fn new(py: Python, address: String, port: u16, sh_server_pid: Option<u64>) -> PyResult<Self> {
+    #[pyo3(signature = (address, port, sh_server_pid=None, *, server_name=None, ca=None, certificate=None, key=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python,
+        address: String,
+        port: u16,
+        sh_server_pid: Option<u64>,
+        server_name: Option<String>,
+        ca: Option<PathBuf>,
+        certificate: Option<PathBuf>,
+        key: Option<PathBuf>,
+    ) -> PyResult<Self> {
+        let tls = match ca {
+            Some(ca) => Some(TlsClient {
+                server_name: server_name.unwrap_or_else(|| address.clone()),
+                ca,
+                certificate,
+                key,
+            }),
+            None if server_name.is_some() || certificate.is_some() || key.is_some() => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "server_name, certificate and key need ca, the trust anchors of a TLS connection",
+                ));
+            }
+            None => None,
+        };
         let options = Options {
             address,
             port,
             sh_server_pid: sh_server_pid.unwrap_or(DEFAULT_PID),
+            tls,
         };
 
         let (message_tx, message_rx) = mpsc::unbounded_channel::<Message>();
