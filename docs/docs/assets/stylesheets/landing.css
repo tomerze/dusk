@@ -502,6 +502,12 @@
 .dusk-fleet__tiny circle {
   fill: var(--dusk-tiny);
 }
+.dusk-packet {
+  fill: var(--dusk-gold);
+}
+.dusk-packet--faint {
+  opacity: 0.6;
+}
 .dusk-fleet__hub-glow {
   fill: var(--dusk-gold);
   opacity: 0.22;
@@ -536,6 +542,12 @@
 .dusk-node__online {
   fill: var(--dusk-gold);
 }
+.dusk-node__pulse {
+  fill: var(--dusk-gold);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dusk-pulse 2.4s ease-out infinite;
+}
 .dusk-node__label {
   fill: var(--md-default-fg-color--light);
   font-size: 15px;
@@ -545,10 +557,24 @@
   stroke-width: 5px;
   stroke-linejoin: round;
 }
+@keyframes dusk-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(3.4);
+    opacity: 0;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-landing .dusk-section > h2 {
     animation: none;
+  }
+  .dusk-packet,
+  .dusk-node__pulse {
+    display: none;
   }
 }
