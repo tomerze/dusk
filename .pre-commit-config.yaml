@@ -43,5 +43,17 @@ repos:
           types_or: [python, pyi]
           files: ^(dusk/src/dusk_py/python/|tests/interfaces/gw/)
           pass_filenames: false
+      -   id: prettier
+          name: prettier
+          entry: prettier --write
+          language: node
+          additional_dependencies: ["prettier@3.6.2"]
+          files: ^docs/docs/assets/(stylesheets|javascripts|landing|\.icons/dusk)/.*\.(css|js|svg)$
+      -   id: djlint
+          name: djlint
+          entry: djlint --reformat --profile=jinja --indent 2
+          language: python
+          additional_dependencies: ["djlint==1.46.4"]
+          files: ^docs/docs/assets/.*\.html$
 
 fail_fast: true
