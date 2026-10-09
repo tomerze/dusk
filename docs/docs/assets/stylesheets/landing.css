@@ -1,6 +1,7 @@
 :root {
   --dusk-header: 3.4rem;
   --dusk-gutter: 0.8rem;
+  --dusk-target: 24px;
   --dusk-measure: 46rem;
   --dusk-button: 8.4rem;
   --dusk-float: 2rem;
@@ -115,6 +116,9 @@
   border-right: 1px solid rgba(243, 240, 251, 0.25);
 }
 .dusk-navbar__links a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--dusk-target);
   color: rgba(243, 240, 251, 0.88);
   font-size: 0.8rem;
   font-weight: 500;
@@ -387,6 +391,9 @@
   font-weight: 600;
 }
 .dusk-landing .dusk-platforms__links a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--dusk-target);
   text-decoration: underline;
   text-decoration-thickness: 0.09em;
   text-underline-offset: 0.22em;
@@ -875,6 +882,11 @@
 .dusk-landing .grid.cards a {
   color: var(--dusk-card-ink);
 }
+.dusk-landing .dusk-card-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--dusk-target);
+}
 .dusk-landing .grid.cards strong {
   color: var(--dusk-card-ink);
   font-size: 1.4rem;
@@ -933,6 +945,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-block-size: var(--dusk-target);
   color: var(--md-footer-fg-color--light);
   font-size: 0.7rem;
 }
@@ -950,8 +963,10 @@
   }
 }
 .dusk-sitemap__title {
-  display: block;
-  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  min-block-size: var(--dusk-target);
+  margin-bottom: 0.3rem;
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--md-footer-fg-color);
@@ -962,10 +977,13 @@
   list-style: none;
 }
 .dusk-sitemap li {
-  margin: 0.35rem 0;
+  margin: 0;
   font-size: 0.7rem;
 }
 .dusk-sitemap li a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--dusk-target);
   color: var(--md-footer-fg-color--light);
 }
 .dusk-sitemap a:hover,
