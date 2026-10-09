@@ -1,4 +1,4 @@
-import type { ActionKind, Campaign } from '../api/types'
+import type { ActionKind, Campaign, CampaignDefinition } from '../api/types'
 import type { CampaignDisplayStatus } from '../components/status'
 
 export function displayStatus(
@@ -59,4 +59,17 @@ export function matchesSearch(
 
 export function isActive(campaign: Pick<Campaign, 'status'>): boolean {
   return campaign.status === 'running' || campaign.status === 'paused'
+}
+
+export function definitionOf(campaign: CampaignDefinition): CampaignDefinition {
+  return {
+    name: campaign.name,
+    description: campaign.description,
+    ...(campaign.tenant === undefined || campaign.tenant === null
+      ? {}
+      : { tenant: campaign.tenant }),
+    selector: campaign.selector,
+    action: campaign.action,
+    policy: campaign.policy,
+  }
 }
