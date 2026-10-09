@@ -3,6 +3,8 @@ use dusk_connection::{CONNECT_TIMEOUT, Connection, TlsClient};
 use dusk_program::anyhow;
 use dusk_program_sh::client::shell::Shell;
 
+const ATTACH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 pub struct Options {
     pub address: String,
     pub port: u16,
@@ -70,11 +72,18 @@ pub async fn open(options: &Options) -> anyhow::Result<(Connection, dusk::Client
         Some(tls) => Connection::connect_tls(&options.address, options.port, tls.clone()).await?,
     };
     let dusk = connection.client().await;
-    let attached = async {
+    let attached = tokio::time::timeout(ATTACH_TIMEOUT, async {
         let process = Shell::recreate_sh_process(dusk.clone(), options.sh_server_pid).await?;
         Shell::new(dusk.clone(), process).await
-    }
-    .await;
+    })
+    .await
+    .unwrap_or_else(|_| {
+        Err(capnp::Error::disconnected(format!(
+            "couldn't attach to the shell server: no answer within {} seconds",
+            ATTACH_TIMEOUT.as_secs()
+        ))
+        .into())
+    });
     match attached {
         Ok(shell) => Ok((connection, dusk, shell)),
         Err(error) => {
