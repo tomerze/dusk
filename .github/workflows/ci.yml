@@ -208,3 +208,22 @@ jobs:
 
       - name: go test
         run: go test -short ./...
+
+  go-integration:
+    name: Go (integration)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/twilight
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/twilight/go.mod
+          cache-dependency-path: services/twilight/go.sum
+
+      - name: go test -tags integration
+        run: go test -tags integration -timeout 30m ./...
