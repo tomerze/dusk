@@ -1,0 +1,56 @@
+:root {
+  --twilight-focus: var(--mantine-primary-color-filled);
+}
+
+html,
+body {
+  background: var(--mantine-color-body);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 35%, transparent);
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-feature-settings: var(--twilight-mono-feature);
+  letter-spacing: -0.01em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+.mono-link:hover {
+  color: var(--mantine-primary-color-filled);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--twilight-focus);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-color: var(--mantine-color-default-border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
