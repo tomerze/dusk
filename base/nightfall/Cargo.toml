@@ -28,7 +28,9 @@ clap = { version = "4", features = ["derive"], optional = true }
 
 [dev-dependencies]
 time = "0.3"
+dusk_base = { path = "../../dusk/src/dusk_base", features = ["client"] }
 dusk_nix = { path = "../../impls/nix" }
+dusk_program_sh = { path = "../sh", features = ["client"] }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
