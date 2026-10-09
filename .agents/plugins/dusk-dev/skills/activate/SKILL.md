@@ -93,6 +93,27 @@ These are checked as each action is taken:
   space means deleting the user's build caches, so **ask first**, and name the
   measured sizes and which branches are already merged so the choice is theirs.
 
+## The Dusk stack's toolchains
+
+The Dusk stack's services - the `stack` skill - need more than Rust:
+
+- **Go 1.27** is in `~/.local/go`, with `go` and `gofmt` also linked in
+  `~/.local/bin`. twilight is the module in `services/twilight`:
+  `go -C services/twilight test ./...`.
+- **Node 22 and npm.** The twilight UI installs from its lockfile with `npm ci`
+  in `services/twilight/web`, and its pre-commit hook needs that done first.
+- **uv** runs every Python tool here, dawn's included.
+- **Docker** with Compose runs the compose stack, builds the images and hosts
+  the containers tests start. Give a throwaway container a unique name and
+  remove it when done, and never touch the host's firewall, sysctl or systemd.
+  Every image builds from the repository root with
+  `--build-arg GIT_REV=$(git rev-parse HEAD)` and needs `vendor/capnproto`
+  checked out; the Rust images compile the workspace from scratch, which is
+  slow.
+- **kind, kubectl and helm** are in `~/.local/bin`. kubectl carries kustomize
+  (`kubectl kustomize infra/k8s/overlays/dev`); helm only renders SigNoz's
+  manifests, which are committed, so nothing installs a chart.
+
 ## Driving the node by hand
 
 Running the thing beats reasoning about it, and it is not the test suite, so it
