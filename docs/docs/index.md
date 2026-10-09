@@ -41,6 +41,30 @@ ship.
 
 </section>
 
+<section class="dusk-platforms" markdown>
+
+## Runs where your software runs.
+
+<div class="dusk-platforms__grid" markdown>
+
+- :simple-linux: Linux
+- :fontawesome-brands-windows: Windows
+- :simple-apple: macOS
+- :simple-freebsd: FreeBSD
+- :simple-android: Android
+- :simple-apple: iOS
+- :simple-webassembly: WASM
+- :simple-espressif: ESP-IDF
+- :material-weather-windy: Zephyr
+- :material-chip: Bare metal
+
+</div>
+
+[See all platforms](embedding/node-artifacts.md#platforms)
+[Add your own](getting-started/guides/custom-impl.md)
+
+</section>
+
 <div class="grid cards" markdown>
 
 -   **Embed Dusk**

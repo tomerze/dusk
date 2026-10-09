@@ -292,6 +292,89 @@
   mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
 }
 
+.dusk-platforms {
+  padding: 2.4rem 0.8rem 1rem;
+  background-color: var(--dusk-ground);
+  text-align: center;
+}
+.dusk-landing .dusk-platforms h2 {
+  margin: 0 0 2rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--md-default-fg-color);
+  text-wrap: balance;
+}
+.dusk-landing .dusk-platforms__grid ul {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1.2rem 0.5rem;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+.dusk-landing .dusk-platforms__grid ul li {
+  --md-icon-size: 1.5rem;
+  display: flex;
+  grid-column: span 2;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 0;
+  color: var(--md-default-fg-color--light);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.dusk-landing .dusk-platforms__grid .twemoji {
+  flex: none;
+}
+.dusk-landing .dusk-platforms > p {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem 2rem;
+  margin: 2rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.dusk-landing .dusk-platforms > p a {
+  text-decoration: underline;
+  text-decoration-thickness: 0.09em;
+  text-underline-offset: 0.22em;
+}
+@media screen and (max-width: 44.9375em) {
+  .dusk-landing .dusk-platforms__grid ul li {
+    gap: 0.4rem;
+    font-size: 0.85rem;
+  }
+  .dusk-landing .dusk-platforms__grid ul li:nth-child(1) {
+    order: -2;
+  }
+  .dusk-landing .dusk-platforms__grid ul li:nth-child(3) {
+    order: -1;
+  }
+  .dusk-landing .dusk-platforms__grid ul li:nth-child(5) {
+    order: 1;
+  }
+  .dusk-landing .dusk-platforms__grid ul li:nth-child(n + 7) {
+    grid-column: span 3;
+    order: 2;
+  }
+}
+@media screen and (min-width: 45em) {
+  .dusk-landing .dusk-platforms__grid ul {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    column-gap: 1rem;
+  }
+  .dusk-landing .dusk-platforms__grid ul li:nth-child(5),
+  .dusk-landing .dusk-platforms__grid ul li:nth-child(8) {
+    grid-column: 2 / span 2;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float {
     animation: none;
