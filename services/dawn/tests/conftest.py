@@ -609,3 +609,125 @@ class RecordingProducer:
 @pytest.fixture
 def producer() -> RecordingProducer:
     return RecordingProducer()
+
+
+DISPATCHER_TOKEN = "dispatcher-token"
+OPERATOR_TOKEN = "operator-token"
+SECOND_OPERATOR_TOKEN = "second-operator-token"
+VIEWER_TOKEN = "viewer-token"
+OPERATOR = "operator@example.org"
+PROGRAMS = [
+    {
+        "name": "ps",
+        "version": "0.1.0",
+        "short_description": "List the processes on the node.",
+        "long_description": "Usage: ps",
+        "program_id": 15065078153151533341,
+    }
+]
+
+
+class MemoryStorage:
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    async def put_object(
+        self, Bucket: str, Key: str, Body: bytes, ContentType: str
+    ) -> dict:
+        self.objects[Key] = Body
+        return {}
+
+
+def bearer(token: str) -> dict[str, str]:
+    return {"authorization": f"Bearer {token}"}
+
+
+class Dawn:
+    def __init__(
+        self, directory: pathlib.Path, connector=None, **settings_overrides
+    ) -> None:
+        import hashlib
+
+        from dawn.api import Services, build_application
+        from dawn.auth import Authenticator, TokenFile
+        from dawn.config import KafkaTopics
+        from dawn.dispatch import Dispatcher
+        from dawn.events import Events
+        from dawn.files import Files
+        from dawn.logstreams import LogStreams
+        from dawn.metrics import Metrics
+        from dawn.nodes import Sessions
+        from dawn.work import Results, Runner
+
+        tokens = directory / "tokens.toml"
+        entries = [
+            (DISPATCHER_TOKEN, "dispatcher", "twilight-0"),
+            (OPERATOR_TOKEN, "operator", OPERATOR),
+            (SECOND_OPERATOR_TOKEN, "operator", "second@example.org"),
+            (VIEWER_TOKEN, "viewer", "viewer@example.org"),
+        ]
+        tokens.write_text(
+            "\n".join(
+                f'[[token]]\nsha256 = "{hashlib.sha256(token.encode()).hexdigest()}"\n'
+                f'role = "{role}"\nsubject = "{subject}"\n'
+                for token, role, subject in entries
+            )
+        )
+        overrides: dict = {"auth": {"tokens_file": str(tokens)}}
+        overrides.update(settings_overrides)
+        self.settings = dawn_settings(**overrides)
+        self.fleet = FakeFleet()
+        self.connector = connector or self.fleet
+        self.producer = RecordingProducer()
+        self.storage = MemoryStorage()
+        self.metrics = Metrics()
+        self.sessions = Sessions(
+            self.settings.limits.max_node_sessions, self.metrics.node_sessions.set
+        )
+        self.results = Results(
+            Events(self.producer, KafkaTopics(), self.settings.instance),
+            b"k" * 32,
+            self.metrics.counted,
+        )
+        limits = self.settings.limits
+        self.files = Files(
+            self.storage,
+            self.settings.s3.bucket,
+            self.results,
+            limits.max_file_bytes,
+            limits.max_concurrent_uploads,
+            limits.max_staged_bytes,
+        )
+        runner = Runner(self.settings, self.connector, self.results, self.files)
+        self.services = Services(
+            settings=self.settings,
+            authenticator=Authenticator(
+                TokenFile(tokens), None, self.settings.principals
+            ),
+            connector=self.connector,
+            sessions=self.sessions,
+            results=self.results,
+            dispatcher=Dispatcher(self.settings, runner, self.sessions),
+            files=self.files,
+            log_streams=LogStreams(
+                self.settings, self.connector, self.sessions, self.results
+            ),
+            metrics=self.metrics,
+            programs=PROGRAMS,
+        )
+        self.application = build_application(self.services, "0.0.0.0")
+
+
+@pytest.fixture
+def dawn(tmp_path):
+    return Dawn(tmp_path)
+
+
+@pytest.fixture
+def client(dawn):
+    from starlette.testclient import TestClient
+
+    with TestClient(
+        dawn.application, base_url="https://dawn-0.dawn:8443"
+    ) as test_client:
+        yield test_client
