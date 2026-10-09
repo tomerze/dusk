@@ -2,10 +2,13 @@ use anyhow::Result;
 use capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty};
 use dusk_capnp::dusk_capnp::dusk::Client;
 use futures::io::AsyncReadExt;
+use std::time::Duration;
 use std::{net::SocketAddr, rc::Rc, sync::Mutex};
 use tokio::net::TcpStream;
 
 type DisconnectorStore = Rc<Mutex<Option<Disconnector<rpc_twoparty_capnp::Side>>>>;
+
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Connection {
     disconnector_store: DisconnectorStore,
@@ -18,7 +21,14 @@ impl Connection {
         disconnector_store: DisconnectorStore,
     ) -> capnp::Result<Client> {
         let client = capnp_rpc::new_future_client(async move {
-            let stream = TcpStream::connect(address).await?;
+            let stream = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(address))
+                .await
+                .map_err(|_| {
+                    capnp::Error::disconnected(format!(
+                        "couldn't connect to {address}: no answer within {} seconds",
+                        CONNECT_TIMEOUT.as_secs()
+                    ))
+                })??;
             stream.set_nodelay(true)?;
 
             let stream = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream);
