@@ -33,5 +33,5 @@
     <polygon points="12,-222 0,-300 -12,-222" transform="rotate(308.571)" />
     <polygon points="12,-222 0,-300 -12,-222" transform="rotate(334.286)" />
   </g>
-  <circle r="200" fill="url(#dusk-sun)" />
+  <circle class="dusk-hero__disc" r="200" fill="url(#dusk-sun)" />
 </svg>

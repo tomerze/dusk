@@ -84,54 +84,31 @@ for (const section of document.querySelectorAll(
   visibility.observe(section);
 }
 
-for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
-  const rays = sun.querySelector(".dusk-hero__rays");
-  const disc = sun.querySelector("circle:last-of-type");
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  let angle = 0;
-  let target = 0;
-  let settling = false;
-  let last = 0;
-  const settle = (now) => {
-    angle = reduced.matches
-      ? target
-      : angle + (target - angle) * (1 - Math.exp((last - now) / 150));
-    last = now;
-    rays.style.transform = `rotate(${angle}deg)`;
-    settling = Math.abs(target - angle) > 0.05;
-    if (settling) {
-      requestAnimationFrame(settle);
-    }
-  };
-  const nudge = () => {
-    if (!settling) {
-      settling = true;
-      last = performance.now();
-      requestAnimationFrame(settle);
-    }
-  };
-  const turnTo = (aim) => {
-    let turn = (aim - target) % 360;
-    if (turn > 180) {
-      turn -= 360;
-    } else if (turn < -180) {
-      turn += 360;
-    }
-    target += turn;
-    nudge();
-  };
-  window.addEventListener("pointermove", (event) => {
-    if (event.pointerType === "touch") {
-      return;
-    }
-    const box = disc.getBoundingClientRect();
-    const across = event.clientX - (box.left + box.width / 2);
-    const above = box.top + box.height / 2 - event.clientY;
-    if (Math.hypot(across, above) < box.width / 2) {
-      return;
-    }
-    turnTo((Math.atan2(across, above) * 180) / Math.PI);
-  });
+if (matchMedia("(hover: hover)").matches) {
+  for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
+    const rays = sun.querySelector(".dusk-hero__rays");
+    const disc = sun.querySelector(".dusk-hero__disc");
+    let aim = 0;
+    window.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch" || still.matches) {
+        return;
+      }
+      const box = disc.getBoundingClientRect();
+      const across = event.clientX - (box.left + box.width / 2);
+      const above = box.top + box.height / 2 - event.clientY;
+      if (Math.hypot(across, above) < box.width / 2) {
+        return;
+      }
+      let turn = ((Math.atan2(across, above) * 180) / Math.PI - aim) % 360;
+      if (turn > 180) {
+        turn -= 360;
+      } else if (turn < -180) {
+        turn += 360;
+      }
+      aim += turn;
+      rays.style.setProperty("--dusk-aim", `${aim}deg`);
+    });
+  }
 }
 
 for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {

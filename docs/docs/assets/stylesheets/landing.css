@@ -312,6 +312,10 @@
   width: min(22rem, 86cqi);
   height: auto;
 }
+.dusk-hero__rays {
+  rotate: var(--dusk-aim, 0deg);
+  transition: rotate 0.6s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
 .dusk-hero__horizon::after {
   content: "";
   position: absolute;
@@ -1023,7 +1027,8 @@
   }
   .dusk-plate,
   .dusk-plate *,
-  .dusk-layer {
+  .dusk-layer,
+  .dusk-hero__rays {
     transition: none;
   }
   .dusk-stack__head {
