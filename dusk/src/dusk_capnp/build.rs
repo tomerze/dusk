@@ -132,7 +132,23 @@ fn ensure_capnp_build(capnp_root: &Path) -> PathBuf {
     capnp_bin
 }
 
-fn main() {
+include!("../dusk_build/src/revision.rs");
+
+fn emit_git_rev() {
+    println!("cargo:rerun-if-env-changed=DUSK_GIT_REV");
+    match std::env::var("DUSK_GIT_REV") {
+        Ok(revision) if !revision.is_empty() => {
+            let Some(short) = short_revision(&revision) else {
+                fail_without_revision(&format!("DUSK_GIT_REV is `{revision}`"));
+            };
+            println!("cargo:rustc-env=GIT_REV={short}");
+            return;
+        }
+        Ok(_) | Err(std::env::VarError::NotPresent) => {}
+        Err(std::env::VarError::NotUnicode(_)) => {
+            fail_without_revision("DUSK_GIT_REV is not UTF-8");
+        }
+    }
     let git = |args: &[&str]| {
         Command::new("git")
             .args(args)
@@ -140,8 +156,22 @@ fn main() {
             .expect("failed to execute git")
     };
 
-    let git_hash = String::from_utf8(git(&["rev-parse", "HEAD"]).stdout).unwrap();
-    println!("cargo:rustc-env=GIT_REV={}", &git_hash.trim()[..16]);
+    let output = match Command::new("git").args(["rev-parse", "HEAD"]).output() {
+        Ok(output) if output.status.success() => output,
+        Ok(output) => fail_without_revision(&format!(
+            "`git rev-parse HEAD` failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        Err(error) => fail_without_revision(&format!("couldn't run git: {error}")),
+    };
+    let revision = String::from_utf8_lossy(&output.stdout);
+    let Some(short) = short_revision(revision.trim()) else {
+        fail_without_revision(&format!(
+            "`git rev-parse HEAD` printed `{}`",
+            revision.trim()
+        ));
+    };
+    println!("cargo:rustc-env=GIT_REV={short}");
 
     let git_dir = String::from_utf8(git(&["rev-parse", "--absolute-git-dir"]).stdout).unwrap();
     let git_dir = git_dir.trim();
@@ -154,6 +184,10 @@ fn main() {
             println!("cargo:rerun-if-changed={ref_path}");
         }
     }
+}
+
+fn main() {
+    emit_git_rev();
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let capnp_root = Path::new(&out_dir).join("capnproto");

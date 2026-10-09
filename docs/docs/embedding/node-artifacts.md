@@ -198,6 +198,27 @@ DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
   --target <target> -p dusk_node --no-default-features --features impl_nix
 ```
 
+A build without a `.git` directory - a Docker build whose context leaves it
+out - cannot ask git for the revision it is built from, which every program
+records. Pass it in `DUSK_GIT_REV`, at least 16 hex digits, taken from a
+checkout that has one. In the stage of the `Dockerfile` that runs the build,
+take it as a build argument and set the variable from it:
+
+```dockerfile
+ARG GIT_REV
+ENV DUSK_GIT_REV=$GIT_REV
+RUN cargo build --profile prod --target <target> -p dusk_node_bin
+```
+
+and pass the argument from the checkout:
+
+```sh
+docker build --build-arg GIT_REV=$(git rev-parse HEAD) .
+```
+
+When `DUSK_GIT_REV` is set the build does not run git at all; when it is not set
+and git cannot answer, the build stops with an error that names `DUSK_GIT_REV`.
+
 ## 3. Link
 
 If you link `dusk::node` from CMake, skip this step: the target brings the
