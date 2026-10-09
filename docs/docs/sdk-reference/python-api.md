@@ -79,6 +79,12 @@ a refused TLS handshake - is `Disconnected`. A failure on the client side - a
 TLS file that can't be read, a certificate without its key - has no kind in
 front of it.
 
+After a `Disconnected` failure the object's next call connects again. When the
+attempt before it ended less than 30 seconds earlier - whether it failed or made
+a connection that has broken since - that call first waits a random time below
+a limit that starts at 0.1 seconds and doubles with each such attempt in a row,
+up to 30 seconds, so a node that is away is not dialled in a tight loop.
+
 ### `node.sh(command: str) -> ShellOutput`
 
 Runs `command` in this object's shell server and returns a `ShellOutput` - an iterator
