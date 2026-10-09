@@ -18,7 +18,7 @@ kvs get <key>            # print every key matching <key>, with its value; fails
 kvs set <key> <value>    # store <value> under <key>, replacing what was there
 kvs delete <key>         # remove <key>; prints whether it was there
 kvs exists <key>         # print whether <key> is there
-kvs scan                 # list every key
+kvs scan                 # list every key, with its flags
 ```
 
 A value typed at the prompt is stored as a string. Values written by programs
@@ -40,15 +40,16 @@ The keys in [What the impl records](#what-the-impl-records) are written by the
 impl, not by a program, and `init` registers their names, so `kvs scan` shows
 them by name too.
 
-`kvs scan` is how you see them. Each row is a key's name and the id it hashes
-to, and a key no program registered a name for shows as its id:
+`kvs scan` is how you see them. Each row is a key's name, the id it hashes
+to and the key's [flags](#flags), and a key no program registered a name for
+shows as its id:
 
 ```console
 > kvs scan
- Key                 ID
- dusk.namespace_id   0x356cac24ff2e7205
- dusk.git_rev        0x73f97df9dc6dba02
- dusk.version        0x7520055bd5de6ac4
+ Key                 ID                  Flags
+ dusk.namespace_id   0x356cac24ff2e7205  sticky
+ dusk.git_rev        0x73f97df9dc6dba02  sticky
+ dusk.version        0x7520055bd5de6ac4  sticky
  0xbc316f8a9c3bae10  0xbc316f8a9c3bae10
 ```
 
@@ -62,6 +63,65 @@ store with many keys never has to answer in one reply.
 
 Two different names can hash to the same id. It is unlikely, and if it happens
 the two names silently share one entry.
+
+## Flags
+
+Every key carries a set of flags beside its value, and `kvs scan` names them in
+its `Flags` column. A key with none shows an empty cell. A set replaces the
+key's flags along with its value.
+
+### Sticky keys
+
+A **sticky** key is one only Dusk sets: every key in
+[What Dusk records](#what-dusk-records) and
+[What the impl records](#what-the-impl-records) is sticky, so a node's
+`dusk.namespace_id` or `dusk.hostname` is what Dusk wrote there, or nothing
+until Dusk writes it, unless someone overrode it with `--forbidden-unstick`.
+Stickiness belongs to the key's name, not to a value stored under it: the
+programs that own Dusk's keys - `init` for the `dusk.*` names, `logs` for its
+counters - claim their names as the node starts, so a name is sticky before Dusk
+has written to it, like `logs.written` before any `logs` command has run or
+`dusk.hostname` on a node whose driver could not read the hostname. `kvs set`
+and `kvs delete` refuse a sticky key, naming its id -
+`kvs set dusk.hostname web-1` fails with:
+
+```text
+key 0xa4cf005db444b151 is sticky: only Dusk sets it. `kvs set --forbidden-unstick` sets it anyway
+```
+
+`--forbidden-unstick` overrides the refusal. The key then holds your value until
+Dusk writes it again - `init` writes its keys when the node starts, `logs` its
+counters whenever a `logs` command runs - and its name stays sticky, so changing
+it again takes `--forbidden-unstick` too:
+
+```sh
+kvs set --forbidden-unstick dusk.hostname web-1
+kvs delete --forbidden-unstick logs.written
+```
+
+The node logs every override that sets or removes a key at `warn`, with the
+key's id in a `key` field: `forbidden-unstick overwrote a sticky key` or
+`forbidden-unstick removed a sticky key`.
+
+A client driving a `kvs bind` process over its portal meets the same refusal:
+`KvsPortal.set` and `KvsPortal.delete` refuse a sticky key unless the call sets
+its `forbiddenUnstick` parameter, the portal's `--forbidden-unstick`. A server
+for a protocol in which stickiness means nothing, such as the Redis server of
+PR #83, would pass it on every call.
+
+A program on the node writing through `dusk_program_kvs_internal::Kvs::set` sets a
+sticky key like any other, which is how Dusk writes the keys that are sticky.
+`Kvs::set_unless_sticky` and `Kvs::delete_unless_sticky` are the ones that
+refuse, the way `kvs set`, `kvs delete` and the portal do. A program makes names
+its own with `dusk_program_kvs_internal::own_keys`, passing its thread's
+`dusk_core::driver::tid()` and a `static` array of their ids - from its
+launcher's `new`, as `init` and `logs` do, so the names are sticky before any
+client connects - gives them back with `disown_keys` and the same `static` when
+the launcher is dropped, and lists the same names with `known_keys!` so a client
+can show them by name. Ownership belongs to the node on that thread: a node on
+another thread of the same process, built with other programs, does not see it.
+A value set with `FLAG_STICKY` in its flags is sticky too, under a name nobody
+owns, until a set without the flag replaces it.
 
 ## Reading keys by name
 
@@ -103,7 +163,7 @@ The node cannot name a key; the client that ran the command does. A command
 whose client is gone cannot have its keys named: one in the node's init script,
 which is compiled before the node runs, or one in a detached script whose client
 has disconnected. `kvs scan` and `kvs get` still answer, without the `Key`
-column - `kvs scan` with `ID` alone, `kvs get` with `ID` and `Value` - and the
+column - `kvs scan` with `ID` and `Flags`, `kvs get` with `ID` and `Value` - and the
 node logs a warning that it did.
 
 A `kvs get` compiled into an init script cannot ask the node for its keys
@@ -111,8 +171,9 @@ either, so it reads the one key you name, by its whole name or its id.
 
 ## What Dusk records
 
-These keys are written by Dusk itself. Read them; overwriting them only lasts
-until their owner writes again.
+These keys are written by Dusk itself, and they are [sticky](#sticky-keys):
+`kvs set` and `kvs delete` refuse them. Overwriting one with
+`--forbidden-unstick` only lasts until its owner writes it again.
 
 | Key | Written by | Value |
 |-----|------------|-------|
@@ -143,7 +204,8 @@ built with as `dusk impl` with a `name` field - the value of
 ## What the impl records
 
 The [impl](../getting-started/concepts/drivers-and-impls.md) writes these keys
-once, as the node starts, before `init` runs. The store only lives while something
+once, as the node starts, before `init` runs, and they are
+[sticky](#sticky-keys). The store only lives while something
 holds it, so the impl moves its `Arc<Kvs>` into the launcher-set closure it hands
 `dusk_core::init::init`, which keeps that closure for as long as the namespace's
 launcher set is registered; an impl that drops the store instead loses these keys
