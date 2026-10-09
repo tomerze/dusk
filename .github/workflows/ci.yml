@@ -268,3 +268,21 @@ jobs:
       - name: go build -tags ui
         working-directory: services/twilight
         run: go build -tags ui -o /dev/null ./cmd/twilight
+
+  contracts:
+    name: Contracts (validate, pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: validate.py
+        run: uv run --no-project --with jsonschema --with referencing python services/contracts/validate.py
+
+      - name: pytest
+        run: uv run --no-project --with pytest --with jsonschema --with referencing pytest services/contracts/tests -q
