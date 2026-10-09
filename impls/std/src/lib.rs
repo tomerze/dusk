@@ -79,6 +79,7 @@ pub fn run(
             );
         });
     }));
+    dusk_program_kvs_internal::release_persistent(dusk_core::driver::tid());
 
     match outcome {
         Ok(()) => unreachable!("executor.run() should never return"),

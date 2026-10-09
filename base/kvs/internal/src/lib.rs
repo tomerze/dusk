@@ -615,6 +615,19 @@ pub fn register_persistent(tid: u64, path: &str) -> anyhow::Result<u64> {
     })
 }
 
+pub fn release_persistent(tid: u64) {
+    let released = REGISTRATIONS
+        .get()
+        .lock(|registrations| registrations.borrow_mut().by_thread.remove(&tid));
+    if let Some(released) = released {
+        tracing::info!(
+            tid,
+            path = released.path.as_str(),
+            "released the persistent kvs file of a node that exited"
+        );
+    }
+}
+
 pub fn unregister_persistent(tid: u64, generation: u64) {
     REGISTRATIONS.get().lock(|registrations| {
         let mut registrations = registrations.borrow_mut();
