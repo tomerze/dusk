@@ -330,7 +330,9 @@ class FakeNode:
         return [call[2] for call in self.calls if call[0] == "sh" and call[1] == pid]
 
     def key_name(self, name: str) -> str:
-        return name
+        from dawn.facts import key_id
+
+        return name if name in self.registered else f"{key_id(name):#018x}"
 
     def compile(self, words: list[str]) -> None:
         if words[0] in self.commands:
