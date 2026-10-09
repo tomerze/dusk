@@ -33,6 +33,7 @@ ship.
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
 [View on :fontawesome-brands-github:](https://github.com/tomerze/dusk){ .md-button .dusk-button-ghost title="View on GitHub" }
+{ .dusk-hero__actions }
 
 </div>
 
@@ -44,7 +45,7 @@ ship.
 
 <section class="dusk-platforms" markdown>
 
-## Runs where your software runs.
+## Runs where your software runs. { .dusk-platforms__title }
 
 <div class="dusk-platforms__grid" markdown>
 
@@ -63,14 +64,16 @@ ship.
 
 [See all platforms](embedding/node-artifacts.md#platforms)
 [Add your own](getting-started/guides/custom-impl.md)
+{ .dusk-platforms__links }
 
 </section>
 
 <section class="dusk-section dusk-fleet" markdown>
 
-## Fleet
+## Fleet { .dusk-section__title }
 
 Place a Dusk Node in everything you deploy, that's your Dusk Fleet
+{ .dusk-section__lead }
 
 <div class="dusk-fleet__figure">
 --8<-- "assets/landing/fleet.svg"
@@ -80,9 +83,10 @@ Place a Dusk Node in everything you deploy, that's your Dusk Fleet
 
 <section class="dusk-section dusk-stack" markdown>
 
-## Stack
+## Stack { .dusk-section__title }
 
 Five layers connect your fleet to the people who run it.
+{ .dusk-section__lead }
 
 <div class="dusk-stack__body" markdown>
 
@@ -92,6 +96,7 @@ Five layers connect your fleet to the people who run it.
 [Twilight](#twilight){ data-layer="twilight" }
 [Data](#data){ data-layer="data" }
 [Observability](#observability){ data-layer="observability" }
+{ .dusk-stack__links }
 </nav>
 
 <div class="dusk-stack__layers" markdown>
@@ -172,49 +177,49 @@ connect the tools you already have.
 
 <div class="grid cards" markdown>
 
--   :material-puzzle-outline:{ .dusk-card-icon }
+-   :material-puzzle-outline:{ .dusk-card-icon data-tone="gold" }
 
     **Embed Dusk**
 
     Drop the C library into an app you already ship - every running copy of it
     becomes a manageable node.
 
-    [Embed it →](getting-started/guides/embed.md)
+    [Embed it →](getting-started/guides/embed.md){ .dusk-card-link }
 
--   :material-chart-timeline-variant:{ .dusk-card-icon }
+-   :material-chart-timeline-variant:{ .dusk-card-icon data-tone="nightfall" }
 
     **Analytics & diagnosis**
 
     Connect to your fleet to see what's running, read logs, and fix misbehaving
     nodes.
 
-    [See your fleet →](getting-started/guides/connect-a-client.md)
+    [See your fleet →](getting-started/guides/connect-a-client.md){ .dusk-card-link }
 
--   :material-web:{ .dusk-card-icon }
+-   :material-web:{ .dusk-card-icon data-tone="dawn" }
 
     **Drive it over HTTP**
 
     Run the API gateway and reach any node from curl, a script, a dashboard or a
     browser. AI agents get an MCP server on the same port.
 
-    [Open the gateway →](features/gateway.md)
+    [Open the gateway →](features/gateway.md){ .dusk-card-link }
 
--   :material-tune-variant:{ .dusk-card-icon }
+-   :material-tune-variant:{ .dusk-card-icon data-tone="twilight" }
 
     **Customize & extend**
 
     Dusk is modular: swap the platform backend or add your own programs when the
     built-ins aren't enough.
 
-    [Extend Dusk →](getting-started/guides/first-program.md)
+    [Extend Dusk →](getting-started/guides/first-program.md){ .dusk-card-link }
 
--   :material-book-open-variant:{ .dusk-card-icon }
+-   :material-book-open-variant:{ .dusk-card-icon data-tone="data" }
 
     **Reference**
 
     The crate map and the Cap'n Proto wire schemas.
 
-    [Reference →](sdk-reference/crates.md)
+    [Reference →](sdk-reference/crates.md){ .dusk-card-link }
 
 </div>
 
