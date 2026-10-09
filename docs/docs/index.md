@@ -77,6 +77,7 @@ Place a Dusk Node in everything you deploy, that's your Dusk Fleet
 { .dusk-section__lead }
 
 <div class="dusk-fleet__figure">
+--8<-- "assets/landing/fleet-narrow.svg"
 --8<-- "assets/landing/fleet.svg"
 </div>
 

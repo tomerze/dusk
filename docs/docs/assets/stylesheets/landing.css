@@ -449,6 +449,7 @@
   padding-bottom: 2.5rem;
 }
 .dusk-fleet__figure {
+  container-type: inline-size;
   max-width: 62rem;
   margin: 0 auto;
 }
@@ -456,19 +457,25 @@
   display: block;
   width: 100%;
   height: auto;
+  margin: 0 auto;
+}
+.dusk-fleet__network--narrow {
+  max-width: 21rem;
+}
+.dusk-fleet__network--wide {
+  display: none;
+  max-width: 45rem;
+}
+@container (min-width: 30rem) {
+  .dusk-fleet__network--narrow {
+    display: none;
+  }
+  .dusk-fleet__network--wide {
+    display: block;
+  }
 }
 .dusk-arm {
   animation: dusk-float 9s ease-in-out infinite alternate;
-}
-.dusk-arm:nth-child(2n) {
-  animation-duration: 11s;
-  animation-delay: -4s;
-}
-.dusk-arm:nth-child(3n) {
-  animation-delay: -7s;
-}
-.dusk-arm:nth-child(4n + 1) {
-  animation-direction: alternate-reverse;
 }
 @keyframes dusk-float {
   from {
@@ -510,7 +517,6 @@
 }
 .dusk-fleet__hub-label {
   fill: var(--md-default-fg-color--light);
-  font-size: 15px;
   font-weight: 700;
 }
 .dusk-node__ring {
@@ -536,21 +542,12 @@
 }
 .dusk-node__label {
   fill: var(--md-default-fg-color--light);
-  font-size: 15px;
   font-weight: 500;
   paint-order: stroke;
   stroke: var(--dusk-ground);
   stroke-width: 2px;
   stroke-opacity: 0.7;
   stroke-linejoin: round;
-}
-@media screen and (max-width: 37.4375em) {
-  .dusk-fleet__figure {
-    margin: 0 -0.8rem;
-  }
-  .dusk-node__label {
-    font-size: 13px;
-  }
 }
 @keyframes dusk-pulse {
   from {
