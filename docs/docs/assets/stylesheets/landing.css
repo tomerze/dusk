@@ -640,6 +640,9 @@
 }
 .dusk-plate__veil {
   fill: var(--md-default-bg-color);
+  stroke: var(--md-default-bg-color);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
   opacity: 0;
 }
 .dusk-plate__leader {

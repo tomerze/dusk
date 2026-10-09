@@ -81,16 +81,25 @@
     <polygon
       class="dusk-plate__left"
       fill="#c9d2e0"
+      stroke="#c9d2e0"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="40,520 220,594 220,612 40,538"
     />
     <polygon
       class="dusk-plate__right"
       fill="#adb8c9"
+      stroke="#adb8c9"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,594 400,520 400,538 220,612"
     />
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-observability)"
+      stroke="url(#dusk-plate-observability)"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,446 400,520 220,594 40,520"
     />
     <polygon
@@ -119,16 +128,25 @@
     <polygon
       class="dusk-plate__left"
       fill="#3b8bc8"
+      stroke="#3b8bc8"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="40,428 220,502 220,520 40,446"
     />
     <polygon
       class="dusk-plate__right"
       fill="#2f70a3"
+      stroke="#2f70a3"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,502 400,428 400,446 220,520"
     />
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-data)"
+      stroke="url(#dusk-plate-data)"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,354 400,428 220,502 40,428"
     />
     <polygon
@@ -157,16 +175,25 @@
     <polygon
       class="dusk-plate__left"
       fill="#8d6fb1"
+      stroke="#8d6fb1"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="40,336 220,410 220,428 40,354"
     />
     <polygon
       class="dusk-plate__right"
       fill="#735892"
+      stroke="#735892"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,410 400,336 400,354 220,428"
     />
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-twilight)"
+      stroke="url(#dusk-plate-twilight)"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,262 400,336 220,410 40,336"
     />
     <polygon
@@ -195,16 +222,25 @@
     <polygon
       class="dusk-plate__left"
       fill="#e7bb84"
+      stroke="#e7bb84"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="40,244 220,318 220,336 40,262"
     />
     <polygon
       class="dusk-plate__right"
       fill="#c99d68"
+      stroke="#c99d68"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,318 400,244 400,262 220,336"
     />
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-dawn)"
+      stroke="url(#dusk-plate-dawn)"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,170 400,244 220,318 40,244"
     />
     <polygon
@@ -233,16 +269,25 @@
     <polygon
       class="dusk-plate__left"
       fill="#1f2b72"
+      stroke="#1f2b72"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="40,152 220,226 220,244 40,170"
     />
     <polygon
       class="dusk-plate__right"
       fill="#172057"
+      stroke="#172057"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,226 400,152 400,170 220,244"
     />
     <polygon
       class="dusk-plate__top"
       fill="url(#dusk-plate-nightfall)"
+      stroke="url(#dusk-plate-nightfall)"
+      stroke-width="1.5"
+      stroke-linejoin="round"
       points="220,78 400,152 220,226 40,152"
     />
     <polygon

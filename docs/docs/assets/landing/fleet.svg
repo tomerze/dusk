@@ -69,9 +69,27 @@
       <circle cx="14" cy="2.5" r="1.8" />
     </symbol>
     <symbol id="dusk-glyph-stack" viewBox="-50 -70.5 100 141">
-      <polygon fill="#c9d2e0" points="-46,35.5 0,65.5 0,70.5 -46,40.5" />
-      <polygon fill="#adb8c9" points="0,65.5 46,35.5 46,40.5 0,70.5" />
-      <polygon fill="#eef2f8" points="0,5.5 46,35.5 0,65.5 -46,35.5" />
+      <polygon
+        fill="#c9d2e0"
+        stroke="#c9d2e0"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,35.5 0,65.5 0,70.5 -46,40.5"
+      />
+      <polygon
+        fill="#adb8c9"
+        stroke="#adb8c9"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,65.5 46,35.5 46,40.5 0,70.5"
+      />
+      <polygon
+        fill="#eef2f8"
+        stroke="#eef2f8"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,5.5 46,35.5 0,65.5 -46,35.5"
+      />
       <text
         class="dusk-fleet__hub-print"
         fill="#4a5668"
@@ -80,9 +98,27 @@
       >
         Observability
       </text>
-      <polygon fill="#3b8bc8" points="-46,16.5 0,46.5 0,51.5 -46,21.5" />
-      <polygon fill="#2f70a3" points="0,46.5 46,16.5 46,21.5 0,51.5" />
-      <polygon fill="#4ea6e6" points="0,-13.5 46,16.5 0,46.5 -46,16.5" />
+      <polygon
+        fill="#3b8bc8"
+        stroke="#3b8bc8"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,16.5 0,46.5 0,51.5 -46,21.5"
+      />
+      <polygon
+        fill="#2f70a3"
+        stroke="#2f70a3"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,46.5 46,16.5 46,21.5 0,51.5"
+      />
+      <polygon
+        fill="#4ea6e6"
+        stroke="#4ea6e6"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,-13.5 46,16.5 0,46.5 -46,16.5"
+      />
       <text
         class="dusk-fleet__hub-print"
         fill="#0d3a5e"
@@ -91,9 +127,27 @@
       >
         Data
       </text>
-      <polygon fill="#8d6fb1" points="-46,-2.5 0,27.5 0,32.5 -46,2.5" />
-      <polygon fill="#735892" points="0,27.5 46,-2.5 46,2.5 0,32.5" />
-      <polygon fill="#a98bcc" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
+      <polygon
+        fill="#8d6fb1"
+        stroke="#8d6fb1"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,-2.5 0,27.5 0,32.5 -46,2.5"
+      />
+      <polygon
+        fill="#735892"
+        stroke="#735892"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,27.5 46,-2.5 46,2.5 0,32.5"
+      />
+      <polygon
+        fill="#a98bcc"
+        stroke="#a98bcc"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,-32.5 46,-2.5 0,27.5 -46,-2.5"
+      />
       <text
         class="dusk-fleet__hub-print"
         fill="#3b2466"
@@ -102,9 +156,27 @@
       >
         Twilight
       </text>
-      <polygon fill="#e7bb84" points="-46,-21.5 0,8.5 0,13.5 -46,-16.5" />
-      <polygon fill="#c99d68" points="0,8.5 46,-21.5 46,-16.5 0,13.5" />
-      <polygon fill="#ffd9a8" points="0,-51.5 46,-21.5 0,8.5 -46,-21.5" />
+      <polygon
+        fill="#e7bb84"
+        stroke="#e7bb84"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,-21.5 0,8.5 0,13.5 -46,-16.5"
+      />
+      <polygon
+        fill="#c99d68"
+        stroke="#c99d68"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,8.5 46,-21.5 46,-16.5 0,13.5"
+      />
+      <polygon
+        fill="#ffd9a8"
+        stroke="#ffd9a8"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,-51.5 46,-21.5 0,8.5 -46,-21.5"
+      />
       <text
         class="dusk-fleet__hub-print"
         fill="#7a4a12"
@@ -113,9 +185,27 @@
       >
         Dawn
       </text>
-      <polygon fill="#1f2b72" points="-46,-40.5 0,-10.5 0,-5.5 -46,-35.5" />
-      <polygon fill="#172057" points="0,-10.5 46,-40.5 46,-35.5 0,-5.5" />
-      <polygon fill="#28378f" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
+      <polygon
+        fill="#1f2b72"
+        stroke="#1f2b72"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,-40.5 0,-10.5 0,-5.5 -46,-35.5"
+      />
+      <polygon
+        fill="#172057"
+        stroke="#172057"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,-10.5 46,-40.5 46,-35.5 0,-5.5"
+      />
+      <polygon
+        fill="#28378f"
+        stroke="#28378f"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5"
+      />
       <text
         class="dusk-fleet__hub-print"
         fill="#f7f1d8"
