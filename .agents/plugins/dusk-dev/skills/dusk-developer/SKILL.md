@@ -5,13 +5,21 @@ description: The project instructions for the dusk repository - the orientation 
 
 # Dusk
 
-Dusk is a platform for managing **fleets** - collections of machines you operate
-as one, anywhere from tiny microcontrollers to supercomputers. Every machine in
-the fleet runs a small Dusk **node**, and you drive a node the same way no matter
-what hardware it is: connect to it, see what's running, start and stop work, and
+Dusk is a platform for managing **fleets** - collections of anything that runs
+Dusk, operated as one: mobile and desktop apps, games, AI agent harnesses,
+services, and hardware from tiny microcontrollers to supercomputers. Each member
+of the fleet runs a small Dusk **node**, and you drive a node the same way
+whatever it is: connect to it, see what's running, start and stop work, and
 read results back.
 
-That single interface spans such different hardware because almost all of Dusk is
+**A fleet is not a set of devices.** Dusk is not a device-management utility, and
+prose that says devices, hardware or machines when it means everything a node
+can be - the home page, a guide, a drawing's title, a commit message - is wrong.
+The user has rejected that framing many times. When an example list is called
+for, mix software and hardware: an app, a game, an agent harness, a
+microcontroller, a server.
+
+That single interface spans such different things because almost all of Dusk is
 platform-agnostic. A node is a portable core plus a thin, per-platform **impl**
 that supplies only what the hardware forces - a clock, a way to spawn work, a
 hostname. The programs you run on a node are written once and run on every impl.
@@ -120,7 +128,7 @@ unresolved `dusk_impl`, selecting two on a duplicate definition of it.
 
 ### Nodes and namespaces
 
-A **node** is one running Dusk server - one machine in the fleet. Internally a
+A **node** is one running Dusk server - one member of the fleet. Internally a
 node is exactly one **namespace**: the execution context that holds everything
 running on it. A node creates its namespace once at startup, and **every client
 session shares it** - two clients connected to the same node see the same

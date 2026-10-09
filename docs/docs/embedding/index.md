@@ -1,15 +1,17 @@
 # Embedding Dusk
 
 This is Dusk's whole reason for existing: **you embed it into software you
-already ship, and that software's devices become a managed fleet.** No separate
+already ship, and every running copy of it becomes part of a managed fleet.**
+No separate
 service to stand up, no rewrite - you link Dusk in, call one function, and you're
 done.
 
-Picture the software inside a media player, a fleet of robot vacuums, or a rack
-of build machines. Each is a device someone needs to watch and operate. Embed
-Dusk and every one of them becomes a **node** you can get
-[analytics](../features/analytics.md) from, [diagnose](../features/diagnosis.md),
-and drive - at any scale, on anything from a microcontroller to a supercomputer.
+Picture a mobile app on a million phones, an agent harness, a game, a fleet of
+robot vacuums, or a rack of build machines. Each is something someone needs to
+watch and operate. Embed Dusk and every one of them becomes a **node** you can
+get [analytics](../features/analytics.md) from,
+[diagnose](../features/diagnosis.md), and drive - at any scale, whether it runs
+on a microcontroller, a phone or a supercomputer.
 
 ## How you embed it
 

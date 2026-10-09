@@ -1,0 +1,905 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="dusk-fleet__network"
+  viewBox="0 0 1200 560"
+  role="img"
+  aria-labelledby="dusk-fleet-title"
+>
+  <title id="dusk-fleet-title">
+    A fleet, each member a node connected to the Dusk stack: a microcontroller,
+    a mobile app, a PC, a server, a router, a desktop app, a car, a camera, a
+    robot vacuum, an agent harness, a game, and many more.
+  </title>
+  <defs>
+    <symbol id="dusk-glyph-microcontroller" viewBox="-24 -24 48 48">
+      <rect x="-13" y="-13" width="26" height="26" rx="3" />
+      <rect x="-6" y="-6" width="12" height="12" rx="1.5" />
+      <path
+        d="M-8 -13v-5M0 -13v-5M8 -13v-5M-8 13v5M0 13v5M8 13v5M-13 -8h-5M-13 0h-5M-13 8h-5M13 -8h5M13 0h5M13 8h5"
+      />
+    </symbol>
+    <symbol id="dusk-glyph-phone" viewBox="-24 -24 48 48">
+      <rect x="-10" y="-18" width="20" height="36" rx="4" />
+      <path d="M-3 13h6" />
+    </symbol>
+    <symbol id="dusk-glyph-laptop" viewBox="-24 -24 48 48">
+      <rect x="-15" y="-13" width="30" height="20" rx="2" />
+      <path d="M-21 11h42l-3 5h-36z" />
+    </symbol>
+    <symbol id="dusk-glyph-server" viewBox="-24 -24 48 48">
+      <rect x="-16" y="-17" width="32" height="10" rx="2" />
+      <rect x="-16" y="-5" width="32" height="10" rx="2" />
+      <rect x="-16" y="7" width="32" height="10" rx="2" />
+      <path d="M-10 -12h4M-10 0h4M-10 12h4" />
+    </symbol>
+    <symbol id="dusk-glyph-router" viewBox="-24 -24 48 48">
+      <rect x="-18" y="1" width="36" height="12" rx="3" />
+      <path d="M-10 1l-5-14M10 1l5-14M-11 7h2M-5 7h2M1 7h2" />
+    </symbol>
+    <symbol id="dusk-glyph-desktop" viewBox="-24 -24 48 48">
+      <rect x="-18" y="-16" width="36" height="24" rx="2" />
+      <path d="M0 8v6M-8 16h16" />
+    </symbol>
+    <symbol id="dusk-glyph-camera" viewBox="-24 -24 48 48">
+      <rect x="-17" y="-11" width="26" height="16" rx="3" />
+      <path d="M9 -6l9-4v14l-9-4" />
+      <path d="M-10 5l-3 10h10" />
+    </symbol>
+    <symbol id="dusk-glyph-robot-vacuum" viewBox="-24 -24 48 48">
+      <circle r="17" />
+      <circle r="5" />
+      <path d="M-12 -8a14 14 0 0 1 24 0" />
+    </symbol>
+    <symbol id="dusk-glyph-car" viewBox="-24 -24 48 48">
+      <path d="M-19 6v-6l5-9h22l7 9h4v6z" />
+      <circle cx="-10" cy="8" r="4" />
+      <circle cx="11" cy="8" r="4" />
+    </symbol>
+    <symbol id="dusk-glyph-agent-harness" viewBox="-24 -24 48 48">
+      <rect x="-15" y="-9" width="30" height="24" rx="5" />
+      <circle cx="-6" cy="2" r="2.2" />
+      <circle cx="6" cy="2" r="2.2" />
+      <path d="M-5 9h10M0 -9v-6" />
+      <circle cy="-17" r="2" />
+    </symbol>
+    <symbol id="dusk-glyph-game" viewBox="-24 -24 48 48">
+      <rect x="-19" y="-9" width="38" height="18" rx="9" />
+      <path d="M-12 0h8M-8 -4v8" />
+      <circle cx="9" cy="-2.5" r="1.8" />
+      <circle cx="14" cy="2.5" r="1.8" />
+    </symbol>
+    <symbol id="dusk-glyph-stack" viewBox="-50 -70.5 100 141">
+      <polygon
+        fill="#c9d2e0"
+        stroke="#c9d2e0"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,35.5 0,65.5 0,70.5 -46,40.5"
+      />
+      <polygon
+        fill="#adb8c9"
+        stroke="#adb8c9"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,65.5 46,35.5 46,40.5 0,70.5"
+      />
+      <polygon fill="#eef2f8" points="0,5.5 46,35.5 0,65.5 -46,35.5" />
+      <text
+        class="dusk-fleet__hub-print"
+        fill="#4a5668"
+        text-anchor="middle"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 51.3)"
+      >
+        Observability
+      </text>
+      <polygon
+        fill="#3b8bc8"
+        stroke="#3b8bc8"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,16.5 0,46.5 0,51.5 -46,21.5"
+      />
+      <polygon
+        fill="#2f70a3"
+        stroke="#2f70a3"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,46.5 46,16.5 46,21.5 0,51.5"
+      />
+      <polygon fill="#4ea6e6" points="0,-13.5 46,16.5 0,46.5 -46,16.5" />
+      <text
+        class="dusk-fleet__hub-print"
+        fill="#0d3a5e"
+        text-anchor="middle"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 32.3)"
+      >
+        Data
+      </text>
+      <polygon
+        fill="#9d64a4"
+        stroke="#9d64a4"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,-2.5 0,27.5 0,32.5 -46,2.5"
+      />
+      <polygon
+        fill="#7f4f85"
+        stroke="#7f4f85"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,27.5 46,-2.5 46,2.5 0,32.5"
+      />
+      <polygon fill="#bf7fc6" points="0,-32.5 46,-2.5 0,27.5 -46,-2.5" />
+      <text
+        class="dusk-fleet__hub-print"
+        fill="#45214a"
+        text-anchor="middle"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 13.3)"
+      >
+        Twilight
+      </text>
+      <polygon
+        fill="#e7bb84"
+        stroke="#e7bb84"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,-21.5 0,8.5 0,13.5 -46,-16.5"
+      />
+      <polygon
+        fill="#c99d68"
+        stroke="#c99d68"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,8.5 46,-21.5 46,-16.5 0,13.5"
+      />
+      <polygon fill="#ffd9a8" points="0,-51.5 46,-21.5 0,8.5 -46,-21.5" />
+      <text
+        class="dusk-fleet__hub-print"
+        fill="#7a4a12"
+        text-anchor="middle"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 -5.7)"
+      >
+        Dawn
+      </text>
+      <polygon
+        fill="#1f2b72"
+        stroke="#1f2b72"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="-46,-40.5 0,-10.5 0,-5.5 -46,-35.5"
+      />
+      <polygon
+        fill="#172057"
+        stroke="#172057"
+        stroke-width="0.6"
+        stroke-linejoin="round"
+        points="0,-10.5 46,-40.5 46,-35.5 0,-5.5"
+      />
+      <polygon fill="#28378f" points="0,-70.5 46,-40.5 0,-10.5 -46,-40.5" />
+      <text
+        class="dusk-fleet__hub-print"
+        fill="#f7f1d8"
+        text-anchor="middle"
+        transform="matrix(0.837611 0.546268 -0.837611 0.546268 -19.32 -24.7)"
+      >
+        Nightfall
+      </text>
+    </symbol>
+  </defs>
+  <circle class="dusk-fleet__hub-glow" cx="600" cy="300" r="117.8" />
+  <g class="dusk-fleet__tiny">
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-0"
+      d="M600 300L493.1 406.9"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-1"
+      d="M600 300L465.1 375.9"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-2"
+      d="M600 300L795.3 345.8"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-3"
+      d="M600 300L422.6 249.1"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-4"
+      d="M600 300L853.3 340.8"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-5"
+      d="M600 300L541.8 414.6"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-6"
+      d="M600 300L508.6 199.7"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-7"
+      d="M600 300L628.4 591.7"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-8"
+      d="M600 300L661.4 122.2"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-9"
+      d="M600 300L421.5 405.7"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-10"
+      d="M600 300L927.6 136.5"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-11"
+      d="M600 300L356.2 290.8"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-12"
+      d="M600 300L814.2 193.5"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-13"
+      d="M600 300L1098.2 289.2"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-14"
+      d="M600 300L491.3 526.8"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-15"
+      d="M600 300L199 463.8"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-16"
+      d="M600 300L768.6 445.3"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-17"
+      d="M600 300L969.9 133.6"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-18"
+      d="M600 300L625.7 405.6"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-19"
+      d="M600 300L585.4 390.8"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-20"
+      d="M600 300L947.4 87.9"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-21"
+      d="M600 300L288.3 239.1"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-22"
+      d="M600 300L939 429"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-23"
+      d="M600 300L804.8 561.5"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-24"
+      d="M600 300L727.8 389.4"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-25"
+      d="M600 300L685.2 457.4"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-26"
+      d="M600 300L377.7 318.2"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-27"
+      d="M600 300L960.6 292.2"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-28"
+      d="M600 300L527.5 64.2"
+    />
+    <path
+      class="dusk-fleet__link dusk-fleet__link--faint"
+      id="dusk-tiny-29"
+      d="M600 300L715.6 193.1"
+    />
+    <circle cx="493.1" cy="406.9" r="2.5" />
+    <circle cx="465.1" cy="375.9" r="3" />
+    <circle cx="795.3" cy="345.8" r="4" />
+    <circle cx="422.6" cy="249.1" r="4" />
+    <circle cx="853.3" cy="340.8" r="3" />
+    <circle cx="541.8" cy="414.6" r="2.5" />
+    <circle cx="508.6" cy="199.7" r="3" />
+    <circle cx="628.4" cy="591.7" r="4" />
+    <circle cx="661.4" cy="122.2" r="4" />
+    <circle cx="421.5" cy="405.7" r="3" />
+    <circle cx="927.6" cy="136.5" r="3.5" />
+    <circle cx="356.2" cy="290.8" r="3.5" />
+    <circle cx="814.2" cy="193.5" r="3.5" />
+    <circle cx="1098.2" cy="289.2" r="3.5" />
+    <circle cx="491.3" cy="526.8" r="4" />
+    <circle cx="199" cy="463.8" r="2.5" />
+    <circle cx="768.6" cy="445.3" r="3.5" />
+    <circle cx="969.9" cy="133.6" r="3.5" />
+    <circle cx="625.7" cy="405.6" r="3" />
+    <circle cx="585.4" cy="390.8" r="4" />
+    <circle cx="947.4" cy="87.9" r="2.5" />
+    <circle cx="288.3" cy="239.1" r="4" />
+    <circle cx="939" cy="429" r="2.5" />
+    <circle cx="804.8" cy="561.5" r="4" />
+    <circle cx="727.8" cy="389.4" r="3.5" />
+    <circle cx="685.2" cy="457.4" r="3.5" />
+    <circle cx="377.7" cy="318.2" r="4" />
+    <circle cx="960.6" cy="292.2" r="4" />
+    <circle cx="527.5" cy="64.2" r="4" />
+    <circle cx="715.6" cy="193.1" r="2.5" />
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="3.2s"
+        begin="-0s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-0" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="4.1s"
+        begin="-2.1s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-3" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="4.9s"
+        begin="-4.3s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-6" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="4s"
+        begin="-2.4s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-9" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="4.9s"
+        begin="-3.6s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-12" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="3.9s"
+        begin="-2.7s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-15" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="4.8s"
+        begin="-3.1s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-18" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="3.9s"
+        begin="-3.2s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-21" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="4.8s"
+        begin="-2.8s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-24" />
+      </animateMotion>
+    </circle>
+    <circle class="dusk-packet dusk-packet--faint" r="2.5">
+      <animateMotion
+        dur="3.8s"
+        begin="-0s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-tiny-27" />
+      </animateMotion>
+    </circle>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-phone"
+      d="M600 300Q553.2 187.3 460.3 108.1"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion
+        dur="3s"
+        begin="-0.8s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-link-phone" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(460.3 108.1)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-phone"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="28"
+        cy="23.9"
+        r="5"
+        style="animation-delay: -0.5s"
+      />
+      <circle class="dusk-node__online" cx="28" cy="23.9" r="5" />
+    </g>
+    <text class="dusk-node__label" x="460.3" y="166.1" text-anchor="middle">
+      Mobile app
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-agent-harness"
+      d="M600 300Q630 202.3 612.4 101.6"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="3.4s" begin="-1.1s" repeatCount="indefinite">
+        <mpath href="#dusk-link-agent-harness" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(612.4 101.6)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-agent-harness"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="6.3"
+        cy="36.2"
+        r="5"
+        style="animation-delay: -1.1s"
+      />
+      <circle class="dusk-node__online" cx="6.3" cy="36.2" r="5" />
+    </g>
+    <text class="dusk-node__label" x="612.4" y="159.6" text-anchor="middle">
+      Agent harness
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-laptop"
+      d="M600 300Q671.1 180.8 788.5 106.8"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="3.3s" begin="-1.7s" repeatCount="indefinite">
+        <mpath href="#dusk-link-laptop" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(788.5 106.8)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-laptop"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="-31.1"
+        cy="19.6"
+        r="5"
+        style="animation-delay: -0.9s"
+      />
+      <circle class="dusk-node__online" cx="-31.1" cy="19.6" r="5" />
+    </g>
+    <text class="dusk-node__label" x="788.5" y="164.8" text-anchor="middle">
+      PC
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-server"
+      d="M600 300Q813.2 307.7 1006.7 217.8"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="3.7s" begin="-2.5s" repeatCount="indefinite">
+        <mpath href="#dusk-link-server" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(1006.7 217.8)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-server"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="-33.3"
+        cy="15.5"
+        r="5"
+        style="animation-delay: -1.4s"
+      />
+      <circle class="dusk-node__online" cx="-33.3" cy="15.5" r="5" />
+    </g>
+    <text class="dusk-node__label" x="1006.7" y="275.8" text-anchor="middle">
+      Server
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-router"
+      d="M600 300Q808.2 284.5 1000.8 365.1"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion
+        dur="4.1s"
+        begin="-3.3s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-link-router" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(1000.8 365.1)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-router"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="-33.9"
+        cy="-14.2"
+        r="5"
+        style="animation-delay: -1.9s"
+      />
+      <circle class="dusk-node__online" cx="-33.9" cy="-14.2" r="5" />
+    </g>
+    <text class="dusk-node__label" x="1000.8" y="423.1" text-anchor="middle">
+      Router
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-desktop"
+      d="M600 300Q698.8 418 840.5 478.2"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="2.9s" begin="-1.3s" repeatCount="indefinite">
+        <mpath href="#dusk-link-desktop" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(840.5 478.2)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-desktop"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="-33.8"
+        cy="-14.4"
+        r="5"
+        style="animation-delay: -2.3s"
+      />
+      <circle class="dusk-node__online" cx="-33.8" cy="-14.4" r="5" />
+    </g>
+    <text class="dusk-node__label" x="840.5" y="536.2" text-anchor="middle">
+      Desktop app
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-game"
+      d="M600 300Q671.1 396.1 690.8 514"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion
+        dur="3.1s"
+        begin="-2s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-link-game" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(690.8 514)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-game"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="-6.1"
+        cy="-36.3"
+        r="5"
+        style="animation-delay: -2s"
+      />
+      <circle class="dusk-node__online" cx="-6.1" cy="-36.3" r="5" />
+    </g>
+    <text class="dusk-node__label" x="690.8" y="572.0" text-anchor="middle">
+      Game
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-car"
+      d="M600 300Q610.7 410.8 570 514.5"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="3.2s" begin="-1.8s" repeatCount="indefinite">
+        <mpath href="#dusk-link-car" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(570 514.5)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-car"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="13.4"
+        cy="-34.2"
+        r="5"
+        style="animation-delay: -0.4s"
+      />
+      <circle class="dusk-node__online" cx="13.4" cy="-34.2" r="5" />
+    </g>
+    <text class="dusk-node__label" x="570" y="572.5" text-anchor="middle">
+      Car
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-camera"
+      d="M600 300Q445.2 348.2 329.1 461.4"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion
+        dur="3.6s"
+        begin="-2.2s"
+        repeatCount="indefinite"
+        keyPoints="1;0"
+        keyTimes="0;1"
+        calcMode="linear"
+      >
+        <mpath href="#dusk-link-camera" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(329.1 461.4)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-camera"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="26.3"
+        cy="-25.7"
+        r="5"
+        style="animation-delay: -0.9s"
+      />
+      <circle class="dusk-node__online" cx="26.3" cy="-25.7" r="5" />
+    </g>
+    <text class="dusk-node__label" x="329.1" y="519.4" text-anchor="middle">
+      Camera
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-robot-vacuum"
+      d="M600 300Q388.6 370.9 168.1 338.1"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="4s" begin="-2.7s" repeatCount="indefinite">
+        <mpath href="#dusk-link-robot-vacuum" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(168.1 338.1)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-robot-vacuum"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="36.4"
+        cy="5.4"
+        r="5"
+        style="animation-delay: -1.4s"
+      />
+      <circle class="dusk-node__online" cx="36.4" cy="5.4" r="5" />
+    </g>
+    <text class="dusk-node__label" x="168.1" y="396.1" text-anchor="middle">
+      Robot vacuum
+    </text>
+  </g>
+  <g class="dusk-arm">
+    <path
+      class="dusk-fleet__link"
+      id="dusk-link-microcontroller"
+      d="M600 300Q398.1 295.1 220.3 199.1"
+    />
+    <circle class="dusk-packet" r="3.5">
+      <animateMotion dur="2.6s" begin="-0s" repeatCount="indefinite">
+        <mpath href="#dusk-link-microcontroller" />
+      </animateMotion>
+    </circle>
+    <g class="dusk-node" transform="translate(220.3 199.1)">
+      <circle class="dusk-node__ring" r="36" />
+      <use
+        class="dusk-node__glyph"
+        href="#dusk-glyph-microcontroller"
+        x="-24"
+        y="-24"
+        width="48"
+        height="48"
+      />
+      <circle
+        class="dusk-node__pulse"
+        cx="32.4"
+        cy="17.5"
+        r="5"
+        style="animation-delay: -0s"
+      />
+      <circle class="dusk-node__online" cx="32.4" cy="17.5" r="5" />
+    </g>
+    <text class="dusk-node__label" x="220.3" y="257.1" text-anchor="middle">
+      Microcontroller
+    </text>
+  </g>
+  <use
+    class="dusk-fleet__hub"
+    href="#dusk-glyph-stack"
+    x="505"
+    y="166"
+    width="190"
+    height="268"
+  />
+  <text class="dusk-fleet__hub-label" x="600" y="421" text-anchor="middle">
+    Dusk Stack
+  </text>
+</svg>

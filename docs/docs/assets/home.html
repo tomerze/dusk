@@ -1,0 +1,94 @@
+{% extends "main.html" %}
+{% block extrahead %}
+  <link rel="stylesheet" href="{{ 'assets/stylesheets/landing.css' | url }}">
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..900&display=swap">
+{% endblock %}
+{% block header %}
+  <header class="md-header md-header--shadow dusk-navbar"
+          data-md-component="header">
+    <nav class="md-header__inner md-grid" aria-label="{{ lang.t('header') }}">
+      <a href="{{ nav.homepage.url | url }}"
+         title="{{ config.site_name | e }}"
+         class="md-header__button md-logo"
+         aria-label="{{ config.site_name }}"
+         data-md-component="logo">{% include "partials/logo.html" %}</a>
+      <label class="md-header__button md-icon" for="__drawer">
+        {% include ".icons/" ~ (config.theme.icon.menu or "material/menu") ~ ".svg" %}
+      </label>
+      <div class="md-header__title" data-md-component="header-title">
+        <div class="md-header__ellipsis">
+          <div class="md-header__topic">
+            <span class="md-ellipsis">{{ config.site_name }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="dusk-navbar__links">
+        {% for section in nav if section.title in ["Getting Started", "Embedding", "Features", "SDK Reference"] %}
+          <a href="{{ (section.children | first).url | url }}">{{ section.title }}</a>
+        {% endfor %}
+      </div>
+      {% include "partials/palette.html" %}
+      {% include "partials/javascripts/palette.html" %}
+      {% if "material/search" in config.plugins %}
+        <label class="md-header__button md-icon" for="__search">
+          {% include ".icons/" ~ (config.theme.icon.search or "material/magnify") ~ ".svg" %}
+        </label>
+        {% include "partials/search.html" %}
+      {% endif %}
+      <a class="md-header__button md-icon dusk-navbar__github"
+         href="{{ config.repo_url }}"
+         title="Dusk on GitHub"
+         aria-label="Dusk on GitHub">{% include ".icons/fontawesome/brands/github.svg" %}</a>
+    </nav>
+  </header>
+{% endblock %}
+{% block hero %}
+  <div class="dusk-landing md-typeset">{{ page.content }}</div>
+{% endblock %}
+{% block content %}{% endblock %}
+{% block footer %}
+  <nav class="dusk-sitemap" aria-label="Documentation">
+    <div class="dusk-sitemap__inner">
+      <div class="dusk-sitemap__brand">
+        <a class="dusk-sitemap__wordmark"
+           href="{{ nav.homepage.url | url }}"
+           aria-label="{{ config.site_name }}">
+        <img class="dusk-sitemap__d"
+             src="{{ 'assets/landing/logo-d.svg' | url }}"
+             alt="">usk</a>
+        <p>The one solution for every fleet.</p>
+        <a class="dusk-sitemap__github" href="{{ config.repo_url }}">
+          {% include ".icons/fontawesome/brands/github.svg" %}
+          Dusk on GitHub
+        </a>
+      </div>
+      <div class="dusk-sitemap__sections">
+        {% for section in nav if section.children %}
+          <div class="dusk-sitemap__section">
+            {% set index = section.children | first %}
+            {% if index.is_page and index.is_index %}
+              <a class="dusk-sitemap__title" href="{{ index.url | url }}">{{ section.title }}</a>
+            {% else %}
+              <span class="dusk-sitemap__title">{{ section.title }}</span>
+            {% endif %}
+            <ul>
+              {% for item in section.children %}
+                {% if item.is_section %}
+                  <li><a href="{{ (item.children | first).url | url }}">{{ item.title }}</a></li>
+                {% elif not item.is_index %}
+                  <li><a href="{{ item.url | url }}">{{ item.title }}</a></li>
+                {% endif %}
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </nav>
+  {{ super() }}
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ 'assets/javascripts/landing.js' | url }}"></script>
+{% endblock %}

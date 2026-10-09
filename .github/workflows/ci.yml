@@ -118,6 +118,29 @@ jobs:
         working-directory: docs
         run: uv run mkdocs build --strict
 
+  docs-format:
+    name: Docs (prettier, djlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: prettier
+        run: >
+          npx --yes prettier@3.6.2 --check
+          "docs/docs/assets/stylesheets/*.css"
+          "docs/docs/assets/javascripts/*.js"
+          "docs/docs/assets/landing/*.svg"
+          "docs/docs/assets/.icons/dusk/*.svg"
+
+      - name: djlint
+        run: uvx djlint@1.46.4 --check --profile=jinja --indent 2 docs/docs/assets/home.html
+
   rust-fmt:
     name: Rust (fmt)
     runs-on: ubuntu-latest
