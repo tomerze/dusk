@@ -7,9 +7,17 @@ license.workspace = true
 [dependencies]
 dusk_program = { path = "../../../dusk/src/dusk_program", public = true }
 dusk_core = { path = "../../../dusk/src/dusk_core" }
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc"] }
+hkdf = { version = "0.12", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+rand_chacha = { version = "0.3", default-features = false }
+rand_core = { version = "0.6", default-features = false }
 nohash-hasher = { version = "0.2", default-features = false, public = false }
 tracing = { version = "0.1.41", default-features = false }
 linkme = { version = "0.3", optional = true, public = true }
+
+[dev-dependencies]
+critical-section = { version = "1", features = ["std"] }
 
 [features]
 client = ["linkme"]

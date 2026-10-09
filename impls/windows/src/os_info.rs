@@ -30,7 +30,9 @@ pub(crate) fn is_not_found(error: &windows_result::Error) -> bool {
 fn set_kvs_values(kvs: &Kvs, source: &str, values: Vec<(String, Value)>) {
     tracing::info!(source, values = ?values, "dusk os");
     for (name, value) in values {
-        block_on(kvs.set(key_id(&name), value, FLAG_STICKY));
+        if let Err(error) = block_on(kvs.set(key_id(&name), value, FLAG_STICKY)) {
+            tracing::warn!(name = name.as_str(), error = %format!("{error:#}"), "couldn't record a key in the kvs");
+        }
     }
 }
 

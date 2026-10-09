@@ -163,25 +163,24 @@ impl Process {
     async fn publish_counters(&self) {
         let kvs = dusk_program_kvs_internal::get_kvs(self.ctx.namespace.id);
         let counts = self.buffer.drop_counts();
-        let sticky = dusk_program_kvs_internal::FLAG_STICKY;
-        kvs.set(WRITTEN_KEY, Value::Uint(self.buffer.written()), sticky)
-            .await;
-        kvs.set(DROPPED_NO_LANE_KEY, Value::Uint(counts.no_lane), sticky)
-            .await;
-        kvs.set(DROPPED_OVERSIZE_KEY, Value::Uint(counts.oversize), sticky)
-            .await;
-        kvs.set(
-            WRITE_FAILURES_KEY,
-            Value::Uint(counts.write_failures),
-            sticky,
-        )
-        .await;
-        kvs.set(
-            OVERWRITTEN_KEY,
-            Value::List(counts.overwritten.into_iter().map(Value::Uint).collect()),
-            sticky,
-        )
-        .await;
+        let values = [
+            (WRITTEN_KEY, Value::Uint(self.buffer.written())),
+            (DROPPED_NO_LANE_KEY, Value::Uint(counts.no_lane)),
+            (DROPPED_OVERSIZE_KEY, Value::Uint(counts.oversize)),
+            (WRITE_FAILURES_KEY, Value::Uint(counts.write_failures)),
+            (
+                OVERWRITTEN_KEY,
+                Value::List(counts.overwritten.into_iter().map(Value::Uint).collect()),
+            ),
+        ];
+        for (key, value) in values {
+            if let Err(error) = kvs
+                .set(key, value, dusk_program_kvs_internal::FLAG_STICKY)
+                .await
+            {
+                ::tracing::warn!(key, error = %alloc::format!("{error:#}"), "couldn't record a key in the kvs");
+            }
+        }
     }
 }
 

@@ -57,11 +57,13 @@ pub fn run(
             ));
 
             let kvs = dusk_program_kvs_internal::get_kvs(root.id);
-            dusk_program::embassy_futures::block_on(kvs.set(
+            if let Err(error) = dusk_program::embassy_futures::block_on(kvs.set(
                 dusk_program_kvs_internal::key_id("dusk.impl"),
                 Value::String(String::from("nix")),
                 dusk_program_kvs_internal::FLAG_STICKY,
-            ));
+            )) {
+                tracing::warn!(name = "dusk.impl", error = %format!("{error:#}"), "couldn't record a key in the kvs");
+            }
             os_info::set_kvs_os_info(&kvs);
             device_info::set_kvs_device_info(&kvs);
 
@@ -75,6 +77,7 @@ pub fn run(
             );
         });
     }));
+    dusk_program_kvs_internal::release_persistent(dusk_core::driver::tid());
 
     match outcome {
         Ok(()) => unreachable!("executor.run() should never return"),

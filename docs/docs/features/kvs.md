@@ -8,8 +8,9 @@ several processes need to see, or a number you want to read back later. The
 `kvs` program is how you reach it from the [shell](shell.md); it's a
 [Base program](../getting-started/concepts/base.md).
 
-The store lives in memory and starts empty every time the node starts. Nothing
-in it survives a restart.
+The store lives in memory and starts empty every time the node starts, except
+for its [persistent keys](#persistent-keys): a node built with a persistent file
+keeps those in it, and they are back when the node starts again.
 
 ## Commands
 
@@ -150,9 +151,109 @@ reads a key with `Kvs::get_with_flags`, and a client that reads one with
 `KvsPortal.get`, gets its flags with its value, and keeps a sensitive one out of
 its own logs too.
 
-`sensitive` is the one flag a client sets. `kvs set` and `KvsPortal.set` refuse
-any other - `sticky` included, which only a program on the node sets - with
-`flags 0x01 hold a flag a client cannot set; a client may set sensitive`.
+`sensitive` and `persistent` are the flags a client sets. `kvs set` and
+`KvsPortal.set` refuse any other - `sticky` included, which only a program on the
+node sets - with
+`flags 0x01 hold a flag a client cannot set; a client may set sensitive, persistent`.
+
+### Persistent keys
+
+A **persistent** key survives the node restarting, crashing or losing power:
+
+```sh
+kvs set --persistent deploy.region eu-west-1
+```
+
+The node keeps it in its persistent file as well as in memory, and reads the
+file back when it starts, so the key is there again, with its value and its
+flags. `kvs set --persistent` answers once the record is on disk: the node syncs
+the file before it does. A later `kvs set` without `--persistent` takes the key
+out of the file, and `kvs delete` removes it from both. `kvs scan` names the flag
+`persistent`, and a key can carry it with `sensitive`:
+`kvs set --persistent --sensitive deploy.token 9f2c41d07be3`.
+
+A node keeps persistent keys only when it was built with a file: the `persistent`
+field of the kvs launcher's `KvsConfig`, which the node artifact sets from
+[`DUSK_NODE_KVS_PERSISTENT`](../embedding/node-artifacts.md#dusk_node_kvs_persistent)
+when it is built. On any other node `kvs set --persistent` fails with
+`this node keeps no persistent kvs keys: its kvs launcher was built without a file`
+and stores nothing. An impl without a file system leaves the field unset.
+
+The kvs launcher registers its file for the thread it is built on, and every
+namespace's kvs asked for on that thread while the launcher holds the file binds
+to it - a node has one namespace - so a node's launcher set is built on the
+thread that runs the node - as the impls' `run` does, calling the builder there -
+or the node keeps no persistent keys.
+
+A program on the node sets a persistent key by passing `FLAG_PERSISTENT` to
+`dusk_program_kvs_internal::Kvs::set`, reads it like any other key, and asks
+`Kvs::keeps_persistent_keys` whether the node has a file that opened. A set or
+delete that cannot reach the file fails and leaves the key as it was in memory;
+when the record reached the disk before the failure - the write went through and
+the sync failed - it can still come back when the node restarts.
+
+#### The file
+
+The file is an append-only log. Every set and delete of a persistent key appends
+one record, encrypted and authenticated with XChaCha20-Poly1305 under a key
+derived with HKDF-SHA256 from the node's
+[fleet token](../embedding/node-artifacts.md#the-fleet-token), salted with the
+device's [`dusk.device.id`](#what-the-impl-records), with the info
+`dusk-kvs-persistent-v1`. A device without an id derives the key from the fleet
+token alone, and the node logs that at `info`. So a file opens only on the device
+that wrote it, under a node built with the same fleet token: a node rebuilt with
+another token - including a new random one, see the fleet token's section -
+cannot read the keys its earlier build kept.
+
+The encryption keeps the file's contents from anyone who copies the file off the
+device and has neither the fleet token nor the device's id. It does not keep them
+from anyone else: the fleet token is in the node's binary, which usually sits on
+the same disk as the file, and every client that connects to a node of the same
+build can ask for it with `Dusk.fleetToken`; the device's id is a kvs key every
+client can read. Mark a secret `--sensitive` as well, to keep it out of the
+node's logs.
+
+When the node starts it replays the file, and logs what it found at `info`:
+
+- A last record that runs past the end of the file or fails to authenticate - the
+  node lost power while writing it, or it is damaged - is dropped, the file cut
+  back to the record before it, and the node logs that at `warn` with the bytes it
+  dropped. A damaged length in the middle of the file looks the same, and drops
+  every record after it.
+- A damaged record with records after it: the node keeps the records before it,
+  drops the rest, and logs that at `error`.
+- A file whose first record does not open under the node's key - a file from
+  another device or another build, or one whose first record is damaged - or one
+  holding a record a newer Dusk wrote, is left as it is, and logged at `error`.
+  The node then keeps no persistent keys: `kvs set --persistent` fails naming the
+  reason, until the file is moved away and the node restarts.
+
+A key the file holds is restored with the flags it was kept with, unless Dusk
+has already written it in this run - the impl writes `dusk.impl`, `dusk.os.*` and
+`dusk.device.*` before the file opens. Then Dusk's value stays, and the node
+drops the file's copy and logs the key at `warn`. A key Dusk writes after the
+file opened - `init`'s keys, `logs`' counters - replaces the restored value, and
+the node drops the file's copy and logs the key at `warn` the same way. So an
+override kept with `kvs set --persistent --forbidden-unstick` lasts until Dusk
+writes the key again.
+
+The node syncs the file's directory when it creates the file. When the file has
+grown past twice the size of its live records plus 64 KiB, the node compacts it:
+it writes the live records to `<file>.tmp`, syncs that, renames it over the file
+and syncs the directory again. A crash before the rename leaves the old file
+whole. Where the directory cannot be opened to sync it - opening a directory as a
+file fails on Windows - the node logs that at `warn`, and until the file system
+flushes the directory on its own a power loss can lose a new file, or bring back
+the file from before a compaction along with every key written since.
+
+A file belongs to one node. A second node in the same process built with the
+same path fails to start: its kvs launcher refuses the file, with
+``another node of this process keeps its persistent kvs keys in `<path>` ``. When
+a node's launcher set is dropped, or its run returns, its kvs closes the file
+and refuses persistent sets from then on, and another node may take the file.
+Nothing stops two node processes from writing one file - the file system driver
+has no lock - and two that do overwrite each other's records: give every node on
+a device its own file.
 
 ## Reading keys by name
 

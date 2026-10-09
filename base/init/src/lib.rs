@@ -189,36 +189,36 @@ impl dusk_program::process::ProcessMixin for Process {
     ) -> anyhow::Result<()> {
         let namespace_id = self.ctx.namespace.id;
         let kvs = dusk_program_kvs_internal::get_kvs(namespace_id);
-        let sticky = dusk_program_kvs_internal::FLAG_STICKY;
-        kvs.set(
-            VERSION_KEY,
-            Value::String(String::from(dusk_capnp::VERSION)),
-            sticky,
-        )
-        .await;
-        kvs.set(
-            GIT_REV_KEY,
-            Value::String(String::from(dusk_capnp::GIT_REV)),
-            sticky,
-        )
-        .await;
-        kvs.set(NAMESPACE_ID_KEY, Value::Uint(namespace_id), sticky)
-            .await;
-        kvs.set(TID_KEY, Value::Uint(dusk_core::driver::tid()), sticky)
-            .await;
-        match dusk_core::driver::hostname() {
-            Ok(hostname) => kvs.set(HOSTNAME_KEY, Value::String(hostname), sticky).await,
-            Err(error) => tracing::warn!("couldn't read the hostname for dusk.hostname: {error:#}"),
-        }
-
         let arch = env!("DUSK_TARGET_ARCH");
         let os = env!("DUSK_TARGET_OS");
         let bits = u64::from(usize::BITS);
-        kvs.set(ARCH_KEY, Value::String(String::from(arch)), sticky)
-            .await;
-        kvs.set(OS_KEY, Value::String(String::from(os)), sticky)
-            .await;
-        kvs.set(BITS_KEY, Value::Uint(bits), sticky).await;
+        let mut values = alloc::vec![
+            (
+                VERSION_KEY,
+                Value::String(String::from(dusk_capnp::VERSION)),
+            ),
+            (
+                GIT_REV_KEY,
+                Value::String(String::from(dusk_capnp::GIT_REV)),
+            ),
+            (NAMESPACE_ID_KEY, Value::Uint(namespace_id)),
+            (TID_KEY, Value::Uint(dusk_core::driver::tid())),
+            (ARCH_KEY, Value::String(String::from(arch))),
+            (OS_KEY, Value::String(String::from(os))),
+            (BITS_KEY, Value::Uint(bits)),
+        ];
+        match dusk_core::driver::hostname() {
+            Ok(hostname) => values.push((HOSTNAME_KEY, Value::String(hostname))),
+            Err(error) => tracing::warn!("couldn't read the hostname for dusk.hostname: {error:#}"),
+        }
+        for (key, value) in values {
+            if let Err(error) = kvs
+                .set(key, value, dusk_program_kvs_internal::FLAG_STICKY)
+                .await
+            {
+                tracing::warn!(key, error = %alloc::format!("{error:#}"), "couldn't record a key in the kvs");
+            }
+        }
         tracing::info!(arch, os, bits, "dusk target");
         match kvs.get(IMPL_KEY).await {
             Some(Value::String(name)) => tracing::info!(name = name.as_str(), "dusk impl"),
