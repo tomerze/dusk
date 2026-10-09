@@ -11,11 +11,13 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = { version = "1.0", public = true }
 arc-swap = { version = "1.7", public = true }
+futures = "0.3"
 metrics = "0.24"
 nightfall_ledger = { path = "ledger", public = true }
 nightfall_membrane = { path = "membrane", public = true }
 nightfall_provisioning = { path = "provisioning", public = true }
 rand = "0.9"
+rdkafka = { version = "0.39", default-features = false, features = ["cmake-build", "curl-static", "ssl-vendored", "tokio", "zstd"], public = true }
 ring = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std", "tls12"], public = true }
 rustls-pki-types = { version = "1.12", features = ["std"], public = true }
