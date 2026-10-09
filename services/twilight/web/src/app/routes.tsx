@@ -34,6 +34,12 @@ export const routes: RouteObject[] = [
               Component: (await import('../campaigns/CampaignsPage')).CampaignsPage,
             }),
           },
+          {
+            path: 'campaigns/:campaignId',
+            lazy: async () => ({
+              Component: (await import('../campaigns/detail/CampaignPage')).CampaignPage,
+            }),
+          },
           { path: '*', element: <NotFound /> },
         ],
       },

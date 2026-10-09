@@ -1,0 +1,63 @@
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: -8px 0 0;
+}
+
+.meta dt {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.meta dd {
+  margin: 2px 0 0;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--twilight-text-strong);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-text);
+}
+
+.legendCount {
+  color: var(--mantine-color-dimmed);
+}
+
+.notReachedSwatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    var(--mantine-color-dimmed) 3px 4px
+  );
+}
+
+.tabs {
+  margin-top: 4px;
+}
+
+.tabs [role='tablist'] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tabs [role='tab'] {
+  flex-shrink: 0;
+}
