@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "kind",
+    "instance",
+    "partition",
+    "sequence",
+    "previous_hash",
+    "hash",
+    "device_id",
+    "installation_id",
+    "namespace_id",
+    "epoch",
+    "principal",
+    "pid",
+    "session_id",
+    "call_id",
+    "cap_id",
+    "parent_cap_id",
+    "direction",
+    "action",
+    "interface_id",
+    "method_id",
+    "param_fields",
+    "param_cap_ids",
+    "param_hash",
+    "result_code",
+    "result_cap_ids",
+    "event",
+    "event_detail",
+    "key_id",
+    "signature"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.ledger/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "kind": { "enum": ["call", "result", "event", "checkpoint"] },
+    "instance": { "$ref": "common.schema.json#/$defs/instance" },
+    "partition": { "type": "integer", "minimum": 0, "maximum": 9007199254740992 },
+    "sequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740992 },
+    "previous_hash": {
+      "description": "Hash of the previous entry in this (instance, partition) chain; 64 zeros at a chain start.",
+      "$ref": "common.schema.json#/$defs/hash"
+    },
+    "hash": {
+      "description": "SHA-256 of this entry's RFC 8785 canonical bytes with hash omitted.",
+      "$ref": "common.schema.json#/$defs/hash"
+    },
+    "device_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/device_id" }, { "type": "null" }]
+    },
+    "installation_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/installation_id" }, { "type": "null" }]
+    },
+    "namespace_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/namespace_id" }, { "type": "null" }]
+    },
+    "epoch": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/epoch" }, { "type": "null" }]
+    },
+    "principal": { "type": "string", "minLength": 1 },
+    "pid": {
+      "description": "The pid of the process at the root of the call's capability provenance; 0 when the entry is under no process.",
+      "$ref": "common.schema.json#/$defs/pid"
+    },
+    "session_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "call_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "cap_id": { "type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740992 },
+    "parent_cap_id": { "type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740992 },
+    "direction": { "enum": [null, "client_to_node", "node_to_client", "nightfall_to_node"] },
+    "action": {
+      "description": "Interface.method, or unknown:<interface id>.<method id> for a call on an interface the session's schema bundle does not hold.",
+      "type": ["string", "null"],
+      "pattern": "^([A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+|unknown:[0-9a-f]{16}\\.(0|[1-9][0-9]{0,4}))$"
+    },
+    "interface_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{16}$" },
+    "method_id": { "type": ["integer", "null"], "minimum": 0, "maximum": 65535 },
+    "param_fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "redacted"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "redacted": { "type": "boolean" }
+        }
+      }
+    },
+    "param_cap_ids": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 9007199254740992 }
+    },
+    "param_hash": {
+      "anyOf": [{ "const": "" }, { "$ref": "common.schema.json#/$defs/hash" }]
+    },
+    "result_code": {
+      "enum": [
+        null,
+        "ok",
+        "error:failed",
+        "error:overloaded",
+        "error:disconnected",
+        "error:unimplemented",
+        "denied",
+        "rate_limited",
+        "revoked"
+      ]
+    },
+    "result_cap_ids": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 9007199254740992 }
+    },
+    "event": {
+      "enum": [
+        null,
+        "session_open",
+        "session_close",
+        "membrane_dropped",
+        "binding_conflict",
+        "setup_call",
+        "chain_link",
+        "chain_resumed",
+        "quarantine_override",
+        "session_refused",
+        "rpc_rejected"
+      ]
+    },
+    "event_detail": {
+      "description": "Open object. session_refused: {reason: revoked, retired or setup_timeout}. rpc_rejected: {kind: the RPC message kind the filter aborted the connection on}.",
+      "type": ["object", "null"]
+    },
+    "key_id": { "type": ["string", "null"], "minLength": 1 },
+    "signature": {
+      "description": "Base64 Ed25519 signature over the RFC 8785 bytes of {instance, partition, sequence, hash} of the preceding entry.",
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9+/]{86}==$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["kind"], "properties": { "kind": { "const": "checkpoint" } } },
+      "then": {
+        "properties": {
+          "key_id": { "type": "string" },
+          "signature": { "type": "string" },
+          "device_id": { "type": "null" },
+          "installation_id": { "type": "null" },
+          "namespace_id": { "type": "null" },
+          "epoch": { "type": "null" },
+          "pid": { "const": "0" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" },
+          "cap_id": { "type": "null" },
+          "parent_cap_id": { "type": "null" },
+          "direction": { "type": "null" },
+          "action": { "type": "null" },
+          "interface_id": { "type": "null" },
+          "method_id": { "type": "null" },
+          "param_fields": { "maxItems": 0 },
+          "param_cap_ids": { "maxItems": 0 },
+          "param_hash": { "const": "" },
+          "result_code": { "type": "null" },
+          "result_cap_ids": { "maxItems": 0 }
+        }
+      },
+      "else": {
+        "properties": {
+          "key_id": { "type": "null" },
+          "signature": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["kind"], "properties": { "kind": { "const": "event" } } },
+      "then": {
+        "properties": {
+          "event": { "type": "string" },
+          "param_hash": { "const": "" }
+        }
+      },
+      "else": {
+        "properties": {
+          "event": { "type": "null" },
+          "event_detail": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["kind"], "properties": { "kind": { "enum": ["call", "result"] } } },
+      "then": {
+        "properties": {
+          "device_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "namespace_id": { "type": "string" },
+          "epoch": { "type": "integer" },
+          "session_id": { "type": "string" },
+          "call_id": { "type": "string" },
+          "cap_id": { "type": "integer" },
+          "direction": { "type": "string" },
+          "action": { "type": "string" },
+          "interface_id": { "type": "string" },
+          "method_id": { "type": "integer" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["kind"], "properties": { "kind": { "const": "call" } } },
+      "then": {
+        "properties": { "result_code": { "enum": [null, "denied", "rate_limited"] } },
+        "if": { "required": ["result_code"], "properties": { "result_code": { "const": "denied" } } },
+        "else": { "properties": { "param_hash": { "$ref": "common.schema.json#/$defs/hash" } } }
+      }
+    },
+    {
+      "if": { "required": ["kind"], "properties": { "kind": { "const": "result" } } },
+      "then": {
+        "properties": {
+          "param_hash": { "const": "" },
+          "result_code": {
+            "enum": [
+              "ok",
+              "error:failed",
+              "error:overloaded",
+              "error:disconnected",
+              "error:unimplemented",
+              "revoked"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "setup_call" } } },
+      "then": {
+        "properties": {
+          "principal": { "const": "nightfall" },
+          "direction": { "const": "nightfall_to_node" },
+          "action": { "type": "string" },
+          "interface_id": { "type": "string" },
+          "method_id": { "type": "integer" },
+          "session_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "session_open" } } },
+      "then": {
+        "properties": {
+          "device_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "namespace_id": { "type": "string" },
+          "epoch": { "type": "integer" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "session_close" } } },
+      "then": {
+        "properties": {
+          "device_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "namespace_id": { "type": "string" },
+          "epoch": { "type": "integer" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "session_refused" } } },
+      "then": {
+        "properties": {
+          "device_id": { "type": "string" },
+          "installation_id": { "type": "string" },
+          "epoch": { "type": "null" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "quarantine_override" } } },
+      "then": {
+        "properties": {
+          "session_id": { "type": "string" },
+          "call_id": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "membrane_dropped" } } },
+      "then": {
+        "properties": {
+          "session_id": { "type": "string" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "chain_link" } } },
+      "then": {
+        "properties": {
+          "device_id": { "type": "null" },
+          "installation_id": { "type": "null" },
+          "namespace_id": { "type": "null" },
+          "epoch": { "type": "null" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "chain_resumed" } } },
+      "then": {
+        "properties": {
+          "device_id": { "type": "null" },
+          "installation_id": { "type": "null" },
+          "namespace_id": { "type": "null" },
+          "epoch": { "type": "null" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "binding_conflict" } } },
+      "then": {
+        "properties": {
+          "epoch": { "type": "null" },
+          "session_id": { "type": "null" },
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "rpc_rejected" } } },
+      "then": {
+        "properties": {
+          "call_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["action"],
+        "properties": { "action": { "type": "string", "pattern": "^unknown:" } }
+      },
+      "then": {
+        "properties": {
+          "kind": { "const": "call" },
+          "result_code": { "const": "denied" },
+          "param_hash": { "const": "" }
+        }
+      }
+    }
+  ]
+}
