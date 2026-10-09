@@ -167,11 +167,11 @@ connect the tools you already have.
 
 </section>
 
+<section class="dusk-section dusk-start" markdown>
+
 <div class="grid cards" markdown>
 
 -   **Embed Dusk**
-
-    ---
 
     Drop the C library into an app you already ship - every device running it
     becomes a manageable node.
@@ -180,16 +180,12 @@ connect the tools you already have.
 
 -   **Analytics & diagnosis**
 
-    ---
-
     Connect to your fleet to see what's running, read logs, and fix misbehaving
     devices.
 
     [See your fleet →](getting-started/guides/connect-a-client.md)
 
 -   **Drive it over HTTP**
-
-    ---
 
     Run the API gateway and reach any node from curl, a script, a dashboard or a
     browser. AI agents get an MCP server on the same port.
@@ -198,8 +194,6 @@ connect the tools you already have.
 
 -   **Customize & extend**
 
-    ---
-
     Dusk is modular: swap the platform backend or add your own programs when the
     built-ins aren't enough.
 
@@ -207,10 +201,10 @@ connect the tools you already have.
 
 -   **Reference**
 
-    ---
-
     The crate map and the Cap'n Proto wire schemas.
 
     [Reference →](sdk-reference/crates.md)
 
 </div>
+
+</section>
