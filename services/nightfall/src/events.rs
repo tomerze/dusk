@@ -1,6 +1,9 @@
 use crate::directory::{ConnectionEvent, NodeIdentity, namespace_hex, parse_namespace};
+use crate::kafka::{OutgoingRecord, RecordProducer};
+use nightfall_provisioning::events::{EnrollmentEvent, EnrollmentEvents};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::sync::Arc;
 use time::OffsetDateTime;
 
 pub const CONNECTIONS_SCHEMA: &str = "dusk.connections/v1";
@@ -180,6 +183,75 @@ pub fn parse_connection(payload: &[u8]) -> Result<ConnectionEvent, String> {
         namespace_id,
         epoch: message.epoch,
     })
+}
+
+#[derive(Clone)]
+pub struct EventPublisher {
+    producer: Arc<dyn RecordProducer>,
+    runtime: tokio::runtime::Handle,
+}
+
+impl EventPublisher {
+    pub fn new(
+        producer: Arc<dyn RecordProducer>,
+        runtime: tokio::runtime::Handle,
+    ) -> EventPublisher {
+        EventPublisher { producer, runtime }
+    }
+
+    pub fn publish(&self, topic: &str, key: Option<String>, message: &Value) {
+        let payload = match serde_json::to_vec(message) {
+            Ok(payload) => payload,
+            Err(error) => {
+                tracing::error!(topic, %error, "an event could not be encoded and is lost");
+                return;
+            }
+        };
+        let delivery = self.producer.send(OutgoingRecord {
+            topic: topic.to_string(),
+            partition: None,
+            key: key.clone(),
+            payload: Some(payload),
+        });
+        let topic = topic.to_string();
+        self.runtime.spawn(async move {
+            if let Err(error) = delivery.await {
+                metrics::counter!("nightfall_event_delivery_failures_total", "topic" => topic.clone())
+                    .increment(1);
+                tracing::error!(topic, key, %error, "an event was not delivered to Kafka");
+            }
+        });
+    }
+
+    pub fn flush(&self, timeout: std::time::Duration) {
+        self.producer.flush(timeout);
+    }
+}
+
+pub struct EnrollmentPublisher {
+    pub events: EventPublisher,
+    pub topic: String,
+}
+
+impl EnrollmentEvents for EnrollmentPublisher {
+    fn record(&self, event: EnrollmentEvent) {
+        metrics::counter!(
+            "nightfall_enrollments_total",
+            "operation" => event.operation.name(),
+            "outcome" => event.outcome.name()
+        )
+        .increment(1);
+        self.events
+            .publish(&self.topic, event.key(), &event.message());
+    }
+
+    fn rate_alert(&self, _per_minute: u64, active: bool) {
+        metrics::gauge!("nightfall_enrollment_rate_alert").set(if active { 1.0 } else { 0.0 });
+    }
+
+    fn device_id_collision(&self, _device_id: &str, _installations: usize, _addresses: usize) {
+        metrics::counter!("device_id_collision").increment(1);
+    }
 }
 
 #[cfg(test)]
