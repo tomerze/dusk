@@ -57,9 +57,9 @@ theme:
   font:
     text: Inter
     code: Roboto Mono
-  favicon: assets/.icons/icon.svg
+  favicon: assets/landing/logo-d.svg
+  logo: assets/landing/logo-d.svg
   icon:
-    logo: icon
     repo: fontawesome/brands/github
 extra_css:
   - assets/stylesheets/extra.css

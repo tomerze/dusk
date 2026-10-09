@@ -79,6 +79,7 @@
 .md-header__button.md-logo svg {
   height: 3rem;
   width: 3rem;
+  padding: 0.6rem;
 }
 /* Pull the logo into the left corner. Material centres the header content in a
    61rem column (.md-grid), leaving a large left gutter on wide screens - break
