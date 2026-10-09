@@ -4,22 +4,27 @@ hide:
   - toc
 ---
 
-<div class="dusk-hero" markdown>
+<section class="dusk-hero" markdown>
 
-<div style="text-align: center;">
-<h1 class="dusk-wordmark">Dusk</h1>
-<p class="tagline lead"><span class="emph">The one solution for every fleet<span class="punct">.</span></span>
-<span class="emph">Seamlessly drop it in at any scale<span class="punct">.</span></span></p>
-<p class="tagline">Dusk can monitor and manage fleets deployed on everything from microcontrollers to supercomputers.
+<div class="dusk-hero__inner" markdown>
 
-And you can run it inside applications you already ship
-</p>
-</div>
+# Dusk { #dusk .dusk-hero__wordmark }
+
+The one solution for every fleet.<br>
+Seamlessly drop it in at any scale.
+{ .dusk-hero__lead }
+
+Dusk can monitor and manage fleets deployed on everything from
+microcontrollers to supercomputers. And you can run it inside applications
+you already ship
+{ .dusk-hero__pitch }
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
-[View on   :fontawesome-brands-github:](https://github.com/tomerze/dusk){ .md-button .gh-button title="View on GitHub" }
+[View on :fontawesome-brands-github:](https://github.com/tomerze/dusk){ .md-button .dusk-button-ghost title="View on GitHub" }
 
 </div>
+
+</section>
 
 <div class="grid cards" markdown>
 
