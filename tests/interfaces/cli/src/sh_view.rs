@@ -24,27 +24,17 @@ fn run(port: u16, command: &str) -> String {
 fn pid_of(port: u16, name: &str) -> u64 {
     let table = run(port, "ps");
     for line in table.lines() {
-        if !line.contains("\"Name\"") {
+        let Ok(record) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
-        }
-        let names: Vec<&str> = line
-            .split("\"Name\":[")
-            .nth(1)
-            .and_then(|rest| rest.split(']').next())
-            .expect("a Name column")
-            .split(',')
-            .collect();
-        let pids: Vec<&str> = line
-            .split("\"PID\":[")
-            .nth(1)
-            .and_then(|rest| rest.split(']').next())
-            .expect("a PID column")
-            .split(',')
-            .collect();
-        for (index, entry) in names.iter().enumerate() {
-            if entry.trim_matches('"') == name {
-                return pids[index].trim().parse().expect("a numeric pid");
-            }
+        };
+        let Some(columns) = record.as_object().and_then(|record| record.values().next()) else {
+            continue;
+        };
+        let Some(names) = columns["Name"].as_array() else {
+            continue;
+        };
+        if let Some(index) = names.iter().position(|entry| entry.as_str() == Some(name)) {
+            return columns["PID"][index].as_u64().expect("a numeric pid");
         }
     }
     panic!("no `{name}` in ps:\n{table}");
