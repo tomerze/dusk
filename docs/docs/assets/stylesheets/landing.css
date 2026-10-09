@@ -151,7 +151,6 @@
   top: 1.2rem;
   right: 0;
   left: 0;
-  display: none;
   max-width: 72rem;
   height: 25rem;
   margin: 0 auto;
@@ -227,9 +226,43 @@
     transform: rotate(360deg) translateX(12px) rotate(-360deg);
   }
 }
-@media screen and (min-width: 60em) {
+@media screen and (max-width: 59.9375em) {
   .dusk-hero__floats {
-    display: block;
+    top: 0;
+    bottom: 0;
+    height: auto;
+  }
+  .dusk-landing .dusk-float {
+    display: none;
+  }
+  .dusk-landing .dusk-float[data-layer="nightfall"],
+  .dusk-landing .dusk-float[data-layer="dawn"],
+  .dusk-landing .dusk-float[data-layer="twilight"],
+  .dusk-landing .dusk-float[data-layer="data"] {
+    --md-icon-size: 34px;
+    display: inline-flex;
+  }
+  .dusk-landing .dusk-float[data-layer="nightfall"] {
+    --md-icon-size: 30px;
+    top: 69%;
+    right: auto;
+    left: 11%;
+  }
+  .dusk-landing .dusk-float[data-layer="data"] {
+    top: 75%;
+    right: 18%;
+    left: auto;
+  }
+  .dusk-landing .dusk-float[data-layer="dawn"] {
+    top: 87%;
+    right: auto;
+    left: 6%;
+  }
+  .dusk-landing .dusk-float[data-layer="twilight"] {
+    --md-icon-size: 30px;
+    top: 81%;
+    right: 3%;
+    left: auto;
   }
 }
 .dusk-hero__inner {
