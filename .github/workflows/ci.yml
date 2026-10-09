@@ -227,3 +227,44 @@ jobs:
 
       - name: go test -tags integration
         run: go test -tags integration -timeout 30m ./...
+
+  ui:
+    name: UI (lint, typecheck, vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/twilight/web
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/twilight/web/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: vitest
+        run: npm test
+
+      - name: build
+        run: npm run build
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/twilight/go.mod
+          cache-dependency-path: services/twilight/go.sum
+
+      - name: go build -tags ui
+        working-directory: services/twilight
+        run: go build -tags ui -o /dev/null ./cmd/twilight
