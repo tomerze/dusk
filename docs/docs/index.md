@@ -136,7 +136,7 @@ should look like, and it will take care of it, your way.
 
 ### :dusk-data: Data
 
-Inventory, events and files
+Inventory, events and objects
 { .dusk-layer__role }
 
 Everything your fleet reports, stored on your own infrastructure and ready to
