@@ -753,11 +753,12 @@
   box-shadow:
     0 0 0 3px var(--dusk-track),
     0 0 12px var(--dusk-ink);
-  opacity: min(
-    calc(var(--dusk-read, 0) * 1000),
-    calc((1 - var(--dusk-read, 0)) * 1000)
-  );
+  z-index: 1;
+  opacity: 0;
   transform: translateY(-50%);
+}
+.dusk-layer.is-reading::before {
+  opacity: 1;
 }
 .dusk-landing .dusk-layer h3 {
   display: flex;
