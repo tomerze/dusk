@@ -22,6 +22,12 @@ repos:
           language: system
           files: ^services/twilight/.*\.go$
           pass_filenames: false
+      -   id: twilight-web-lint
+          name: eslint and prettier (twilight web)
+          entry: npm --prefix services/twilight/web run lint
+          language: system
+          files: ^services/twilight/web/
+          pass_filenames: false
       -   id: clang-tidy
           name: clang-tidy
           entry: clang-tidy
