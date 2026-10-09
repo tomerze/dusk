@@ -36,6 +36,16 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
         }
         front.style.opacity = 0;
         diagram.append(front);
+        for (const animation of front.getAnimations()) {
+          const twin = plate
+            .getAnimations()
+            .find(
+              (original) => original.animationName === animation.animationName,
+            );
+          if (animation.animationName && twin) {
+            animation.currentTime = twin.currentTime;
+          }
+        }
         getComputedStyle(front).opacity;
         front.style.opacity = 1;
       }
