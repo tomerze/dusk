@@ -17,7 +17,6 @@
   --dusk-twilight: #bf7fc6;
   --dusk-data: #4ea6e6;
   --dusk-observability: #f2f5fa;
-  overflow-x: clip;
 }
 [data-md-color-scheme="default"] .dusk-landing {
   --dusk-sky: linear-gradient(
