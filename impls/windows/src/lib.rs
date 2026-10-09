@@ -14,6 +14,7 @@ pub use dusk_program::launcher_set::LauncherSet;
 #[cfg(windows)]
 mod device_info;
 mod driver;
+mod fs;
 #[cfg(windows)]
 mod os_info;
 

@@ -15,6 +15,7 @@ pub use dusk_program::launcher_set::LauncherSet;
 
 mod device_info;
 mod driver;
+mod fs;
 mod os_info;
 
 /// Panic payload `Driver::exit` raises to unwind the executor, carrying the

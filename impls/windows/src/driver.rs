@@ -1,4 +1,5 @@
-use dusk_core::driver::Driver;
+use crate::fs::WindowsFsDriver;
+use dusk_core::driver::{Driver, FsDriver};
 use dusk_program::anyhow::{Ok, Result, anyhow};
 use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::System::WindowsProgramming::GetComputerNameW;
@@ -22,6 +23,10 @@ impl Driver for WindowsDriver {
 
     fn tid(&self) -> u64 {
         u64::from(unsafe { GetCurrentThreadId() })
+    }
+
+    fn fs_driver(&self) -> Result<Box<dyn FsDriver>> {
+        Ok(Box::new(WindowsFsDriver))
     }
 
     fn exit(&self, exit_code: i32) {

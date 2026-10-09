@@ -1,4 +1,5 @@
-use dusk_core::driver::Driver;
+use crate::fs::NixFsDriver;
+use dusk_core::driver::{Driver, FsDriver};
 use dusk_program::anyhow::{Ok, Result, anyhow};
 use nix::unistd::gethostname;
 
@@ -38,6 +39,10 @@ impl Driver for NixDriver {
     #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
     fn tid(&self) -> u64 {
         TID.try_with(|tid| *tid).unwrap_or(0)
+    }
+
+    fn fs_driver(&self) -> Result<Box<dyn FsDriver>> {
+        Ok(Box::new(NixFsDriver))
     }
 
     fn exit(&self, exit_code: i32) {
