@@ -1,0 +1,15 @@
+.dusk-landing {
+  overflow-x: clip;
+}
+
+.dusk-landing ~ .md-main .md-content {
+  display: none;
+}
+.dusk-landing ~ .md-main .md-main__inner {
+  margin-top: 0;
+}
+@media screen and (min-width: 76.25em) {
+  .dusk-landing ~ .md-main {
+    display: none;
+  }
+}

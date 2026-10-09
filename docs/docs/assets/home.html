@@ -1,0 +1,8 @@
+{% extends "main.html" %}
+{% block extrahead %}
+  <link rel="stylesheet" href="{{ 'assets/stylesheets/landing.css' | url }}">
+{% endblock %}
+{% block hero %}
+  <div class="dusk-landing md-typeset">{{ page.content }}</div>
+{% endblock %}
+{% block content %}{% endblock %}

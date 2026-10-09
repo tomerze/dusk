@@ -68,15 +68,6 @@
 }
 
 /* ---------- Hero ---------- */
-/* The home page's content wrapper carries Material's default top padding plus
-   its ::before spacer (~1.4rem). Zero both, scoped to the hero page only, so the
-   whole hero block sits up against the top bar. */
-.md-content__inner:has(.dusk-hero) {
-  padding-top: 0;
-}
-.md-content__inner:has(.dusk-hero)::before {
-  display: none;
-}
 .dusk-hero {
   padding: 0 0 1.5rem;
   margin-top: -0.8rem; /* pull the title up toward the top bar */

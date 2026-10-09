@@ -1,3 +1,9 @@
+---
+template: home.html
+hide:
+  - toc
+---
+
 <div class="dusk-hero" markdown>
 
 <div style="text-align: center;">

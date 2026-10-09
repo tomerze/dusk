@@ -3,6 +3,7 @@ site_description: Documentation for the Dusk framework
 repo_name: Dusk
 repo_url: https://github.com/tomerze/dusk
 copyright: "© 2023-2026 Tomer Zeitune"
+exclude_docs: /assets/home.html
 markdown_extensions:
   - attr_list
   - md_in_html
