@@ -12,6 +12,7 @@ use dusk_program::{ready::Ready, signal::SignalReceiver};
 
 type Terminated = Watch<CriticalSectionRawMutex, bool, 16>;
 
+mod backoff;
 #[cfg(feature = "client")]
 pub mod client;
 
