@@ -240,29 +240,46 @@
   .dusk-landing .dusk-float[data-layer="twilight"],
   .dusk-landing .dusk-float[data-layer="data"] {
     --md-icon-size: 34px;
+    top: auto;
     display: inline-flex;
   }
   .dusk-landing .dusk-float[data-layer="nightfall"] {
     --md-icon-size: 30px;
-    top: 69%;
     right: auto;
+    bottom: 5.6rem;
     left: 11%;
   }
   .dusk-landing .dusk-float[data-layer="data"] {
-    top: 75%;
-    right: 18%;
+    right: 13%;
+    bottom: 5.4rem;
     left: auto;
   }
   .dusk-landing .dusk-float[data-layer="dawn"] {
-    top: 87%;
     right: auto;
+    bottom: 2.4rem;
     left: 6%;
   }
   .dusk-landing .dusk-float[data-layer="twilight"] {
     --md-icon-size: 30px;
-    top: 81%;
-    right: 3%;
+    right: 5%;
+    bottom: 2.4rem;
     left: auto;
+  }
+}
+@media screen and (max-width: 23.6875em) {
+  .dusk-landing .dusk-float[data-layer="nightfall"] {
+    bottom: 10rem;
+    left: calc((100% - 8.4rem) / 4 - 15px);
+  }
+  .dusk-landing .dusk-float[data-layer="data"] {
+    right: calc((100% - 8.4rem) / 4 - 17px);
+    bottom: 9.4rem;
+  }
+  .dusk-landing .dusk-float[data-layer="dawn"] {
+    bottom: 3.1rem;
+  }
+  .dusk-landing .dusk-float[data-layer="twilight"] {
+    bottom: 5.55rem;
   }
 }
 .dusk-hero__inner {
