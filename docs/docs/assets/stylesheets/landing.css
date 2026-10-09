@@ -17,7 +17,6 @@
   );
   --dusk-ground: #ece5d8;
   --dusk-node-fill: #fffdf8;
-  --dusk-node-line: #d3c9b8;
   --dusk-node-glyph: #4a4658;
   --dusk-link: rgba(85, 74, 150, 0.34);
   --dusk-link-faint: rgba(85, 74, 150, 0.13);
@@ -40,7 +39,6 @@
   );
   --dusk-ground: #0f0c1f;
   --dusk-node-fill: #1d1838;
-  --dusk-node-line: #3d3569;
   --dusk-node-glyph: #d2cce8;
   --dusk-link: rgba(165, 155, 235, 0.36);
   --dusk-link-faint: rgba(165, 155, 235, 0.13);
@@ -538,7 +536,8 @@
   width: 100%;
   height: auto;
 }
-.dusk-arm {
+.dusk-arm,
+.dusk-node__label {
   animation: dusk-float 9s ease-in-out infinite alternate;
 }
 .dusk-arm:nth-child(2n) {
@@ -582,7 +581,7 @@
 }
 .dusk-fleet__hub-glow {
   fill: var(--dusk-gold);
-  opacity: 0.22;
+  opacity: 0.06;
   filter: blur(22px);
 }
 .dusk-fleet__hub-print {
@@ -596,8 +595,6 @@
 }
 .dusk-node__ring {
   fill: var(--dusk-node-fill);
-  stroke: var(--dusk-node-line);
-  stroke-width: 1.2;
 }
 .dusk-node__glyph {
   fill: none;
@@ -619,10 +616,12 @@
   fill: var(--md-default-fg-color--light);
   font-size: 15px;
   font-weight: 500;
+}
+.dusk-fleet__labels text {
   paint-order: stroke;
   stroke: var(--dusk-ground);
-  stroke-width: 2px;
-  stroke-opacity: 0.7;
+  stroke-width: 1.5px;
+  stroke-opacity: 0.6;
   stroke-linejoin: round;
 }
 @media screen and (max-width: 37.4375em) {
@@ -1081,6 +1080,7 @@
 
 .is-offscreen .dusk-float,
 .is-offscreen .dusk-arm,
+.is-offscreen .dusk-node__label,
 .is-offscreen .dusk-node__pulse,
 .is-offscreen .dusk-plate {
   animation-play-state: paused;
@@ -1097,6 +1097,7 @@
 @media (prefers-reduced-motion: reduce) {
   .dusk-landing .dusk-float,
   .dusk-arm,
+  .dusk-node__label,
   .dusk-plate {
     animation: none;
   }
