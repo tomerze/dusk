@@ -328,3 +328,134 @@ the destination with the source's and fails if they differ.
         program_args_builder: Rc::new(CpProgramArgsBuilder {}),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Directory(std::path::PathBuf);
+
+    impl Directory {
+        fn new(name: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("dusk-cp-client-{name}-{}", std::process::id()));
+            std::fs::create_dir_all(&path).unwrap();
+            Directory(path)
+        }
+
+        fn path(&self, name: &str) -> String {
+            self.0.join(name).display().to_string()
+        }
+    }
+
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            if let Err(error) = std::fs::remove_dir_all(&self.0) {
+                std::eprintln!("couldn't remove {}: {error}", self.0.display());
+            }
+        }
+    }
+
+    fn server(source: &str, destination: &str) -> cp_capnp::cp_args::server::Client {
+        Args::new(source, destination)
+            .as_program_args()
+            .unwrap()
+            .server_as()
+            .unwrap()
+    }
+
+    async fn stat(
+        server: &cp_capnp::cp_args::server::Client,
+        path: &str,
+    ) -> Result<bool, ::capnp::Error> {
+        let mut request = server.stat_request();
+        request.get().set_path(path);
+        Ok(request.send().promise.await?.get()?.get_exists())
+    }
+
+    async fn hash(
+        server: &cp_capnp::cp_args::server::Client,
+        path: &str,
+    ) -> Result<Vec<u8>, ::capnp::Error> {
+        let mut request = server.hash_request();
+        request.get().set_path(path);
+        request.get().set_length(1);
+        Ok(request.send().promise.await?.get()?.get_hash()?.to_vec())
+    }
+
+    async fn read(
+        server: &cp_capnp::cp_args::server::Client,
+        path: &str,
+    ) -> Result<(), ::capnp::Error> {
+        let mut request = server.read_request();
+        request.get().set_path(path);
+        request.get().set_end(1);
+        request.send().promise.await?;
+        Ok(())
+    }
+
+    async fn write(
+        server: &cp_capnp::cp_args::server::Client,
+        path: &str,
+    ) -> Result<(), ::capnp::Error> {
+        let mut request = server.write_request();
+        request.get().set_path(path);
+        request.send().promise.await?.get()?.get_sink()?;
+        Ok(())
+    }
+
+    fn refused<Answer: std::fmt::Debug>(answer: Result<Answer, ::capnp::Error>, action: &str) {
+        let error = answer.expect_err("the client answered for a path it was not given");
+        assert!(
+            error.to_string().contains(&format!("refused to {action}")),
+            "{error}"
+        );
+    }
+
+    fn run(test: impl std::future::Future<Output = ()>) {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        tokio::task::LocalSet::new().block_on(&runtime, test);
+    }
+
+    #[test]
+    fn test_an_upload_answers_only_for_its_own_source() {
+        let directory = Directory::new("upload");
+        let source = directory.path("source");
+        let secret = directory.path("secret");
+        std::fs::write(&source, "copied").unwrap();
+        std::fs::write(&secret, "secret").unwrap();
+        run(async {
+            let server = server(&source, ":/tmp/destination");
+            assert!(stat(&server, &source).await.unwrap());
+            assert_eq!(hash(&server, &source).await.unwrap().len(), 32);
+            refused(stat(&server, &secret).await, "stat");
+            refused(hash(&server, &secret).await, "hash");
+            refused(read(&server, &secret).await, "read");
+            refused(write(&server, &secret).await, "write");
+            refused(write(&server, &source).await, "write");
+            refused(stat(&server, "/tmp/destination").await, "stat");
+        });
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "copied");
+        assert_eq!(std::fs::read_to_string(&secret).unwrap(), "secret");
+    }
+
+    #[test]
+    fn test_a_download_answers_only_for_its_own_destination() {
+        let directory = Directory::new("download");
+        let destination = directory.path("destination");
+        let elsewhere = directory.path("elsewhere");
+        run(async {
+            let server = server(":/etc/hostname", &destination);
+            assert!(!stat(&server, &destination).await.unwrap());
+            write(&server, &destination).await.unwrap();
+            assert!(stat(&server, &destination).await.unwrap());
+            refused(read(&server, &destination).await, "read");
+            refused(write(&server, &elsewhere).await, "write");
+            refused(stat(&server, "/etc/hostname").await, "stat");
+        });
+        assert!(std::path::Path::new(&destination).exists());
+        assert!(!std::path::Path::new(&elsewhere).exists());
+    }
+}
