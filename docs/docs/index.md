@@ -128,8 +128,7 @@ Orchestration layer
 { .dusk-layer__role }
 
 Twilight is all about transition of state. Tell Twilight what your fleet
-should look like. It rolls changes out in phases, watches their health, and
-stops when something goes wrong.
+should look like, and it will take care of it, your way.
 
 </article>
 
