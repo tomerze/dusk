@@ -44,19 +44,25 @@ impl Args {
         Args { data }
     }
 
-    pub fn set(key: u64, value: &Value) -> capnp::Result<Self> {
+    pub fn set(key: u64, value: &Value, forbidden_unstick: bool) -> capnp::Result<Self> {
         let mut data = ArgsDataBuilder::new_default();
         {
-            let mut set = data.init_root().init_set();
+            let mut root = data.init_root();
+            root.set_forbidden_unstick(forbidden_unstick);
+            let mut set = root.init_set();
             set.set_key(key);
             value.write_to_builder(set.init_value())?;
         }
         Ok(Args { data })
     }
 
-    pub fn delete(key: u64) -> Self {
+    pub fn delete(key: u64, forbidden_unstick: bool) -> Self {
         let mut data = ArgsDataBuilder::new_default();
-        data.init_root().set_delete(key);
+        {
+            let mut root = data.init_root();
+            root.set_forbidden_unstick(forbidden_unstick);
+            root.set_delete(key);
+        }
         Args { data }
     }
 
@@ -187,11 +193,11 @@ impl dusk_program::process::ProcessMixin for Process {
         ready: Ready,
     ) -> anyhow::Result<()> {
         use kvs_capnp::kvs_args::data::Which;
-        let action = self
+        let (action, forbidden_unstick) = self
             .ctx
             .program_args
             .with_data::<kvs_capnp::kvs_args::data::Owned, _, _>(|data| {
-                Ok(match data.which()? {
+                let action = match data.which()? {
                     Which::Get(keys) => Which::Get(keys?.iter().collect::<alloc::vec::Vec<_>>()),
                     Which::Set(set) => {
                         Which::Set((set.get_key(), Value::from_reader(set.get_value()?)?))
@@ -200,7 +206,8 @@ impl dusk_program::process::ProcessMixin for Process {
                     Which::Exists(key) => Which::Exists(key),
                     Which::Bind(()) => Which::Bind(()),
                     Which::Scan(()) => Which::Scan(()),
-                })
+                };
+                Ok((action, data.get_forbidden_unstick()))
             })?;
         match action {
             kvs_capnp::kvs_args::data::Which::Get(keys) => {
@@ -222,10 +229,20 @@ impl dusk_program::process::ProcessMixin for Process {
                 *self.found.borrow_mut() = found;
             }
             kvs_capnp::kvs_args::data::Which::Set((key, value)) => {
-                self.kvs.set(key, value, 0).await;
+                set_key(&self.kvs, key, value, forbidden_unstick)
+                    .await
+                    .map_err(|sticky| {
+                        anyhow::anyhow!("{sticky}. `kvs set --forbidden-unstick` sets it anyway")
+                    })?;
             }
             kvs_capnp::kvs_args::data::Which::Delete(key) => {
-                let deleted = self.kvs.delete(key).await;
+                let deleted = delete_key(&self.kvs, key, forbidden_unstick)
+                    .await
+                    .map_err(|sticky| {
+                        anyhow::anyhow!(
+                            "{sticky}. `kvs delete --forbidden-unstick` deletes it anyway"
+                        )
+                    })?;
                 *self.result.borrow_mut() = Some(Value::Bool(deleted));
             }
             kvs_capnp::kvs_args::data::Which::Exists(key) => {
@@ -243,6 +260,39 @@ impl dusk_program::process::ProcessMixin for Process {
                 return Ok(());
             }
         }
+    }
+}
+
+async fn set_key(
+    kvs: &kvs::Kvs,
+    key: u64,
+    value: Value,
+    forbidden_unstick: bool,
+) -> Result<(), kvs::Sticky> {
+    if let Err(sticky) = kvs.set_unless_sticky(key, value.clone(), 0).await {
+        if !forbidden_unstick {
+            return Err(sticky);
+        }
+        kvs.set(key, value, 0).await;
+        tracing::warn!(key, "forbidden-unstick overwrote a sticky key");
+    }
+    Ok(())
+}
+
+async fn delete_key(
+    kvs: &kvs::Kvs,
+    key: u64,
+    forbidden_unstick: bool,
+) -> Result<bool, kvs::Sticky> {
+    match kvs.delete_unless_sticky(key).await {
+        Err(sticky) if forbidden_unstick => {
+            let deleted = kvs.delete(key).await;
+            if deleted {
+                tracing::warn!(key = sticky.key, "forbidden-unstick removed a sticky key");
+            }
+            Ok(deleted)
+        }
+        deleted => deleted,
     }
 }
 
@@ -278,10 +328,14 @@ impl Portal {
         let params = dusk_capnp::pry!(params.get());
         let key = params.get_key();
         let value = dusk_capnp::pry!(Value::from_reader(dusk_capnp::pry!(params.get_value())));
+        let forbidden_unstick = params.get_forbidden_unstick();
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            kvs.set(key, value, 0).await;
-            Ok(())
+            set_key(&kvs, key, value, forbidden_unstick)
+                .await
+                .map_err(|sticky| {
+                    ::capnp::Error::failed(format!("{sticky}. `forbiddenUnstick` sets it anyway"))
+                })
         })
     }
 
@@ -290,10 +344,19 @@ impl Portal {
         params: kvs_capnp::kvs_portal::DeleteParams,
         mut results: kvs_capnp::kvs_portal::DeleteResults,
     ) -> Promise<(), ::capnp::Error> {
-        let key = dusk_capnp::pry!(params.get()).get_key();
+        let params = dusk_capnp::pry!(params.get());
+        let key = params.get_key();
+        let forbidden_unstick = params.get_forbidden_unstick();
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            results.get().set_deleted(kvs.delete(key).await);
+            let deleted = delete_key(&kvs, key, forbidden_unstick)
+                .await
+                .map_err(|sticky| {
+                    ::capnp::Error::failed(format!(
+                        "{sticky}. `forbiddenUnstick` deletes it anyway"
+                    ))
+                })?;
+            results.get().set_deleted(deleted);
             Ok(())
         })
     }

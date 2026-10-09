@@ -26,6 +26,23 @@ pub const SALT: u64 = 0x9396_8e6e_30a5_93d6;
 
 pub const FLAG_STICKY: u8 = 1;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sticky {
+    pub key: u64,
+}
+
+impl core::fmt::Display for Sticky {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            formatter,
+            "key {:#018x} is sticky: only Dusk sets it",
+            self.key
+        )
+    }
+}
+
+impl core::error::Error for Sticky {}
+
 #[cfg(feature = "client")]
 pub use linkme;
 
@@ -143,6 +160,15 @@ pub fn disown_keys(tid: u64, keys: &'static [u64]) {
     });
 }
 
+fn owned(tid: u64, key: u64) -> bool {
+    OWNED.get().lock(|owned| {
+        owned
+            .borrow()
+            .get(&tid)
+            .is_some_and(|lists| lists.iter().any(|list| list.contains(&key)))
+    })
+}
+
 type Entry = Arc<Mutex<CriticalSectionRawMutex, (Value, u8)>>;
 
 type Entries = HashMap<u64, Entry, BuildNoHashHasher<u64>>;
@@ -152,6 +178,7 @@ type Entries = HashMap<u64, Entry, BuildNoHashHasher<u64>>;
 /// carries its own `Mutex` and overwriting one takes only the read lock.
 pub struct Kvs {
     entries: RwLock<CriticalSectionRawMutex, Entries>,
+    tid: u64,
 }
 
 impl Default for Kvs {
@@ -165,6 +192,7 @@ impl Kvs {
     pub fn new() -> Self {
         Kvs {
             entries: RwLock::new(HashMap::default()),
+            tid: dusk_core::driver::tid(),
         }
     }
 
@@ -177,27 +205,55 @@ impl Kvs {
 
     /// Store `value` under `key`, replacing whatever was there.
     pub async fn set(&self, key: u64, value: Value, flags: u8) {
+        self.write(key, value, flags, false).await;
+    }
+
+    pub async fn set_unless_sticky(&self, key: u64, value: Value, flags: u8) -> Result<(), Sticky> {
+        if self.write(key, value, flags, true).await {
+            Ok(())
+        } else {
+            Err(Sticky { key })
+        }
+    }
+
+    async fn write(&self, key: u64, value: Value, flags: u8, unless_sticky: bool) -> bool {
+        if unless_sticky && owned(self.tid, key) {
+            return false;
+        }
         {
             let entries = self.entries.read().await;
             if let Some(entry) = entries.get(&key) {
-                *entry.lock().await = (value, flags);
-                tracing::debug!(key, flags, "kvs set");
-                return;
+                return replace(&mut *entry.lock().await, key, value, flags, unless_sticky);
             }
         }
         let mut entries = self.entries.write().await;
         // The key may have appeared while the read guard was released.
         if let Some(entry) = entries.get(&key).cloned() {
-            *entry.lock().await = (value, flags);
-        } else {
-            entries.insert(key, Arc::new(Mutex::new((value, flags))));
+            return replace(&mut *entry.lock().await, key, value, flags, unless_sticky);
         }
+        entries.insert(key, Arc::new(Mutex::new((value, flags))));
         tracing::debug!(key, flags, "kvs set");
+        true
     }
 
     /// Remove `key`, reporting whether it was there.
     pub async fn delete(&self, key: u64) -> bool {
         self.entries.write().await.remove(&key).is_some()
+    }
+
+    pub async fn delete_unless_sticky(&self, key: u64) -> Result<bool, Sticky> {
+        if owned(self.tid, key) {
+            return Err(Sticky { key });
+        }
+        let mut entries = self.entries.write().await;
+        let Some(entry) = entries.get(&key).cloned() else {
+            return Ok(false);
+        };
+        if entry.lock().await.1 & FLAG_STICKY != 0 {
+            return Err(Sticky { key });
+        }
+        entries.remove(&key);
+        Ok(true)
     }
 
     /// Whether `key` is present.
@@ -209,6 +265,21 @@ impl Kvs {
     pub async fn scan(&self) -> alloc::vec::Vec<u64> {
         self.entries.read().await.keys().copied().collect()
     }
+}
+
+fn replace(
+    entry: &mut (Value, u8),
+    key: u64,
+    value: Value,
+    flags: u8,
+    unless_sticky: bool,
+) -> bool {
+    if unless_sticky && entry.1 & FLAG_STICKY != 0 {
+        return false;
+    }
+    *entry = (value, flags);
+    tracing::debug!(key, flags, "kvs set");
+    true
 }
 
 type Registry = BlockingMutex<

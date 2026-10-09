@@ -130,7 +130,7 @@ async fn test_kvs_args_interface() {
 
             let (pid, values, daemonize) = run_action(
                 &client,
-                KvsArgs::set(key, &Value::String("1".to_string()))
+                KvsArgs::set(key, &Value::String("1".to_string()), false)
                     .unwrap()
                     .as_program_args()
                     .unwrap(),
@@ -168,8 +168,11 @@ async fn test_kvs_args_interface() {
             assert!(!daemonize);
             stop(&client, pid).await;
 
-            let (pid, values, daemonize) =
-                run_action(&client, KvsArgs::delete(key).as_program_args().unwrap()).await;
+            let (pid, values, daemonize) = run_action(
+                &client,
+                KvsArgs::delete(key, false).as_program_args().unwrap(),
+            )
+            .await;
             assert_eq!(values, vec![Value::Bool(true)], "delete removed the key");
             assert!(!daemonize);
             stop(&client, pid).await;
