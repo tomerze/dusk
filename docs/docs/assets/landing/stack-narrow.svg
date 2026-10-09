@@ -160,7 +160,7 @@
         dur="5.4s"
         begin="-2.3s"
         repeatCount="indefinite"
-        keyPoints="0;1;1"
+        keyPoints="1;0;0"
         keyTimes="0;0.45;1"
         calcMode="linear"
       >
@@ -184,7 +184,7 @@
         dur="6.0s"
         begin="-1.2s"
         repeatCount="indefinite"
-        keyPoints="0;1;1"
+        keyPoints="1;0;0"
         keyTimes="0;0.45;1"
         calcMode="linear"
       >
@@ -208,7 +208,7 @@
         dur="4.5s"
         begin="-0.7s"
         repeatCount="indefinite"
-        keyPoints="0;1;1"
+        keyPoints="1;0;0"
         keyTimes="0;0.45;1"
         calcMode="linear"
       >
@@ -227,19 +227,117 @@
         <mpath href="#dusk-uplink-12-narrow" />
       </animateMotion>
     </circle>
+    <circle
+      class="dusk-node__pulse"
+      cx="48"
+      cy="34"
+      r="4"
+      style="animation-delay: -0s"
+    />
     <circle class="dusk-stack__node" cx="48" cy="34" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="75.8"
+      cy="16"
+      r="4"
+      style="animation-delay: -0.8s"
+    />
     <circle class="dusk-stack__node" cx="75.8" cy="16" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="103.7"
+      cy="26"
+      r="4"
+      style="animation-delay: -1.7s"
+    />
     <circle class="dusk-stack__node" cx="103.7" cy="26" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="131.5"
+      cy="12"
+      r="4"
+      style="animation-delay: -0.1s"
+    />
     <circle class="dusk-stack__node" cx="131.5" cy="12" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="159.4"
+      cy="30"
+      r="4"
+      style="animation-delay: -0.9s"
+    />
     <circle class="dusk-stack__node" cx="159.4" cy="30" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="187.2"
+      cy="18"
+      r="4"
+      style="animation-delay: -1.7s"
+    />
     <circle class="dusk-stack__node" cx="187.2" cy="18" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="215.1"
+      cy="38"
+      r="4"
+      style="animation-delay: -0.2s"
+    />
     <circle class="dusk-stack__node" cx="215.1" cy="38" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="242.9"
+      cy="14"
+      r="4"
+      style="animation-delay: -1s"
+    />
     <circle class="dusk-stack__node" cx="242.9" cy="14" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="270.8"
+      cy="28"
+      r="4"
+      style="animation-delay: -1.8s"
+    />
     <circle class="dusk-stack__node" cx="270.8" cy="28" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="298.6"
+      cy="20"
+      r="4"
+      style="animation-delay: -0.3s"
+    />
     <circle class="dusk-stack__node" cx="298.6" cy="20" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="326.5"
+      cy="34"
+      r="4"
+      style="animation-delay: -1.1s"
+    />
     <circle class="dusk-stack__node" cx="326.5" cy="34" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="354.3"
+      cy="16"
+      r="4"
+      style="animation-delay: -1.9s"
+    />
     <circle class="dusk-stack__node" cx="354.3" cy="16" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="382.2"
+      cy="26"
+      r="4"
+      style="animation-delay: -0.4s"
+    />
     <circle class="dusk-stack__node" cx="382.2" cy="26" r="4" />
+    <circle
+      class="dusk-node__pulse"
+      cx="410"
+      cy="40"
+      r="4"
+      style="animation-delay: -1.2s"
+    />
     <circle class="dusk-stack__node" cx="410" cy="40" r="4" />
   </g>
   <g class="dusk-plate" data-layer="observability">
