@@ -897,6 +897,11 @@
   p:not(:first-child):not(:last-child) {
   font-weight: 400;
 }
+.dusk-landing .dusk-card-icon {
+  --md-icon-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  color: var(--dusk-card-ink);
+}
 @media screen and (max-width: 44.9375em) {
   .dusk-landing .grid.cards {
     grid-template-columns: minmax(0, 1fr);

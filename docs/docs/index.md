@@ -171,35 +171,45 @@ connect the tools you already have.
 
 <div class="grid cards" markdown>
 
--   **Embed Dusk**
+-   :material-puzzle-outline:{ .dusk-card-icon }
+
+    **Embed Dusk**
 
     Drop the C library into an app you already ship - every device running it
     becomes a manageable node.
 
     [Embed it →](getting-started/guides/embed.md)
 
--   **Analytics & diagnosis**
+-   :material-chart-timeline-variant:{ .dusk-card-icon }
+
+    **Analytics & diagnosis**
 
     Connect to your fleet to see what's running, read logs, and fix misbehaving
     devices.
 
     [See your fleet →](getting-started/guides/connect-a-client.md)
 
--   **Drive it over HTTP**
+-   :material-web:{ .dusk-card-icon }
+
+    **Drive it over HTTP**
 
     Run the API gateway and reach any node from curl, a script, a dashboard or a
     browser. AI agents get an MCP server on the same port.
 
     [Open the gateway →](features/gateway.md)
 
--   **Customize & extend**
+-   :material-tune-variant:{ .dusk-card-icon }
+
+    **Customize & extend**
 
     Dusk is modular: swap the platform backend or add your own programs when the
     built-ins aren't enough.
 
     [Extend Dusk →](getting-started/guides/first-program.md)
 
--   **Reference**
+-   :material-book-open-variant:{ .dusk-card-icon }
+
+    **Reference**
 
     The crate map and the Cap'n Proto wire schemas.
 
