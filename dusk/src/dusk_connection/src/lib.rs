@@ -4,9 +4,11 @@ use dusk_capnp::dusk_capnp::dusk::Client;
 use futures::io::AsyncReadExt;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use std::cell::Cell;
+use std::hash::{BuildHasher, RandomState};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{net::SocketAddr, rc::Rc, sync::Mutex};
 use tokio::net::TcpStream;
 
@@ -20,6 +22,27 @@ type DisconnectorStore = Rc<Mutex<LinkState>>;
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+const RECONNECT_BASE: Duration = Duration::from_millis(100);
+
+const RECONNECT_CAP: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Copy, Default)]
+struct Attempts {
+    in_a_row: u32,
+    ended: Option<Instant>,
+}
+
+fn reconnect_delay(in_a_row: u32) -> Duration {
+    let Some(doublings) = in_a_row.checked_sub(1) else {
+        return Duration::ZERO;
+    };
+    let ceiling = RECONNECT_BASE
+        .saturating_mul(1 << doublings.min(16))
+        .min(RECONNECT_CAP);
+    let nanoseconds = u64::try_from(ceiling.as_nanos()).unwrap_or(u64::MAX);
+    Duration::from_nanos(RandomState::new().hash_one(Instant::now()) % nanoseconds)
+}
 
 #[derive(Clone, Debug)]
 pub struct TlsClient {
@@ -262,6 +285,25 @@ async fn open(target: Target, disconnector_store: DisconnectorStore) -> capnp::R
     }
 }
 
+async fn open_with_backoff(
+    target: Target,
+    disconnector_store: DisconnectorStore,
+    attempts: Rc<Cell<Attempts>>,
+) -> capnp::Result<Client> {
+    let previous = attempts.get();
+    let in_a_row = match previous.ended {
+        Some(ended) if ended.elapsed() < RECONNECT_CAP => previous.in_a_row.saturating_add(1),
+        _ => 0,
+    };
+    tokio::time::sleep(reconnect_delay(in_a_row)).await;
+    let opened = open(target, disconnector_store).await;
+    attempts.set(Attempts {
+        in_a_row,
+        ended: Some(Instant::now()),
+    });
+    opened
+}
+
 pub struct Connection {
     disconnector_store: DisconnectorStore,
     client: Client,
@@ -271,10 +313,12 @@ impl Connection {
     fn with_target(target: Target) -> Result<Self> {
         let disconnector_store: DisconnectorStore = Rc::new(Mutex::new(LinkState::Open(None)));
         let disconnector_store_clone = disconnector_store.clone();
+        let attempts = Rc::new(Cell::new(Attempts::default()));
         let (client, _) = capnp_rpc::auto_reconnect(move || {
-            Ok(capnp_rpc::new_future_client(open(
+            Ok(capnp_rpc::new_future_client(open_with_backoff(
                 target.clone(),
                 disconnector_store_clone.clone(),
+                attempts.clone(),
             )))
         })?;
 

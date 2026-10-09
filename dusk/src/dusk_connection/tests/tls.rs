@@ -561,3 +561,33 @@ async fn test_a_client_kept_after_disconnect_does_not_open_another_link() {
         })
         .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_reconnects_that_keep_failing_wait_longer_and_longer() {
+    let fixture = Fixture::new();
+    let tls = fixture.client(&fixture.authority.leaf(&["client.test"]));
+    tokio::task::LocalSet::new()
+        .run_until(async move {
+            let (port, accepted) =
+                serve(&fixture.authority, fixture.authority.leaf(&[SERVER_NAME])).await;
+            accepted.unreachable.set(true);
+            let connection = Connection::connect_tls("127.0.0.1", port, tls)
+                .await
+                .unwrap();
+            let window = std::time::Duration::from_secs(2);
+            let started = std::time::Instant::now();
+            let mut calls = 0;
+            while started.elapsed() < window {
+                let error = hostname(&connection).await.unwrap_err();
+                assert_eq!(error.kind, capnp::ErrorKind::Disconnected, "{error}");
+                calls += 1;
+            }
+            let links = accepted.peers.borrow().len();
+            assert!(
+                (2..=20).contains(&links),
+                "{links} links in {window:?} for {calls} calls"
+            );
+            connection.disconnect().await.unwrap();
+        })
+        .await;
+}
