@@ -293,6 +293,21 @@ impl dusk::Server for DuskServer {
         Promise::ok(())
     }
 
+    fn dusk(
+        &mut self,
+        _params: dusk::DuskParams,
+        mut results: dusk::DuskResults,
+    ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.dusk", "rpc call");
+        let namespace = self.namespace.clone();
+        Promise::from_future(async move {
+            results
+                .get()
+                .set_result(crate::local_client(namespace).await);
+            Ok(())
+        })
+    }
+
     fn settime(
         &mut self,
         params: dusk::SettimeParams,
