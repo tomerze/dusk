@@ -350,10 +350,6 @@
   width: min(22rem, 86vw);
   height: auto;
   transform: translateX(-50%);
-  filter: drop-shadow(0 0 3rem rgba(240, 150, 64, 0.45));
-}
-.dusk-hero__horizon p {
-  margin: 0;
 }
 .dusk-hero__horizon::after {
   content: "";

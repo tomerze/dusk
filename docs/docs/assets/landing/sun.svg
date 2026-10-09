@@ -1,4 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-400 -330 800 400">
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="dusk-hero__sun"
+  viewBox="-400 -330 800 400"
+  aria-hidden="true"
+>
   <defs>
     <radialGradient id="dusk-sun" cx="0.5" cy="0.32" r="0.7">
       <stop offset="0" stop-color="#ffe4a6" />
@@ -6,15 +11,27 @@
       <stop offset="0.72" stop-color="#f09a42" />
       <stop offset="1" stop-color="#e5643a" />
     </radialGradient>
+    <radialGradient id="dusk-glow">
+      <stop offset="0.6" stop-color="#f09640" stop-opacity="0.45" />
+      <stop offset="1" stop-color="#f09640" stop-opacity="0" />
+    </radialGradient>
   </defs>
-  <g fill="#f0b441" fill-opacity="0.4">
+  <circle r="330" fill="url(#dusk-glow)" />
+  <g class="dusk-hero__rays" fill="#f0b441" fill-opacity="0.4">
     <polygon points="12,-222 0,-300 -12,-222" />
-    <polygon points="108.1,-194.3 131.5,-269.6 86.5,-204.8" />
-    <polygon points="182.3,-127.2 236.4,-184.7 167.6,-146.1" />
-    <polygon points="218.3,-42.1 291.1,-72.6 212.5,-65.4" />
-    <polygon points="-86.5,-204.8 -131.5,-269.6 -108.1,-194.3" />
-    <polygon points="-167.6,-146.1 -236.4,-184.7 -182.3,-127.2" />
-    <polygon points="-212.5,-65.4 -291.1,-72.6 -218.3,-42.1" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(25.7143)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(51.4286)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(77.1429)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(102.857)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(128.571)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(154.286)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(180)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(205.714)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(231.429)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(257.143)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(282.857)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(308.571)" />
+    <polygon points="12,-222 0,-300 -12,-222" transform="rotate(334.286)" />
   </g>
   <circle r="200" fill="url(#dusk-sun)" />
 </svg>

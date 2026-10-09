@@ -56,3 +56,45 @@ for (const section of document.querySelectorAll(
 )) {
   visibility.observe(section);
 }
+
+for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
+  const rays = sun.querySelector(".dusk-hero__rays");
+  const disc = sun.querySelector("circle:last-of-type");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let angle = 0;
+  let target = 0;
+  let settling = false;
+  let last = 0;
+  const settle = (now) => {
+    angle = reduced.matches
+      ? target
+      : angle + (target - angle) * (1 - Math.exp((last - now) / 150));
+    last = now;
+    rays.style.transform = `rotate(${angle}deg)`;
+    settling = Math.abs(target - angle) > 0.05;
+    if (settling) {
+      requestAnimationFrame(settle);
+    }
+  };
+  window.addEventListener("pointermove", (event) => {
+    const box = disc.getBoundingClientRect();
+    const across = event.clientX - (box.left + box.width / 2);
+    const above = box.top + box.height / 2 - event.clientY;
+    if (Math.hypot(across, above) < box.width / 2) {
+      return;
+    }
+    const aim = (Math.atan2(across, above) * 180) / Math.PI;
+    let turn = (aim - target) % 360;
+    if (turn > 180) {
+      turn -= 360;
+    } else if (turn < -180) {
+      turn += 360;
+    }
+    target += turn;
+    if (!settling) {
+      settling = true;
+      last = performance.now();
+      requestAnimationFrame(settle);
+    }
+  });
+}

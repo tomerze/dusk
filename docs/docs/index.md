@@ -36,8 +36,8 @@ ship.
 
 </div>
 
-<div class="dusk-hero__horizon" markdown>
-![](assets/landing/sun.svg){ .dusk-hero__sun }
+<div class="dusk-hero__horizon">
+--8<-- "assets/landing/sun.svg"
 </div>
 
 </section>
