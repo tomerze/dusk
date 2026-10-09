@@ -23,6 +23,8 @@ set(DUSK_NODE_RUSTFLAGS "" CACHE STRING
     "Extra flags for rustc, separated by spaces as in RUSTFLAGS. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_INIT_SCRIPT "" CACHE STRING
     "The shell script the node runs at boot; empty leaves it to cargo: DUSK_NODE_INIT_SCRIPT in the environment, else .cargo/config.toml. See docs/docs/embedding/node-artifacts.md")
+set(DUSK_NODE_KVS_PERSISTENT "" CACHE STRING
+    "The file the node keeps its persistent kvs keys in; empty leaves it to cargo: DUSK_NODE_KVS_PERSISTENT in the environment, else no file. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_CARGO_SUBCOMMAND "build" CACHE STRING
     "The cargo subcommand that builds the node. See docs/docs/embedding/node-artifacts.md")
 
@@ -127,6 +129,11 @@ if(NOT DUSK_NODE_INIT_SCRIPT STREQUAL "")
     endif()
     string(REPLACE ";" "$<SEMICOLON>" DUSK_NODE_INIT_SCRIPT_ESCAPED "${DUSK_NODE_INIT_SCRIPT}")
     set(DUSK_NODE_ENVIRONMENT_ARGUMENTS "DUSK_NODE_INIT_SCRIPT=${DUSK_NODE_INIT_SCRIPT_ESCAPED}")
+endif()
+if(NOT DUSK_NODE_KVS_PERSISTENT STREQUAL "")
+    string(REPLACE ";" "$<SEMICOLON>" DUSK_NODE_KVS_PERSISTENT_ESCAPED "${DUSK_NODE_KVS_PERSISTENT}")
+    list(APPEND DUSK_NODE_ENVIRONMENT_ARGUMENTS
+        "DUSK_NODE_KVS_PERSISTENT=${DUSK_NODE_KVS_PERSISTENT_ESCAPED}")
 endif()
 
 if(DUSK_NODE_TRIPLE MATCHES "windows-msvc")
