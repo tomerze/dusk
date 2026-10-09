@@ -730,7 +730,7 @@
   }
 }
 .dusk-layer {
-  --dusk-track: color-mix(in srgb, var(--dusk-ink) 22%, transparent);
+  --dusk-track: color-mix(in srgb, var(--dusk-ink) 38%, transparent);
   position: relative;
   padding: 1rem 0 1rem 1.2rem;
   border-left: 3px solid transparent;
