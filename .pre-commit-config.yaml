@@ -55,5 +55,11 @@ repos:
           language: python
           additional_dependencies: ["djlint==1.46.4"]
           files: ^docs/docs/assets/.*\.html$
+      -   id: mkdocs-build
+          name: mkdocs build --strict
+          entry: bash -c 'cd docs && uv run mkdocs build --strict --quiet'
+          language: system
+          files: ^docs/
+          pass_filenames: false
 
 fail_fast: true
