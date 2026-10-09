@@ -30,6 +30,7 @@
   --dusk-link: rgba(85, 74, 150, 0.34);
   --dusk-link-faint: rgba(85, 74, 150, 0.13);
   --dusk-tiny: #aaa1cc;
+  --dusk-dim: contrast(0.4) brightness(1.45) saturate(0.5);
   --dusk-ink-nightfall: #2c3a9e;
   --dusk-ink-dawn: #b86f1a;
   --dusk-ink-twilight: #8f4a96;
@@ -52,6 +53,7 @@
   --dusk-link: rgba(165, 155, 235, 0.36);
   --dusk-link-faint: rgba(165, 155, 235, 0.13);
   --dusk-tiny: #7a72ad;
+  --dusk-dim: brightness(0.3) saturate(0.7);
   --dusk-ink-nightfall: #9fb0ff;
   --dusk-ink-dawn: #ffd9a8;
   --dusk-ink-twilight: #e3b3e6;
@@ -585,7 +587,9 @@
 }
 .dusk-plate {
   animation: dusk-hover 5s ease-in-out infinite alternate;
-  transition: transform 0.45s ease;
+  transition:
+    transform 0.45s ease,
+    filter 0.45s ease;
 }
 .dusk-plate[data-layer="nightfall"] {
   animation-duration: 5.4s;
@@ -615,7 +619,6 @@
     translate: 0 -3px;
   }
 }
-.dusk-plate polygon,
 .dusk-plate text,
 .dusk-plate use,
 .dusk-plate path {
@@ -625,10 +628,6 @@
   transition:
     transform 0.45s ease,
     opacity 0.45s ease;
-}
-.dusk-plate__veil {
-  fill: var(--md-default-bg-color);
-  opacity: 0;
 }
 .dusk-plate__leader {
   stroke: var(--dusk-ink);
@@ -797,8 +796,8 @@
     justify-content: center;
     min-height: 56vh;
   }
-  .dusk-stack.is-focused .dusk-plate:not(.is-active) .dusk-plate__veil {
-    opacity: 0.78;
+  .dusk-stack.is-focused .dusk-plate:not(.is-active) {
+    filter: var(--dusk-dim);
   }
   .dusk-stack.is-focused .dusk-plate:not(.is-active) text,
   .dusk-stack.is-focused .dusk-plate:not(.is-active) use,

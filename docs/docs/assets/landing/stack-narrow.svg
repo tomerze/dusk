@@ -362,10 +362,6 @@
       fill="url(#dusk-plate-observability-narrow)"
       points="220,446 400,520 220,594 40,520"
     />
-    <polygon
-      class="dusk-plate__veil"
-      points="220,444 402,519 402,539 220,614 38,539 38,519"
-    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 520)"
@@ -403,10 +399,6 @@
       class="dusk-plate__top"
       fill="url(#dusk-plate-data-narrow)"
       points="220,354 400,428 220,502 40,428"
-    />
-    <polygon
-      class="dusk-plate__veil"
-      points="220,352 402,427 402,447 220,522 38,447 38,427"
     />
     <g
       class="dusk-plate__print"
@@ -446,10 +438,6 @@
       fill="url(#dusk-plate-twilight-narrow)"
       points="220,262 400,336 220,410 40,336"
     />
-    <polygon
-      class="dusk-plate__veil"
-      points="220,260 402,335 402,355 220,430 38,355 38,335"
-    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 336)"
@@ -488,10 +476,6 @@
       fill="url(#dusk-plate-dawn-narrow)"
       points="220,170 400,244 220,318 40,244"
     />
-    <polygon
-      class="dusk-plate__veil"
-      points="220,168 402,243 402,263 220,338 38,263 38,243"
-    />
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 244)"
@@ -529,10 +513,6 @@
       class="dusk-plate__top"
       fill="url(#dusk-plate-nightfall-narrow)"
       points="220,78 400,152 220,226 40,152"
-    />
-    <polygon
-      class="dusk-plate__veil"
-      points="220,76 402,151 402,171 220,246 38,171 38,151"
     />
     <g
       class="dusk-plate__print"
