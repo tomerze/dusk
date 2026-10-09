@@ -7,6 +7,7 @@
   --dusk-orbit: 0.6rem;
   --dusk-hill: 3.6rem;
   --dusk-line: 3px;
+  --dusk-dot: 9px;
 }
 .dusk-landing {
   --dusk-gold: #f0b441;
@@ -659,36 +660,27 @@
   fill: var(--dusk-gold);
 }
 .dusk-stack__head {
-  --dusk-track: color-mix(in srgb, var(--dusk-ink) 38%, transparent);
   position: sticky;
-  top: 50vh;
-  top: 50svh;
+  top: calc(50svh - var(--dusk-dot) / 2);
   z-index: 1;
-  height: 0;
-}
-.dusk-stack__head::after {
-  content: "";
-  position: absolute;
-  top: -4.5px;
-  left: -3px;
-  width: 9px;
-  height: 9px;
+  inline-size: var(--dusk-dot);
+  block-size: var(--dusk-dot);
+  margin-block-end: calc(-1 * var(--dusk-dot));
+  margin-inline-start: calc((var(--dusk-line) - var(--dusk-dot)) / 2);
   border-radius: 50%;
-  background-color: var(--dusk-ink);
-  box-shadow:
-    0 0 0 3px var(--dusk-track),
-    0 0 12px var(--dusk-ink);
+  background-color: var(--dusk-ink, transparent);
+  box-shadow: 0 0 12px var(--dusk-ink, transparent);
   opacity: 0;
-  transform: scale(0.4);
+  scale: 0.4;
   transition:
     opacity 0.35s ease,
-    transform 0.35s ease,
+    scale 0.35s ease,
     background-color 0.35s ease,
     box-shadow 0.35s ease;
 }
-.dusk-stack__head.is-reading::after {
+.dusk-stack__head[data-layer] {
   opacity: 1;
-  transform: none;
+  scale: 1;
 }
 .dusk-layer {
   position: relative;

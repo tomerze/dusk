@@ -2,6 +2,7 @@ const still = matchMedia("(prefers-reduced-motion: reduce)");
 
 for (const stack of document.querySelectorAll(".dusk-stack")) {
   const parts = [...stack.querySelectorAll("[data-layer]")];
+  const head = stack.querySelector(".dusk-stack__head");
   const diagrams = [...stack.querySelectorAll(".dusk-stack__diagram")];
   const visible = new Set();
   let fronts = [];
@@ -58,6 +59,11 @@ for (const stack of document.querySelectorAll(".dusk-stack")) {
       for (const part of parts) {
         part.classList.toggle("is-active", part.dataset.layer === layer);
       }
+      if (head && layer) {
+        head.dataset.layer = layer;
+      } else if (head) {
+        delete head.dataset.layer;
+      }
     },
     { rootMargin: "-49% 0px -50% 0px" },
   );
@@ -69,13 +75,13 @@ for (const stack of document.querySelectorAll(".dusk-stack")) {
 const visibility = new IntersectionObserver((entries) => {
   for (const entry of entries) {
     entry.target.classList.toggle("is-offscreen", !entry.isIntersecting);
-    for (const network of entry.target.querySelectorAll(
+    for (const drawing of entry.target.querySelectorAll(
       ".dusk-fleet__network, .dusk-stack__diagram",
     )) {
       if (entry.isIntersecting) {
-        network.unpauseAnimations();
+        drawing.unpauseAnimations();
       } else {
-        network.pauseAnimations();
+        drawing.pauseAnimations();
       }
     }
   }
@@ -111,34 +117,4 @@ if (matchMedia("(hover: hover)").matches) {
       rays.style.setProperty("--dusk-aim", `${aim}deg`);
     });
   }
-}
-
-for (const head of document.querySelectorAll(".dusk-stack__head")) {
-  const layers = [...head.parentElement.querySelectorAll(".dusk-layer")];
-  let reading = null;
-  const read = () => {
-    const at = head.getBoundingClientRect().top;
-    const start = layers[0].getBoundingClientRect().top;
-    const end = layers.at(-1).getBoundingClientRect().bottom;
-    const layer =
-      at > start + 1 && at < end - 1
-        ? layers.find(
-            (candidate) => candidate.getBoundingClientRect().bottom > at,
-          )
-        : null;
-    if (layer === reading) {
-      return;
-    }
-    reading = layer;
-    head.classList.toggle("is-reading", Boolean(layer));
-    if (layer) {
-      head.style.setProperty(
-        "--dusk-ink",
-        getComputedStyle(layer).getPropertyValue("--dusk-ink"),
-      );
-    }
-  };
-  window.addEventListener("scroll", read, { passive: true });
-  window.addEventListener("resize", read);
-  read();
 }
