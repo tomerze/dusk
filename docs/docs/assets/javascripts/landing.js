@@ -2,9 +2,8 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
   const parts = stack.querySelectorAll("[data-layer]");
   const diagram = stack.querySelector(".dusk-stack__diagram");
   const plates = [...diagram.querySelectorAll(".dusk-plate")];
-  const fleet = diagram.querySelector(".dusk-stack__fleet");
-  const calm = matchMedia("(prefers-reduced-motion: reduce)");
   const visible = new Set();
+  let front = null;
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -16,39 +15,36 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
       }
       const current = visible.values().next().value;
       const layer = current ? current.dataset.layer : "";
-      const before = calm.matches
-        ? []
-        : [...diagram.querySelectorAll(".dusk-plate, .dusk-plate *")].map(
-            (part) => {
-              const style = getComputedStyle(part);
-              return [part, style.transform, style.opacity];
-            },
-          );
+      if (front && front.dataset.layer !== layer) {
+        const leaving = front;
+        leaving.classList.remove("is-active");
+        leaving.style.opacity = 0;
+        setTimeout(() => leaving.remove(), 450);
+        front = null;
+      }
+      const plate = plates.find(
+        (candidate) => candidate.dataset.layer === layer,
+      );
+      if (plate && !front) {
+        front = plate.cloneNode(true);
+        front.classList.add("dusk-plate--front");
+        front.classList.remove("is-active");
+        for (const aside of front.querySelectorAll(
+          ".dusk-plate__leader, .dusk-plate__name",
+        )) {
+          aside.remove();
+        }
+        front.style.opacity = 0;
+        diagram.append(front);
+        getComputedStyle(front).opacity;
+        front.style.opacity = 1;
+      }
       stack.classList.toggle("is-focused", Boolean(current));
       for (const part of parts) {
         part.classList.toggle("is-active", part.dataset.layer === layer);
       }
-      for (const plate of plates) {
-        if (plate.dataset.layer !== layer) {
-          diagram.insertBefore(plate, fleet);
-        }
-      }
-      for (const plate of plates) {
-        if (plate.dataset.layer === layer) {
-          diagram.insertBefore(plate, fleet);
-        }
-      }
-      for (const [part, transform, opacity] of before) {
-        const style = getComputedStyle(part);
-        if (style.transform !== transform || style.opacity !== opacity) {
-          part.animate(
-            [
-              { transform, opacity },
-              { transform: style.transform, opacity: style.opacity },
-            ],
-            { duration: 450, easing: "ease" },
-          );
-        }
+      if (front) {
+        front.classList.add("is-active");
       }
     },
     { rootMargin: "-49% 0px -50% 0px" },

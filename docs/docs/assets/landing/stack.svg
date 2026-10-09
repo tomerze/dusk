@@ -41,8 +41,8 @@
       <circle cx="12" cy="12" r="3.2" />
     </symbol>
     <linearGradient id="dusk-plate-nightfall" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#6273dc" />
-      <stop offset="1" stop-color="#3446b4" />
+      <stop offset="0" stop-color="#4a5bc2" />
+      <stop offset="1" stop-color="#28378f" />
     </linearGradient>
     <linearGradient id="dusk-plate-dawn" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff1dc" />
@@ -61,6 +61,22 @@
       <stop offset="1" stop-color="#e7ecf4" />
     </linearGradient>
   </defs>
+  <g class="dusk-stack__fleet">
+    <path class="dusk-stack__uplink" d="M70 36L172 154.5" />
+    <path class="dusk-stack__uplink" d="M124 18L189.3 150" />
+    <path class="dusk-stack__uplink" d="M180 28L207.2 152.5" />
+    <path class="dusk-stack__uplink" d="M238 14L225.8 149" />
+    <path class="dusk-stack__uplink" d="M294 26L243.7 152" />
+    <path class="dusk-stack__uplink" d="M348 16L261 149.5" />
+    <path class="dusk-stack__uplink" d="M388 40L273.8 155.5" />
+    <circle class="dusk-stack__node" cx="70" cy="36" r="5" />
+    <circle class="dusk-stack__node" cx="124" cy="18" r="5" />
+    <circle class="dusk-stack__node" cx="180" cy="28" r="5" />
+    <circle class="dusk-stack__node" cx="238" cy="14" r="5" />
+    <circle class="dusk-stack__node" cx="294" cy="26" r="5" />
+    <circle class="dusk-stack__node" cx="348" cy="16" r="5" />
+    <circle class="dusk-stack__node" cx="388" cy="40" r="5" />
+  </g>
   <g class="dusk-plate" data-layer="observability">
     <polygon
       class="dusk-plate__left"
@@ -220,12 +236,12 @@
   <g class="dusk-plate" data-layer="nightfall">
     <polygon
       class="dusk-plate__left"
-      fill="#2a3994"
+      fill="#1f2b72"
       points="40,152 220,226 220,244 40,170"
     />
     <polygon
       class="dusk-plate__right"
-      fill="#202c76"
+      fill="#172057"
       points="220,226 400,152 400,170 220,244"
     />
     <polygon
@@ -241,7 +257,7 @@
     <g
       class="dusk-plate__print"
       transform="matrix(0.925 0.38 -0.925 0.38 69.6 152)"
-      style="--dusk-print: #e4e8ff"
+      style="--dusk-print: #f7f1d8"
     >
       <use
         class="dusk-plate__print-icon"
@@ -255,21 +271,5 @@
     </g>
     <path class="dusk-plate__leader" d="M414 152H444" />
     <text class="dusk-plate__name" x="456" y="159">Security layer</text>
-  </g>
-  <g class="dusk-stack__fleet">
-    <path class="dusk-stack__uplink" d="M70 36L172 154.5" />
-    <path class="dusk-stack__uplink" d="M124 18L189.3 150" />
-    <path class="dusk-stack__uplink" d="M180 28L207.2 152.5" />
-    <path class="dusk-stack__uplink" d="M238 14L225.8 149" />
-    <path class="dusk-stack__uplink" d="M294 26L243.7 152" />
-    <path class="dusk-stack__uplink" d="M348 16L261 149.5" />
-    <path class="dusk-stack__uplink" d="M388 40L273.8 155.5" />
-    <circle class="dusk-stack__node" cx="70" cy="36" r="5" />
-    <circle class="dusk-stack__node" cx="124" cy="18" r="5" />
-    <circle class="dusk-stack__node" cx="180" cy="28" r="5" />
-    <circle class="dusk-stack__node" cx="238" cy="14" r="5" />
-    <circle class="dusk-stack__node" cx="294" cy="26" r="5" />
-    <circle class="dusk-stack__node" cx="348" cy="16" r="5" />
-    <circle class="dusk-stack__node" cx="388" cy="40" r="5" />
   </g>
 </svg>

@@ -1,6 +1,6 @@
 .dusk-landing {
   --dusk-gold: #f0b441;
-  --dusk-nightfall: #3446b4;
+  --dusk-nightfall: #28378f;
   --dusk-dawn: #ffd9a8;
   --dusk-twilight: #a98bcc;
   --dusk-data: #4ea6e6;
@@ -624,6 +624,20 @@
   height: auto;
   overflow: visible;
 }
+.dusk-plate {
+  transition: transform 0.45s ease;
+}
+.dusk-plate polygon,
+.dusk-plate text,
+.dusk-plate use,
+.dusk-plate path {
+  transition: opacity 0.45s ease;
+}
+.dusk-plate--front {
+  transition:
+    transform 0.45s ease,
+    opacity 0.45s ease;
+}
 .dusk-plate__edge {
   fill: none;
   stroke: rgba(255, 255, 255, 0.55);
@@ -995,6 +1009,8 @@
   .dusk-stack__uplink {
     animation: none;
   }
+  .dusk-plate,
+  .dusk-plate *,
   .dusk-layer {
     transition: none;
   }
