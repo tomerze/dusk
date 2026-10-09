@@ -98,6 +98,92 @@
   background: var(--dusk-sky);
   text-align: center;
 }
+.dusk-hero__floats {
+  position: absolute;
+  top: 1.2rem;
+  right: 0;
+  left: 0;
+  display: none;
+  max-width: 72rem;
+  height: 25rem;
+  margin: 0 auto;
+  pointer-events: none;
+}
+.dusk-hero__floats p {
+  margin: 0;
+}
+.dusk-landing .dusk-float {
+  --md-icon-size: 2.2rem;
+  position: absolute;
+  color: var(--dusk-ink, var(--dusk-gold));
+  opacity: 0.9;
+  animation: dusk-orbit 10s linear infinite;
+}
+.dusk-landing .dusk-float:nth-child(1) {
+  --md-icon-size: 46px;
+  top: 6%;
+  left: 5%;
+  animation-duration: 11s;
+}
+.dusk-landing .dusk-float:nth-child(2) {
+  --md-icon-size: 38px;
+  top: 40%;
+  left: 15%;
+  animation-duration: 8s;
+  animation-direction: reverse;
+}
+.dusk-landing .dusk-float:nth-child(3) {
+  --md-icon-size: 34px;
+  top: 66%;
+  left: 3%;
+  animation-duration: 13s;
+}
+.dusk-landing .dusk-float:nth-child(4) {
+  --md-icon-size: 34px;
+  top: 90%;
+  left: 11%;
+  animation-duration: 9s;
+  animation-direction: reverse;
+}
+.dusk-landing .dusk-float:nth-child(5) {
+  --md-icon-size: 44px;
+  top: 8%;
+  right: 6%;
+  animation-duration: 10s;
+  animation-direction: reverse;
+}
+.dusk-landing .dusk-float:nth-child(6) {
+  --md-icon-size: 38px;
+  top: 44%;
+  right: 15%;
+  animation-duration: 12s;
+}
+.dusk-landing .dusk-float:nth-child(7) {
+  --md-icon-size: 36px;
+  top: 70%;
+  right: 4%;
+  animation-duration: 7s;
+  animation-direction: reverse;
+}
+.dusk-landing .dusk-float:nth-child(8) {
+  --md-icon-size: 32px;
+  top: 92%;
+  right: 13%;
+  animation-duration: 14s;
+}
+@keyframes dusk-orbit {
+  from {
+    transform: rotate(0deg) translateX(12px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(12px) rotate(-360deg);
+  }
+}
+@media screen and (min-width: 60em) {
+  .dusk-hero__floats {
+    display: block;
+  }
+}
 .dusk-hero__inner {
   position: relative;
   z-index: 1;
@@ -204,4 +290,10 @@
   background-color: var(--dusk-ground);
   -webkit-mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
   mask: url("../landing/hill.svg") center bottom / 100% 100% no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dusk-landing .dusk-float {
+    animation: none;
+  }
 }

@@ -6,6 +6,17 @@ hide:
 
 <section class="dusk-hero" markdown>
 
+<div class="dusk-hero__floats" aria-hidden="true" markdown>
+:dusk-nightfall:{ .dusk-float data-layer="nightfall" }
+:dusk-dawn:{ .dusk-float data-layer="dawn" }
+:dusk-data:{ .dusk-float data-layer="data" }
+:dusk-phone:{ .dusk-float }
+:dusk-twilight:{ .dusk-float data-layer="twilight" }
+:dusk-observability:{ .dusk-float data-layer="observability" }
+:dusk-microcontroller:{ .dusk-float }
+:dusk-server:{ .dusk-float }
+</div>
+
 <div class="dusk-hero__inner" markdown>
 
 # ![](assets/landing/logo-d.svg){ .dusk-hero__d }usk { #dusk .dusk-hero__wordmark aria-label="Dusk" }
