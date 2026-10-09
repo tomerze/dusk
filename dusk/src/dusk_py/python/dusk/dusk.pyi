@@ -4,6 +4,7 @@ Mirrors the PyO3 surface defined in ``dusk/src/dusk_py``. Keep in sync with the
 ``#[pymethods]`` blocks on ``Dusk`` and ``ShellOutput`` there.
 """
 
+import os
 from typing import Any
 
 class ShellOutput:
@@ -23,7 +24,17 @@ class ShellOutput:
 class Dusk:
     """Client connection to a Dusk server."""
 
-    def __init__(self, address: str, port: int) -> None: ...
+    def __init__(
+        self,
+        address: str,
+        port: int,
+        sh_server_pid: int | None = None,
+        *,
+        server_name: str | None = None,
+        ca: str | os.PathLike[str] | None = None,
+        certificate: str | os.PathLike[str] | None = None,
+        key: str | os.PathLike[str] | None = None,
+    ) -> None: ...
     def disconnect(self) -> None: ...
     def sh(self, command: str) -> ShellOutput: ...
     @staticmethod

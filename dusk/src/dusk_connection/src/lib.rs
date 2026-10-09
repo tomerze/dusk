@@ -2,10 +2,343 @@ use anyhow::Result;
 use capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty};
 use dusk_capnp::dusk_capnp::dusk::Client;
 use futures::io::AsyncReadExt;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use std::cell::Cell;
+use std::hash::{BuildHasher, RandomState};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use std::{net::SocketAddr, rc::Rc, sync::Mutex};
 use tokio::net::TcpStream;
+use tracing::Instrument as _;
 
-type DisconnectorStore = Rc<Mutex<Option<Disconnector<rpc_twoparty_capnp::Side>>>>;
+enum LinkState {
+    Open(Option<Disconnector<rpc_twoparty_capnp::Side>>),
+    Disconnected,
+}
+
+type DisconnectorStore = Rc<Mutex<LinkState>>;
+
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+const RECONNECT_BASE: Duration = Duration::from_millis(100);
+
+const RECONNECT_CAP: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Copy, Default)]
+struct Attempts {
+    in_a_row: u32,
+    ended: Option<Instant>,
+}
+
+fn reconnect_delay(in_a_row: u32) -> Duration {
+    let Some(doublings) = in_a_row.checked_sub(1) else {
+        return Duration::ZERO;
+    };
+    let ceiling = RECONNECT_BASE
+        .saturating_mul(1 << doublings.min(16))
+        .min(RECONNECT_CAP);
+    let nanoseconds = u64::try_from(ceiling.as_nanos()).unwrap_or(u64::MAX);
+    Duration::from_nanos(RandomState::new().hash_one(Instant::now()) % nanoseconds)
+}
+
+#[derive(Clone, Debug)]
+pub struct TlsClient {
+    pub server_name: String,
+    pub ca: PathBuf,
+    pub certificate: Option<PathBuf>,
+    pub key: Option<PathBuf>,
+}
+
+impl TlsClient {
+    fn config(&self) -> anyhow::Result<rustls::ClientConfig> {
+        let mut roots = rustls::RootCertStore::empty();
+        for certificate in read_certificates(&self.ca)? {
+            roots.add(certificate).map_err(|error| {
+                anyhow::anyhow!(
+                    "`{}` holds a trust anchor rustls refuses: {error}",
+                    self.ca.display()
+                )
+            })?;
+        }
+        let builder = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()?
+        .with_root_certificates(roots);
+        Ok(match (&self.certificate, &self.key) {
+            (Some(certificate), Some(key)) => {
+                let chain = read_certificates(certificate)?;
+                let key = PrivateKeyDer::from_pem_file(key).map_err(|error| {
+                    anyhow::anyhow!(
+                        "couldn't read a private key from `{}`: {error}",
+                        key.display()
+                    )
+                })?;
+                builder.with_client_auth_cert(chain, key)?
+            }
+            (None, None) => builder.with_no_client_auth(),
+            (Some(_), None) => anyhow::bail!("a client certificate needs its key"),
+            (None, Some(_)) => anyhow::bail!("a client key needs its certificate"),
+        })
+    }
+}
+
+fn read_certificates(path: &Path) -> anyhow::Result<Vec<CertificateDer<'static>>> {
+    let certificates = CertificateDer::pem_file_iter(path)
+        .and_then(|certificates| certificates.collect::<Result<Vec<_>, _>>())
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "couldn't read certificates from `{}`: {error}",
+                path.display()
+            )
+        })?;
+    if certificates.is_empty() {
+        anyhow::bail!("`{}` holds no PEM certificate", path.display());
+    }
+    Ok(certificates)
+}
+
+#[derive(Clone)]
+enum Target {
+    Plain(SocketAddr),
+    Tls {
+        host: String,
+        port: u16,
+        server_name: ServerName<'static>,
+        tls: TlsClient,
+    },
+}
+
+async fn dial(host: &str, port: u16) -> anyhow::Result<TcpStream> {
+    let addresses = tokio::time::timeout(CONNECT_TIMEOUT, tokio::net::lookup_host((host, port)))
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "couldn't resolve `{host}`: no answer within {} seconds",
+                CONNECT_TIMEOUT.as_secs()
+            )
+        })?
+        .map_err(|error| anyhow::anyhow!("couldn't resolve `{host}`: {error}"))?;
+    let mut failures = Vec::new();
+    for address in addresses {
+        match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(address)).await {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(error)) => failures.push(format!("{address}: {error}")),
+            Err(_) => failures.push(format!(
+                "{address}: no answer within {} seconds",
+                CONNECT_TIMEOUT.as_secs()
+            )),
+        }
+    }
+    if failures.is_empty() {
+        anyhow::bail!("`{host}` resolves to no address");
+    }
+    anyhow::bail!(
+        "couldn't connect to `{host}:{port}`: {}",
+        failures.join("; ")
+    )
+}
+
+struct LinkStream<Stream>(Stream);
+
+fn link_failure(error: std::io::Error) -> std::io::Error {
+    tracing::warn!(error = %error, "the link failed");
+    std::io::Error::new(std::io::ErrorKind::ConnectionAborted, error.to_string())
+}
+
+impl<Stream: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for LinkStream<Stream> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match std::pin::Pin::new(&mut self.0).poll_read(context, buffer) {
+            std::task::Poll::Ready(Err(error))
+                if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                tracing::debug!("the peer closed the link without close_notify");
+                std::task::Poll::Ready(Ok(()))
+            }
+            polled => polled.map_err(link_failure),
+        }
+    }
+}
+
+impl<Stream: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for LinkStream<Stream> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        bytes: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.0)
+            .poll_write(context, bytes)
+            .map_err(link_failure)
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0)
+            .poll_flush(context)
+            .map_err(link_failure)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0)
+            .poll_shutdown(context)
+            .map_err(link_failure)
+    }
+}
+
+fn serve<Stream>(stream: Stream, disconnector_store: &DisconnectorStore) -> capnp::Result<Client>
+where
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + 'static,
+{
+    let stream = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream);
+    let (reader, writer) = stream.split();
+    let rpc_network = Box::new(twoparty::VatNetwork::new(
+        reader,
+        writer,
+        rpc_twoparty_capnp::Side::Client,
+        Default::default(),
+    ));
+    let mut rpc_system = RpcSystem::new(rpc_network, None);
+    let disconnector = rpc_system.get_disconnector();
+    let replaced = match &mut *disconnector_store
+        .lock()
+        .map_err(|error| capnp::Error::failed(error.to_string()))?
+    {
+        LinkState::Open(stored) => stored.replace(disconnector),
+        LinkState::Disconnected => {
+            return Err(capnp::Error::failed(
+                "this connection was disconnected".to_string(),
+            ));
+        }
+    };
+    if let Some(replaced) = replaced {
+        tokio::task::spawn_local(
+            async move {
+                if let Err(error) = replaced.await {
+                    tracing::warn!(error = %error, "couldn't close the link a reconnect replaced");
+                }
+            }
+            .instrument(tracing::Span::current()),
+        );
+    }
+    let client: Client = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
+    tokio::task::spawn_local(
+        async move {
+            match rpc_system.await {
+                Ok(()) => tracing::info!("link down"),
+                Err(error) => tracing::warn!(error = %error, "link down"),
+            }
+        }
+        .instrument(tracing::Span::current()),
+    );
+    Ok(client)
+}
+
+async fn open(target: Target, disconnector_store: DisconnectorStore) -> capnp::Result<Client> {
+    match target {
+        Target::Plain(address) => {
+            let stream = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(address))
+                .await
+                .map_err(|_| {
+                    capnp::Error::disconnected(format!(
+                        "couldn't connect to {address}: no answer within {} seconds",
+                        CONNECT_TIMEOUT.as_secs()
+                    ))
+                })?
+                .map_err(|error| capnp::Error::disconnected(error.to_string()))?;
+            stream
+                .set_nodelay(true)
+                .map_err(|error| capnp::Error::disconnected(error.to_string()))?;
+            serve(LinkStream(stream), &disconnector_store)
+        }
+        Target::Tls {
+            host,
+            port,
+            server_name,
+            tls,
+        } => {
+            let unreachable =
+                |error: anyhow::Error| capnp::Error::disconnected(format!("{error:#}"));
+            let config = tls.config().map_err(unreachable)?;
+            let stream = dial(&host, port).await.map_err(unreachable)?;
+            stream
+                .set_nodelay(true)
+                .map_err(|error| capnp::Error::disconnected(error.to_string()))?;
+            let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+            let stream = tokio::time::timeout(
+                HANDSHAKE_TIMEOUT,
+                connector.connect(server_name.clone(), stream),
+            )
+            .await
+            .map_err(|_| {
+                capnp::Error::disconnected(format!(
+                    "the TLS handshake with `{host}:{port}` took longer than {} seconds",
+                    HANDSHAKE_TIMEOUT.as_secs()
+                ))
+            })?
+            .map_err(|error| {
+                capnp::Error::disconnected(format!(
+                    "the TLS handshake with `{host}:{port}` as `{}` failed: {error}",
+                    server_name.to_str()
+                ))
+            })?;
+            serve(LinkStream(stream), &disconnector_store)
+        }
+    }
+}
+
+async fn open_with_backoff(
+    target: Target,
+    disconnector_store: DisconnectorStore,
+    attempts: Rc<Cell<Attempts>>,
+) -> capnp::Result<Client> {
+    let span = match &target {
+        Target::Plain(address) => tracing::info_span!("link", address = %address),
+        Target::Tls {
+            host,
+            port,
+            server_name,
+            ..
+        } => tracing::info_span!(
+            "link",
+            host = host.as_str(),
+            port,
+            server_name = %server_name.to_str()
+        ),
+    };
+    async move {
+        let previous = attempts.get();
+        let in_a_row = match previous.ended {
+            Some(ended) if ended.elapsed() < RECONNECT_CAP => previous.in_a_row.saturating_add(1),
+            _ => 0,
+        };
+        tokio::time::sleep(reconnect_delay(in_a_row)).await;
+        let opened = open(target, disconnector_store).await;
+        attempts.set(Attempts {
+            in_a_row,
+            ended: Some(Instant::now()),
+        });
+        match &opened {
+            Ok(_) => tracing::info!(in_a_row, "link up"),
+            Err(error) => tracing::warn!(error = %error, in_a_row, "couldn't open the link"),
+        }
+        opened
+    }
+    .instrument(span)
+    .await
+}
 
 pub struct Connection {
     disconnector_store: DisconnectorStore,
@@ -13,48 +346,16 @@ pub struct Connection {
 }
 
 impl Connection {
-    fn auto_connect(
-        address: SocketAddr,
-        disconnector_store: DisconnectorStore,
-    ) -> capnp::Result<Client> {
-        let client = capnp_rpc::new_future_client(async move {
-            let stream = TcpStream::connect(address).await?;
-            stream.set_nodelay(true)?;
-
-            let stream = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream);
-            let (reader, writer) = stream.split();
-            let rpc_network = Box::new(twoparty::VatNetwork::new(
-                reader,
-                writer,
-                rpc_twoparty_capnp::Side::Client,
-                Default::default(),
-            ));
-            let mut rpc_system = RpcSystem::new(rpc_network, None);
-            let disconnector = rpc_system.get_disconnector();
-
-            {
-                let mut disconnector_option_guard = disconnector_store
-                    .lock()
-                    .map_err(|e| capnp::Error::failed(e.to_string()))?;
-                *disconnector_option_guard = Some(disconnector);
-            }
-
-            let client: Client = rpc_system.bootstrap(rpc_twoparty_capnp::Side::Server);
-            tokio::task::spawn_local(rpc_system);
-            Ok(client)
-        });
-        Ok(client)
-    }
-
-    pub async fn connect(address: SocketAddr) -> Result<Self> {
-        let disconnector_store: DisconnectorStore = Rc::new(Mutex::new(None));
+    fn with_target(target: Target) -> Result<Self> {
+        let disconnector_store: DisconnectorStore = Rc::new(Mutex::new(LinkState::Open(None)));
         let disconnector_store_clone = disconnector_store.clone();
+        let attempts = Rc::new(Cell::new(Attempts::default()));
         let (client, _) = capnp_rpc::auto_reconnect(move || {
-            if let Ok(client) = Self::auto_connect(address, disconnector_store_clone.clone()) {
-                Ok(client)
-            } else {
-                Err(capnp::Error::failed("Failed to connect".to_string()))
-            }
+            Ok(capnp_rpc::new_future_client(open_with_backoff(
+                target.clone(),
+                disconnector_store_clone.clone(),
+                attempts.clone(),
+            )))
         })?;
 
         Ok(Self {
@@ -63,16 +364,38 @@ impl Connection {
         })
     }
 
+    pub async fn connect(address: SocketAddr) -> Result<Self> {
+        Self::with_target(Target::Plain(address))
+    }
+
+    pub async fn connect_tls(host: &str, port: u16, tls: TlsClient) -> Result<Self> {
+        let server_name = ServerName::try_from(tls.server_name.clone()).map_err(|error| {
+            anyhow::anyhow!("`{}` is not a server name: {error}", tls.server_name)
+        })?;
+        tls.config()?;
+        Self::with_target(Target::Tls {
+            host: host.to_string(),
+            port,
+            server_name,
+            tls,
+        })
+    }
+
     pub async fn client(&self) -> Client {
         self.client.clone()
     }
 
     pub async fn disconnect(self) -> Result<()> {
-        let disconnector_option = self
-            .disconnector_store
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to lock mutex: {}", e))?
-            .take();
+        let disconnector_option = match std::mem::replace(
+            &mut *self
+                .disconnector_store
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Failed to lock mutex: {}", e))?,
+            LinkState::Disconnected,
+        ) {
+            LinkState::Open(disconnector) => disconnector,
+            LinkState::Disconnected => None,
+        };
         match disconnector_option {
             Some(disconnector) => disconnector.await.map_err(anyhow::Error::from),
             None => Ok(()), // Already disconnected
