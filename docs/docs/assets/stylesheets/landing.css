@@ -571,7 +571,8 @@
   font-weight: 500;
   paint-order: stroke;
   stroke: var(--dusk-ground);
-  stroke-width: 5px;
+  stroke-width: 2px;
+  stroke-opacity: 0.7;
   stroke-linejoin: round;
 }
 @media screen and (max-width: 37.4375em) {
