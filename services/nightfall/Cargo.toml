@@ -12,6 +12,7 @@ path = "src/lib.rs"
 anyhow = { version = "1.0", public = true }
 arc-swap = { version = "1.7", public = true }
 capnp = "0.21.7"
+capnp-rpc = "0.21.0"
 futures = "0.3"
 jsonschema = { version = "0.58", default-features = false }
 libc = "0.2"
