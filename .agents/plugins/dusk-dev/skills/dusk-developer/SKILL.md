@@ -155,6 +155,7 @@ When a client connects, it receives a `Dusk` capability - the node's whole API:
 | `hostname()` | The node's hostname. |
 | `time()` / `settime(ms)` | Read or set the node's wall-clock. |
 | `programs()` | Enumerate the programs the node can run. |
+| `namespaceId()` | The node's namespace id, random per run. |
 
 ### Portals and streams
 
