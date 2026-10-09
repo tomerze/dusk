@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod backoff;
 pub mod census;
 pub mod config;
