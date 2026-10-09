@@ -136,11 +136,11 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
   const glow = fleet.querySelector(".dusk-fleet__hub-glow");
   const hubLabel = fleet.querySelector(".dusk-fleet__hub-label");
   const layout = (width) => {
-    const margin = 56;
+    const margin = width < 600 ? 50 : 56;
     const scale = width < 600 ? 0.8 : 1;
     const ring = 36.77 * scale;
     const rx = width / 2 - margin;
-    const spacing = scale < 1 ? 136 : 120;
+    const spacing = scale < 1 ? 170 : 120;
     const around = (arms.length * spacing) / (2 * Math.PI);
     const hubSize = Math.min(190, Math.max(150, width * 0.16));
     const ry = Math.max(
