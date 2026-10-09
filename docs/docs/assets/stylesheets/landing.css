@@ -638,11 +638,6 @@
     transform 0.45s ease,
     opacity 0.45s ease;
 }
-.dusk-plate__edge {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.55);
-  stroke-width: 1.2;
-}
 .dusk-plate__veil {
   fill: var(--md-default-bg-color);
   opacity: 0;
