@@ -12,6 +12,7 @@ pub mod peer;
 pub mod proxy;
 pub mod rlimit;
 pub mod rpc;
+pub mod session;
 pub mod shard;
 pub mod sni;
 pub mod tls;
