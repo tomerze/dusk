@@ -357,16 +357,18 @@ const tracked = [
     name: "--dusk-sunk",
     aim: () => Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
   })),
-  ...[...document.querySelectorAll(".dusk-section > h2")].map((element) => ({
-    element,
-    name: "--dusk-passed",
-    aim: () => {
-      const box = element.getBoundingClientRect();
-      const passed =
-        (window.innerHeight - box.top) / (window.innerHeight + box.height);
-      return Math.max(0, Math.min(1, passed));
-    },
-  })),
+  ...[...document.querySelectorAll(".dusk-section > h2, .dusk-os__title")].map(
+    (element) => ({
+      element,
+      name: "--dusk-passed",
+      aim: () => {
+        const box = element.getBoundingClientRect();
+        const passed =
+          (window.innerHeight - box.top) / (window.innerHeight + box.height);
+        return Math.max(0, Math.min(1, passed));
+      },
+    }),
+  ),
 ].map((item) => ({ ...item, target: item.aim(), value: item.aim() }));
 let gliding = false;
 let lastGlide = 0;
@@ -434,4 +436,47 @@ for (const head of document.querySelectorAll(".dusk-stack__head")) {
   window.addEventListener("scroll", read, { passive: true });
   window.addEventListener("resize", read);
   read();
+}
+
+const namespaceId = Array.from(
+  crypto.getRandomValues(new Uint8Array(8)),
+  (byte) => byte.toString(16).padStart(2, "0"),
+).join("");
+for (const namespace of document.querySelectorAll(".dusk-os__namespace")) {
+  namespace.textContent = namespaceId;
+}
+
+const today = new Date();
+const instanceName = `instance-${today.getFullYear()}${String(
+  today.getMonth() + 1,
+).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+for (const instance of document.querySelectorAll(".dusk-os__instance")) {
+  instance.textContent = instanceName;
+}
+
+const latencySteps = {
+  17: { 16: { 17: 0.9 }, 17: { 16: 0.3, 18: 0.3 }, 18: { 17: 0.9 } },
+  66: {
+    65: { 66: 0.9 },
+    66: { 65: 0.3, 67: 0.18 },
+    67: { 66: 0.83, 68: 0.17 },
+    68: { 67: 0.32 },
+  },
+};
+for (const element of document.querySelectorAll(".dusk-os__latency")) {
+  const steps = latencySteps[element.textContent];
+  let latency = element.textContent;
+  const flicker = () => {
+    let roll = Math.random();
+    for (const [next, chance] of Object.entries(steps[latency])) {
+      if (roll < chance) {
+        latency = next;
+        break;
+      }
+      roll -= chance;
+    }
+    element.textContent = latency;
+    setTimeout(flicker, 250 + Math.random() * 550);
+  };
+  flicker();
 }
