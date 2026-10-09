@@ -493,15 +493,6 @@
       />
       <circle class="dusk-node__online" cx="-23.4" cy="28.4" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="596.1"
-      y="128.6"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Mobile app
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -540,15 +531,6 @@
       />
       <circle class="dusk-node__online" cx="-27.5" cy="24.4" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="802"
-      y="164.9"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Agent harness
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -587,15 +569,6 @@
       />
       <circle class="dusk-node__online" cx="-36.5" cy="-4.5" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="917.6"
-      y="278.4"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      PC
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -634,15 +607,6 @@
       />
       <circle class="dusk-node__online" cx="-36.7" cy="-2.5" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="855.8"
-      y="437"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Server
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -688,15 +652,6 @@
       />
       <circle class="dusk-node__online" cx="-19.2" cy="-31.3" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="693"
-      y="518.5"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Router
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -735,15 +690,6 @@
       />
       <circle class="dusk-node__online" cx="-9.3" cy="-35.6" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="503.9"
-      y="527"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Desktop app
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -789,15 +735,6 @@
       />
       <circle class="dusk-node__online" cx="31.8" cy="-18.5" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="317.6"
-      y="499.7"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Game
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -836,15 +773,6 @@
       />
       <circle class="dusk-node__online" cx="31.9" cy="-18.4" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="115.2"
-      y="439.5"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Car
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -890,15 +818,6 @@
       />
       <circle class="dusk-node__online" cx="34.8" cy="12" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="55.1"
-      y="282.8"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Camera
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -937,15 +856,6 @@
       />
       <circle class="dusk-node__online" cx="35.4" cy="10" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="234.3"
-      y="176.5"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Robot vacuum
-    </text>
   </g>
   <g
     class="dusk-arm"
@@ -984,15 +894,6 @@
       />
       <circle class="dusk-node__online" cx="6.8" cy="36.1" r="5" />
     </g>
-    <text
-      class="dusk-node__label"
-      x="410.8"
-      y="126.3"
-      text-anchor="middle"
-      font-size="20.2"
-    >
-      Microcontroller
-    </text>
   </g>
   <use
     class="dusk-fleet__hub"
@@ -1002,13 +903,169 @@
     width="160"
     height="225.6"
   />
-  <text
-    class="dusk-fleet__hub-label"
-    x="500"
-    y="404.8"
-    text-anchor="middle"
-    font-size="21"
-  >
-    Dusk Stack
-  </text>
+  <g class="dusk-fleet__labels">
+    <text
+      class="dusk-fleet__hub-label"
+      x="500"
+      y="404.8"
+      text-anchor="middle"
+      font-size="21"
+    >
+      Dusk Stack
+    </text>
+    <text
+      class="dusk-node__label"
+      x="596.1"
+      y="128.6"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 9s;
+        animation-delay: 0s;
+        animation-direction: alternate-reverse;
+      "
+    >
+      Mobile app
+    </text>
+    <text
+      class="dusk-node__label"
+      x="802"
+      y="164.9"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 11s;
+        animation-delay: -7s;
+        animation-direction: alternate;
+      "
+    >
+      Agent harness
+    </text>
+    <text
+      class="dusk-node__label"
+      x="917.6"
+      y="278.4"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 9s;
+        animation-delay: 0s;
+        animation-direction: alternate;
+      "
+    >
+      PC
+    </text>
+    <text
+      class="dusk-node__label"
+      x="855.8"
+      y="437"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 11s;
+        animation-delay: -4s;
+        animation-direction: alternate;
+      "
+    >
+      Server
+    </text>
+    <text
+      class="dusk-node__label"
+      x="693"
+      y="518.5"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 9s;
+        animation-delay: -7s;
+        animation-direction: alternate-reverse;
+      "
+    >
+      Router
+    </text>
+    <text
+      class="dusk-node__label"
+      x="503.9"
+      y="527"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 11s;
+        animation-delay: -4s;
+        animation-direction: alternate;
+      "
+    >
+      Desktop app
+    </text>
+    <text
+      class="dusk-node__label"
+      x="317.6"
+      y="499.7"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 9s;
+        animation-delay: 0s;
+        animation-direction: alternate;
+      "
+    >
+      Game
+    </text>
+    <text
+      class="dusk-node__label"
+      x="115.2"
+      y="439.5"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 11s;
+        animation-delay: -7s;
+        animation-direction: alternate;
+      "
+    >
+      Car
+    </text>
+    <text
+      class="dusk-node__label"
+      x="55.1"
+      y="282.8"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 9s;
+        animation-delay: 0s;
+        animation-direction: alternate-reverse;
+      "
+    >
+      Camera
+    </text>
+    <text
+      class="dusk-node__label"
+      x="234.3"
+      y="176.5"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 11s;
+        animation-delay: -4s;
+        animation-direction: alternate;
+      "
+    >
+      Robot vacuum
+    </text>
+    <text
+      class="dusk-node__label"
+      x="410.8"
+      y="126.3"
+      text-anchor="middle"
+      font-size="20.2"
+      style="
+        animation-duration: 9s;
+        animation-delay: -7s;
+        animation-direction: alternate;
+      "
+    >
+      Microcontroller
+    </text>
+  </g>
 </svg>
