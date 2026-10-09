@@ -15,16 +15,69 @@ node.disconnect()
 
 ## `Dusk`
 
-### `Dusk(address: str, port: int, sh_server_pid: int | None = None)`
+### `Dusk(address: str, port: int, sh_server_pid: int | None = None, *, server_name=None, ca=None, certificate=None, key=None)`
 
 Connects to a node at `address:port` and takes hold of a shell server on it: the
 node's default one at `defaultPid`, or the one at `sh_server_pid` - started
 there if nothing is running it yet. The constructor blocks until the connection is established and
 the node answers, and raises if it can't reach the node.
 
+`address` is a host name, an IPv4 address or an IPv6 address (`"::1"`, without
+brackets). Over plain TCP the constructor resolves a host name and tries each
+address it resolves to in turn until one answers, and the object connects to
+that address from then on. Over TLS the name is resolved again each time the
+object connects, and each address it resolves to is tried in turn until one
+takes the connection. The name lookup has 10 seconds, and so does each address:
+over plain TCP, an address that takes the connection and then says nothing is
+given up on and the next one tried; over TLS, the handshake has 10 seconds of
+its own.
+
 Every command this object runs goes to that shell server, so the shell server's
 state is the object's state: a function defined by one `sh` call is there for the next one,
 and two objects on different pids do not see each other's.
+
+#### Over TLS
+
+The keyword arguments connect over TLS 1.3 or 1.2 instead of plain TCP, to a
+server that terminates TLS in front of a node:
+
+| Argument | What it is |
+|----------|------------|
+| `ca` | A PEM file of the certificates the server's certificate must chain to. Passing it is what turns TLS on. |
+| `server_name` | The name the server's certificate must carry, sent as the TLS server name (SNI). Defaults to `address`. |
+| `certificate` | A PEM file holding this client's certificate chain, leaf first. |
+| `key` | A PEM file holding the private key of `certificate`. |
+
+Every TLS argument needs `ca`; without it the constructor raises `ValueError`.
+`certificate` and `key` go together, and the constructor raises `RuntimeError`
+when it gets one without the other. The files are read again each time the
+connection is made, a reconnect included, so a certificate renewed on disk is
+used without making a new object. Paths are strings or `pathlib.Path`s.
+
+```python
+node = dusk.Dusk(
+    "node.example.internal", 8444,
+    ca="/etc/client/ca.pem",
+    certificate="/etc/client/client.pem",
+    key="/etc/client/client.key",
+)
+```
+
+#### Errors
+
+The constructor, `sh` and `prompt` raise `RuntimeError`. When the failure is one
+the node or the connection reported, the message starts with its Cap'n Proto
+error kind - `Failed`, `Overloaded`, `Disconnected` or `Unimplemented` -
+followed by `: ` and the reason:
+
+```
+Disconnected: Connection refused (os error 111)
+```
+
+A connection that can't be made - a closed port, a name that does not resolve,
+a refused TLS handshake - is `Disconnected`. A failure on the client side - a
+TLS file that can't be read, a certificate without its key - has no kind in
+front of it.
 
 ### `node.sh(command: str) -> ShellOutput`
 
