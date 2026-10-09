@@ -6,9 +6,9 @@
   aria-labelledby="dusk-fleet-title"
 >
   <title id="dusk-fleet-title">
-    A fleet of devices, each one a node connected to the Dusk stack:
-    microcontroller, mobile app, PC, server, router, desktop app, car, camera,
-    robot vacuum, agent harness, game, and many more.
+    A fleet, each member a node connected to the Dusk stack: a microcontroller,
+    a mobile app, a PC, a server, a router, a desktop app, a car, a camera, a
+    robot vacuum, an agent harness, a game, and many more.
   </title>
   <defs>
     <symbol id="dusk-glyph-microcontroller" viewBox="-24 -24 48 48">

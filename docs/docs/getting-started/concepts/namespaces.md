@@ -1,8 +1,8 @@
 # Namespaces
 
 A **namespace** is a node's execution context - the container for every
-[process](processes.md) running on that machine. One running node is exactly one
-namespace. When you connect to a machine in your fleet, you are talking to its
+[process](processes.md) running on that node. One running node is exactly one
+namespace. When you connect to a node in your fleet, you are talking to its
 namespace.
 
 As a program author you never construct or manage a namespace directly; the

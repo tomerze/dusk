@@ -59,7 +59,7 @@ short explanation, so you stay in control of what actually executes.
 
 ## Why it's there
 
-Diagnosing a device under pressure is exactly when you don't want to be looking
+Diagnosing a node under pressure is exactly when you don't want to be looking
 up syntax. Ask Dusk lowers that barrier, which makes it a natural companion to
 [diagnosis](diagnosis.md).
 

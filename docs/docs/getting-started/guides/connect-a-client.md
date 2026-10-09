@@ -2,7 +2,7 @@
 
 Connecting to a node is how you get Dusk's [analytics and
 diagnosis](../index.md#what-you-get) - see what's running, read logs, and drive a
-device. Anything that holds the node's `Dusk` capability can do it; there are
+node. Anything that holds the node's `Dusk` capability can do it; there are
 three first-class ways in.
 
 ## The `dusk` CLI

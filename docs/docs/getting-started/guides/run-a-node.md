@@ -1,6 +1,6 @@
 # Run a dusk node
 
-A node is one running Dusk server - one machine in your fleet. This guide covers
+A node is one running Dusk server - one member of your fleet. This guide covers
 running one beyond the quickstart binary.
 
 ## The `dusk_node` binary

@@ -26,9 +26,9 @@ The one solution for every fleet.<br>
 Seamlessly drop it in at any scale.
 { .dusk-hero__lead }
 
-Dusk can monitor and manage fleets deployed on everything from
-microcontrollers to supercomputers. Run it inside applications you already
-ship.
+Dusk monitors and manages fleets of anything that runs it - apps, games,
+agent harnesses, services, and hardware from microcontrollers to
+supercomputers. Run it inside the software you already ship.
 { .dusk-hero__pitch }
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
@@ -70,8 +70,8 @@ ship.
 
 ## Fleet
 
-Each of these devices is a node: it runs Dusk, and you can reach it from a
-single place.
+Each of these is a node: it runs Dusk, and you can reach it from a single
+place.
 
 <div class="dusk-fleet__figure">
 --8<-- "assets/landing/fleet.svg"
@@ -104,8 +104,8 @@ Five layers connect your fleet to the people who run it.
 Security layer
 { .dusk-layer__role }
 
-Every device connects through Nightfall. It checks who can do what on which
-device, and records every action taken.
+Every node connects through Nightfall. It checks who can do what on which
+node, and records every action taken.
 
 </article>
 
@@ -116,7 +116,7 @@ device, and records every action taken.
 Client layer
 { .dusk-layer__role }
 
-Dawn carries out the work on your devices: it runs commands, streams logs back
+Dawn carries out the work on your nodes: it runs commands, streams logs back
 and collects files.
 
 </article>
@@ -128,8 +128,9 @@ and collects files.
 Orchestration layer
 { .dusk-layer__role }
 
-Tell Twilight what your fleet should look like. It rolls changes out in
-phases, watches their health, and stops when something goes wrong.
+Twilight is all about transition of state. Tell Twilight what your fleet
+should look like. It rolls changes out in phases, watches their health, and
+stops when something goes wrong.
 
 </article>
 
@@ -140,8 +141,8 @@ phases, watches their health, and stops when something goes wrong.
 Inventory, events and files
 { .dusk-layer__role }
 
-Everything your devices report, stored on your own infrastructure and ready
-to send anywhere else you need it.
+Everything your fleet reports, stored on your own infrastructure and ready to
+send anywhere else you need it.
 
 </article>
 
@@ -175,7 +176,7 @@ connect the tools you already have.
 
     **Embed Dusk**
 
-    Drop the C library into an app you already ship - every device running it
+    Drop the C library into an app you already ship - every running copy of it
     becomes a manageable node.
 
     [Embed it →](getting-started/guides/embed.md)
@@ -185,7 +186,7 @@ connect the tools you already have.
     **Analytics & diagnosis**
 
     Connect to your fleet to see what's running, read logs, and fix misbehaving
-    devices.
+    nodes.
 
     [See your fleet →](getting-started/guides/connect-a-client.md)
 
