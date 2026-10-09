@@ -26,7 +26,6 @@
   );
   --dusk-ground: #ece5d8;
   --dusk-node-fill: #fffdf8;
-  --dusk-node-line: #d3c9b8;
   --dusk-node-glyph: #4a4658;
   --dusk-link: rgba(85, 74, 150, 0.34);
   --dusk-link-faint: rgba(85, 74, 150, 0.13);
@@ -49,7 +48,6 @@
   );
   --dusk-ground: #0f0c1f;
   --dusk-node-fill: #1d1838;
-  --dusk-node-line: #3d3569;
   --dusk-node-glyph: #d2cce8;
   --dusk-link: rgba(165, 155, 235, 0.36);
   --dusk-link-faint: rgba(165, 155, 235, 0.13);
@@ -524,8 +522,6 @@
 }
 .dusk-node__ring {
   fill: var(--dusk-node-fill);
-  stroke: var(--dusk-node-line);
-  stroke-width: 1.2;
 }
 .dusk-node__glyph {
   fill: none;
