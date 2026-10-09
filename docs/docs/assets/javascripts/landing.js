@@ -330,6 +330,15 @@ const tracked = [
       return Math.max(0, Math.min(1, passed));
     },
   })),
+  ...[...document.querySelectorAll(".dusk-layer")].map((element) => ({
+    element,
+    name: "--dusk-read",
+    aim: () => {
+      const box = element.getBoundingClientRect();
+      const read = (window.innerHeight / 2 - box.top) / box.height;
+      return Math.max(0, Math.min(1, read));
+    },
+  })),
 ].map((item) => ({ ...item, target: item.aim(), value: item.aim() }));
 let gliding = false;
 let lastGlide = 0;
