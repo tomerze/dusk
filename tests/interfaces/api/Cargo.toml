@@ -8,6 +8,7 @@ license.workspace = true
 dusk_tests = { path = "../../common" }
 dusk_connection = { path = "../../../dusk/src/dusk_connection" }
 dusk_capnp = { path = "../../../dusk/src/dusk_capnp" }
+dusk_core = { path = "../../../dusk/src/dusk_core" }
 dusk_program = { path = "../../../dusk/src/dusk_program" }
 dusk_program_kvs = { path = "../../../base/kvs" }
 dusk_program_ps = { path = "../../../base/ps" }
