@@ -303,6 +303,16 @@ impl dusk::Server for DuskServer {
         Promise::ok(())
     }
 
+    fn fleet_token(
+        &mut self,
+        _params: dusk::FleetTokenParams,
+        mut results: dusk::FleetTokenResults,
+    ) -> Promise<(), capnp::Error> {
+        debug!(method = "Dusk.fleetToken", "rpc call");
+        results.get().set_result(crate::fleet_token::fleet_token());
+        Promise::ok(())
+    }
+
     fn settime(
         &mut self,
         params: dusk::SettimeParams,

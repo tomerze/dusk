@@ -26,6 +26,7 @@ use tracing::Instrument;
 pub mod driver;
 #[cfg(feature = "ffi")]
 pub mod ffi;
+pub mod fleet_token;
 pub mod init;
 pub mod launchers;
 pub mod server;

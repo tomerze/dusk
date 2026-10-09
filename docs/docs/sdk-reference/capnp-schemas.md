@@ -24,6 +24,7 @@ interface Dusk {
   settime   @7 (unix_time_ms :UInt64) -> ();
   programs  @8 () -> (program_entries :List(ProgramEntry));
   dusk      @10 () -> (result :Dusk);
+  fleetToken @11 () -> (result :Text);
 }
 ```
 
@@ -34,6 +35,9 @@ interface Dusk {
   `programs` describe the node and the program set linked into it.
 - `dusk` returns a new `Dusk` capability on the same node. Whoever serves one
   node to several clients over a single connection gives each client its own.
+- `fleetToken` returns the [fleet token](../embedding/node-artifacts.md#the-fleet-token)
+  the node was built with. Every client that holds the node's `Dusk` capability
+  can call it.
 
 ### `Process`
 
