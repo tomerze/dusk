@@ -202,6 +202,14 @@ pub(crate) fn certificate_request(
     Ok(request.der().to_vec())
 }
 
+pub(crate) fn renew_point(not_before_unix_ms: u64, not_after_unix_ms: u64, random: u64) -> u64 {
+    let lifetime = u128::from(not_after_unix_ms.saturating_sub(not_before_unix_ms));
+    let earliest = lifetime * 55 / 100;
+    let span = lifetime * 75 / 100 - earliest;
+    let offset = earliest + u128::from(random) % (span + 1);
+    not_before_unix_ms.saturating_add(u64::try_from(offset).unwrap_or(u64::MAX))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,4 +472,36 @@ mod tests {
         assert!(parse_leaf(b"not a certificate").is_err());
     }
 
+    #[test]
+    fn renew_points_fall_between_55_and_75_percent_of_the_lifetime() {
+        let not_before = 1_700_000_000_000;
+        let lifetime = 168 * 3600 * 1000;
+        let not_after = not_before + lifetime;
+        let earliest = not_before + lifetime * 55 / 100;
+        let latest = not_before + lifetime * 75 / 100;
+        let span = latest - earliest;
+        assert_eq!(renew_point(not_before, not_after, 0), earliest);
+        assert_eq!(renew_point(not_before, not_after, span), latest);
+        assert_eq!(renew_point(not_before, not_after, span + 1), earliest);
+        let mut buckets = [0u32; 20];
+        for random in (0..100_000u64).map(|value| value.wrapping_mul(0x9e37_79b9_7f4a_7c15)) {
+            let point = renew_point(not_before, not_after, random);
+            assert!(point >= earliest && point <= latest, "{point}");
+            let bucket = usize::try_from((point - earliest) * 20 / (span + 1)).unwrap();
+            buckets[bucket] += 1;
+        }
+        for count in buckets {
+            assert!((4_000..6_000).contains(&count), "{buckets:?}");
+        }
+    }
+
+    #[test]
+    fn renew_point_survives_degenerate_validity() {
+        assert_eq!(renew_point(10, 5, 7), 10);
+        assert_eq!(renew_point(u64::MAX - 1, u64::MAX, 200), u64::MAX - 1);
+        assert_eq!(
+            renew_point(0, u64::MAX, 200),
+            u64::try_from(u128::from(u64::MAX) * 55 / 100).unwrap() + 200
+        );
+    }
 }
