@@ -552,3 +552,58 @@ def dawn_settings(**overrides):
         else:
             values[key] = value
     return Settings(**values)
+
+
+CONTRACTS = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "kafka"
+TOPICS = ("dusk.process-results", "dusk.process-output", "dusk.files")
+
+
+def contract_validator():
+    import json
+
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
+
+    registry = Registry().with_resources(
+        (path.name, Resource.from_contents(json.loads(path.read_text())))
+        for path in CONTRACTS.glob("*.schema.json")
+    )
+    validators = {
+        topic: Draft202012Validator(
+            json.loads((CONTRACTS / f"{topic}.schema.json").read_text()),
+            registry=registry,
+            format_checker=Draft202012Validator.FORMAT_CHECKER,
+        )
+        for topic in TOPICS
+    }
+
+    def validate(topic: str, message: dict) -> None:
+        validators[topic].validate(json.loads(json.dumps(message)))
+
+    return validate
+
+
+class RecordingProducer:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, dict]] = []
+        self.validate = contract_validator()
+
+    async def send(self, topic: str, key: str, value: dict):
+        self.validate(topic, value)
+        self.sent.append((topic, key, value))
+
+        async def delivered() -> bool:
+            return True
+
+        return delivered()
+
+    def on(self, topic: str) -> list[dict]:
+        return [value for sent_topic, _, value in self.sent if sent_topic == topic]
+
+    def results(self) -> list[dict]:
+        return self.on("dusk.process-results")
+
+
+@pytest.fixture
+def producer() -> RecordingProducer:
+    return RecordingProducer()
