@@ -24,6 +24,8 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// the same name.
 pub const SALT: u64 = 0x9396_8e6e_30a5_93d6;
 
+pub const FLAG_STICKY: u8 = 1;
+
 #[cfg(feature = "client")]
 pub use linkme;
 
@@ -55,6 +57,20 @@ macro_rules! known_key {
     };
 }
 
+#[cfg(feature = "client")]
+#[linkme::distributed_slice]
+pub static KNOWN_KEY_LISTS: [&'static [&'static str]] = [..];
+
+#[cfg(feature = "client")]
+#[macro_export]
+macro_rules! known_keys {
+    ($binding:ident, $names:expr) => {
+        #[$crate::linkme::distributed_slice($crate::KNOWN_KEY_LISTS)]
+        #[linkme(crate = $crate::linkme)]
+        static $binding: &'static [&'static str] = $names;
+    };
+}
+
 /// The name `id` was hashed from, if a program registered it.
 #[cfg(feature = "client")]
 #[must_use]
@@ -63,6 +79,13 @@ pub fn known_key_name(id: u64) -> Option<&'static str> {
         .iter()
         .find(|key| key.id == id)
         .map(|key| key.name)
+        .or_else(|| {
+            KNOWN_KEY_LISTS
+                .iter()
+                .flat_map(|names| names.iter())
+                .find(|name| key_id(name) == id)
+                .copied()
+        })
 }
 
 /// The id a key name hashes to: fnv1a, 64-bit, salted with [`SALT`].
@@ -81,7 +104,46 @@ pub const fn key_id(name: &str) -> u64 {
     hash
 }
 
-type Entry = Arc<Mutex<CriticalSectionRawMutex, Value>>;
+#[must_use]
+pub const fn key_ids<const COUNT: usize>(names: [&str; COUNT]) -> [u64; COUNT] {
+    let mut ids = [0; COUNT];
+    let mut index = 0;
+    while index < COUNT {
+        ids[index] = key_id(names[index]);
+        index += 1;
+    }
+    ids
+}
+
+type Owned = BlockingMutex<
+    CriticalSectionRawMutex,
+    RefCell<HashMap<u64, alloc::vec::Vec<&'static [u64]>, BuildNoHashHasher<u64>>>,
+>;
+
+static OWNED: LazyLock<Owned> =
+    LazyLock::new(|| BlockingMutex::new(RefCell::new(HashMap::default())));
+
+pub fn own_keys(tid: u64, keys: &'static [u64]) {
+    OWNED
+        .get()
+        .lock(|owned| owned.borrow_mut().entry(tid).or_default().push(keys));
+}
+
+pub fn disown_keys(tid: u64, keys: &'static [u64]) {
+    OWNED.get().lock(|owned| {
+        let mut owned = owned.borrow_mut();
+        if let Some(lists) = owned.get_mut(&tid) {
+            if let Some(index) = lists.iter().position(|list| core::ptr::eq(*list, keys)) {
+                lists.swap_remove(index);
+            }
+            if lists.is_empty() {
+                owned.remove(&tid);
+            }
+        }
+    });
+}
+
+type Entry = Arc<Mutex<CriticalSectionRawMutex, (Value, u8)>>;
 
 type Entries = HashMap<u64, Entry, BuildNoHashHasher<u64>>;
 
@@ -109,28 +171,28 @@ impl Kvs {
     /// The value stored under `key`, or `None` if the key is absent.
     pub async fn get(&self, key: u64) -> Option<Value> {
         let entry = self.entries.read().await.get(&key).cloned()?;
-        let value = entry.lock().await.clone();
+        let value = entry.lock().await.0.clone();
         Some(value)
     }
 
     /// Store `value` under `key`, replacing whatever was there.
-    pub async fn set(&self, key: u64, value: Value) {
+    pub async fn set(&self, key: u64, value: Value, flags: u8) {
         {
             let entries = self.entries.read().await;
             if let Some(entry) = entries.get(&key) {
-                *entry.lock().await = value;
-                tracing::debug!(key, "kvs set");
+                *entry.lock().await = (value, flags);
+                tracing::debug!(key, flags, "kvs set");
                 return;
             }
         }
         let mut entries = self.entries.write().await;
         // The key may have appeared while the read guard was released.
         if let Some(entry) = entries.get(&key).cloned() {
-            *entry.lock().await = value;
+            *entry.lock().await = (value, flags);
         } else {
-            entries.insert(key, Arc::new(Mutex::new(value)));
+            entries.insert(key, Arc::new(Mutex::new((value, flags))));
         }
-        tracing::debug!(key, "kvs set");
+        tracing::debug!(key, flags, "kvs set");
     }
 
     /// Remove `key`, reporting whether it was there.

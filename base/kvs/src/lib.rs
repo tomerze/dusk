@@ -222,7 +222,7 @@ impl dusk_program::process::ProcessMixin for Process {
                 *self.found.borrow_mut() = found;
             }
             kvs_capnp::kvs_args::data::Which::Set((key, value)) => {
-                self.kvs.set(key, value).await;
+                self.kvs.set(key, value, 0).await;
             }
             kvs_capnp::kvs_args::data::Which::Delete(key) => {
                 let deleted = self.kvs.delete(key).await;
@@ -280,7 +280,7 @@ impl Portal {
         let value = dusk_capnp::pry!(Value::from_reader(dusk_capnp::pry!(params.get_value())));
         let kvs = self.process.kvs.clone();
         Promise::from_future(async move {
-            kvs.set(key, value).await;
+            kvs.set(key, value, 0).await;
             Ok(())
         })
     }

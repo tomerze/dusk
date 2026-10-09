@@ -35,14 +35,18 @@ const DROPPED_OVERSIZE_KEY: u64 = dusk_program_kvs_internal::key_id("logs.droppe
 const WRITE_FAILURES_KEY: u64 = dusk_program_kvs_internal::key_id("logs.write_failures");
 const OVERWRITTEN_KEY: u64 = dusk_program_kvs_internal::key_id("logs.overwritten");
 
+const LOGS_KEY_NAMES: [&str; 5] = [
+    "logs.written",
+    "logs.dropped_no_lane",
+    "logs.dropped_oversize",
+    "logs.write_failures",
+    "logs.overwritten",
+];
+
+static LOGS_KEYS: [u64; 5] = dusk_program_kvs_internal::key_ids(LOGS_KEY_NAMES);
+
 #[cfg(feature = "client")]
-mod known_keys {
-    dusk_program_kvs_internal::known_key!(WRITTEN, "logs.written");
-    dusk_program_kvs_internal::known_key!(DROPPED_NO_LANE, "logs.dropped_no_lane");
-    dusk_program_kvs_internal::known_key!(DROPPED_OVERSIZE, "logs.dropped_oversize");
-    dusk_program_kvs_internal::known_key!(WRITE_FAILURES, "logs.write_failures");
-    dusk_program_kvs_internal::known_key!(OVERWRITTEN, "logs.overwritten");
-}
+dusk_program_kvs_internal::known_keys!(LOGS_KEY_LIST, &LOGS_KEY_NAMES);
 
 dusk_program_proc::metadata!("logs", VERSION, logs_capnp::PROGRAM_ID);
 
@@ -81,6 +85,7 @@ impl Launcher {
         let tid = dusk_core::driver::tid();
         let layer = portable_atomic_util::Arc::new(BufferLayer::new(buffer.clone()));
         crate::tracing::register(tid, layer.clone())?;
+        dusk_program_kvs_internal::own_keys(tid, &LOGS_KEYS);
         Ok(Self { buffer, tid, layer })
     }
 }
@@ -88,6 +93,7 @@ impl Launcher {
 impl Drop for Launcher {
     fn drop(&mut self) {
         crate::tracing::unregister(self.tid, &self.layer);
+        dusk_program_kvs_internal::disown_keys(self.tid, &LOGS_KEYS);
     }
 }
 
@@ -157,17 +163,23 @@ impl Process {
     async fn publish_counters(&self) {
         let kvs = dusk_program_kvs_internal::get_kvs(self.ctx.namespace.id);
         let counts = self.buffer.drop_counts();
-        kvs.set(WRITTEN_KEY, Value::Uint(self.buffer.written()))
+        let sticky = dusk_program_kvs_internal::FLAG_STICKY;
+        kvs.set(WRITTEN_KEY, Value::Uint(self.buffer.written()), sticky)
             .await;
-        kvs.set(DROPPED_NO_LANE_KEY, Value::Uint(counts.no_lane))
+        kvs.set(DROPPED_NO_LANE_KEY, Value::Uint(counts.no_lane), sticky)
             .await;
-        kvs.set(DROPPED_OVERSIZE_KEY, Value::Uint(counts.oversize))
+        kvs.set(DROPPED_OVERSIZE_KEY, Value::Uint(counts.oversize), sticky)
             .await;
-        kvs.set(WRITE_FAILURES_KEY, Value::Uint(counts.write_failures))
-            .await;
+        kvs.set(
+            WRITE_FAILURES_KEY,
+            Value::Uint(counts.write_failures),
+            sticky,
+        )
+        .await;
         kvs.set(
             OVERWRITTEN_KEY,
             Value::List(counts.overwritten.into_iter().map(Value::Uint).collect()),
+            sticky,
         )
         .await;
     }
