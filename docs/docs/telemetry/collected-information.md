@@ -6,11 +6,15 @@ can tell what it is and where it runs. It gathers them once, at startup, keeps
 them in the node's [key-value store](../features/kvs.md) and writes them to the
 node's [logs](../features/logs.md).
 
-Dusk sends none of this anywhere by itself. It leaves the node in two ways, both
-started from outside it: a client that connects to the node can read it, from
-the key-value store or from the logs, and `logs stream` sends the node's logs to
-a file or a collector. None of it is kept across a restart; the node gathers it
-again each time it starts.
+Dusk sends none of this anywhere unless it is told to. It leaves the node in
+three ways: a client that connects to the node can read it, from the key-value
+store or from the logs; `logs stream` sends the node's logs to a file or a
+collector; and a node built to
+[connect to nightfall](../getting-started/guides/connect-to-nightfall.md) sends
+nightfall a report every time it enrolls - the SHA-256 of the device's id, the
+device's network name, Dusk's version, the impl, and the operating system and
+processor architecture the node was built for. None of it is kept across a
+restart; the node gathers it again each time it starts.
 
 Some of these facts can identify more than the node: the device's id, which
 stays the same for as long as the operating system is installed; the device's

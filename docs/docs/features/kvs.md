@@ -80,11 +80,11 @@ A **sticky** key is one only Dusk sets: every key in
 until Dusk writes it, unless someone overrode it with `--forbidden-unstick`.
 Stickiness belongs to the key's name, not to a value stored under it: the
 programs that own Dusk's keys - `init` for the `dusk.*` names, `logs` for its
-counters - claim their names as the node starts, so a name is sticky before Dusk
-has written to it, like `logs.written` before any `logs` command has run or
-`dusk.hostname` on a node whose driver could not read the hostname. `kvs set`
-and `kvs delete` refuse a sticky key, naming its id -
-`kvs set dusk.hostname web-1` fails with:
+counters, `nightfall` for the node's identity - claim their names as the node
+starts, so a name is sticky before Dusk has written to it, like `logs.written`
+before any `logs` command has run or `dusk.hostname` on a node whose driver could
+not read the hostname. `kvs set` and `kvs delete` refuse a sticky key, naming its
+id - `kvs set dusk.hostname web-1` fails with:
 
 ```text
 key 0xa4cf005db444b151 is sticky: only Dusk sets it. `kvs set --forbidden-unstick` sets it anyway
@@ -116,13 +116,13 @@ sticky key like any other, which is how Dusk writes the keys that are sticky.
 refuse, the way `kvs set`, `kvs delete` and the portal do. A program makes names
 its own with `dusk_program_kvs_internal::own_keys`, passing its thread's
 `dusk_core::driver::tid()` and a `static` array of their ids - from its
-launcher's `new`, as `init` and `logs` do, so the names are sticky before any
-client connects - gives them back with `disown_keys` and the same `static` when
-the launcher is dropped, and lists the same names with `known_keys!` so a client
-can show them by name. Ownership belongs to the node on that thread: a node on
-another thread of the same process, built with other programs, does not see it.
-A value set with `FLAG_STICKY` in its flags is sticky too, under a name nobody
-owns, until a set without the flag replaces it.
+launcher's `new`, as `init`, `logs` and `nightfall` do, so the names are sticky
+before any client connects - gives them back with `disown_keys` and the same
+`static` when the launcher is dropped, and lists the same names with
+`known_keys!` so a client can show them by name. Ownership belongs to the node on
+that thread: a node on another thread of the same process, built with other
+programs, does not see it. A value set with `FLAG_STICKY` in its flags is sticky
+too, under a name nobody owns, until a set without the flag replaces it.
 
 ### Sensitive keys
 
@@ -322,6 +322,11 @@ These keys are written by Dusk itself, and they are [sticky](#sticky-keys):
 | `logs.dropped_oversize` | `logs`, same | Records dropped because they are bigger than their lane's whole arena. |
 | `logs.write_failures` | `logs`, same | Records that failed to serialize on their way into the buffer. |
 | `logs.overwritten` | `logs`, same | A list with one number per lane: how many stored records that lane has destroyed by overwriting its oldest. |
+| `nightfall.installation_id` | `nightfall -c`, when the node enrolls or renews its certificate | The installation id nightfall assigned the node. [Persistent](#persistent-keys). |
+| `nightfall.private_key` | `nightfall -c`, same | The node's private key, PKCS#8 DER. Persistent and [sensitive](#sensitive-keys). |
+| `nightfall.certificate_chain` | `nightfall -c`, same | The node's certificate chain, a list of DER certificates. Persistent. |
+| `nightfall.staged_private_key` | `nightfall -c`, while it enrolls or renews | The key a certificate is being requested for. Persistent and sensitive. |
+| `nightfall.hardware_fingerprint` | `nightfall -c`, on a device without a machine id | 32 random bytes that stand in for one. Persistent. |
 
 The `logs.*` counters are a snapshot taken by the `logs` program, so they are
 as fresh as the last time a `logs` command ran on the node. Run `logs dump

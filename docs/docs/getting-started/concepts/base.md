@@ -189,3 +189,9 @@ nightfall -l 127.0.0.1:4000    # listen on one address
 `ps` shows it as `nightfall[listen :4000]`, or `nightfall[listen 127.0.0.1:4000]`
 when it listens on one address. The port is the one it is listening on, so
 `nightfall -l 0` shows the port the system picked.
+
+With `-c` it dials out to a nightfall server instead of listening: it gets the
+node a certificate the first time, keeps the node's identity in persistent kvs
+keys, renews the certificate before it expires, and serves the node's `Dusk`
+capability over TLS 1.3. `ps` shows it as `nightfall[connect <host>:<port>]`.
+See [Connect a node to nightfall](../guides/connect-to-nightfall.md).
