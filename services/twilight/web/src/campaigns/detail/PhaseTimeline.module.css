@@ -1,0 +1,169 @@
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(var(--phase-count), minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phase {
+  min-width: 0;
+}
+
+.rail {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.marker {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--mantine-color-default-border);
+  background: var(--twilight-surface);
+  color: var(--mantine-color-dimmed);
+}
+
+.connector {
+  flex: 1;
+  height: 2px;
+  margin: 0 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--mantine-color-default-border) 0 6px,
+    transparent 6px 10px
+  );
+}
+
+.phase:last-child .connector {
+  visibility: hidden;
+}
+
+.phase[data-status='passed'] .marker {
+  border-color: var(--mantine-color-green-filled);
+  background: var(--mantine-color-green-filled);
+  color: var(--twilight-surface);
+}
+
+.phase[data-status='passed'] .connector {
+  background: var(--mantine-color-green-filled);
+}
+
+.phase[data-status='open'] .marker {
+  border-color: var(--mantine-primary-color-filled);
+  color: var(--mantine-primary-color-filled);
+  box-shadow: 0 0 0 4px var(--twilight-accent-soft);
+}
+
+.phase[data-tone='danger'] .marker {
+  border-color: var(--mantine-color-red-filled);
+  color: var(--mantine-color-red-text);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mantine-color-red-filled) 18%, transparent);
+}
+
+.phase[data-status='stopped'] .marker {
+  border-color: var(--mantine-color-orange-filled);
+  color: var(--mantine-color-orange-text);
+}
+
+.body {
+  padding: 10px 16px 0 0;
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--twilight-text-strong);
+}
+
+.state {
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+
+.state[data-tone='passed'] {
+  color: var(--mantine-color-green-text);
+}
+
+.state[data-tone='open'] {
+  color: var(--mantine-color-dusk-text);
+}
+
+.state[data-tone='danger'] {
+  color: var(--mantine-color-red-text);
+}
+
+.state[data-tone='stopped'] {
+  color: var(--mantine-color-orange-text);
+}
+
+.progress {
+  margin-top: 8px;
+  max-width: 220px;
+}
+
+.bake {
+  margin-top: 6px;
+  max-width: 220px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--twilight-surface-sunken);
+  overflow: hidden;
+}
+
+.bake span {
+  display: block;
+  height: 100%;
+  background: var(--mantine-color-dusk-text);
+}
+
+@media (max-width: 48em) {
+  .timeline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .phase {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  .rail {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .connector {
+    width: 2px;
+    height: auto;
+    min-height: 16px;
+    margin: 4px 0;
+    background: repeating-linear-gradient(
+      180deg,
+      var(--mantine-color-default-border) 0 6px,
+      transparent 6px 10px
+    );
+  }
+
+  .body {
+    padding: 2px 0 16px;
+  }
+
+  .progress,
+  .bake {
+    max-width: none;
+  }
+}
