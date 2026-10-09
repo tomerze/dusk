@@ -47,6 +47,34 @@
   <div class="dusk-landing md-typeset">{{ page.content }}</div>
 {% endblock %}
 {% block content %}{% endblock %}
+{% block footer %}
+  <nav class="dusk-sitemap" aria-label="Documentation">
+    <div class="dusk-sitemap__inner">
+      <div class="dusk-sitemap__sections">
+        {% for section in nav if section.children %}
+          <div class="dusk-sitemap__section">
+            {% set index = section.children | first %}
+            {% if index.is_page and index.is_index %}
+              <a class="dusk-sitemap__title" href="{{ index.url | url }}">{{ section.title }}</a>
+            {% else %}
+              <span class="dusk-sitemap__title">{{ section.title }}</span>
+            {% endif %}
+            <ul>
+              {% for item in section.children %}
+                {% if item.is_section %}
+                  <li><a href="{{ (item.children | first).url | url }}">{{ item.title }}</a></li>
+                {% elif not item.is_index %}
+                  <li><a href="{{ item.url | url }}">{{ item.title }}</a></li>
+                {% endif %}
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </nav>
+  {{ super() }}
+{% endblock %}
 {% block scripts %}
   {{ super() }}
   <script src="{{ 'assets/javascripts/landing.js' | url }}"></script>
