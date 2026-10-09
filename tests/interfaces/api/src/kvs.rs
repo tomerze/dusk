@@ -12,10 +12,14 @@ use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_kvs::{
     Args as KvsArgs, Record, Value, client::key_display, kvs::key_id, kvs_capnp,
 };
-use dusk_program_sh::sh_capnp;
+use dusk_program_logs::client::LogsArgs;
+use dusk_program_logs::common_capnp::any_value;
+use dusk_program_logs::{FLAG_REPLAY, logs_args, signal};
+use dusk_program_sh::{ShArgs, ShMode, sh_capnp};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS, gen_port};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 struct CaptureStream {
     values: Rc<RefCell<Vec<Value>>>,
@@ -82,7 +86,12 @@ async fn stop(client: &dusk::Client, pid: u64) {
     let mut kill_request = client.kill_request();
     kill_request.get().set_pid(pid);
     kill_request.get().set_signal(15);
-    kill_request.send().promise.await.unwrap();
+    if let Err(error) = kill_request.send().promise.await {
+        assert!(
+            error.to_string().contains("has exited"),
+            "process {pid} could not be stopped: {error}"
+        );
+    }
 
     let mut waitpid_request = client.waitpid_request();
     waitpid_request.get().set_pid(pid);
@@ -627,4 +636,179 @@ fn test_a_launcher_owns_its_names_for_its_own_node_until_it_is_dropped() {
     })
     .join()
     .unwrap();
+}
+
+async fn run_line(client: &dusk::Client, line: &str) -> Vec<Value> {
+    let script = dusk_program_sh::compile(client.clone(), line)
+        .await
+        .unwrap();
+    let program_args = ShArgs::new(ShMode::Script(script))
+        .unwrap()
+        .as_program_args()
+        .unwrap();
+    let (pid, values, _) = run_action(client, program_args).await;
+    stop(client, pid).await;
+    values
+}
+
+struct LogCapture {
+    batches: Arc<Mutex<Vec<Vec<u8>>>>,
+    set_keys: Arc<Mutex<Vec<u64>>>,
+}
+
+impl logs_args::stream::Server for LogCapture {
+    fn send(&mut self, params: logs_args::stream::SendParams) -> Promise<(), capnp::Error> {
+        let signal_batch =
+            dusk_capnp::pry!(params.get().and_then(|params| params.get_signal_batch()));
+        let signals = dusk_capnp::pry!(signal_batch.get_signals());
+        let acknowledgement = dusk_capnp::pry!(signal_batch.get_ack());
+        let mut message = capnp::message::Builder::new_default();
+        dusk_capnp::pry!(message.set_root(signals));
+        self.batches
+            .lock()
+            .unwrap()
+            .push(capnp::serialize::write_message_to_words(&message));
+        for entry in signals.iter() {
+            let Ok(signal::Which::LogRecord(Ok(log_record))) = entry.which() else {
+                continue;
+            };
+            let body = log_record
+                .get_body()
+                .ok()
+                .and_then(|body| body.which().ok())
+                .and_then(|which| match which {
+                    any_value::Which::StringValue(Ok(text)) => {
+                        text.to_str().ok().map(str::to_string)
+                    }
+                    _ => None,
+                });
+            if body.as_deref() != Some("kvs set") {
+                continue;
+            }
+            for attribute in log_record.get_attributes().into_iter().flatten() {
+                if attribute.get_key().ok().and_then(|key| key.to_str().ok()) != Some("key") {
+                    continue;
+                }
+                let key = attribute
+                    .get_value()
+                    .ok()
+                    .and_then(|value| value.which().ok())
+                    .and_then(|which| match which {
+                        any_value::Which::IntValue(number) => Some(number as u64),
+                        any_value::Which::StringValue(Ok(text)) => {
+                            text.to_str().ok().and_then(|text| text.parse().ok())
+                        }
+                        _ => None,
+                    });
+                self.set_keys.lock().unwrap().extend(key);
+            }
+        }
+        Promise::from_future(async move {
+            acknowledgement.ack_request().send().promise.await?;
+            Ok(())
+        })
+    }
+
+    fn stop(
+        &mut self,
+        _params: logs_args::stream::StopParams,
+        _results: logs_args::stream::StopResults,
+    ) -> Promise<(), capnp::Error> {
+        Promise::from_future(std::future::pending())
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_kvs_sensitive_value_stays_out_of_the_logs() {
+    let port = gen_port();
+    let _dusk = DuskNixImpl::new(LISTEN_ADDRESS, port);
+
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async move {
+            let address: std::net::SocketAddr =
+                format!("{}:{}", LISTEN_ADDRESS, port).parse().unwrap();
+            let connection = Connection::connect(address).await.unwrap();
+            let client = connection.client().await;
+
+            let secret = format!(
+                "sensitive-value-{port}-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            );
+            let key = key_id("secret.token");
+
+            let values = run_line(
+                &client,
+                &format!("kvs set --sensitive secret.token {secret}"),
+            )
+            .await;
+            assert!(values.is_empty(), "set streamed {values:?}");
+            assert_eq!(
+                get_value(&client, key).await,
+                Value::String(secret.clone()),
+                "kvs get still answers a sensitive value"
+            );
+            assert_eq!(
+                scanned_flags(&client, key).await,
+                Value::String("sensitive".to_string()),
+                "kvs scan names the flag"
+            );
+            let error = run_to_exit(
+                &client,
+                KvsArgs::set(
+                    key_id("client.sticky"),
+                    &Value::String("1".to_string()),
+                    dusk_program_kvs::kvs::FLAG_STICKY,
+                    false,
+                )
+                .unwrap()
+                .as_program_args()
+                .unwrap(),
+            )
+            .await;
+            assert!(
+                error.to_string().contains("a client cannot set"),
+                "a client's set refuses every flag but sensitive: {error}"
+            );
+
+            let values = run_line(&client, "kvs get secret.token").await;
+            assert!(
+                format!("{values:?}").contains(&secret),
+                "kvs get through the shell answers the value: {values:?}"
+            );
+
+            let batches = Arc::new(Mutex::new(Vec::new()));
+            let set_keys = Arc::new(Mutex::new(Vec::new()));
+            let capture = LogCapture {
+                batches: batches.clone(),
+                set_keys: set_keys.clone(),
+            };
+            let stream: logs_args::stream::Client = capnp_rpc::new_client(capture);
+            let program_args = LogsArgs::new(None, FLAG_REPLAY, move || Ok(stream.clone()))
+                .as_program_args()
+                .unwrap();
+            let (pid, _, _) = run_action(&client, program_args).await;
+            stop(&client, pid).await;
+
+            assert!(
+                set_keys.lock().unwrap().contains(&key),
+                "the captured logs must hold the kvs set of {}, or they prove nothing",
+                key_display(key)
+            );
+            let batches = core::mem::take(&mut *batches.lock().unwrap());
+            assert!(!batches.is_empty(), "the node replayed no logs");
+            let secret = secret.as_bytes();
+            for batch in batches.iter() {
+                assert!(
+                    !batch.windows(secret.len()).any(|window| window == secret),
+                    "a sensitive value reached the node's logs"
+                );
+            }
+
+            connection.disconnect().await.unwrap();
+        })
+        .await;
 }
