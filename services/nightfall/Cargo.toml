@@ -7,3 +7,6 @@ license.workspace = true
 [lib]
 name = "nightfall"
 path = "src/lib.rs"
+
+[dependencies]
+rand = "0.9"
