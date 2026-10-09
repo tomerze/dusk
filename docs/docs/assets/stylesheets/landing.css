@@ -411,13 +411,11 @@
   background-image: linear-gradient(
     100deg,
     #a86f12 0%,
-    #f0b441 35%,
-    #fff1c4 50%,
-    #f0b441 65%,
+    #f0b441 40%,
+    #fff1c4 55%,
+    #f0b441 70%,
     #a86f12 100%
   );
-  background-size: 300% 100%;
-  background-position-x: calc(var(--dusk-passed, 0) * 100%);
 }
 .dusk-landing .dusk-stack .dusk-section__title {
   color: var(--dusk-ink-twilight);
@@ -435,7 +433,6 @@
     transparent 98% 100%
   );
   background-size: 100% 0.72em;
-  background-position-y: calc(var(--dusk-passed, 0) * -2.16em);
 }
 .dusk-landing .dusk-section__lead {
   max-width: 32rem;

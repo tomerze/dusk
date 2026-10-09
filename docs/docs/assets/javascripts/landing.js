@@ -1,3 +1,5 @@
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+
 document.querySelectorAll(".dusk-stack").forEach((stack) => {
   const parts = stack.querySelectorAll("[data-layer]");
   const diagram = stack.querySelector(".dusk-stack__diagram");
@@ -313,57 +315,6 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       layout(current);
     }
   });
-}
-
-const still = matchMedia("(prefers-reduced-motion: reduce)");
-const tracked = [
-  ...[...document.querySelectorAll(".dusk-section > h2")].map((element) => ({
-    element,
-    name: "--dusk-passed",
-    aim: () => {
-      const box = element.getBoundingClientRect();
-      const passed =
-        (window.innerHeight - box.top) / (window.innerHeight + box.height);
-      return Math.max(0, Math.min(1, passed));
-    },
-  })),
-].map((item) => ({ ...item, target: item.aim(), value: item.aim() }));
-let gliding = false;
-let lastGlide = 0;
-const glide = (now) => {
-  const ease = 1 - Math.exp((lastGlide - now) / 120);
-  lastGlide = now;
-  gliding = false;
-  for (const item of tracked) {
-    item.value += (item.target - item.value) * ease;
-    if (Math.abs(item.target - item.value) > 0.0005) {
-      gliding = true;
-    } else {
-      item.value = item.target;
-    }
-    item.element.style.setProperty(item.name, item.value);
-  }
-  if (gliding) {
-    requestAnimationFrame(glide);
-  }
-};
-const follow = () => {
-  if (still.matches) {
-    return;
-  }
-  for (const item of tracked) {
-    item.target = item.aim();
-  }
-  if (!gliding) {
-    gliding = true;
-    lastGlide = performance.now();
-    requestAnimationFrame(glide);
-  }
-};
-window.addEventListener("scroll", follow, { passive: true });
-window.addEventListener("resize", follow);
-for (const item of tracked) {
-  item.element.style.setProperty(item.name, item.value);
 }
 
 for (const head of document.querySelectorAll(".dusk-stack__head")) {
