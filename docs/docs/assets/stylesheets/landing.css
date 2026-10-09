@@ -326,6 +326,11 @@
     translate: 0 30%;
   }
 }
+@keyframes dusk-turn {
+  to {
+    rotate: 180deg;
+  }
+}
 
 .dusk-platforms {
   padding: 2.4rem var(--dusk-gutter) 1rem;
@@ -995,6 +1000,13 @@
       animation: dusk-sink linear both;
       animation-timeline: scroll(root);
       animation-range: 0 60svh;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) and (hover: none) {
+    .dusk-hero__rays {
+      animation: dusk-turn linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 100svh;
     }
   }
 }

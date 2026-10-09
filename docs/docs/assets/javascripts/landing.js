@@ -120,17 +120,6 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
     target += turn;
     nudge();
   };
-  if (matchMedia("(hover: none)").matches) {
-    window.addEventListener(
-      "scroll",
-      () => {
-        target = window.scrollY * 0.2;
-        nudge();
-      },
-      { passive: true },
-    );
-    continue;
-  }
   window.addEventListener("pointermove", (event) => {
     if (event.pointerType === "touch") {
       return;
