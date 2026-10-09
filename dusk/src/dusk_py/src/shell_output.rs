@@ -1,17 +1,28 @@
-use dusk_program::anyhow::Result;
+use crate::SHELL_OUTPUT_BUFFER_SIZE;
+use dusk_program::anyhow::{self, Result};
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program::value::Value;
 use dusk_program_sh::client::shell::Shell;
-use dusk_program_sh::client::stop::StopSignal;
 use pyo3::exceptions::{PyRuntimeError, PyStopAsyncIteration};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, Notify, mpsc};
 
-use crate::SHELL_OUTPUT_BUFFER_SIZE;
+pub struct OutputSender {
+    values: mpsc::Sender<Result<Vec<u8>>>,
+}
+
+impl OutputSender {
+    pub async fn fail(&self, error: anyhow::Error) {
+        let message = format!("{error:#}");
+        if self.values.send(Err(error)).await.is_err() {
+            tracing::warn!(error = %message, "nobody was reading the command's error");
+        }
+    }
+}
 
 struct Output {
     rx: mpsc::Receiver<Result<Vec<u8>>>,
@@ -39,21 +50,17 @@ impl ShellOutput {
         })
     }
 
-    pub(crate) fn new(
-        command: String,
-        message_tx: &mpsc::UnboundedSender<crate::Message>,
-    ) -> Result<Self, String> {
-        let (output_tx, output_rx) = mpsc::channel(SHELL_OUTPUT_BUFFER_SIZE);
-        message_tx
-            .send(crate::Message::Sh(command, output_tx))
-            .map_err(|e| format!("{:?}", e))?;
-
-        Ok(Self {
-            output: Arc::new(Mutex::new(Output {
-                rx: output_rx,
-                shown: VecDeque::new(),
-            })),
-        })
+    pub(crate) fn channel() -> (OutputSender, Self) {
+        let (values, receiver) = mpsc::channel(SHELL_OUTPUT_BUFFER_SIZE);
+        (
+            OutputSender { values },
+            Self {
+                output: Arc::new(Mutex::new(Output {
+                    rx: receiver,
+                    shown: VecDeque::new(),
+                })),
+            },
+        )
     }
 }
 
@@ -172,34 +179,23 @@ impl StreamMixin for StreamServer {
     }
 }
 
-pub fn handle_sh(
-    shell: Rc<Mutex<Shell>>,
-    command: String,
-    output_tx: mpsc::Sender<Result<Vec<u8>>>,
-) {
+pub async fn run(shell: Rc<Mutex<Shell>>, command: String, output: OutputSender) {
     let (done_sender, done_receiver) = tokio::sync::oneshot::channel();
-    let stream_server = Stream::new(StreamServer {
-        tx: output_tx.clone(),
+    let stream_client = capnp_rpc::new_client(Stream::new(StreamServer {
+        tx: output.values.clone(),
         done: Some(done_sender),
-    });
-    let stream_client = capnp_rpc::new_client(stream_server);
-
-    tokio::task::spawn_local(async move {
-        let stop_signal = StopSignal::new();
-        let command_run =
-            shell
-                .lock()
-                .await
-                .sh(&command, stream_client, done_receiver, stop_signal.signal());
-        let result = match command_run {
-            Ok(command_run) => command_run.await,
-            Err(error) => Err(error),
-        };
-        if let Err(error) = result {
-            let message = format!("{error:#}");
-            if output_tx.send(Err(error)).await.is_err() {
-                tracing::warn!(error = %message, "nobody was reading the command's error");
-            }
-        }
-    });
+    }));
+    let command_run = shell.lock().await.sh(
+        &command,
+        stream_client,
+        done_receiver,
+        Rc::new(Notify::new()),
+    );
+    let result = match command_run {
+        Ok(command_run) => command_run.await,
+        Err(error) => Err(error),
+    };
+    if let Err(error) = result {
+        output.fail(error).await;
+    }
 }

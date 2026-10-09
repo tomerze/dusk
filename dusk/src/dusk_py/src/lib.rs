@@ -1,27 +1,24 @@
 #![allow(exported_private_dependencies)]
 #![feature(linkage)]
 
-use connection::Options;
-use dusk_capnp::dusk_capnp::dusk::Client;
-use dusk_connection::{Connection, TlsClient};
-use dusk_program::anyhow::Result;
-use dusk_program_sh::client::open_prompt;
+use connection::{COMMAND_QUEUE, Command, Options, Reply};
+use dusk_connection::TlsClient;
+use dusk_program::anyhow;
 use dusk_program_sh::entry::{EntryInfo, sh_entries};
 use dusk_program_sh::sh_capnp::DEFAULT_PID;
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use shell_output::ShellOutput;
 use std::path::PathBuf;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
-use tokio::sync::Mutex as TokioMutex;
-use tokio::sync::mpsc;
+use std::sync::{Mutex, PoisonError};
+use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::{mpsc, oneshot};
 
 mod connection;
 mod ctrl_c;
+mod pool;
 mod shell_output;
-use ctrl_c::stop_on_ctrl_c;
-use shell_output::{ShellOutput, handle_sh};
 
 // Provide a dummy __pender symbol for embassy linkage compatibility
 #[unsafe(no_mangle)]
@@ -54,23 +51,64 @@ fn entry_info_to_dict<'py>(py: Python<'py>, info: &EntryInfo) -> PyResult<Bound<
     Ok(dict)
 }
 
-pub(crate) enum Message {
-    Shutdown(mpsc::UnboundedSender<Result<()>>),
-    Sh(String, mpsc::Sender<Result<Vec<u8>>>),
-    Prompt(mpsc::UnboundedSender<Result<()>>),
+struct Link {
+    commands: mpsc::Sender<Command>,
+    shutdown: Mutex<Option<oneshot::Sender<Reply<()>>>>,
 }
 
-// Since we need the capnp rpc runtime to run using tokio on a single thread the design of this
-// client is as follows:
-// * When a Dusk instance is created, a new thread is spawned
-// * This thread runs a tokio runtime with a local task set
-// * The connection to the Dusk server is established in this thread
-// * A mpsc channel is used to send messages to this thread for executing actions
-// * The thread listens for messages and processes them accordingly
+impl Link {
+    fn send(&self, command: Command) -> PyResult<()> {
+        if self
+            .shutdown
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_none()
+        {
+            return Err(PyRuntimeError::new_err("Connection is closed"));
+        }
+        self.commands
+            .try_send(command)
+            .map_err(|error| match error {
+                TrySendError::Full(_) => PyRuntimeError::new_err(format!(
+                    "{COMMAND_QUEUE} commands are already waiting on this connection, try again"
+                )),
+                TrySendError::Closed(_) => PyRuntimeError::new_err("Connection is closed"),
+            })
+    }
+}
+
+fn wait<Answer: Send>(
+    py: Python<'_>,
+    receiver: oneshot::Receiver<anyhow::Result<Answer>>,
+) -> PyResult<Answer> {
+    match py.detach(move || receiver.blocking_recv()) {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(PyRuntimeError::new_err(format!("{error:#}"))),
+        Err(_) => Err(PyRuntimeError::new_err("Connection is closed")),
+    }
+}
+
+fn start(options: Options) -> PyResult<(Link, oneshot::Receiver<anyhow::Result<()>>)> {
+    let (commands, receiver) = mpsc::channel(COMMAND_QUEUE);
+    let (shutdown, shutdown_receiver) = oneshot::channel();
+    let (ready, ready_receiver) = oneshot::channel();
+    pool::pool()
+        .and_then(|pool| {
+            pool.spawn(move || connection::serve(options, receiver, shutdown_receiver, ready))
+        })
+        .map_err(PyRuntimeError::new_err)?;
+    Ok((
+        Link {
+            commands,
+            shutdown: Mutex::new(Some(shutdown)),
+        },
+        ready_receiver,
+    ))
+}
+
 #[pyclass]
 struct Dusk {
-    thread_handle: Arc<Mutex<Option<JoinHandle<Result<()>>>>>,
-    message_tx: Arc<Mutex<Option<mpsc::UnboundedSender<Message>>>>,
+    link: Link,
 }
 
 #[pymethods]
@@ -102,62 +140,46 @@ impl Dusk {
             }
             None => None,
         };
-        let options = Options {
+        let (link, ready) = start(Options {
             address,
             port,
             sh_server_pid: sh_server_pid.unwrap_or(DEFAULT_PID),
             tls,
-        };
-
-        let (message_tx, message_rx) = mpsc::unbounded_channel::<Message>();
-        let (init_tx, mut init_rx) = mpsc::unbounded_channel::<Result<()>>();
-
-        let thread_handle =
-            std::thread::spawn(move || Self::connection_thread(options, message_rx, init_tx));
-
-        // Wait for initialization to complete or fail, releasing the GIL so a
-        // slow connect doesn't freeze other Python threads.
-        match py.detach(|| init_rx.blocking_recv()) {
-            Some(Ok(())) => Ok(Dusk {
-                thread_handle: Arc::new(Mutex::new(Some(thread_handle))),
-                message_tx: Arc::new(Mutex::new(Some(message_tx))),
-            }),
-            Some(Err(e)) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
-            None => Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Initialization failed unexpectedly",
-            )),
-        }
+        })?;
+        wait(py, ready)?;
+        Ok(Dusk { link })
     }
 
     /// Disconnect from the Dusk server.
     /// This should be called when you're done using the client.
     fn disconnect(&mut self, py: Python) -> PyResult<()> {
-        self.disconnect_internal(py)
+        let shutdown = self
+            .link
+            .shutdown
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .ok_or_else(|| PyRuntimeError::new_err("Already disconnected"))?;
+        let (reply, receiver) = oneshot::channel();
+        shutdown
+            .send(reply)
+            .map_err(|_| PyRuntimeError::new_err("Already disconnected"))?;
+        wait(py, receiver)
     }
 
     /// Run `command` in this object's shell server, returning its output values.
     fn sh(&self, command: String) -> PyResult<ShellOutput> {
-        let sender = self.sender()?;
-        ShellOutput::new(command, &sender).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+        let (output, shell_output) = ShellOutput::channel();
+        self.link.send(Command::Sh { command, output })?;
+        Ok(shell_output)
     }
 
     /// Open an interactive prompt on this object's shell server, on the calling
     /// terminal. Blocks while the prompt is up and returns when it is left.
     fn prompt(&mut self, py: Python) -> PyResult<()> {
-        let sender = self.sender()?;
-        let (result_sender, mut result_receiver) = mpsc::unbounded_channel();
-        sender
-            .send(Message::Prompt(result_sender))
-            .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(format!("{error:?}")))?;
-        match py.detach(move || result_receiver.blocking_recv()) {
-            Some(Ok(())) => Ok(()),
-            Some(Err(error)) => Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                "{error:#}"
-            ))),
-            None => Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "the prompt ended without a result",
-            )),
-        }
+        let (reply, receiver) = oneshot::channel();
+        self.link.send(Command::Prompt { reply })?;
+        wait(py, receiver)
     }
 
     /// Look up help for the available programs.
@@ -189,142 +211,6 @@ impl Dusk {
                     "no sh entry named '{program_name}'"
                 ))),
             }
-        }
-    }
-
-    fn __del__(&mut self, py: Python) {
-        let _ = self.disconnect_internal(py);
-    }
-}
-
-impl Dusk {
-    fn sender(&self) -> PyResult<mpsc::UnboundedSender<Message>> {
-        Ok(self
-            .message_tx
-            .lock()
-            .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?
-            .as_ref()
-            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?
-            .clone())
-    }
-
-    fn connection_thread(
-        options: Options,
-        mut message_rx: mpsc::UnboundedReceiver<Message>,
-        init_tx: mpsc::UnboundedSender<Result<()>>,
-    ) -> Result<()> {
-        let rt = tokio::runtime::Runtime::new()?;
-        let local_set = tokio::task::LocalSet::new();
-
-        rt.block_on(local_set.run_until(async move {
-            let server_pid = options.sh_server_pid;
-            let (connection, client, shell) = match connection::open(&options).await {
-                Ok(opened) => opened,
-                Err(error) => {
-                    if init_tx.send(Err(error)).is_err() {
-                        tracing::warn!("nobody was waiting for the connection to be set up");
-                    }
-                    return Ok(());
-                }
-            };
-            let shell = Rc::new(TokioMutex::new(shell));
-            let _ = init_tx.send(Ok(()));
-
-            loop {
-                match message_rx.recv().await {
-                    Some(Message::Sh(command, output_tx)) => {
-                        handle_sh(shell.clone(), command, output_tx);
-                    }
-                    Some(Message::Prompt(result_sender)) => {
-                        let client = client.clone();
-                        tokio::task::spawn_local(async move {
-                            let result = stop_on_ctrl_c(open_prompt(
-                                client,
-                                server_pid,
-                            ))
-                            .await;
-                            if let Err(error) = result_sender.send(result) {
-                                tracing::warn!(error = %format!("{error:?}"), "nobody was waiting for the prompt's result");
-                            }
-                        });
-                    }
-                    Some(Message::Shutdown(result_tx)) => {
-                        Self::handle_shutdown(client, connection, result_tx).await;
-                        break;
-                    }
-                    None => {
-                        drop(client);
-                        let _ = connection.disconnect().await;
-                        break;
-                    }
-                }
-            }
-            Ok::<(), dusk_program::anyhow::Error>(())
-        }))
-    }
-    async fn handle_shutdown(
-        client: Client,
-        connection: Connection,
-        result_tx: mpsc::UnboundedSender<Result<()>>,
-    ) {
-        let result = async {
-            drop(client);
-            connection.disconnect().await?;
-            Ok(())
-        }
-        .await;
-        let _ = result_tx.send(result);
-    }
-
-    // Disconnection flow
-    // * User calls `disconnect()` which wraps this internal function
-    // * A shutdown message is sent to the connection thread
-    // * The thread calls `connection.disconnect()`
-    fn disconnect_internal(&mut self, py: Python) -> PyResult<()> {
-        // Take the sender if available
-        let tx_opt = self
-            .message_tx
-            .lock()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
-            .take();
-
-        // Take the handle if available
-        let handle_opt = self
-            .thread_handle
-            .lock()
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
-            .take();
-
-        // If we have a sender, send shutdown and wait for result
-        if let Some(tx) = tx_opt {
-            let (result_tx, mut result_rx) = mpsc::unbounded_channel();
-            let _ = tx.send(Message::Shutdown(result_tx));
-
-            // Wait for thread to finish if we have a handle
-            if let Some(handle) = handle_opt {
-                // Release the GIL while joining the connection thread and
-                // waiting for its shutdown result - both block.
-                let shutdown_result = py.detach(move || {
-                    let _ = handle.join();
-                    result_rx.blocking_recv()
-                });
-                if let Some(shutdown_result) = shutdown_result {
-                    return shutdown_result
-                        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()));
-                }
-            }
-            Ok(())
-        } else if let Some(handle) = handle_opt {
-            // No sender but have handle - just wait for the thread, GIL released.
-            py.detach(move || {
-                let _ = handle.join();
-            });
-            Ok(())
-        } else {
-            // Already disconnected
-            Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Already disconnected",
-            ))
         }
     }
 }
