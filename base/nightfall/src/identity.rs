@@ -183,9 +183,29 @@ fn unix_milliseconds(seconds: i64) -> Result<u64, String> {
         .ok_or_else(|| format!("validity time {seconds} is before 1970"))
 }
 
+pub(crate) fn certificate_request(
+    device_id: &str,
+    installation_id: &str,
+    key: &NodeKey,
+) -> anyhow::Result<Vec<u8>> {
+    let mut parameters = rcgen::CertificateParams::default();
+    parameters.distinguished_name = rcgen::DistinguishedName::new();
+    parameters.subject_alt_names = vec![
+        rcgen::SanType::URI(rcgen::string::Ia5String::try_from(format!(
+            "{DEVICE_URI_PREFIX}{device_id}"
+        ))?),
+        rcgen::SanType::URI(rcgen::string::Ia5String::try_from(format!(
+            "{INSTALLATION_URI_PREFIX}{installation_id}"
+        ))?),
+    ];
+    let request = parameters.serialize_request(&CsrSigningKey(key))?;
+    Ok(request.der().to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use x509_parser::extensions::ParsedExtension;
 
     const DEVICE: &str = "00112233445566778899aabbccddeeff";
     const INSTALLATION: &str = "ffeeddccbbaa99887766554433221100";
@@ -347,6 +367,39 @@ mod tests {
         let mut names = uris(&[&device, &installation]);
         names.push(GeneralName::IPAddress(&[127, 0, 0, 1]));
         assert!(identity_from_names(&names).is_err());
+    }
+
+    #[test]
+    fn certificate_request_carries_exactly_the_two_uris_and_an_empty_subject() {
+        let (key, _) = NodeKey::generate().unwrap();
+        let der = certificate_request(DEVICE, INSTALLATION, &key).unwrap();
+        let (remainder, request) =
+            x509_parser::certification_request::X509CertificationRequest::from_der(&der).unwrap();
+        assert!(remainder.is_empty());
+        let information = &request.certification_request_info;
+        assert_eq!(information.subject.iter().count(), 0);
+        assert_eq!(
+            information.subject_pki.subject_public_key.data.as_ref(),
+            key.public_key()
+        );
+        let extensions: Vec<&ParsedExtension> = request.requested_extensions().unwrap().collect();
+        assert_eq!(extensions.len(), 1);
+        let ParsedExtension::SubjectAlternativeName(names) = extensions[0] else {
+            std::panic!("expected only a subject alternative name extension, got {extensions:?}");
+        };
+        assert_eq!(
+            names.general_names,
+            [
+                GeneralName::URI(&device_uri()),
+                GeneralName::URI(&installation_uri())
+            ]
+        );
+        ring::signature::UnparsedPublicKey::new(
+            &ring::signature::ECDSA_P256_SHA256_ASN1,
+            key.public_key(),
+        )
+        .verify(information.raw, request.signature_value.data.as_ref())
+        .unwrap();
     }
 
     #[test]
