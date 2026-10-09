@@ -748,7 +748,7 @@
   height: 100vh;
   background-color: color-mix(
     in srgb,
-    var(--md-default-bg-color) 62%,
+    var(--md-default-bg-color) 40%,
     transparent
   );
 }
