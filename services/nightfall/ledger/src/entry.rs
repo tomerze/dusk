@@ -60,6 +60,7 @@ pub enum Event {
     ChainLink,
     ChainResumed,
     QuarantineOverride,
+    AdmissionOverride,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +79,9 @@ pub struct EntryContent {
     pub epoch: Option<u64>,
     pub principal: String,
     pub pid: u64,
+    pub intent_campaign_id: Option<String>,
+    pub intent_principal: Option<String>,
+    pub intent_subject: Option<String>,
     pub session_id: Option<String>,
     pub call_id: Option<String>,
     pub cap_id: Option<u64>,
@@ -112,6 +116,9 @@ impl EntryContent {
             epoch: None,
             principal: String::from(principal),
             pid: 0,
+            intent_campaign_id: None,
+            intent_principal: None,
+            intent_subject: None,
             session_id: None,
             call_id: None,
             cap_id: None,
@@ -150,6 +157,23 @@ impl EntryContent {
         }
         if self.principal.is_empty() {
             return invalid("principal is empty");
+        }
+        match (&self.intent_principal, &self.intent_subject) {
+            (None, None) if self.intent_campaign_id.is_some() => {
+                return invalid("intent_campaign_id names the campaign of no intended process");
+            }
+            (None, None) => {}
+            (Some(principal), Some(subject)) if !principal.is_empty() && !subject.is_empty() => {}
+            _ => {
+                return invalid(
+                    "intent_principal and intent_subject are both set and not empty, or both null",
+                );
+            }
+        }
+        if let Some(campaign_id) = &self.intent_campaign_id
+            && !is_canonical_uuid(campaign_id)
+        {
+            return invalid("intent_campaign_id is not a canonical lowercase UUID");
         }
         for (name, identifier) in [("session_id", &self.session_id), ("call_id", &self.call_id)] {
             if let Some(identifier) = identifier
@@ -232,8 +256,12 @@ impl EntryContent {
         match self.kind {
             Kind::Checkpoint => return invalid("checkpoints are written by the ledger itself"),
             Kind::Call | Kind::Result => {
-                if self.event.is_some() || self.event_detail.is_some() {
-                    return invalid("call and result entries carry no event");
+                let denied_call =
+                    self.kind == Kind::Call && self.result_code == Some(ResultCode::Denied);
+                if self.event.is_some() || (self.event_detail.is_some() && !denied_call) {
+                    return invalid(
+                        "call and result entries carry no event, and only a denied call an event_detail",
+                    );
                 }
                 let complete = self.device_id.is_some()
                     && self.installation_id.is_some()
@@ -333,6 +361,24 @@ impl EntryContent {
                     );
                 }
             }
+            Some(Event::AdmissionOverride) => {
+                let named = |member: &str| {
+                    self.event_detail
+                        .as_ref()
+                        .and_then(|detail| detail.get(member))
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| !value.is_empty())
+                };
+                if self.session_id.is_none()
+                    || self.call_id.is_none()
+                    || !named("role")
+                    || !named("rule")
+                {
+                    return invalid(
+                        "admission_override carries the session_id and call_id of its call and the role and rule in its event_detail",
+                    );
+                }
+            }
             Some(Event::MembraneDropped) => {
                 if self.session_id.is_none() || self.call_id.is_some() {
                     return invalid("membrane_dropped carries a session_id and no call_id");
@@ -379,6 +425,9 @@ pub struct LedgerEntry {
     pub epoch: Option<u64>,
     pub principal: String,
     pub pid: String,
+    pub intent_campaign_id: Option<String>,
+    pub intent_principal: Option<String>,
+    pub intent_subject: Option<String>,
     pub session_id: Option<String>,
     pub call_id: Option<String>,
     pub cap_id: Option<u64>,
@@ -427,6 +476,9 @@ impl LedgerEntry {
             epoch: content.epoch,
             principal: content.principal,
             pid: content.pid.to_string(),
+            intent_campaign_id: content.intent_campaign_id,
+            intent_principal: content.intent_principal,
+            intent_subject: content.intent_subject,
             session_id: content.session_id,
             call_id: content.call_id,
             cap_id: content.cap_id,
@@ -545,6 +597,8 @@ pub mod fixtures {
     pub const SESSION: &str = "0192f3a4-9e8d-7c6b-8a59-483726150f1e";
     pub const CALL: &str = "0192f3a4-a001-7b2c-9d3e-4f5061728394";
     pub const PID: u64 = 0x9c41_e27a_0b5d_3f86;
+    pub const CAMPAIGN: &str = "0192f3a4-5b6c-7d8e-9f01-23456789abcd";
+    pub const INTENT_PRINCIPAL: &str = "token:0192f3a4-1111-7d8e-9f01-23456789abcd";
     pub const PARAM_HASH: &str = "1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c2b4a6f8e1d3c5b7a9f0e2d4c6b8a1f3e";
 
     pub fn call() -> EntryContent {
@@ -556,6 +610,9 @@ pub mod fixtures {
             epoch: Some(1791278043512408),
             principal: String::from("dawn-0"),
             pid: PID,
+            intent_campaign_id: Some(String::from(CAMPAIGN)),
+            intent_principal: Some(String::from(INTENT_PRINCIPAL)),
+            intent_subject: Some(format!("campaign:{CAMPAIGN}")),
             session_id: Some(String::from(SESSION)),
             call_id: Some(String::from(CALL)),
             cap_id: Some(7),
@@ -631,6 +688,32 @@ mod tests {
         }
         .validate()
         .unwrap();
+        EntryContent {
+            result_code: Some(ResultCode::Denied),
+            event_detail: serde_json::from_str(r#"{"rule": "command_budget"}"#).unwrap(),
+            ..call()
+        }
+        .validate()
+        .unwrap();
+        EntryContent {
+            intent_campaign_id: None,
+            intent_principal: None,
+            intent_subject: None,
+            ..call()
+        }
+        .validate()
+        .unwrap();
+        EntryContent {
+            session_id: Some(String::from(SESSION)),
+            call_id: Some(String::from(CALL)),
+            event_detail: serde_json::from_str(
+                r#"{"role": "break-glass", "rule": "process_without_intent"}"#,
+            )
+            .unwrap(),
+            ..EntryContent::event(Event::AdmissionOverride, "operator-0")
+        }
+        .validate()
+        .unwrap();
     }
 
     #[test]
@@ -691,6 +774,37 @@ mod tests {
             },
             EntryContent::event(Event::SetupCall, "dawn-0"),
             EntryContent::event(Event::QuarantineOverride, "dawn-0"),
+            EntryContent {
+                event_detail: serde_json::from_str(r#"{"rule": "command_budget"}"#).unwrap(),
+                ..call()
+            },
+            EntryContent {
+                event_detail: serde_json::from_str(r#"{"rule": "command_budget"}"#).unwrap(),
+                ..result()
+            },
+            EntryContent {
+                session_id: Some(String::from(SESSION)),
+                call_id: Some(String::from(CALL)),
+                event_detail: serde_json::from_str(r#"{"role": "break-glass"}"#).unwrap(),
+                ..EntryContent::event(Event::AdmissionOverride, "operator-0")
+            },
+            EntryContent {
+                intent_subject: None,
+                ..call()
+            },
+            EntryContent {
+                intent_principal: None,
+                intent_subject: None,
+                ..call()
+            },
+            EntryContent {
+                intent_principal: Some(String::new()),
+                ..call()
+            },
+            EntryContent {
+                intent_campaign_id: Some(String::from("campaign-1")),
+                ..call()
+            },
         ];
         for entry in refused {
             assert!(entry.validate().is_err(), "accepted {entry:?}");

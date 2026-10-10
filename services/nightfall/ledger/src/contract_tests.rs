@@ -106,6 +106,37 @@ fn produced() -> Vec<LedgerEntry> {
         },
         EntryContent {
             session_id: call().session_id,
+            call_id: call().call_id,
+            intent_campaign_id: call().intent_campaign_id,
+            intent_principal: call().intent_principal,
+            intent_subject: call().intent_subject,
+            event_detail: detail(&[
+                ("role", Value::from("break-glass")),
+                ("rule", Value::from("command_budget")),
+            ]),
+            ..EntryContent {
+                event: Some(Event::AdmissionOverride),
+                ..session_open()
+            }
+        },
+        EntryContent {
+            result_code: Some(ResultCode::Denied),
+            event_detail: detail(&[("rule", Value::from("command_budget"))]),
+            ..call()
+        },
+        EntryContent {
+            pid: 2,
+            intent_campaign_id: None,
+            intent_principal: None,
+            intent_subject: None,
+            param_hash: String::new(),
+            result_code: Some(ResultCode::Denied),
+            action: Some(String::from("Dusk.process")),
+            event_detail: detail(&[("rule", Value::from("process_without_intent"))]),
+            ..call()
+        },
+        EntryContent {
+            session_id: call().session_id,
             event_detail: detail(&[("reason", Value::from("lifecycle_changed"))]),
             ..EntryContent {
                 event: Some(Event::MembraneDropped),

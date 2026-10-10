@@ -56,6 +56,9 @@ fn event(event: AuditEvent) -> Event {
 
 pub fn content(entry: AuditEntry) -> EntryContent {
     EntryContent {
+        intent_campaign_id: None,
+        intent_principal: None,
+        intent_subject: None,
         kind: kind(entry.kind),
         device_id: entry.device_id,
         installation_id: entry.installation_id,
