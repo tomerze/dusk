@@ -709,13 +709,13 @@
 }
 .dusk-os {
   --dusk-os-fill: #f4a83c;
-  --dusk-os-ink: var(--dusk-ground);
+  --dusk-os-ink: #0f0c1f;
   --dusk-os-pin: 90svh;
   --dusk-os-from: calc(var(--dusk-os-height, 100lvh) - 100lvh);
   --dusk-os-sun: max(17rem, 50vw + 7.5rem);
   --dusk-os-start: calc(1.4 / 17);
   --dusk-os-sun-top: calc(100% - 10.9rem);
-  --dusk-os-lead-colour: var(--md-default-bg-color);
+  --dusk-os-lead-colour: #14112a;
   background-color: var(--dusk-ground);
 }
 .dusk-os__stage {
@@ -739,7 +739,7 @@
     ),
     color-mix(
       in srgb,
-      var(--md-default-bg-color) calc(var(--dusk-os-title-ink) * 100%),
+      #14112a calc(var(--dusk-os-title-ink) * 100%),
       transparent
     )
   );
@@ -754,6 +754,9 @@
   line-height: 1.4;
   color: var(--dusk-os-lead-colour);
   text-wrap: balance;
+}
+[data-md-color-scheme="default"] .dusk-os {
+  --md-default-fg-color--light: var(--dusk-os-lead-colour);
 }
 .dusk-os__terminals {
   position: relative;
