@@ -107,6 +107,9 @@ campaign over the whole fleet says so, for example with `has(device_id)`.
 | `dusk_version` | The node's Dusk version. A version field (below). |
 | `hardware_class` | `<arch>-<cores>c-<memory>g`, cores rounded down and memory in GiB rounded up to powers of two, e.g. `x86_64-8c-16g`. |
 | `tenant` | The tenant the node's credential carried. |
+| `credential_kind` | What the node enrolled with: `fleet_token` or `install_token`. |
+| `credential_ref` | The fleet token entry's name, or the install token's subject, the node enrolled with. |
+| `credential_issuer` | The key id of the key that signed the install token the node enrolled with; absent for a fleet token. |
 | `locale` | The node's locale, e.g. `en_US.UTF-8`. |
 | `hostname`, `impl`, `target_arch` | The node's host name, its Dusk impl (`nix`, `windows`, `std`) and its processor architecture. |
 | `reported_version` | The version the node last reported for the version key a campaign watches. A version field. |

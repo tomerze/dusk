@@ -212,12 +212,20 @@ is skipped for 30 seconds.
 | `reap_interval_seconds` | `300` | How long the reap sweep takes to look at every online node once, one of 30 groups at a time. |
 | `reaps_per_second` | `20` | Reap requests sent to dawn per second, across the fleet. |
 | `reap_retry_seconds` | `600` | How long a pid dawn was asked to reap waits before it is asked again, when dawn never reported it reaped. |
+| `revocations_per_second` | `1000` | Installations a [revocation](#revocations) revokes per second, across every running revocation. |
 
 ### `alerts`
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `enrollment_rate_per_minute` | `600` | More enrollments than this in one minute raise a high `enrollment_rate` alert. |
+| `enrollments.window_seconds` | `300` | The window the [enrollment alerts](#enrollment-alerts) count in. |
+| `enrollments.baseline_days` | `7` | How many earlier days the baseline averages the same hour of. |
+| `enrollments.baseline_factor` | `4` | How many times its baseline a count must pass, besides its floor, to raise an alert. |
+| `enrollments.escalation_factor` | `2` | The first time an open alert's count reaches this many times the count it opened with, the alert is raised to critical; after that its detail takes the new count each time the count reaches this many times the count it last recorded. At least 2. |
+| `enrollments.resolve_after_seconds` | `900` | How long a count must stay at or below its threshold before its alert resolves itself. |
+| `enrollments.issued_floors.fleet`, `.credential`, `.network` | `100`, `30`, `20` | The least count of new installations in a window that raises `enrollment_rate`, across the fleet, for one credential and for one network. |
+| `enrollments.refused_floors.fleet`, `.credential`, `.network` | `300`, `60`, `60` | The same for refused enrollments and `denied_enrollments_spike`. |
+| `enrollments.new_network_floors.fleet`, `.credential` | `50`, `20` | The same for installations from networks new to the baseline period and `enrollment_from_new_network_burst`, across the fleet and for one credential. |
 | `public_url` | | twilight's address as people open it, such as `https://twilight.example.org`. Every notification links its alert as `<public_url>/alerts?alert=<id>`. Required with `receivers`. |
 | `runbook_url` | | Where the [runbooks](runbooks/index.md) are published, with `{kind}` where the alert's kind goes, such as `https://docs.example.org/stack/runbooks/{kind}/`. Every notification links its kind's runbook. Required with `receivers`. |
 | `delivery_horizon_seconds` | `86400` | How long twilight keeps retrying a notification before it gives up on it. |
@@ -318,7 +326,7 @@ Each route names a `receiver` and may narrow what it gets with lists:
 |-----|---------|
 | `severities` | `critical`, `high`, `medium`, `low` |
 | `kinds` | alert kinds, such as `process_without_intent` (the [runbooks](runbooks/index.md) list every kind) |
-| `tenants` | the alert's tenant: the tenant of the node it names (`device_id` and `installation_id` in its detail) or of the campaign it names. An alert with no tenant never matches a route that lists tenants. |
+| `tenants` | the alert's tenant: the tenant of the node it names (`device_id` and `installation_id` in its detail) or of the campaign it names, or for an [enrollment alert](#enrollment-alerts) the tenant of its credential. An alert with no tenant never matches a route that lists tenants. |
 
 An absent or empty list matches everything. An alert goes to the receiver of
 every route it matches, once per receiver even when several routes name the
@@ -486,6 +494,76 @@ Grafana sends its email through its own SMTP settings: set
 to the email receiver's server. The local stack and the Kubernetes overlays run
 `grafana-alerting` before Grafana starts ([Deploy](deploy.md)); after a change
 to the receivers or routes, run it again and restart Grafana.
+
+### Enrollment alerts
+
+The leader reads `dusk.enrollments` and counts new enrollments only: an
+`enroll` that was `issued` is a new installation, and an `assign` or `enroll`
+that was `denied` or `rate_limited` is a refusal. Renewals and errors are never
+counted. Each is counted for the whole fleet, for its credential - a fleet token
+entry by `credential_ref`, an install token key by `credential_issuer` - and for
+its network, the /24 of an IPv4 address or the /48 of an IPv6 one. An
+installation from a network no installation came from in the `baseline_days`
+before also counts as one from a new network, while that network is no older
+than one window.
+
+For every one of those, over the last `window_seconds`, twilight compares the
+count with its threshold: the larger of its floor and `baseline_factor` times
+its baseline, the average count of a window in the same UTC hour of each of the
+last `baseline_days` days. twilight writes the counts by hour to the
+`enrollment_counts` table for that, and deletes them after `baseline_days` and
+one more day. A count above its threshold raises a high alert, which reaches
+the receivers its routes name like every other alert:
+
+| Kind | Counts | Fingerprint |
+|------|--------|-------------|
+| `enrollment_rate` | New installations | `enrollment_rate:fleet`, `enrollment_rate:credential:<kind>:<name>`, `enrollment_rate:network:<network>`, `enrollment_rate:network` |
+| `denied_enrollments_spike` | Refusals | `denied_enrollments_spike:fleet`, `...:credential:<kind>:<name>`, `...:network:<network>`, `...:network` |
+| `enrollment_from_new_network_burst` | New installations from new networks | `enrollment_from_new_network_burst:fleet`, `...:credential:<kind>:<name>` |
+| `credential_quota_reached` | Refusals for `credential_quota_reached`; any one raises it | `credential_quota_reached:credential:<kind>:<name>` |
+
+The detail holds the `scope`, the `credential_kind` and `credential` (and the
+`tenant`) or the `network`, the `count`, the `window_seconds`, the `baseline`,
+the `threshold`, and the networks and credentials the count came from with
+their counts. An alert for a credential takes the credential's tenant, so
+`tenants` in a route matches it. The first time an open alert's count reaches
+`escalation_factor` times the count it opened with, twilight raises the alert to
+critical: receivers get it as `re_escalated`, so PagerDuty pages again, and its
+acknowledgement is cleared. Each later time the count reaches
+`escalation_factor` times the count it last recorded, the detail takes the new
+count and counts an occurrence at critical, which sends nothing. Once the count
+stays at or below its threshold for `resolve_after_seconds`, twilight resolves
+the alert as `twilight`, and the next rise opens a new one. A new
+leader goes on with the open alerts. The counts are those of the leader since it
+was elected, so a leader that took over in the middle of a burst counts the
+burst from then on.
+
+At most 10 networks of one kind have an alert of their own at a time, so
+refusals from many networks cannot flood the alerts. A network that goes above
+its threshold while 10 are open is named in the kind's `<kind>:network` alert
+instead: its `count` is the number of such networks, `networks` lists the ones
+with the most enrollments in the window, and `network_alerts` says how many
+networks have an alert of their own. Like any other, it is raised to critical
+the first time that number reaches `escalation_factor` times the number it
+opened with, its detail takes the new number at each later step, and it
+resolves once no network is left in it for `resolve_after_seconds`. A flood
+from any number of networks therefore opens at most 11 network alerts of a
+kind, and sends receivers no more than their openings, one escalation each and
+their resolutions. twilight watches at most
+100 000 networks at once and counts no new network while that many are
+watched; the fleet and every credential are always counted.
+
+An alert resolved by hand or through the API is noticed within 15 seconds, or
+at its next escalation: twilight forgets the counts behind it, and the next
+count above the threshold opens a new alert. Resolving the `<kind>:network`
+alert forgets the counts of the networks it named.
+
+What twilight counts while a count's alert is open, or while its network is in
+the `<kind>:network` alert, is not written to `enrollment_counts`, so a burst
+does not raise the baseline later windows of the same hour are compared with.
+
+`twilight_enrollment_observations_total{signal}` counts what was counted:
+`issued`, `refused` and `quota`.
 
 ### `reconcile`
 
@@ -811,6 +889,9 @@ to the query that made it: a node cursor made for one `sort` is refused with
 | `POST /api/v1/nodes/{device}/{installation}/sessions` | operator | `{"reason", "ttl_seconds"}` (60 to 28800) opens an interactive session: twilight records a random pid as the node's intended interactive process for `ttl_seconds` and answers 201 `{"pid", "node"}`, the pid to connect a shell at through dawn's `/v1/connect` and the node's live session. The session's process is reaped once it expires. |
 | `POST /api/v1/nodes/{device}/{installation}/logs` | operator | `{"level", "duration_seconds"}` streams the node's logs to the collector through dawn: 202 `{"stream_id"}`. |
 | `POST /api/v1/nodes/{device}/{installation}/files` | operator | `{"path"}` collects a file from the node into object storage through dawn: 202 `{"upload_id"}`. |
+| `GET /api/v1/revocations?limit=&cursor=` | viewer | [Revocations](#revocations), newest first. |
+| `POST /api/v1/revocations` | admin | `{"credential_kind", "credential", "enrolled_after", "enrolled_before", "reason", "dry_run"}` revokes every installation one credential enrolled: 202 `{"matched", "revocation"}`, or 200 with `revocation` `null` for a `dry_run`, which only counts. |
+| `GET /api/v1/revocations/{id}` | viewer | A revocation and how far it got. |
 | `POST /api/v1/devices/{device}/lifecycle` | admin | `{"lifecycle", "reason"}` with `retired` or `revoked` blocks every installation of the device, those enrolled now and any it enrolls later, through a device-scope `dusk.node-state` record; `active` lifts the block, and each installation keeps its own lifecycle. Answers `{"device_id", "lifecycle", "reason", "changed_at", "actor"}`. |
 | `POST /api/v1/selectors/validate` | viewer | `{"selector"}` answers `ok`, the `error` with its position, how many nodes it `matched`, and a `sample` of them. |
 | `GET /api/v1/campaigns?status=&limit=&cursor=` | viewer | Campaigns, newest first, each with its counters; `status` takes one status or several, comma-separated. |
@@ -1017,3 +1098,24 @@ heads and the alerts of one batch are written in one transaction, so a restart
 neither skips nor repeats an entry. Watch `twilight_reconcile_lag_seconds`:
 `result_without_ledger` is only judged once every partition has been reconciled
 ten minutes past a result.
+
+### Revocations
+
+A revocation revokes every installation one credential enrolled, as twilight's
+inventory recorded it: for a fleet token entry the nodes whose
+`credential_kind` is `fleet_token` and whose `credential_ref` is the entry's
+name, for an install token key those whose `credential_issuer` is the key id,
+optionally only those whose `enrolled_at` is at or after `enrolled_after` and
+before `enrolled_before`, and never one that is already `revoked`. `matched` is
+how many matched when it started. The leader revokes them in the order of their
+device and installation ids, in batches, at `engine.revocations_per_second`
+across all running revocations: for each batch it produces one
+`dusk.node-state` record per installation, with the revocation's reason and
+actor, waits until Kafka has them all, then marks the installations `revoked`
+and moves the revocation's place forward in one transaction. A batch Kafka did
+not take, or that a former leader was writing, is sent again from that place, so
+a revocation carries on across restarts and leader changes and no installation
+is skipped. It finishes when no matching installation is left; one enrolled
+after it passed its place in the order is not included, which is why the
+credential is retired first ([Provisioning](provisioning.md#revoking-what-a-credential-enrolled)).
+Each revocation is logged when it starts and when it finishes.
