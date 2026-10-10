@@ -143,6 +143,9 @@
   .dusk-navbar__links {
     display: flex;
   }
+  .dusk-navbar .md-search {
+    margin-left: 0.8rem;
+  }
 }
 
 .dusk-landing svg text {
