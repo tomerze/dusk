@@ -3605,6 +3605,13 @@
           "fingerprint": {
             "type": "string"
           },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The tenant of the node or campaign the alert concerns, when it has one."
+          },
           "detail": {
             "type": "object"
           },
@@ -3643,6 +3650,7 @@
           "severity",
           "kind",
           "fingerprint",
+          "tenant",
           "detail",
           "acknowledged_by",
           "acknowledged_at",
