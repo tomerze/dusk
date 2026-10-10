@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PagerDuty Events API v2 event, as https://docs.pagerduty.com/developer/send-alert-event documents it",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["routing_key", "event_action"],
+  "properties": {
+    "routing_key": {"type": "string", "minLength": 32, "maxLength": 32},
+    "event_action": {"enum": ["trigger", "acknowledge", "resolve"]},
+    "dedup_key": {"type": "string", "minLength": 1, "maxLength": 255},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "source", "severity"],
+      "properties": {
+        "summary": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "source": {"type": "string", "minLength": 1},
+        "severity": {"enum": ["critical", "error", "warning", "info"]},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "component": {"type": "string"},
+        "group": {"type": "string"},
+        "class": {"type": "string"},
+        "custom_details": {"type": "object"}
+      }
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["src"],
+        "properties": {"src": {"type": "string", "pattern": "^https://"}, "href": {"type": "string"}, "alt": {"type": "string"}}
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["href"],
+        "properties": {"href": {"type": "string", "minLength": 1}, "text": {"type": "string"}}
+      }
+    },
+    "client": {"type": "string"},
+    "client_url": {"type": "string"}
+  },
+  "if": {"properties": {"event_action": {"const": "trigger"}}},
+  "then": {"required": ["payload"]},
+  "else": {"required": ["dedup_key"]}
+}

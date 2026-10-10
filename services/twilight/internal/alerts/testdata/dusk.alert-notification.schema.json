@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The body twilight's webhook receiver posts, dusk.alert-notification/v1, as docs/docs/stack/twilight.md documents it",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "receiver", "transition", "transition_at", "actor", "severity", "title", "summary", "hostname", "campaign_name", "alert", "links"],
+  "$defs": {
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"},
+    "severity": {"enum": ["critical", "high", "medium", "low"]},
+    "optionalText": {"type": ["string", "null"]},
+    "optionalTime": {"oneOf": [{"$ref": "#/$defs/time"}, {"type": "null"}]}
+  },
+  "properties": {
+    "schema": {"const": "dusk.alert-notification/v1"},
+    "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "receiver": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+    "transition": {"enum": ["opened", "re_escalated", "acknowledged", "resolved"]},
+    "transition_at": {"$ref": "#/$defs/time"},
+    "actor": {"$ref": "#/$defs/optionalText"},
+    "severity": {"$ref": "#/$defs/severity"},
+    "title": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "hostname": {"$ref": "#/$defs/optionalText"},
+    "campaign_name": {"$ref": "#/$defs/optionalText"},
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "time", "last_seen_at", "occurrences", "severity", "kind", "fingerprint", "tenant", "detail", "acknowledged_by", "acknowledged_at", "resolved_by", "resolved_at"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "time": {"$ref": "#/$defs/time"},
+        "last_seen_at": {"$ref": "#/$defs/time"},
+        "occurrences": {"type": "integer", "minimum": 1},
+        "severity": {"$ref": "#/$defs/severity"},
+        "kind": {"type": "string", "minLength": 1},
+        "fingerprint": {"type": "string", "minLength": 1},
+        "tenant": {"$ref": "#/$defs/optionalText"},
+        "detail": {"type": "object"},
+        "acknowledged_by": {"$ref": "#/$defs/optionalText"},
+        "acknowledged_at": {"$ref": "#/$defs/optionalTime"},
+        "resolved_by": {"$ref": "#/$defs/optionalText"},
+        "resolved_at": {"$ref": "#/$defs/optionalTime"}
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alert", "runbook"],
+      "properties": {
+        "alert": {"type": ["string", "null"], "pattern": "^https?://"},
+        "runbook": {"type": ["string", "null"], "pattern": "^https?://"}
+      }
+    }
+  }
+}
