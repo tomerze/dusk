@@ -62,3 +62,17 @@ groups:
         labels:
           severity: high
           kind: vector_messages_dropped
+      - uid: dusk-alert-delivery-failing
+        title: "Alert delivery failing"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-inventory", "model": {"refId": "A", "rawSql": "SELECT count(*) AS failing FROM alert_deliveries WHERE (state = 'failed' AND coalesce(last_attempt_at, created_at) > now() - interval '1 hour') OR (state = 'pending' AND created_at < now() - interval '10 minutes')", "format": "table", "rawQuery": true, "editorMode": "code"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "{{ $values.B }} twilight alert notification(s) gave up in the last hour or have been retrying for more than 10 minutes."
+          description: "Open twilight's Alerts page to see which receiver fails and why, then check that receiver's secret file and that twilight can reach it."
+        labels:
+          severity: high
+          kind: alert_delivery_failing

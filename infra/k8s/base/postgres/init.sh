@@ -26,7 +26,7 @@ BEGIN
     FOR created IN
         SELECT object_identity FROM pg_event_trigger_ddl_commands()
         WHERE command_tag = 'CREATE TABLE' AND object_type = 'table' AND schema_name = 'public'
-            AND object_identity = ANY (ARRAY['public.nodes', 'public.node_presence', 'public.campaigns', 'public.campaign_counters', 'public.campaign_events', 'public.campaign_nodes', 'public.alerts', 'public.ledger_chain_heads'])
+            AND object_identity = ANY (ARRAY['public.nodes', 'public.node_presence', 'public.campaigns', 'public.campaign_counters', 'public.campaign_events', 'public.campaign_nodes', 'public.alerts', 'public.alert_transitions', 'public.alert_deliveries', 'public.ledger_chain_heads'])
     LOOP
         EXECUTE format('GRANT SELECT ON %s TO grafana', created.object_identity);
     END LOOP;
