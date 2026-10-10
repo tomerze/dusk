@@ -320,6 +320,7 @@ impl Provisioning {
         info!(
             instance = %config.instance,
             fleet_tokens = config.fleet_tokens.len(),
+            retired_fleet_tokens = config.fleet_tokens.retired(),
             install_token_keys = config.install_token_keys.len(),
             tpm_endorsement_roots = endorsement_roots.len(),
             "provisioning ready"
@@ -357,14 +358,16 @@ impl Provisioning {
     }
 
     pub fn replace_fleet_tokens(&self, tokens: FleetTokens) {
-        let named = |tokens: &FleetTokens| -> std::collections::BTreeMap<String, Option<String>> {
-            tokens
-                .iter()
-                .map(|token| (token.name.clone(), token.tenant.clone()))
-                .collect()
-        };
+        let named =
+            |tokens: &FleetTokens| -> std::collections::BTreeMap<String, (Option<String>, bool)> {
+                tokens
+                    .iter()
+                    .map(|token| (token.name.clone(), (token.tenant.clone(), token.retired)))
+                    .collect()
+            };
         let after = named(&tokens);
         let count = tokens.len();
+        let retired_count = tokens.retired();
         let before = named(&replace(&self.fleet_tokens, tokens));
         let added: Vec<&String> = after
             .keys()
@@ -374,6 +377,11 @@ impl Provisioning {
             .keys()
             .filter(|name| !after.contains_key(*name))
             .collect();
+        let retired: Vec<&String> = after
+            .iter()
+            .filter(|(name, entry)| entry.1 && before.get(*name).is_none_or(|previous| !previous.1))
+            .map(|(name, _)| name)
+            .collect();
         let changed: Vec<&String> = after
             .iter()
             .filter(|(name, entry)| before.get(*name).is_some_and(|previous| previous != *entry))
@@ -381,8 +389,10 @@ impl Provisioning {
             .collect();
         info!(
             fleet_tokens = count,
+            retired_fleet_tokens = retired_count,
             ?added,
             ?removed,
+            ?retired,
             ?changed,
             "fleet tokens reloaded"
         );
@@ -533,6 +543,15 @@ impl Provisioning {
         let address = connection.remote_address.ip();
         let verified = match presented {
             Presented::FleetToken(token) => match current(&self.fleet_tokens).find(token) {
+                Some(entry) if entry.retired => {
+                    attempt.event.credential_ref = Some(entry.name.clone());
+                    attempt.event.tenant = entry.tenant.clone();
+                    return Err(Refusal::denied(
+                        "credential_retired",
+                        format!("fleet token {} is retired", entry.name),
+                        "credential retired",
+                    ));
+                }
                 Some(entry) => Verified {
                     reference: entry.name.clone(),
                     tenant: entry.tenant.clone(),

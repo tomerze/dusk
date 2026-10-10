@@ -31,6 +31,7 @@ pub struct FleetToken {
     pub name: String,
     pub value_sha256: [u8; 32],
     pub tenant: Option<String>,
+    pub retired: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -51,6 +52,8 @@ struct FleetTokenEntry {
     name: String,
     value_sha256: String,
     tenant: Option<String>,
+    #[serde(default)]
+    retired: bool,
 }
 
 fn equal_in_constant_time(left: &[u8; 32], right: &[u8; 32]) -> bool {
@@ -115,6 +118,7 @@ impl FleetTokens {
                 name: entry.name,
                 value_sha256,
                 tenant: entry.tenant,
+                retired: entry.retired,
             });
         }
         Ok(FleetTokens { tokens })
@@ -126,6 +130,10 @@ impl FleetTokens {
 
     pub fn is_empty(&self) -> bool {
         self.tokens.is_empty()
+    }
+
+    pub fn retired(&self) -> usize {
+        self.tokens.iter().filter(|token| token.retired).count()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &FleetToken> {
@@ -306,10 +314,24 @@ mod tests {
             ),
             format!("[[token]]\nname = \"\"\nvalue_sha256 = \"{digest}\"\n"),
             format!("[[token]]\nname = \"a\"\nvalue = \"plain\"\nvalue_sha256 = \"{digest}\"\n"),
+            format!("[[token]]\nname = \"a\"\nvalue_sha256 = \"{digest}\"\nretired = \"yes\"\n"),
         ];
         for text in refused {
             assert!(FleetTokens::from_toml(&text).is_err(), "accepted {text}");
         }
+    }
+
+    #[test]
+    fn reads_the_retirement_of_a_fleet_token() {
+        let tokens = FleetTokens::from_toml(&format!(
+            "[[token]]\nname = \"batch-7\"\nvalue_sha256 = \"{}\"\n\n[[token]]\nname = \"old\"\nvalue_sha256 = \"{}\"\nretired = true\n",
+            hex::encode(sha256(b"batch secret")),
+            hex::encode(sha256(b"old secret"))
+        ))
+        .unwrap();
+        assert!(!tokens.find("batch secret").unwrap().retired);
+        assert!(tokens.find("old secret").unwrap().retired);
+        assert_eq!(tokens.retired(), 1);
     }
 
     fn keys(signer: &EdwardsSigner) -> InstallTokenKeys {
