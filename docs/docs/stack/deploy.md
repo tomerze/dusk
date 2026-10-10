@@ -170,7 +170,8 @@ The `verify` profile runs the infrastructure's tests from inside a stack:
 topics and their configuration, ClickHouse's tables and the ledger chain view,
 the Postgres roles, every bucket and its policy, step-ca's certificate policy,
 messages from Kafka to ClickHouse and the evidence bucket, OTLP through the
-collector, and every Grafana datasource, dashboard and alert rule.
+collector, every Grafana datasource, dashboard and alert rule, and every
+SigNoz panel's query.
 
 The tests write: they produce every contract example to its Kafka topic, put
 objects into the buckets, have step-ca sign node certificates and create
@@ -212,6 +213,25 @@ SigNoz starts with its root account, `admin@dusk.test`, whose password is the
 address is `signoz.env.signoz_user_root_email` in
 `infra/k8s/base/signoz/values.yaml` and `SIGNOZ_USER_ROOT_EMAIL` in the compose
 file.
+
+The `signoz-dashboards` job (a service in the compose profile, a Job in
+Kubernetes) signs in as the root account and imports the dashboards in
+`infra/k8s/base/signoz/dashboards/`, each file what SigNoz's dashboard JSON
+editor downloads. Each run creates the dashboards that are missing and
+overwrites the ones that exist, by name: `dusk-` and the file's name. A change
+made in SigNoz's UI lasts until the job runs again; to keep it, download the
+dashboard's JSON over its file. The job signs in as `SIGNOZ_EMAIL`, which must
+be the root account's address.
+
+Every panel is a ClickHouse SQL query over the `dusk` database for the time
+range picked in SigNoz:
+
+| Dashboard | Shows |
+|-----------|-------|
+| Dusk ledger | Calls nightfall forwarded or refused, by method, by calling principal and by result code; denied and rate-limited calls, by principal; every ledger chain checked from the start of the range by the `ledger_chain` view: entries, gaps, broken links, entries sharing a sequence and the last checkpoint |
+| Dusk process results | The final status dawn reported for each dispatch, by status and by action kind; duplicates (the pid was already on the node, so nothing ran); `running` and `ended` (the stream to the node broke, and the node's logs show no end of the script, or that it ended but not how); the time from the start of a dispatch to its final status at the median, 95th and 99th percentile |
+| Dusk enrollments | Requests to assign, enroll and renew nodes, by outcome and by credential kind; the enrollment rate per minute; denied, rate-limited and failed requests |
+| Dusk connections | Node sessions opened and ended, and the reason each one ended |
 
 Log pipelines edited in SigNoz's UI do not reach the ingester: it runs from the
 configuration in `infra/k8s/base/signoz/collector.yaml` and not under SigNoz's
@@ -462,7 +482,7 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | `postgres-superuser`, `postgres-twilight`, `postgres-grafana`, `postgres-signoz` | `username`, `password`, `pgpass` | Postgres; twilight, Grafana, SigNoz |
 | `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz |
 | `grafana-admin` | `password` | Grafana |
-| `signoz-admin` | `password`, the password of SigNoz's root account | SigNoz |
+| `signoz-admin` | `password`, the password of SigNoz's root account | SigNoz, signoz-dashboards |
 
 pki-init adds, in Kubernetes:
 
@@ -593,8 +613,9 @@ Parquet lake, and Kafka is a buffer with retention of days.
 - Jobs cannot be changed once they exist. Before applying a new version, delete
   the finished init jobs (`kubectl -n dusk delete job --ignore-not-found
   secrets-init pki-init kafka-init clickhouse-schema ceph-init
-  signoz-telemetrystore-migrator`; prod has no kafka-init); they run again and
-  change only what is missing.
+  signoz-telemetrystore-migrator signoz-dashboards`; prod has no kafka-init);
+  they run again and change only what is missing, except signoz-dashboards,
+  which overwrites every dashboard it imports.
 - SigNoz's Kubernetes manifests are rendered from its chart. To move to another
   version, change `--version` and render again:
 
