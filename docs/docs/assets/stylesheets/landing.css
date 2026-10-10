@@ -529,20 +529,6 @@
     300% 100%;
   background-position-x: 0, calc(var(--dusk-passed, 0) * 100%);
 }
-[data-md-color-scheme="default"] .dusk-landing .dusk-fleet > h2,
-[data-md-color-scheme="default"] .dusk-landing .dusk-os__title {
-  color: #5c3a00;
-  background-image:
-    var(--dusk-title-ink, none),
-    linear-gradient(
-      100deg,
-      #3d2700 0%,
-      #5c3a00 35%,
-      #9a6b00 50%,
-      #5c3a00 65%,
-      #3d2700 100%
-    );
-}
 [data-md-color-scheme="default"] .dusk-landing .dusk-fleet > h2 + p {
   color: var(--md-default-fg-color);
 }
