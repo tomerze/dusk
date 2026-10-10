@@ -1155,10 +1155,10 @@
 }
 @keyframes dusk-hover {
   from {
-    translate: 0 3px;
+    translate: 0 5px;
   }
   to {
-    translate: 0 -3px;
+    translate: 0 -5px;
   }
 }
 .dusk-plate polygon,
