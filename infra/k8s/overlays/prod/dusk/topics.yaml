@@ -79,6 +79,20 @@ spec:
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
+  name: dusk.credential-quota
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.credential-quota
+  partitions: 6
+  replicas: 3
+  config:
+    cleanup.policy: compact
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
   name: dusk.process-results
   labels:
     strimzi.io/cluster: dusk

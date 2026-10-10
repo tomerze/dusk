@@ -19,6 +19,7 @@ topics=(
     "dusk.ledger 3 32 cleanup.policy=delete,retention.ms=$((30 * day)),unclean.leader.election.enable=false"
     "dusk.enrollments 3 12 cleanup.policy=delete,retention.ms=$((30 * day))"
     "dusk.node-state 1 6 cleanup.policy=compact"
+    "dusk.credential-quota 1 6 cleanup.policy=compact"
     "dusk.process-results 3 48 cleanup.policy=delete,retention.ms=$((7 * day))"
     "dusk.process-output 3 24 cleanup.policy=delete,retention.ms=$((7 * day))"
     "dusk.files 3 12 cleanup.policy=delete,retention.ms=$((30 * day))"

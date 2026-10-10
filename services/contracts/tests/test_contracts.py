@@ -41,6 +41,7 @@ def test_every_topic_has_a_schema_and_examples() -> None:
         "dusk.ledger",
         "dusk.enrollments",
         "dusk.node-state",
+        "dusk.credential-quota",
         "dusk.process-results",
         "dusk.process-output",
         "dusk.files",

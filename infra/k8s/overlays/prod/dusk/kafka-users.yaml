@@ -41,6 +41,11 @@ spec:
           patternType: literal
         operations: [Read, Describe, DescribeConfigs]
       - resource:
+          type: topic
+          name: dusk.credential-quota
+          patternType: literal
+        operations: [Read, Write, Describe, DescribeConfigs]
+      - resource:
           type: transactionalId
           name: nightfall-ledger-
           patternType: prefix

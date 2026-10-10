@@ -31,6 +31,7 @@ TOPICS: dict[str, tuple[int, dict[str, str]]] = {
         {"cleanup.policy": "delete", "retention.ms": str(30 * DAY)},
     ),
     "dusk.node-state": (1, {"cleanup.policy": "compact"}),
+    "dusk.credential-quota": (1, {"cleanup.policy": "compact"}),
     "dusk.process-results": (
         3,
         {"cleanup.policy": "delete", "retention.ms": str(7 * DAY)},

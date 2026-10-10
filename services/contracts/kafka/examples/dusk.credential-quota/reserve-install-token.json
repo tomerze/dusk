@@ -1,0 +1,13 @@
+{
+  "schema": "dusk.credential-quota/v1",
+  "id": "01a112fe-d1bc-73b3-8e1a-4382d9b0f143",
+  "time": "2026-10-06T09:15:03.512408117Z",
+  "operation": "reserve",
+  "reservation": "01a112fe-d1bc-73b3-8e1a-4382d9b0f143",
+  "credential_kind": "install_token",
+  "credential": "factory-2026",
+  "limit": 500,
+  "device_id": "7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f",
+  "installation_id": "0d5e7a9c2f3b1d4e6a8c0f2b4d6e8a1c",
+  "instance": "nightfall-1"
+}
