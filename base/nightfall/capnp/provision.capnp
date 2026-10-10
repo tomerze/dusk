@@ -6,17 +6,15 @@ struct Credential {
   union {
     fleetToken @0 :Text $Dusk.sensitive;
     installToken @1 :Text $Dusk.sensitive;
-    tpmAttestation @2 :TpmAttestation;
-    certificate @3 :Void;
+    certificate @2 :Void;
   }
 }
 
 struct TpmAttestation {
   endorsementKey @0 :Data;
-  attestationKey @1 :Data;
-  quote @2 :Data;
-  signature @3 :Data;
-  certifyInfo @4 :Data;
+  endorsementCertificate @1 :Data;
+  endorsementCertificateChain @2 :List(Data);
+  nodeKey @3 :Data;
 }
 
 struct DeviceReport {
@@ -27,6 +25,7 @@ struct DeviceReport {
   targetOs @4 :Text;
   targetArch @5 :Text;
   hostname @6 :Text;
+  tpm @7 :TpmAttestation;
 }
 
 struct Assignment {
@@ -34,6 +33,8 @@ struct Assignment {
   installationId @1 :Text;
   challenge @2 :Data;
   challengeExpiresUnixMs @3 :UInt64;
+  credentialBlob @4 :Data;
+  encryptedSecret @5 :Data;
 }
 
 struct Issued {
