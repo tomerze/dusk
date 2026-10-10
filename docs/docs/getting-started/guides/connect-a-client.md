@@ -80,10 +80,8 @@ curl -s localhost:9100/v1/sh \
      -d '{"descriptor": "a3f91c07", "command": "ps"}'
 ```
 
-The API describes itself: open **`http://localhost:9100/v1/docs`** in a browser
-for a Swagger UI you can call every endpoint from, and point a client generator
-at `/v1/openapi.json` to get a typed client in your language. Neither needs
-internet access.
+The API describes itself: point a client generator at `/v1/openapi.json` to get
+a typed client in your language.
 
 An **MCP** server for LLM agents and IDEs is always served on the same port at
 `/mcp`, exposing each of the node's programs as a tool.
