@@ -71,6 +71,10 @@ single_password() {
     password > "$1/password"
 }
 
+signoz_password() {
+    printf '%s-Aa0' "$(password)" > "$1/password"
+}
+
 postgres_login() {
     printf '%s' "$1" > "$2/username"
     password > "$2/password"
@@ -113,3 +117,4 @@ for user in admin vector grafana signoz; do
     create "clickhouse-$user" single_password
 done
 create grafana-admin single_password
+create signoz-admin signoz_password

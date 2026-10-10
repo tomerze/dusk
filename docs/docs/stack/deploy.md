@@ -90,7 +90,7 @@ Open the UIs, published on 127.0.0.1 only:
 |----|---------|---------|
 | twilight | http://127.0.0.1:8080 | `docker compose exec twilight twilight token create --name admin --role admin` prints a token |
 | Grafana | http://127.0.0.1:3000 | user `admin`, password from `docker compose exec grafana cat /run/secrets/grafana-admin/password` |
-| SigNoz | http://127.0.0.1:8081 | create the first account in the UI (needs the `signoz` profile, below) |
+| SigNoz | http://127.0.0.1:8081 | user `admin@dusk.test`, password from `docker compose exec signoz cat /run/secrets/signoz-admin/password` (needs the `signoz` profile, below) |
 
 Nodes outside Docker reach nightfall on 127.0.0.1:8443. They must connect by
 the names on its certificates, `fleet.dusk.test` and `provision.dusk.test`,
@@ -206,6 +206,12 @@ Postgres database. Its ingester reads `dusk.otel-logs`, `dusk.otel-spans` and
 offset still in Kafka. The image is SigNoz's own `signoz/signoz`, which
 includes code under the SigNoz Enterprise License; only that build can keep its
 metadata in Postgres.
+
+SigNoz starts with its root account, `admin@dusk.test`, whose password is the
+`signoz-admin` secret; SigNoz's UI cannot change or delete that account. The
+address is `signoz.env.signoz_user_root_email` in
+`infra/k8s/base/signoz/values.yaml` and `SIGNOZ_USER_ROOT_EMAIL` in the compose
+file.
 
 Log pipelines edited in SigNoz's UI do not reach the ingester: it runs from the
 configuration in `infra/k8s/base/signoz/collector.yaml` and not under SigNoz's
@@ -456,6 +462,7 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | `postgres-superuser`, `postgres-twilight`, `postgres-grafana`, `postgres-signoz` | `username`, `password`, `pgpass` | Postgres; twilight, Grafana, SigNoz |
 | `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz |
 | `grafana-admin` | `password` | Grafana |
+| `signoz-admin` | `password`, the password of SigNoz's root account | SigNoz |
 
 pki-init adds, in Kubernetes:
 

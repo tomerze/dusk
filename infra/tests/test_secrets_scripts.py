@@ -116,6 +116,21 @@ def test_generate_keeps_every_secret_that_exists(
     assert second.count("exists, kept") == len(groups)
 
 
+def test_generate_gives_signoz_a_password_its_policy_accepts(
+    tmp_path: Path, step: dict[str, str]
+) -> None:
+    output = tmp_path / "secrets"
+    generate(output, step)
+    password = (output / "signoz-admin" / "password").read_text()
+    symbols = '~!@#$%^&*()_+`-={}|[]\\:"<>?,./'
+    assert len(password) >= 12
+    assert any(character.isupper() for character in password)
+    assert any(character.islower() for character in password)
+    assert any(character.isdigit() for character in password)
+    assert any(character in symbols for character in password)
+    assert all(character.isalnum() or character in symbols for character in password)
+
+
 def test_generate_derives_the_verify_group_from_the_ledger_keys(
     tmp_path: Path, step: dict[str, str]
 ) -> None:

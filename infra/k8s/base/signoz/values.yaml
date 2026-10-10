@@ -15,6 +15,13 @@ signoz:
           name: postgres-signoz
           key: password
     signoz_sqlstore_postgres_dsn: postgres://signoz:$(SQLSTORE_POSTGRES_PASSWORD)@postgres:5432/signoz?sslmode=disable
+    signoz_user_root_enabled: true
+    signoz_user_root_email: admin@dusk.test
+    signoz_user_root_password:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-admin
+          key: password
   podSecurityContext:
     fsGroup: 1000
   resources:

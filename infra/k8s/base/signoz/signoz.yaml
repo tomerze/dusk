@@ -586,6 +586,15 @@ spec:
                 secretKeyRef:
                   key: password
                   name: postgres-signoz
+            - name: SIGNOZ_USER_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: signoz-admin
+            - name: SIGNOZ_USER_ROOT_ENABLED
+              value: "true"
+            - name: SIGNOZ_USER_ROOT_EMAIL
+              value: "admin@dusk.test"
             - name: SIGNOZ_TELEMETRYSTORE_PROVIDER
               value: "clickhouse"
             - name: SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN

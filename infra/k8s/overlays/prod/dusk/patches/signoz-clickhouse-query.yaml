@@ -11,10 +11,10 @@
   path: /spec/template/spec/containers/0/env/6/value
   value: "true"
 - op: test
-  path: /spec/template/spec/containers/0/env/9/name
+  path: /spec/template/spec/containers/0/env/12/name
   value: SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN
 - op: replace
-  path: /spec/template/spec/containers/0/env/9/value
+  path: /spec/template/spec/containers/0/env/12/value
   value: "tcp://clickhouse:9440/?username=$(CLICKHOUSE_USER)&password=$(CLICKHOUSE_PASSWORD)&secure=true"
 - op: add
   path: /spec/template/spec/containers/0/env/-

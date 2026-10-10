@@ -616,6 +616,7 @@ services:
       - >-
         export SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN="tcp://clickhouse:9000/?username=signoz&password=$$(cat /run/secrets/clickhouse-signoz/password)"
         SIGNOZ_SQLSTORE_POSTGRES_DSN="postgres://signoz:$$(cat /run/secrets/postgres-signoz/password)@postgres:5432/signoz?sslmode=disable"
+        SIGNOZ_USER_ROOT_PASSWORD="$$(cat /run/secrets/signoz-admin/password)"
         && exec ./signoz server
     networks: [stack]
     ports:
@@ -627,6 +628,8 @@ services:
       SIGNOZ_ALERTMANAGER_PROVIDER: signoz
       SIGNOZ_EMAILING_ENABLED: "false"
       SIGNOZ_PROMETHEUS_ACTIVE__QUERY__TRACKER_ENABLED: "false"
+      SIGNOZ_USER_ROOT_ENABLED: "true"
+      SIGNOZ_USER_ROOT_EMAIL: admin@${DUSK_DOMAIN:-dusk.test}
     depends_on:
       postgres:
         condition: service_healthy
@@ -636,6 +639,7 @@ services:
       - signoz:/var/lib/signoz
       - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
       - { <<: *secret, target: /run/secrets/postgres-signoz, volume: { subpath: postgres-signoz } }
+      - { <<: *secret, target: /run/secrets/signoz-admin, volume: { subpath: signoz-admin } }
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/api/v1/health"]
       interval: 10s
