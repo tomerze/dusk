@@ -114,7 +114,7 @@ flowchart TB
 | Dusk node | nightfall | TLS 1.3 with the node's certificate, Cap'n Proto RPC; the node is the RPC server | The fleet link, to `fleet.<domain>`. The node serves its `Dusk`; nightfall serves the node nothing of its own. |
 | Dusk node | nightfall | TLS 1.2 or 1.3, Cap'n Proto RPC | Enrollment and renewal, to `provision.<domain>`, usually on the same port as the fleet link. |
 | nightfall | step-ca | HTTPS | Signing a node's certificate request with a one-time token nightfall mints. |
-| nightfall | Kafka | Kafka protocol | Writes `dusk.ledger`, `dusk.connections`, `dusk.census`, `dusk.enrollments`; reads `dusk.node-state`, `dusk.census`, `dusk.connections`. |
+| nightfall | Kafka | Kafka protocol | Writes `dusk.ledger`, `dusk.connections`, `dusk.census`, `dusk.enrollments`, `dusk.credential-quota`; reads `dusk.node-state`, `dusk.census`, `dusk.connections`, `dusk.credential-quota`. |
 | nightfall | nightfall | The client's own TLS, relayed after a PROXY protocol v2 header | A client that reached an instance not holding its node is relayed to the instance that does. |
 | dawn | nightfall | TLS 1.3 with dawn's principal certificate, Cap'n Proto RPC | Reaching one node, by the server name `<namespace id>.<suffix>`. The `dusk` Python extension runs inside dawn and is the client of this link. |
 | dawn | Kafka | Kafka protocol | Writes `dusk.process-results`, `dusk.process-output`, `dusk.files`. |
@@ -125,7 +125,7 @@ flowchart TB
 | twilight | Postgres | PostgreSQL protocol | The inventory, campaigns, intended processes and alerts. |
 | OTel collector | Kafka | Kafka protocol | Writes `dusk.otel-logs`, `dusk.otel-spans`, `dusk.otel-metrics`. |
 | OTel collector | nightfall, dawn, twilight | HTTP | Scrapes their Prometheus metrics: nightfall on 9100, dawn on 9101, twilight on 9102. |
-| Vector | Kafka | Kafka protocol | Reads every topic but `dusk.census` and `dusk.node-state`; the ledger with `isolation.level=read_committed`. |
+| Vector | Kafka | Kafka protocol | Reads every topic but `dusk.census`, `dusk.node-state` and `dusk.credential-quota`; the ledger with `isolation.level=read_committed`. |
 | Vector | ClickHouse | HTTP | One table per topic. |
 | Vector | Ceph RGW | S3 | The Parquet lake (`dusk-lake`) and the ledger's evidence copy (`dusk-ledger-evidence`), with credentials that may only add objects to the evidence bucket. |
 | ClickHouse | Ceph RGW | S3 | Views over the Parquet lake, and SigNoz's cold storage tier (`signoz-cold`). Grafana and SigNoz reach the object store only this way. |
@@ -146,6 +146,7 @@ nodes through dawn at a pid twilight records for them.
 | `dusk.enrollments` | nightfall | twilight, Vector |
 | `dusk.node-state` | twilight | nightfall |
 | `dusk.intended-processes` | twilight | nightfall |
+| `dusk.credential-quota` | nightfall | nightfall |
 | `dusk.process-results` | dawn | twilight, Vector |
 | `dusk.process-output` | dawn | Vector |
 | `dusk.files` | dawn | Vector |

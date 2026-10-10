@@ -97,14 +97,18 @@ describes:
 | `kafka.topics.enrollments` | `dusk.enrollments` | `delete` |
 | `kafka.topics.node_state` | `dusk.node-state` | `compact` |
 | `kafka.topics.intended_processes` | `dusk.intended-processes` | `compact` |
+| `kafka.topics.credential_quota` | `dusk.credential-quota` | `compact` |
 
 It stays not ready while one is missing or its `cleanup.policy` is not exactly
 the one above (`compact,delete` on `dusk.node-state` would let Kafka delete the
 records of revoked nodes, and on `dusk.intended-processes` the records of
 processes still intended). Each instance writes its ledger to partition `ledger.partition`
 with the transactional id `nightfall-ledger-<instance>`, and writes its census
-to the partition the Java default partitioner gives its instance name. It reads
-`dusk.node-state`, `dusk.intended-processes` and `dusk.census` from the beginning and `dusk.connections` from
+to the partition the Java default partitioner gives its instance name. It writes
+an installation reservation of a capped credential to the partition the Java
+default partitioner gives `<credential_kind>/<credential>` (see
+[Capping installations](provisioning.md#capping-installations)). It reads
+`dusk.node-state`, `dusk.intended-processes`, `dusk.census` and `dusk.credential-quota` from the beginning and `dusk.connections` from
 60 seconds before the oldest census it applied was taken, with partitions assigned directly (no
 consumer group rebalancing). Every message it reads is checked against its
 contract in `services/contracts/kafka/`; an invalid one is dropped, counted in
@@ -129,6 +133,10 @@ so a census burst never fills the ledger's queue.
 * every topic above exists with its cleanup policy;
 * the ledger can take entries;
 * nightfall is not draining.
+
+Reading `dusk.credential-quota` to its end is not one of them: until it is
+read, nightfall refuses only the enrollments of capped credentials, with
+`credential_quota_unavailable`.
 
 ## Configuration
 
@@ -305,9 +313,15 @@ client CA bundle) keeps the previous material, is logged at `warn` and counted i
 changed, whose principal lost its roles or whose certificate is now denied is
 disconnected, and the rest keep their connections.
 
-The fleet tokens, the install token keys, the device id key, the ledger keys,
-the step-ca settings and every other key of `nightfall.toml` are read at start; change them with a
-restart.
+`fleet_tokens_file` and `install_token_keys` are checked the same way and a
+changed file is loaded without a restart and without touching a session: new
+enrollments see added, retired, removed, re-tenanted and re-capped credentials
+at once, and nightfall logs which entries were added, removed, retired or
+changed. A file that does not load keeps the previous credentials, is logged at
+`warn` and counted in `nightfall_credentials_reload_failures_total{file}`.
+
+The device id key, the ledger keys, the step-ca settings and every other key of
+`nightfall.toml` are read at start; change them with a restart.
 
 ## The admin API
 
@@ -382,6 +396,11 @@ roles = ["admin"]
 | `nightfall_census_failures_total`, `nightfall_event_delivery_failures_total` | `topic` on the second | Census writes and events Kafka did not take. |
 | `nightfall_dead_instances_total` | | Instances whose census stopped. |
 | `nightfall_tls_reload_failures_total`, `nightfall_permissions_reload_failures_total` | | Changed files that did not load. |
+| `nightfall_credentials_reload_failures_total` | `file` (`fleet_tokens_file`, `install_token_keys`) | Changed credential files that did not load. |
+| `nightfall_credential_installations_remaining` | `credential_kind`, `credential` | What is left of each credential's `max_installations`. |
+| `nightfall_credential_quota_reservations_total` | `outcome` (`granted`, `refused`, `unconfirmed`, `unwritten`) | Installation reservations of capped credentials. |
+| `nightfall_credential_quota_release_failures_total` | | Reservations nightfall could not give back; each leaves an installation counted. |
+| `nightfall_credential_quota_record_failures_total` | | Installations of uncapped credentials nightfall could not record; a cap set later does not count them. |
 | `device_id_collision` | | Device ids seen with many installations from many addresses (cloned images). |
 
 ## Sizing

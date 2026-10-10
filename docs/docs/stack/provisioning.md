@@ -2,9 +2,9 @@
 
 This page is for fleet operators: the people who decide which nodes may join a
 fleet and who run the certificate authority that admits them. It covers the
-credentials nightfall accepts, how to issue them, TPM attestation, how to set up
-step-ca as the fleet-client certificate authority, the certificate template, and
-how certificates are renewed.
+credentials nightfall accepts, how to issue, cap and retire them, TPM
+attestation, how to set up step-ca as the fleet-client certificate authority, the
+certificate template, and how certificates are renewed.
 
 The `step` commands on this page were run with step CLI 0.30.2 and step-ca
 0.30.2, both in the `smallstep/step-ca:0.30.2` image; the others need OpenSSL 3
@@ -92,6 +92,13 @@ fleet_tokens_file` is a TOML file with one `[[token]]` table per token:
 name = "retail-eu-2026"
 value_sha256 = "0e8ae4e5ae2bdd59c7b6a3fd1f4e5a9e15d2a0a6f78d5d1bfa1b0e7a5e3c3a2d"
 tenant = "retail-eu"
+max_installations = 50000
+
+[[token]]
+name = "retail-eu-2025"
+value_sha256 = "9d4b2c7e1a3f5b8d0c6e4a2f7b9d1c3e5a8f0b2d4c6e9a1b3d5f7c0e2a4b6d8f"
+tenant = "retail-eu"
+retired = true
 
 [[token]]
 name = "lab"
@@ -105,6 +112,13 @@ value_sha256 = "6f2c7d0e4b1a9c8d3e5f7a2b4c6d8e0f1a3b5c7d9e2f4a6b8c0d1e3f5a7b9c2d
 * `tenant` (optional) is written into every certificate the token enrolls, as
   `urn:dusk:tenant:<tenant>`. It matches `[a-z0-9-]{1,63}`. A node cannot choose
   or change its tenant; it comes from the credential only.
+* `max_installations` (optional, at least 1) is the most installations the token
+  ever enrolls, across every nightfall instance; see
+  [Capping installations](#capping-installations). Without it the token has no
+  cap.
+* `retired` (optional, default `false`): `true` refuses every assign and enroll
+  with the token, with `denied: credential retired`. The address the token came
+  from is not penalized for it.
 
 Any other key, a repeated name or a repeated value makes nightfall refuse the
 file. Create a token and its entry:
@@ -120,9 +134,24 @@ the node is compiled); the printed digest is the entry's `value_sha256`. nightfa
 as the node presents it, so `printf '%s'` writes it without a trailing
 newline.
 
-To retire a token, remove its entry and restart nightfall, one instance at a time.
-Nodes that already hold certificates keep them and keep renewing, since renewal
-needs only the certificate; to cut those nodes off, revoke them.
+nightfall checks the file's modification time every 30 seconds and loads a
+changed file without a restart: an added entry is accepted, a retired or
+removed one is refused, and a changed tenant or cap applies to every enrollment
+from then on. An enrollment between its assign and its enroll call when its
+token is retired is refused at enroll. A file that does not load leaves the
+previous entries in use; nightfall logs a warning and counts it in
+`nightfall_credentials_reload_failures_total{file="fleet_tokens_file"}`. In
+Kubernetes the file is a Secret mounted without `subPath`, so an updated Secret
+reaches nightfall after the kubelet's next sync (one minute by default) plus its
+cache delay.
+
+To retire a token, set `retired = true` on its entry, or remove the entry.
+Keeping the entry keeps naming the token in enrollment events, so twilight can
+alert on nodes that still present it, and keeps it unpenalized; a removed
+token is an unknown credential, which counts against the address that presents
+it. Either way, nodes that already hold certificates keep them, keep their
+sessions and keep renewing, since renewal needs only the certificate; to cut
+those nodes off, revoke them.
 
 ## Install tokens
 
@@ -150,7 +179,9 @@ claims:
 | `tenant` | no | The tenant written into the certificate, `[a-z0-9-]{1,63}`. |
 
 nightfall allows 60 seconds of clock difference on `exp` and `nbf` and ignores
-other claims. A token is single-use because nightfall passes
+other claims. The key that signed a token is its **issuer**: enrollment events
+name it as `credential_issuer`, and caps, rate limits and bulk revocation group
+a key's tokens under it. A token is single-use because nightfall passes
 `hex(SHA-256(L("dusk-install-token") || L(iss) || L(jti)))`, where `L(x)` is the
 length of `x` in 4 big-endian bytes followed by `x`, to step-ca as the id of the
 one-time token it signs the certificate with, and step-ca refuses an id it has
@@ -177,8 +208,57 @@ echo '{"tenant": "retail-eu"}' | step crypto jwt sign - --key installer.jwk \
 The step CLI requires `--aud`; nightfall does not read it. Leave out the payload
 (`echo '{}'`) for a token without a tenant.
 
-To stop accepting a key's tokens, remove the key from the JWKS and restart
-nightfall, one instance at a time.
+A key in the JWKS may carry `max_installations`, a whole number of at least 1:
+the most installations its tokens ever enroll together, across every nightfall
+instance (see [Capping installations](#capping-installations)):
+
+```json
+{"keys": [{"kty": "OKP", "crv": "Ed25519", "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo", "kid": "factory-2026", "use": "sig", "max_installations": 50000}]}
+```
+
+`step crypto jwk keyset add` does not keep members it does not know, so add
+`max_installations` after the last key is added. nightfall reloads a changed JWKS
+the way it reloads the fleet tokens file. To stop accepting a key's tokens,
+remove the key from the JWKS; its tokens are then refused as
+`invalid_install_token`.
+
+## Capping installations
+
+A fleet token entry or an install token key with `max_installations` enrolls at
+most that many installations, ever. The installation that would go beyond it is
+refused with `denied: credential quota reached` and the reason
+`credential_quota_reached`, at assign and at enroll, on every nightfall
+instance. Renewals do not count and are never refused for it; revoking an
+installation does not give its place back.
+
+nightfall counts the installations on the Kafka topic `dusk.credential-quota`,
+which every instance reads from the beginning. Just before it asks step-ca to
+sign, nightfall writes a reservation there and waits until it reads that
+reservation back: in the order the topic holds them, a reservation is granted
+while fewer than the cap are granted before it, so two instances racing for the
+last place cannot both get it. A reservation whose signing fails is given back.
+A reservation that is not read back within 10 seconds is refused as
+`credential_quota_unavailable`, and given back once it is read if it was
+granted. A nightfall instance that crashes between a reservation and its
+signing keeps that place used: the cap can be reached early, never passed.
+
+nightfall counts the installations of credentials without a cap too: once a
+certificate is issued, it records the installation on the same topic without
+waiting for it. A cap set on a credential later therefore counts what the
+credential enrolled before, and refuses at once when that is already the cap or
+more. An installation Kafka does not take is logged and counted in
+`nightfall_credential_quota_record_failures_total`, and a later cap does not
+count it.
+
+While an instance has not read the topic to its end - right after it starts -
+and while Kafka does not take the reservation, it refuses capped credentials
+with `overloaded` and the reason `credential_quota_unavailable`, and the node
+retries. Credentials without a cap never wait for the topic.
+
+`nightfall_credential_installations_remaining{credential_kind, credential}`
+reports what is left of each cap, and
+`nightfall_credential_quota_reservations_total{outcome}` counts reservations
+`granted`, `refused`, `unconfirmed` and `unwritten`.
 
 ## TPM attestation
 
@@ -422,10 +502,16 @@ appears in the fleet as a new installation of the same device.
 ## Limits
 
 * `[limits] enrollments_per_second` (default 50) for the whole nightfall instance
-  and `enrollments_per_second_per_credential` (default 10) per credential value,
-  and as many again per TPM endorsement key for a node that attests.
-  assign and enroll each take one, so one enrollment takes two. Beyond any of
-  them, the node is told `overloaded` and retries later.
+  and `enrollments_per_second_per_credential` (default 10) per credential - one
+  fleet token entry, or every install token one key signed - and as many again
+  per TPM endorsement key for a node that attests. assign and enroll each take
+  one, so one enrollment takes two: one credential enrolls at most 5 nodes a
+  second through one instance, and that many times the number of instances
+  across the stack. The credential is checked first, so a credential that does
+  not verify takes nothing from these buckets and counts against its address
+  instead. Beyond any of them, the node is told `overloaded` and retries later.
+* `max_installations` caps what a credential enrolls in all; see
+  [Capping installations](#capping-installations).
 * A credential that fails counts against the address it came from; an address
   with more than `[limits] credential_failures_per_ip_per_hour` (default 20)
   failures is refused for `penalty_seconds` (default 60).
@@ -443,7 +529,8 @@ Kafka topic `dusk.enrollments` (defined by
 `services/contracts/kafka/dusk.enrollments.schema.json` in the Dusk repository) with the operation, the outcome (`assigned`, `issued`, `denied`,
 `rate_limited` or `error`), the device and installation ids when known, the
 tenant, the credential kind and `credential_ref` (a fleet token's `name` or an
-install token's `sub`, never the secret), the SHA-256 of the hardware fingerprint,
+install token's `sub`, never the secret), `credential_issuer` (the key id of an
+install token's key), the SHA-256 of the hardware fingerprint,
 the address the call came from, the issued certificate's serial, fingerprint and
 expiry, what the node reported about itself, and the nightfall instance.
 `reason` says why a call did not succeed:
@@ -457,6 +544,9 @@ expiry, what the node reported about itself, and the nightfall instance.
 | `credential_rate` | `rate_limited` | This credential's enrollment rate is exhausted. |
 | `endorsement_key_rate` | `rate_limited` | This TPM endorsement key's enrollment rate is exhausted. |
 | `invalid_credential` | `denied` | No fleet token entry matches. |
+| `credential_retired` | `denied` | The fleet token entry is `retired`. |
+| `credential_quota_reached` | `denied` | The fleet token entry or the install token key enrolled its `max_installations`. |
+| `credential_quota_unavailable` | `error` | The credential has a cap and the instance could not count against it: it has not read `dusk.credential-quota` to its end yet, or Kafka did not take or return the reservation within 10 seconds. |
 | `invalid_install_token` | `denied` | The install token's signature, claims or validity period is wrong. |
 | `certificate_credential` | `denied` | assign or enroll was called with the certificate credential, which only renew takes. |
 | `tpm_roots_missing` | `denied` | The node attested and `[provision] tpm_endorsement_roots` is empty. |
@@ -486,3 +576,4 @@ expiry, what the node reported about itself, and the nightfall instance.
 | `random_source` | `error` | The system's random number source failed. |
 
 nightfall's log holds the detail of every refusal under the same reason.
+
