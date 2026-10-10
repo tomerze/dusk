@@ -356,6 +356,7 @@ export interface Alert {
   severity: Severity
   kind: string
   fingerprint: string
+  tenant: string | null
   detail: Record<string, JsonValue>
   acknowledged_by: string | null
   acknowledged_at: string | null
