@@ -104,6 +104,9 @@ func newNotifier(settings config.Alerts, instance string) (*notifier, error) {
 		case receiver.Slack != nil:
 			secretFile = receiver.Slack.WebhookURLFile
 			built.senders[receiver.Name] = slackSender{client: client, webhookURLFile: secretFile}
+		case receiver.Teams != nil:
+			secretFile = receiver.Teams.WebhookURLFile
+			built.senders[receiver.Name] = teamsSender{client: client, webhookURLFile: secretFile}
 		case receiver.Webhook != nil:
 			secretFile = receiver.Webhook.SecretFile
 			built.senders[receiver.Name] = webhookSender{client: client, url: receiver.Webhook.URL, secretFile: secretFile}

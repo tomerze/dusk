@@ -21,6 +21,7 @@ type Receiver struct {
 	Name      string             `yaml:"name"`
 	PagerDuty *PagerDutyReceiver `yaml:"pagerduty"`
 	Slack     *SlackReceiver     `yaml:"slack"`
+	Teams     *TeamsReceiver     `yaml:"teams"`
 	Webhook   *WebhookReceiver   `yaml:"webhook"`
 }
 
@@ -30,6 +31,10 @@ type PagerDutyReceiver struct {
 }
 
 type SlackReceiver struct {
+	WebhookURLFile string `yaml:"webhook_url_file"`
+}
+
+type TeamsReceiver struct {
 	WebhookURLFile string `yaml:"webhook_url_file"`
 }
 
@@ -56,6 +61,7 @@ var (
 	receiverTypes = []string{
 		"pagerduty",
 		"slack",
+		"teams",
 		"webhook",
 	}
 )
@@ -106,6 +112,7 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 		for _, set := range []bool{
 			receiver.PagerDuty != nil,
 			receiver.Slack != nil,
+			receiver.Teams != nil,
 			receiver.Webhook != nil,
 		} {
 			if set {
@@ -127,6 +134,10 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 		case receiver.Slack != nil:
 			if receiver.Slack.WebhookURLFile == "" {
 				problem("%s.slack.webhook_url_file is required", where)
+			}
+		case receiver.Teams != nil:
+			if receiver.Teams.WebhookURLFile == "" {
+				problem("%s.teams.webhook_url_file is required", where)
 			}
 		case receiver.Webhook != nil:
 			if !webURL(receiver.Webhook.URL) {
