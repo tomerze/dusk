@@ -2,8 +2,9 @@
 
 This page is for the people who operate nightfall and for the people who review
 its security. It says what the membrane guarantees about every call that crosses
-nightfall, what it writes to the ledger, how `permissions.toml` is read, and what
-the membrane cannot see.
+nightfall, which calls it admits against the processes twilight intended, what it
+writes to the ledger, how `permissions.toml` is read, and what the membrane
+cannot see.
 
 The membrane is the part of nightfall that stands between a client on the inner
 listener (dawn) and a node. A client never holds a capability of the node: it
@@ -25,6 +26,11 @@ the bootstrap answers `unimplemented`.
 **Permissions decide what can be called at all.** A call the principal's roles
 do not allow is answered `unimplemented` and never reaches the node. There is no
 check after the fact.
+
+**Only what twilight intended reaches a node.** A call the roles allow is held
+against the processes twilight intends on that node before it is forwarded
+([Admission](#admission)). A call no intended process allows fails with
+`denied: not intended` and never reaches the node.
 
 **Every capability is wrapped, in both directions.** A capability the node
 returns is replaced by a nightfall capability before the client sees it, at any
@@ -80,6 +86,67 @@ message: <kind>`, logged at `error` and recorded in the ledger as an
 itself; the filter is there so that a future capnp-rpc that can hand a
 capability to a third party fails loudly instead of letting it bypass the
 membrane.
+
+## Admission
+
+twilight writes every process it intends - the pid, the node, until when, and
+how many shell commands it may run - to the compacted Kafka topic
+`dusk.intended-processes` before it asks dawn for the process, and a tombstone
+once the process expires or is reaped.
+Every nightfall instance reads that topic from the beginning, on every partition,
+into a table of the intended processes of every node, and holds each
+client-to-node call against the table of the call's node before forwarding it.
+
+A call the rules refuse fails with `failed` and the message `denied: not
+intended`, is never forwarded, is recorded as a `call` entry with result
+`denied` and `event_detail` `{"rule": "<rule>"}`, is counted in
+`nightfall_admission_refused_total{rule}`, and is logged at `info` with its
+principal, session, action, pid and rule.
+
+| rule | refuses |
+|------|---------|
+| `process_without_intent` | `Dusk.process` at a pid that no intended process of the node names - including a pid intended for another node. |
+| `process_without_pid` | `Dusk.process` with no pid, but one: the read-only `kvs bind` process the `kvs` client starts to read the key names `kvs get` matches, while an intended process of the node is open. `ShPortal.sh` on a shell nightfall saw created without a pid is refused the same way. |
+| `process_after_deadline` | any call under a pid whose intended process expired - more than `clock_skew_ms` past its `expires_at` - or that the table no longer holds, but `Dusk.kill` and `Dusk.waitpid`. |
+| `command_budget` | `ShPortal.sh` under a pid once the shell at that pid has taken `max_commands` of them. |
+| `default_shell_without_intent` | `Dusk.process` at the default shell's pid (`sh.capnp`'s `defaultPid`), and `ShPortal.sh` in the default shell, while no intended process of the node is open. A process is open from `clock_skew_ms` before its `created_at` to `clock_skew_ms` after its `expires_at`. |
+| `default_shell_budget` | `ShPortal.sh` in the default shell beyond the `default_shell_commands` of the node's intended processes that overlap the current window. The window starts at the `created_at` of the earliest open process and starts again, with a fresh count, when that process closes. |
+| `not_caught_up` | every call a rule above would judge, until this instance has read `dusk.intended-processes` up to the end it had at startup. The instance is not ready meanwhile. |
+
+Calls under no process (pid 0: `Dusk.ps`, `Dusk.hostname` and the other calls on
+the bootstrap), calls under the default shell's pid other than `ShPortal.sh`,
+`Dusk.kill` and `Dusk.waitpid` at any pid, and node-to-client calls are not
+judged.
+
+**A call waits for the newest intent before it is refused.** twilight writes an
+intended process and waits for Kafka to acknowledge it before it calls dawn, but
+nightfall may not have read it yet when dawn's call arrives. So a call the rules
+would refuse first waits, up to `intent_wait_ms`, for this instance to read
+`dusk.intended-processes` up to the end it has when the call arrives, and is
+then judged again. A process twilight intended is admitted however close behind
+dawn's call its record arrives; a call nobody intended is refused
+`intent_wait_ms` late.
+
+**Budgets are counted per instance.** The `ShPortal.sh` calls of a pid and of a
+node's default shell are counted by the instance that holds the node session,
+and every client of that node shares the count. A node that reconnects to
+another instance starts that instance's count from zero; twilight's reconcile
+still holds the totals.
+
+**The table is bounded.** It holds at most `max_intended_processes` processes
+across every node; an expired one is evicted within 10 seconds. A record that
+would take the table past its bound is dropped - the process stays unintended
+and its calls are refused - and counted in
+`nightfall_intended_processes_dropped_total`, with an `error` log. The number
+held is `nightfall_intended_processes`, and how far behind the topic this
+instance reads is `nightfall_intended_processes_lag_seconds`.
+
+**Roles exempt from admission.** A role with `admission_exempt = true` is not
+held to the intended processes: its calls are forwarded whatever the table
+holds. This is for an operator's break-glass role. Every call of such a role
+that a rule would have refused is recorded with an `admission_override` event
+that names the role and the rule, and logged at `warn`; reconcile still raises
+its alerts for those calls, since they reach the node.
 
 ## Limits
 
@@ -149,6 +216,12 @@ the membrane fills these:
 * `principal`, `device_id`, `installation_id`, `namespace_id`, `epoch` - who
   called which node session.
 * `session_id` - one UUID per inner connection.
+* `intent_campaign_id`, `intent_principal`, `intent_subject` - the campaign,
+  the principal who asked and the subject (`campaign:<id>` or the operator) of
+  the intended process at `pid`, as nightfall held it when it saw the call; null
+  when it held none, as for pid `"0"` and the default shell. A result carries
+  what its call carried. They let the ledger name who asked for a process after
+  twilight has dropped its own record of it.
 * `pid` - the process the call is about, as a decimal string. A process is the
   unit of work on a node, so this is how a call is tied to the work it belongs
   to. It is the fixed pid in the `ProgramArgs` of `Dusk.process`, the `pid` of
@@ -176,12 +249,18 @@ the membrane fills these:
 
 A call on an interface the node's schema bundle does not know is refused
 (`unimplemented`) and recorded as a denied call whose action is
-`unknown:<16 hex interface id>.<method id>`, with an empty `param_hash`.
+`unknown:<16 hex interface id>.<method id>`, with an empty `param_hash`. A call
+refused by [admission](#admission) is a denied call whose `event_detail` names
+the rule; one refused by permissions has a null `event_detail`.
 
 Events the membrane writes:
 
 * `quarantine_override` - a call on a quarantined node was let through by a role
   with `quarantine_override = true`; it carries the call's `call_id` and `pid`.
+* `admission_override` - a call that no intended process allows was let through
+  by a role with `admission_exempt = true`; it carries the call's `call_id`,
+  `action` and `pid`, and `event_detail` `{"role", "rule"}` names the role and
+  the rule the call broke.
 * `membrane_dropped` - a membrane was dropped; `event_detail.reason` says why
   (`permissions_changed`, `principal_revoked`, or the reason nightfall gave), and
   `event_detail.by` names the admin principal when an admin killed it.
@@ -220,6 +299,9 @@ node does with them.
   object again, dropping the membrane does not take it back.
 * **Untyped content is opaque.** Two calls that differ only inside cleared
   content hash the same.
+* **Admission does not read a script.** It counts `ShPortal.sh` calls; what a
+  script runs inside an intended process's budget is not checked, and neither is
+  which of a node's open processes a command in its default shell serves.
 * **Interfaces newer than nightfall are refused.** A node running a program
   whose schema is in none of nightfall's bundles cannot be driven through that
   program's portal. Roll out nightfall, with the new bundle, before the nodes.
@@ -262,6 +344,7 @@ roles = ["dawn"]
 | `deny` | list of patterns | client-to-node calls refused even when a role allows them. |
 | `reverse_allow` | list of patterns | node-to-client calls the role permits; everything else the node calls on the client's capabilities is refused. |
 | `quarantine_override` | bool, default false | the role's grants also apply on quarantined nodes, and each such call writes a `quarantine_override` event. |
+| `admission_exempt` | bool, default false | the role's calls are not held to the intended processes ([Admission](#admission)), and each call a rule would have refused writes an `admission_override` event. |
 | `[[principal]] name` | pattern | principal names this entry applies to. |
 | `roles` | list of strings | the roles those principals get. |
 

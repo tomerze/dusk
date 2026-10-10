@@ -19,11 +19,15 @@ One entry for each of these:
 * the result of every forwarded call;
 * every call nightfall refuses (`denied`) or holds back by a rate limit
   (`rate_limited`) - one entry, with no result entry after it, because the call
-  never reached the node;
+  never reached the node. A call refused because no process twilight intended
+  allows it names the [admission rule](membrane.md#admission) in its
+  `event_detail`;
 * the calls nightfall itself makes on a node while it sets up a session
   (`setup_call` events, principal `nightfall`);
 * node sessions opening, closing and being refused, a client's access being
-  dropped, an RPC message being rejected, and a role using a quarantine override;
+  dropped, an RPC message being rejected, a role using a quarantine override, and
+  a role exempt from admission making a call no intended process allows
+  (`admission_override`);
 * the chain's own events (`chain_link`, `chain_resumed`) and signed checkpoints.
 
 No entry holds a parameter value, a result value or command output. A call entry
@@ -68,6 +72,7 @@ carries.
 | `epoch` | The session's epoch. |
 | `principal` | Who made the call: the client's certificate principal, or `nightfall`. |
 | `pid` | The process the call is about, as a decimal string: the fixed pid a `Dusk.process` named, the pid a `Dusk.kill` or `Dusk.waitpid` names, or the pid of the process every capability of the call descends from. `"0"` when the call is about no process. A process is the unit of work on a node, so this ties every call to the work it belongs to. |
+| `intent_campaign_id`, `intent_principal`, `intent_subject` | The campaign, the principal who asked and the subject (`campaign:<id>` or the operator) of the process twilight intended at `pid`, as nightfall held it when it saw the call. `null` when it held none - on pid `"0"`, in the default shell, on checkpoints and on calls refused for want of an intended process. twilight keeps its own record of an intended process for weeks; these fields keep the answer to who asked in the ledger, and in its evidence copy, for as long as they are kept. |
 | `session_id` | The client connection the call arrived on. |
 | `call_id` | Shared by a call and its result. |
 | `cap_id`, `parent_cap_id` | The capability the call was made on and the one it was derived from, so the entries of a session form a tree. |
@@ -78,7 +83,7 @@ carries.
 | `param_hash` | The parameter HMAC on calls; `""` on results, events and checkpoints. |
 | `result_code` | `ok`, `error:failed`, `error:overloaded`, `error:disconnected`, `error:unimplemented` or `revoked` on results; `denied` or `rate_limited` on refused calls; `null` on calls that were forwarded. |
 | `result_cap_ids` | The capabilities a result returned. |
-| `event`, `event_detail` | The event an `event` entry records, and what it carries. |
+| `event`, `event_detail` | The event an `event` entry records, and what it carries. A `denied` call refused by admission carries `{"rule": ...}` in `event_detail`; every other non-event entry carries `null`. |
 | `key_id`, `signature` | Checkpoints only: which key signed and the signature. |
 
 These three records are a call, its result and the checkpoint after them, exactly
@@ -86,9 +91,9 @@ as nightfall writes them (one JSON object per line). Save them as
 `example.jsonl`; the checks below verify them.
 
 ```json
-{"action":"ShPortal.sh","call_id":"0192f3a4-a001-7b2c-9d3e-4f5061728394","cap_id":7,"device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","direction":"client_to_node","epoch":1791278043512408,"event":null,"event_detail":null,"hash":"747f720a42e97e505f36724829a33855ebc5eae7d84be0c9da7937f08d12b086","id":"01a112fe-d1ba-7684-ae83-5239bd173f3d","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","instance":"nightfall-0","interface_id":"e1c5b0f3a7d29c48","key_id":null,"kind":"call","method_id":0,"namespace_id":"5d2e9a1c7b3f8e04","param_cap_ids":[8],"param_fields":[{"name":"script","redacted":false}],"param_hash":"1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c2b4a6f8e1d3c5b7a9f0e2d4c6b8a1f3e","parent_cap_id":3,"partition":0,"pid":"11259529557207498630","previous_hash":"0000000000000000000000000000000000000000000000000000000000000000","principal":"dawn-0","result_cap_ids":[],"result_code":null,"schema":"dusk.ledger/v1","sequence":0,"session_id":"0192f3a4-9e8d-7c6b-8a59-483726150f1e","signature":null,"time":"2026-10-06T09:15:40.512408217Z"}
-{"action":"ShPortal.sh","call_id":"0192f3a4-a001-7b2c-9d3e-4f5061728394","cap_id":7,"device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","direction":"client_to_node","epoch":1791278043512408,"event":null,"event_detail":null,"hash":"5fcdc3db55bee5030567ab66fe3496d9962d7ec12f1013a46575a4652a8bd22b","id":"01a112fe-d1c4-7a0e-9b31-0c6f2d8e4a57","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","instance":"nightfall-0","interface_id":"e1c5b0f3a7d29c48","key_id":null,"kind":"result","method_id":0,"namespace_id":"5d2e9a1c7b3f8e04","param_cap_ids":[],"param_fields":[],"param_hash":"","parent_cap_id":3,"partition":0,"pid":"11259529557207498630","previous_hash":"747f720a42e97e505f36724829a33855ebc5eae7d84be0c9da7937f08d12b086","principal":"dawn-0","result_cap_ids":[9],"result_code":"ok","schema":"dusk.ledger/v1","sequence":1,"session_id":"0192f3a4-9e8d-7c6b-8a59-483726150f1e","signature":null,"time":"2026-10-06T09:15:40.531870044Z"}
-{"action":null,"call_id":null,"cap_id":null,"device_id":null,"direction":null,"epoch":null,"event":null,"event_detail":null,"hash":"f4b154c49200c56e5cbc513afff99bb818a97f678a2d8a259991f0e973d8b848","id":"01a112fe-d2a9-7f13-8e64-91b0c3d5e7f2","installation_id":null,"instance":"nightfall-0","interface_id":null,"key_id":"aIYX4r2CsioPrjLn-oyOh-8Li3WjGy78fze6-ezQUKQ","kind":"checkpoint","method_id":null,"namespace_id":null,"param_cap_ids":[],"param_fields":[],"param_hash":"","parent_cap_id":null,"partition":0,"pid":"0","previous_hash":"5fcdc3db55bee5030567ab66fe3496d9962d7ec12f1013a46575a4652a8bd22b","principal":"nightfall","result_cap_ids":[],"result_code":null,"schema":"dusk.ledger/v1","sequence":2,"session_id":null,"signature":"Qmy6Lugd6H29lsTbwJJOYDdIa26++GRalhqHoK0DUOKBf4P/JplRM+ZvJPV+drKKClX412gUmjMd7gTW+WHqDw==","time":"2026-10-06T09:15:41.512901336Z"}
+{"action":"ShPortal.sh","call_id":"0192f3a4-a001-7b2c-9d3e-4f5061728394","cap_id":7,"device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","direction":"client_to_node","epoch":1791278043512408,"event":null,"event_detail":null,"hash":"6e00fa298c5c31816638e88df022081a764dd5ed2e9a137e19b24d6c7aadbd93","id":"01a112fe-d1ba-7684-ae83-5239bd173f3d","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","instance":"nightfall-0","intent_campaign_id":"0192f3a4-5b6c-7d8e-9f01-23456789abcd","intent_principal":"token:0192f3a4-1111-7d8e-9f01-23456789abcd","intent_subject":"campaign:0192f3a4-5b6c-7d8e-9f01-23456789abcd","interface_id":"e1c5b0f3a7d29c48","key_id":null,"kind":"call","method_id":0,"namespace_id":"5d2e9a1c7b3f8e04","param_cap_ids":[8],"param_fields":[{"name":"script","redacted":false}],"param_hash":"1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c2b4a6f8e1d3c5b7a9f0e2d4c6b8a1f3e","parent_cap_id":3,"partition":0,"pid":"11259529557207498630","previous_hash":"0000000000000000000000000000000000000000000000000000000000000000","principal":"dawn-0","result_cap_ids":[],"result_code":null,"schema":"dusk.ledger/v1","sequence":0,"session_id":"0192f3a4-9e8d-7c6b-8a59-483726150f1e","signature":null,"time":"2026-10-06T09:15:40.512408217Z"}
+{"action":"ShPortal.sh","call_id":"0192f3a4-a001-7b2c-9d3e-4f5061728394","cap_id":7,"device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","direction":"client_to_node","epoch":1791278043512408,"event":null,"event_detail":null,"hash":"57c1d2cfe0453f2c832ed5741488974c3e869fb5ffc5784116fd97ffe746d67c","id":"01a112fe-d1c4-7a0e-9b31-0c6f2d8e4a57","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","instance":"nightfall-0","intent_campaign_id":"0192f3a4-5b6c-7d8e-9f01-23456789abcd","intent_principal":"token:0192f3a4-1111-7d8e-9f01-23456789abcd","intent_subject":"campaign:0192f3a4-5b6c-7d8e-9f01-23456789abcd","interface_id":"e1c5b0f3a7d29c48","key_id":null,"kind":"result","method_id":0,"namespace_id":"5d2e9a1c7b3f8e04","param_cap_ids":[],"param_fields":[],"param_hash":"","parent_cap_id":3,"partition":0,"pid":"11259529557207498630","previous_hash":"6e00fa298c5c31816638e88df022081a764dd5ed2e9a137e19b24d6c7aadbd93","principal":"dawn-0","result_cap_ids":[9],"result_code":"ok","schema":"dusk.ledger/v1","sequence":1,"session_id":"0192f3a4-9e8d-7c6b-8a59-483726150f1e","signature":null,"time":"2026-10-06T09:15:40.531870044Z"}
+{"action":null,"call_id":null,"cap_id":null,"device_id":null,"direction":null,"epoch":null,"event":null,"event_detail":null,"hash":"695914db1efc572f2e5cecde804ab15892521a28e87b01f4a7c9e60df1b8fb7a","id":"01a112fe-d2a9-7f13-8e64-91b0c3d5e7f2","installation_id":null,"instance":"nightfall-0","intent_campaign_id":null,"intent_principal":null,"intent_subject":null,"interface_id":null,"key_id":"HGdXo-ksSpjj5w_-LHDCgukLPgv6Byy8KLG2iR_eOsg","kind":"checkpoint","method_id":null,"namespace_id":null,"param_cap_ids":[],"param_fields":[],"param_hash":"","parent_cap_id":null,"partition":0,"pid":"0","previous_hash":"57c1d2cfe0453f2c832ed5741488974c3e869fb5ffc5784116fd97ffe746d67c","principal":"nightfall","result_cap_ids":[],"result_code":null,"schema":"dusk.ledger/v1","sequence":2,"session_id":null,"signature":"uEFhweyyaouKhPReSXKJGFLUF+5S1Mx+uHLA++L/1ZFR69tu5xbk2nLiWuAjUciBhGrRVOKwHeRtEFkVPhjeAw==","time":"2026-10-06T09:15:41.512901336Z"}
 ```
 
 ## Hashes and the chain
@@ -157,7 +162,7 @@ print(json.dumps({"keys": [{"kty": "OKP", "crv": "Ed25519", "x": x, "kid": kid}]
 The key that signed the example above has this JWKS:
 
 ```json
-{"keys": [{"kty": "OKP", "crv": "Ed25519", "x": "hchWCwlGPECJkO2UVc6UnDbQQLjetxHo30y195c9EOM", "kid": "U2t4_JwxDWJTMDFnyu2LAVJZRMN_D9vJ5SLUwwRcHlk"}]}
+{"keys": [{"kty": "OKP", "crv": "Ed25519", "x": "UvDGaapsy13txwCGfG7Fb68E8AjhkThX2TZL3ZCpzKE", "kid": "HGdXo-ksSpjj5w_-LHDCgukLPgv6Byy8KLG2iR_eOsg"}]}
 ```
 
 Keep the public keys of retired signing keys: the checkpoints they signed stay in

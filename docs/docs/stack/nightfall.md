@@ -96,13 +96,15 @@ describes:
 | `kafka.topics.ledger` | `dusk.ledger` | `delete` |
 | `kafka.topics.enrollments` | `dusk.enrollments` | `delete` |
 | `kafka.topics.node_state` | `dusk.node-state` | `compact` |
+| `kafka.topics.intended_processes` | `dusk.intended-processes` | `compact` |
 
 It stays not ready while one is missing or its `cleanup.policy` is not exactly
 the one above (`compact,delete` on `dusk.node-state` would let Kafka delete the
-records of revoked nodes). Each instance writes its ledger to partition `ledger.partition`
+records of revoked nodes, and on `dusk.intended-processes` the records of
+processes still intended). Each instance writes its ledger to partition `ledger.partition`
 with the transactional id `nightfall-ledger-<instance>`, and writes its census
 to the partition the Java default partitioner gives its instance name. It reads
-`dusk.node-state` and `dusk.census` from the beginning and `dusk.connections` from
+`dusk.node-state`, `dusk.intended-processes` and `dusk.census` from the beginning and `dusk.connections` from
 60 seconds before the oldest census it applied was taken, with partitions assigned directly (no
 consumer group rebalancing). Every message it reads is checked against its
 contract in `services/contracts/kafka/`; an invalid one is dropped, counted in
@@ -119,6 +121,9 @@ so a census burst never fills the ledger's queue.
 * `dusk.node-state` was read up to the end it had when nightfall started. Until
   then nightfall closes provisioning connections before TLS, and once it is read
   it closes every node session the states revoke or retire;
+* `dusk.intended-processes` was read up to the end it had when nightfall
+  started. Until then [admission](membrane.md#admission) refuses every call it
+  judges with `not_caught_up`;
 * `dusk.census` was read to its end and nightfall reads `dusk.connections`, so it
   knows which namespace ids other instances hold;
 * every topic above exists with its cleanup policy;
@@ -225,6 +230,17 @@ A Kafka property name holds dots, so it can only be set through the whole
 | `topics` | see [Kafka topics](#kafka-topics) | Topic names. |
 | `census_interval_seconds` | `300` | How often the full census is written. |
 | `census_heartbeat_seconds` | `15` | How often a header-only census heartbeat is written; an instance silent for three of its heartbeats is dead to the others. Must be shorter than the interval. |
+
+### `[admission]`
+
+How the membrane holds calls against the processes twilight intends; see
+[admission](membrane.md#admission).
+
+| key | default | meaning |
+|-----|---------|---------|
+| `max_intended_processes` | `1000000` | The most intended processes the instance holds, across every node. A record past it is dropped and its process stays unintended. Size it above the number of processes twilight has open at once - a campaign phase holds one per node, plus the facts, reaps and sessions of every node that connects. |
+| `clock_skew_ms` | `5000` | How far twilight's clock and this instance's may disagree: a process counts as open this long before its `created_at` and after its `expires_at`. At most 3600000. |
+| `intent_wait_ms` | `3000` | How long a call no intended process allows waits for this instance to read `dusk.intended-processes` up to its end before it is refused. At most 60000. |
 
 ### `[schemas]`, `[permissions]`
 
@@ -349,6 +365,10 @@ roles = ["admin"]
 | `nightfall_membranes_dropped_total` | `reason` | Clients disconnected by nightfall. |
 | `nightfall_inflight_bytes` | | Bytes of calls in flight. |
 | `nightfall_node_state_lag_seconds` | | Age of the last node state applied; 0 when caught up. |
+| `nightfall_admission_refused_total` | `rule` | Calls refused because no intended process allowed them, by [rule](membrane.md#admission). |
+| `nightfall_intended_processes` | | Intended processes the instance holds. |
+| `nightfall_intended_processes_lag_seconds` | | Age of the last intended process record applied; 0 when caught up. |
+| `nightfall_intended_processes_dropped_total` | | Intended process records dropped because the table was full. |
 | `nightfall_heartbeat_misses_total` | | Heartbeats a node did not answer. |
 | `nightfall_ready` | | 1 when `/readyz` would answer 200. |
 | `nightfall_sessions_refused_total` | `reason` | Node sessions refused after TLS: `revoked`, `retired`, `setup_timeout`, `invalid_certificate`. |
