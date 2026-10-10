@@ -36,6 +36,27 @@ spec:
         fsGroup: 472
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: alerting-provisioning
+          image: dusk-twilight:dev
+          args: ["grafana-alerting", "--config", "/etc/twilight/twilight.yaml", "--output", "/provisioning/notifications.yaml"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: twilight-configuration
+              mountPath: /etc/twilight
+              readOnly: true
+            - name: alerting-provisioning
+              mountPath: /provisioning
       containers:
         - name: grafana
           image: dusk-grafana:dev
@@ -74,6 +95,10 @@ spec:
             - name: secrets
               mountPath: /run/secrets
               readOnly: true
+            - name: alerting-provisioning
+              mountPath: /etc/grafana/provisioning/alerting/notifications.yaml
+              subPath: notifications.yaml
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -97,3 +122,13 @@ spec:
                   items:
                     - key: password
                       path: clickhouse-grafana/password
+        - name: alerting-provisioning
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: twilight-configuration
+          configMap:
+            name: twilight
+            defaultMode: 0444
+            items:
+              - key: twilight.yaml
+                path: twilight.yaml
