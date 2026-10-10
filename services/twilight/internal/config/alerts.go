@@ -21,12 +21,17 @@ type Receiver struct {
 	Name          string             `yaml:"name"`
 	RatePerMinute int                `yaml:"rate_per_minute"`
 	PagerDuty     *PagerDutyReceiver `yaml:"pagerduty"`
+	Slack         *SlackReceiver     `yaml:"slack"`
 	Webhook       *WebhookReceiver   `yaml:"webhook"`
 }
 
 type PagerDutyReceiver struct {
 	RoutingKeyFile string `yaml:"routing_key_file"`
 	URL            string `yaml:"url"`
+}
+
+type SlackReceiver struct {
+	WebhookURLFile string `yaml:"webhook_url_file"`
 }
 
 type WebhookReceiver struct {
@@ -51,6 +56,7 @@ var (
 	receiverName  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	receiverTypes = []string{
 		"pagerduty",
+		"slack",
 		"webhook",
 	}
 )
@@ -103,6 +109,7 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 		types := 0
 		for _, set := range []bool{
 			receiver.PagerDuty != nil,
+			receiver.Slack != nil,
 			receiver.Webhook != nil,
 		} {
 			if set {
@@ -120,6 +127,10 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 			}
 			if receiver.PagerDuty.URL != "" && !webURL(receiver.PagerDuty.URL) {
 				problem("%s.pagerduty.url must be an http or https URL", where)
+			}
+		case receiver.Slack != nil:
+			if receiver.Slack.WebhookURLFile == "" {
+				problem("%s.slack.webhook_url_file is required", where)
 			}
 		case receiver.Webhook != nil:
 			if !webURL(receiver.Webhook.URL) {
