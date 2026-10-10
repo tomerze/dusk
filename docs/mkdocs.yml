@@ -105,6 +105,28 @@ nav:
       - Campaigns: stack/campaigns.md
       - The twilight UI: stack/ui.md
       - Security model: stack/security.md
+      - Runbooks:
+          - stack/runbooks/index.md
+          - Process nobody intended: stack/runbooks/process_without_intent.md
+          - Default shell used without intent: stack/runbooks/default_shell_without_intent.md
+          - Process on the wrong node: stack/runbooks/target_mismatch.md
+          - Result without a ledger entry: stack/runbooks/result_without_ledger.md
+          - Ledger chain broken: stack/runbooks/ledger_chain_broken.md
+          - Revocation not enforced: stack/runbooks/revocation_not_enforced.md
+          - Calls after the deadline: stack/runbooks/process_after_deadline.md
+          - Pid reused: stack/runbooks/pid_reused.md
+          - Calls after the result: stack/runbooks/process_after_result.md
+          - Unexpected process shape: stack/runbooks/process_shape.md
+          - Quarantine override: stack/runbooks/quarantine_override.md
+          - Enrollment spike: stack/runbooks/enrollment_rate.md
+          - Campaign paused by its gate: stack/runbooks/campaign_paused_by_gate.md
+          - Campaign failed by its policy: stack/runbooks/campaign_failed_by_policy.md
+          - Campaign conflict: stack/runbooks/campaign_conflict.md
+          - Critical alert unacknowledged: stack/runbooks/critical_alert_unacknowledged.md
+          - Ledger chain broken in ClickHouse: stack/runbooks/clickhouse_ledger_chain_broken.md
+          - Ledger evidence copy stalled: stack/runbooks/ledger_evidence_stalled.md
+          - Alert delivery failing: stack/runbooks/alert_delivery_failing.md
+          - Messages dropped by Vector: stack/runbooks/vector_messages_dropped.md
   - Telemetry:
       - Collected information: telemetry/collected-information.md
   - Customize:
