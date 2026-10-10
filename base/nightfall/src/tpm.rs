@@ -4,26 +4,39 @@ use std::io::{ErrorKind, Read, Write};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context as _;
-use tpm2_protocol::basic::{TpmHandle, TpmUint16};
+use ring::rand::SecureRandom as _;
+use tpm2_protocol::basic::{TpmHandle, TpmInt32, TpmUint16, TpmUint32};
 use tpm2_protocol::data::{
-    Tpm2bDigest, Tpm2bNonce, Tpm2bPrivate, Tpm2bPublic, TpmAlgId, TpmEccCurve, TpmRc, TpmRcBase,
-    TpmRh, TpmSt, TpmaObject, TpmaSession, TpmsAuthCommand, TpmsEccParms, TpmsEccPoint,
-    TpmsSchemeHash, TpmtEccScheme, TpmtKdfScheme, TpmtPublic, TpmtSigScheme, TpmtSymDef,
+    Tpm2bDigest, Tpm2bEncryptedSecret, Tpm2bIdObject, Tpm2bNonce, Tpm2bPrivate, Tpm2bPublic,
+    Tpm2bPublicKeyRsa, TpmAlgId, TpmEccCurve, TpmRc, TpmRcBase, TpmRh, TpmSe, TpmSt, TpmaObject,
+    TpmaSession, TpmsAuthCommand, TpmsEccParms, TpmsEccPoint, TpmsRsaParms, TpmsSchemeHash,
+    TpmtEccScheme, TpmtKdfScheme, TpmtPublic, TpmtRsaScheme, TpmtSigScheme, TpmtSymDef,
     TpmtTkHashcheck, TpmuAsymScheme, TpmuPublicId, TpmuPublicParms, TpmuSignature, TpmuSymKeyBits,
     TpmuSymMode,
 };
 use tpm2_protocol::frame::{
-    TpmCreateCommand, TpmCreatePrimaryCommand, TpmCreatePrimaryResponse, TpmCreateResponse,
-    TpmFlushContextCommand, TpmFlushContextResponse, TpmFrame, TpmLoadCommand, TpmLoadResponse,
-    TpmResponse, TpmSignCommand, TpmSignResponse, TpmUnmarshalBody, tpm_marshal_command,
+    TpmActivateCredentialCommand, TpmActivateCredentialResponse, TpmCreateCommand,
+    TpmCreatePrimaryCommand, TpmCreatePrimaryResponse, TpmCreateResponse, TpmFlushContextCommand,
+    TpmFlushContextResponse, TpmFrame, TpmLoadCommand, TpmLoadResponse, TpmNvReadCommand,
+    TpmNvReadPublicCommand, TpmNvReadPublicResponse, TpmNvReadResponse, TpmPolicySecretCommand,
+    TpmPolicySecretResponse, TpmResponse, TpmSignCommand, TpmSignResponse,
+    TpmStartAuthSessionCommand, TpmStartAuthSessionResponse, TpmUnmarshalBody, tpm_marshal_command,
 };
 use tpm2_protocol::{TpmError, TpmMarshal, TpmUnmarshal, TpmWriter};
 
+pub(crate) const ENDORSEMENT_CERTIFICATE_INDEX: u32 = 0x01C0_0002;
+pub(crate) const FIRST_CHAIN_INDEX: u32 = 0x01C0_0100;
+pub(crate) const LAST_CHAIN_INDEX: u32 = 0x01C0_01FF;
+const NV_READ_CHUNK_BYTES: usize = 768;
 const MAXIMUM_FRAME_BYTES: usize = 4096;
 const HEADER_BYTES: usize = 10;
 const P256_COORDINATE_BYTES: usize = 32;
 const MAXIMUM_ATTEMPTS: u32 = 10;
 const RETRY_PAUSE: std::time::Duration = std::time::Duration::from_millis(20);
+const ENDORSEMENT_POLICY: [u8; 32] = [
+    0x83, 0x71, 0x97, 0x67, 0x44, 0x84, 0xB3, 0xF8, 0x1A, 0x90, 0xCC, 0x8D, 0x46, 0xA5, 0xD7, 0x24,
+    0xFD, 0x52, 0xD7, 0x6E, 0x06, 0x52, 0x0B, 0x64, 0xF2, 0xA1, 0xDA, 0x1B, 0x33, 0x14, 0x69, 0xAA,
+];
 
 enum Channel {
     Device(std::fs::File),
@@ -94,6 +107,12 @@ pub(crate) struct KeyBlob {
     pub(crate) public: Vec<u8>,
 }
 
+pub(crate) struct Endorsement {
+    pub(crate) key: Object,
+    pub(crate) certificate: Vec<u8>,
+    pub(crate) chain: Vec<Vec<u8>>,
+}
+
 fn password() -> TpmsAuthCommand {
     session(TpmRh::Pw.value())
 }
@@ -145,6 +164,27 @@ fn no_symmetric() -> TpmtSymDef {
         key_bits: TpmuSymKeyBits::Null,
         mode: TpmuSymMode::Null,
     }
+}
+
+pub(crate) fn endorsement_key_template() -> Result<TpmtPublic, TpmError> {
+    Ok(TpmtPublic {
+        object_type: TpmAlgId::Rsa,
+        name_alg: TpmAlgId::Sha256,
+        object_attributes: TpmaObject::FIXED_TPM
+            | TpmaObject::FIXED_PARENT
+            | TpmaObject::SENSITIVE_DATA_ORIGIN
+            | TpmaObject::ADMIN_WITH_POLICY
+            | TpmaObject::RESTRICTED
+            | TpmaObject::DECRYPT,
+        auth_policy: Tpm2bDigest::try_from(&ENDORSEMENT_POLICY[..])?,
+        parameters: TpmuPublicParms::Rsa(TpmsRsaParms {
+            symmetric: aes_128_cfb(),
+            scheme: TpmtRsaScheme::default(),
+            key_bits: TpmUint16::new(2048),
+            exponent: TpmUint32::new(0),
+        }),
+        unique: TpmuPublicId::Rsa(Tpm2bPublicKeyRsa::try_from(&[0u8; 256][..])?),
+    })
 }
 
 pub(crate) fn storage_root_template() -> TpmtPublic {
@@ -239,6 +279,37 @@ pub(crate) fn der_signature(r: &[u8], s: &[u8]) -> Vec<u8> {
     let mut encoded = vec![0x30, body.len() as u8];
     encoded.extend_from_slice(&body);
     encoded
+}
+
+pub(crate) fn certificates(mut contents: &[u8]) -> Vec<Vec<u8>> {
+    let mut found = Vec::new();
+    while let Some(length) = sequence_length(contents) {
+        found.push(contents[..length].to_vec());
+        contents = &contents[length..];
+    }
+    found
+}
+
+fn sequence_length(bytes: &[u8]) -> Option<usize> {
+    if bytes.first() != Some(&0x30) {
+        return None;
+    }
+    let first = usize::from(*bytes.get(1)?);
+    let (header, body) = if first < 0x80 {
+        (2, first)
+    } else {
+        let count = first - 0x80;
+        if !(1..=3).contains(&count) {
+            return None;
+        }
+        let length = bytes
+            .get(2..2 + count)?
+            .iter()
+            .fold(0, |length, byte| (length << 8) | usize::from(*byte));
+        (2 + count, length)
+    };
+    let total = header + body;
+    (total <= bytes.len()).then_some(total)
 }
 
 fn exchange(channel: &mut (impl Read + Write), command: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -364,6 +435,41 @@ impl Tpm {
             .map(|_| ())
     }
 
+    fn read_nv(&self, index: u32) -> anyhow::Result<Option<Vec<u8>>> {
+        let command = TpmNvReadPublicCommand {
+            handles: [TpmHandle::new(index)],
+        };
+        let public: TpmNvReadPublicResponse = match self.execute("NV_ReadPublic", &command, &[]) {
+            Ok(public) => public,
+            Err(error)
+                if error
+                    .downcast_ref::<ResponseCode>()
+                    .is_some_and(|code| code.is(TpmRcBase::Handle)) =>
+            {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
+        let size = usize::from(public.nv_public.inner.data_size.value());
+        let mut contents = Vec::with_capacity(size);
+        while contents.len() < size {
+            let chunk = (size - contents.len()).min(NV_READ_CHUNK_BYTES);
+            let command = TpmNvReadCommand {
+                handles: [TpmHandle::new(index), TpmHandle::new(index)],
+                size: TpmUint16::new(u16::try_from(chunk)?),
+                offset: TpmUint16::new(u16::try_from(contents.len())?),
+            };
+            let response: TpmNvReadResponse = self.execute("NV_Read", &command, &[password()])?;
+            anyhow::ensure!(
+                response.data.len() == chunk,
+                "the TPM read {} bytes of NV index {index:#x} when asked for {chunk}",
+                response.data.len()
+            );
+            contents.extend_from_slice(&response.data);
+        }
+        Ok(Some(contents))
+    }
+
     pub(crate) fn create_primary(
         self: &Arc<Self>,
         hierarchy: TpmRh,
@@ -386,6 +492,30 @@ impl Tpm {
             "the TPM named the primary key it created after another public area"
         );
         Ok(object)
+    }
+
+    pub(crate) fn endorsement(self: &Arc<Self>) -> anyhow::Result<Endorsement> {
+        let certificate = self
+            .read_nv(ENDORSEMENT_CERTIFICATE_INDEX)?
+            .and_then(|contents| certificates(&contents).into_iter().next())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "the TPM holds no RSA endorsement key certificate at NV index {ENDORSEMENT_CERTIFICATE_INDEX:#x}"
+                )
+            })?;
+        let mut chain = Vec::new();
+        for index in FIRST_CHAIN_INDEX..=LAST_CHAIN_INDEX {
+            let Some(contents) = self.read_nv(index)? else {
+                break;
+            };
+            chain.extend(certificates(&contents));
+        }
+        let key = self.create_primary(TpmRh::Endorsement, endorsement_key_template()?)?;
+        Ok(Endorsement {
+            key,
+            certificate,
+            chain,
+        })
     }
 }
 
@@ -449,6 +579,75 @@ impl Object {
             &signature.signature_s,
         ))
     }
+
+    pub(crate) fn activate_credential(
+        &self,
+        endorsement_key: &Object,
+        credential_blob: &[u8],
+        encrypted_secret: &[u8],
+    ) -> anyhow::Result<Vec<u8>> {
+        let command = TpmActivateCredentialCommand {
+            handles: [
+                TpmHandle::new(self.handle),
+                TpmHandle::new(endorsement_key.handle),
+            ],
+            credential_blob: Tpm2bIdObject::try_from(credential_blob)
+                .context("the credential blob does not fit a TPM2B_ID_OBJECT")?,
+            secret: Tpm2bEncryptedSecret::try_from(encrypted_secret)
+                .context("the encrypted secret does not fit a TPM2B_ENCRYPTED_SECRET")?,
+        };
+        let mut nonce = [0u8; 32];
+        ring::rand::SystemRandom::new()
+            .fill(&mut nonce)
+            .map_err(|_| anyhow::anyhow!("the system random number generator failed"))?;
+        let start = TpmStartAuthSessionCommand {
+            handles: [
+                TpmHandle::new(TpmRh::Null.value()),
+                TpmHandle::new(TpmRh::Null.value()),
+            ],
+            nonce_caller: Tpm2bNonce::try_from(&nonce[..])?,
+            encrypted_salt: Tpm2bEncryptedSecret::default(),
+            session_type: TpmSe::Policy,
+            symmetric: no_symmetric(),
+            auth_hash: TpmAlgId::Sha256,
+        };
+        let started: TpmStartAuthSessionResponse =
+            self.tpm.execute("StartAuthSession", &start, &[])?;
+        let policy_session = started.handles[0].value();
+        let policy_secret = TpmPolicySecretCommand {
+            handles: [
+                TpmHandle::new(TpmRh::Endorsement.value()),
+                TpmHandle::new(policy_session),
+            ],
+            nonce_tpm: Tpm2bNonce::default(),
+            cp_hash_a: Tpm2bDigest::default(),
+            policy_ref: Tpm2bNonce::default(),
+            expiration: TpmInt32::new(0),
+        };
+        let activated = self
+            .tpm
+            .execute::<_, TpmPolicySecretResponse>("PolicySecret", &policy_secret, &[password()])
+            .and_then(|_| {
+                self.tpm.execute::<_, TpmActivateCredentialResponse>(
+                    "ActivateCredential",
+                    &command,
+                    &[password(), session(policy_session)],
+                )
+            });
+        match activated {
+            Ok(response) => Ok(response.cert_info.to_vec()),
+            Err(error) => {
+                if let Err(flush_error) = self.tpm.flush(policy_session) {
+                    tracing::warn!(
+                        tpm = self.tpm.path.as_str(),
+                        error = %format_args!("{flush_error:#}"),
+                        "couldn't flush the policy session from the TPM"
+                    );
+                }
+                Err(error)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -465,6 +664,18 @@ mod tests {
             .chunks(2)
             .map(|pair| u8::from_str_radix(core::str::from_utf8(pair).unwrap(), 16).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn the_endorsement_key_template_is_tcg_template_l1() {
+        let mut expected = hex("0001 000b 000300b2 0020
+             837197674484b3f81a90cc8d46a5d724fd52d76e06520b64f2a1da1b331469aa
+             0006 0080 0043 0010 0800 00000000 0100");
+        expected.extend_from_slice(&[0u8; 256]);
+        assert_eq!(
+            marshal(&endorsement_key_template().unwrap()).unwrap(),
+            expected
+        );
     }
 
     #[test]
@@ -509,11 +720,15 @@ mod tests {
     fn a_public_area_that_is_not_a_node_key_is_refused() {
         let mut restricted = node_key_template();
         restricted.object_attributes |= TpmaObject::RESTRICTED;
+        let mut endorsement = endorsement_key_template().unwrap();
+        endorsement.unique =
+            TpmuPublicId::Rsa(Tpm2bPublicKeyRsa::try_from(&[1u8; 256][..]).unwrap());
         let mut trailing = node_key_public(&[0x11; 32], &[0x22; 32]);
         trailing.push(0);
         for public in [
             marshal(&restricted).unwrap(),
             marshal(&storage_root_template()).unwrap(),
+            marshal(&endorsement).unwrap(),
             node_key_public(&[0x11; 33], &[0x22; 32]),
             trailing,
             b"not a public area".to_vec(),
@@ -535,6 +750,20 @@ mod tests {
             der_signature(&[0x00; 32], &[0x01]),
             [0x30, 0x06, 0x02, 0x01, 0x00, 0x02, 0x01, 0x01]
         );
+    }
+
+    #[test]
+    fn concatenated_certificates_split_and_padding_ends_them() {
+        let short = [0x30, 0x03, 0x02, 0x01, 0x07];
+        let mut long = vec![0x30, 0x82, 0x01, 0x00];
+        long.extend_from_slice(&[0x04; 0x100]);
+        let mut contents = short.to_vec();
+        contents.extend_from_slice(&long);
+        contents.extend_from_slice(&[0xff; 16]);
+        assert_eq!(certificates(&contents), vec![short.to_vec(), long.clone()]);
+        assert!(certificates(&[]).is_empty());
+        assert!(certificates(&[0x30, 0x05, 0x01]).is_empty());
+        assert!(certificates(&[0x30, 0x84, 0, 0, 0, 1, 0]).is_empty());
     }
 
     struct Chunked {
