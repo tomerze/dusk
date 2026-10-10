@@ -4,7 +4,7 @@
 
 [Click here](https://tomerze.github.io/dusk)
 
-## Quick start
+## Take it for a spin
 
 Configure, build, and run a standalone Dusk node for linux.
 
@@ -20,8 +20,6 @@ Build a Dusk CLI client for that node, and use it to connect to the running node
 cargo build --release -p dusk_cli_bin # Build
 ./target/release/dusk 127.0.0.1:9090 # Connect
 ```
-
-![A Dusk CLI client connected to a Dusk node](docs/docs/assets/dusk_showcase.png)
 
 ## Contributing
 

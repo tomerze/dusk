@@ -427,10 +427,7 @@ for (const head of document.querySelectorAll(".dusk-stack__head")) {
     reading = layer;
     head.classList.toggle("is-reading", Boolean(layer));
     if (layer) {
-      head.style.setProperty(
-        "--dusk-ink",
-        getComputedStyle(layer).getPropertyValue("--dusk-ink"),
-      );
+      head.dataset.layer = layer.dataset.layer;
     }
   };
   window.addEventListener("scroll", read, { passive: true });
@@ -454,13 +451,21 @@ for (const namespace of document.querySelectorAll(".dusk-os__namespace")) {
   namespace.textContent = namespaceId;
 }
 
+const today = new Date();
+const instanceName = `instance-${today.getFullYear()}${String(
+  today.getMonth() + 1,
+).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+for (const instance of document.querySelectorAll(".dusk-os__instance")) {
+  instance.textContent = instanceName;
+}
+
 const latencySteps = {
-  17: { 16: { 17: 0.6 }, 17: { 16: 0.2, 18: 0.2 }, 18: { 17: 0.6 } },
+  17: { 16: { 17: 0.9 }, 17: { 16: 0.3, 18: 0.3 }, 18: { 17: 0.9 } },
   66: {
-    65: { 66: 0.6 },
-    66: { 65: 0.2, 67: 0.15 },
-    67: { 66: 0.69, 68: 0.2 },
-    68: { 67: 0.37 },
+    65: { 66: 0.9 },
+    66: { 65: 0.3, 67: 0.18 },
+    67: { 66: 0.83, 68: 0.17 },
+    68: { 67: 0.32 },
   },
 };
 for (const element of document.querySelectorAll(".dusk-os__latency")) {
@@ -476,7 +481,7 @@ for (const element of document.querySelectorAll(".dusk-os__latency")) {
       roll -= chance;
     }
     element.textContent = latency;
-    setTimeout(flicker, 400 + Math.random() * 900);
+    setTimeout(flicker, 250 + Math.random() * 550);
   };
   flicker();
 }

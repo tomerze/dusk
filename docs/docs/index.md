@@ -176,7 +176,7 @@ connect the tools you already have.
 
 ## Node { .dusk-os__title }
 
-Feels like an OS inside. Somehow you already know how to drive it.
+Feels like an OS inside. Somehow you already know how to drive one.
 { .dusk-os__lead }
 
 <div class="dusk-os__terminals">
@@ -193,7 +193,7 @@ Feels like an OS inside. Somehow you already know how to drive it.
 │ <span class="dusk-os__gray">1</span> │ nightfall[listen :9090] │ 0.1.0   │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0xd089c575e560637e</span></span> │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0x7a7d909c3bb3ac79</span></span> │ ... │
 │ <span class="dusk-os__gray">2</span> │ init                    │ 0.1.0   │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0xd77c7f8193a1856c</span></span> │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0xc079da09ecb0cd0a</span></span> │ ... │
 │ <span class="dusk-os__gray">3</span> │ ps                      │ 0.1.0   │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0xd111e8c31818511d</span></span> │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0xe67bdd2de87a69eb</span></span> │ ... │
-│ <span class="dusk-os__gray">4</span> │ sh[prompt <span class="dusk-os__cell">⟷</span> pc1]        │ 0.1.0   │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0x8d0e0504ec994ea4</span></span> │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0x565e93ec9fe33165</span></span> │ ... │
+│ <span class="dusk-os__gray">4</span> │ sh[prompt <span class="dusk-os__cell">⟷</span> ec2-user]   │ 0.1.0   │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0x8d0e0504ec994ea4</span></span> │ <span class="dusk-os__bright-cyan"><span class="dusk-os__bold">0x565e93ec9fe33165</span></span> │ ... │
 ╰───┴─────────────────────────┴─────────┴────────────────────┴────────────────────┴─────╯
 <span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">66</span>ms</span>
 <span class="dusk-os__gray">○</span> <span class="dusk-os__green">❯</span> </pre>
@@ -201,7 +201,7 @@ Feels like an OS inside. Somehow you already know how to drive it.
 <div class="dusk-os__terminal dusk-os__terminal--cp">
 <div class="dusk-os__bar" aria-hidden="true"><span></span><span></span><span></span></div>
 <pre class="dusk-os__session dusk-os__session--narrow"><span class="dusk-os__gray">$</span> <span class="dusk-os__green dusk-os__bold">dusk</span> <span class="dusk-os__bright-cyan dusk-os__namespace">7c3f1a9e2b5d4086</span><span class="dusk-os__blue">.connect.nightfall</span>
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span>
 <span class="dusk-os__bright-cyan">●</span> <span class="dusk-os__green">❯</span> <span class="dusk-os__cyan dusk-os__bold">cp</span> <span class="dusk-os__white">report.txt</span> <span class="dusk-os__white">:/tmp/report.txt</span>
 ╭─────────────┬────────────────────────╮
 │ <span class="dusk-os__yellow dusk-os__bold">source</span>      │ report.txt             │
@@ -212,10 +212,10 @@ Feels like an OS inside. Somehow you already know how to drive it.
 │             │ 48c1caaaf8df4950c6ecce │
 │             │ 76a1b7a30cbba34be6d0   │
 ╰─────────────┴────────────────────────╯
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
 <span class="dusk-os__gray">○</span> <span class="dusk-os__green">❯</span> </pre>
 <pre class="dusk-os__session dusk-os__session--wide"><span class="dusk-os__gray">$</span> <span class="dusk-os__green dusk-os__bold">dusk</span> <span class="dusk-os__bright-cyan dusk-os__namespace">7c3f1a9e2b5d4086</span><span class="dusk-os__blue">.connect.nightfall</span>
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span>
 <span class="dusk-os__bright-cyan">●</span> <span class="dusk-os__green">❯</span> <span class="dusk-os__cyan dusk-os__bold">cp</span> <span class="dusk-os__white">report.txt</span> <span class="dusk-os__white">:/tmp/report.txt</span>
 ╭─────────────┬──────────────────────────────────╮
 │ <span class="dusk-os__yellow dusk-os__bold">source</span>      │ report.txt                       │
@@ -225,7 +225,7 @@ Feels like an OS inside. Somehow you already know how to drive it.
 │ <span class="dusk-os__yellow dusk-os__bold">sha256</span>      │ 3114865161b206080e637a48c1caaaf8 │
 │             │ df4950c6ecce76a1b7a30cbba34be6d0 │
 ╰─────────────┴──────────────────────────────────╯
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
 <span class="dusk-os__gray">○</span> <span class="dusk-os__green">❯</span> </pre>
 </div>
 </div>
