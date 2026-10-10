@@ -1,5 +1,6 @@
 site_name: Dusk
 site_description: Documentation for the Dusk project
+site_url: !ENV SITE_URL
 repo_name: Dusk
 repo_url: https://github.com/tomerze/dusk
 copyright: "© 2023-2026 Tomer Zeitune"
