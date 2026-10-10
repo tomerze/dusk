@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import pathlib
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -16,10 +17,12 @@ from dusk.gw.mcp import build_application as build_mcp_application
 from dusk.gw.rest import MALFORMED, ErrorResponse
 from dusk.gw.rest import build_application as build_rest_application
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.openapi.docs import get_swagger_ui_html
 from starlette.applications import Starlette
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp
 
 from . import facts
@@ -60,6 +63,9 @@ from .work import Results, classify, shell_at
 
 logger = logging.getLogger(__name__)
 
+STATIC = pathlib.Path(__file__).parent / "static"
+BLANK_FAVICON = "data:,"
+SWAGGER_UI_PARAMETERS = {"validatorUrl": None}
 TITLE = "dawn"
 DESCRIPTION = """
 Run processes on dusk nodes through nightfall.
@@ -325,6 +331,20 @@ def add_routes(api: FastAPI, services: Services) -> None:
         except SessionsExhausted as failure:
             raise HTTPException(503, str(failure)) from failure
         return FileAccepted(upload_id=upload_id)
+
+    api.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+    @api.get("/docs", include_in_schema=False)
+    async def docs(request: Request) -> Response:
+        mounted_at = request.scope.get("root_path", "").rstrip("/")
+        return get_swagger_ui_html(
+            openapi_url=f"{mounted_at}/openapi.json",
+            title=f"{TITLE} - API reference",
+            swagger_js_url=f"{mounted_at}/static/swagger-ui-bundle.js",
+            swagger_css_url=f"{mounted_at}/static/swagger-ui.css",
+            swagger_favicon_url=BLANK_FAVICON,
+            swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
+        )
 
 
 def build_application(services: Services, ip: str) -> ASGIApp:
