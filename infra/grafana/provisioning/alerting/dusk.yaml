@@ -19,6 +19,7 @@ groups:
           description: "Open the Alerts dashboard or twilight's Alerts page; acknowledge each alert once someone owns it."
         labels:
           severity: critical
+          kind: critical_alert_unacknowledged
       - uid: dusk-ledger-chain-broken
         title: "Ledger chain broken"
         condition: C
@@ -32,6 +33,7 @@ groups:
           description: "Open the Ledger dashboard's chain status, then verify the evidence copy with nightfall verify-ledger before trusting the ClickHouse copy."
         labels:
           severity: critical
+          kind: clickhouse_ledger_chain_broken
       - uid: dusk-ledger-evidence-stalled
         title: "Ledger evidence copy stalled"
         condition: C
@@ -45,6 +47,7 @@ groups:
           description: "Check Vector's evidence_ledger sink: the ledger-writer credentials, the dusk-ledger-evidence bucket and its object lock configuration."
         labels:
           severity: critical
+          kind: ledger_evidence_stalled
       - uid: dusk-contract-messages-dropped
         title: "Messages dropped by Vector"
         condition: C
@@ -58,3 +61,4 @@ groups:
           description: "Vector logs each dropped record at warn with its topic, partition and offset; a producer is writing messages that fail their contract schema."
         labels:
           severity: high
+          kind: vector_messages_dropped
