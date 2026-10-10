@@ -18,6 +18,9 @@
     "epoch",
     "principal",
     "pid",
+    "intent_campaign_id",
+    "intent_principal",
+    "intent_subject",
     "session_id",
     "call_id",
     "cap_id",
@@ -36,6 +39,20 @@
     "key_id",
     "signature"
   ],
+  "$defs": {
+    "admission_rule": {
+      "description": "The admission rule nightfall refused a call by: not_caught_up (it has not read dusk.intended-processes to its end), process_without_intent (Dusk.process at a pid that no intended process of the node names), process_without_pid (Dusk.process with no pid), process_after_deadline (a call under a pid whose intended process expired or is gone, but Dusk.kill and Dusk.waitpid), command_budget (ShPortal.sh beyond the pid's max_commands), default_shell_without_intent (the default shell while no intended process of the node is open), default_shell_budget (ShPortal.sh in the default shell beyond the open processes' default_shell_commands).",
+      "enum": [
+        "not_caught_up",
+        "process_without_intent",
+        "process_without_pid",
+        "process_after_deadline",
+        "command_budget",
+        "default_shell_without_intent",
+        "default_shell_budget"
+      ]
+    }
+  },
   "properties": {
     "schema": { "const": "dusk.ledger/v1" },
     "id": { "$ref": "common.schema.json#/$defs/id" },
@@ -68,6 +85,20 @@
     "pid": {
       "description": "The pid of the process at the root of the call's capability provenance; 0 when the entry is under no process.",
       "$ref": "common.schema.json#/$defs/pid"
+    },
+    "intent_campaign_id": {
+      "description": "The campaign of the intended process at pid when nightfall saw the call, from dusk.intended-processes; null when it has none or none was known.",
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "intent_principal": {
+      "description": "Who asked for the intended process at pid when nightfall saw the call; null when no intended process of the node was known at pid.",
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "intent_subject": {
+      "description": "What the intended process at pid is for, campaign:<campaign_id> or the operator; null exactly when intent_principal is.",
+      "type": ["string", "null"],
+      "minLength": 1
     },
     "session_id": {
       "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
@@ -132,12 +163,13 @@
         "chain_link",
         "chain_resumed",
         "quarantine_override",
+        "admission_override",
         "session_refused",
         "rpc_rejected"
       ]
     },
     "event_detail": {
-      "description": "Open object. session_refused: {reason: revoked, retired or setup_timeout}. rpc_rejected: {kind: the RPC message kind the filter aborted the connection on}.",
+      "description": "Open object on an event entry. session_refused: {reason: revoked, retired or setup_timeout}. rpc_rejected: {kind: the RPC message kind the filter aborted the connection on}. admission_override: {role: the exempt role, rule: the admission rule the call broke}. A denied call entry carries {rule} when admission refused it, otherwise null; every other entry carries null.",
       "type": ["object", "null"]
     },
     "key_id": { "type": ["string", "null"], "minLength": 1 },
@@ -149,6 +181,13 @@
   },
   "allOf": [
     {
+      "if": { "required": ["intent_principal"], "properties": { "intent_principal": { "type": "null" } } },
+      "then": {
+        "properties": { "intent_campaign_id": { "type": "null" }, "intent_subject": { "type": "null" } }
+      },
+      "else": { "properties": { "intent_subject": { "type": "string" } } }
+    },
+    {
       "if": { "required": ["kind"], "properties": { "kind": { "const": "checkpoint" } } },
       "then": {
         "properties": {
@@ -159,6 +198,7 @@
           "namespace_id": { "type": "null" },
           "epoch": { "type": "null" },
           "pid": { "const": "0" },
+          "intent_principal": { "type": "null" },
           "session_id": { "type": "null" },
           "call_id": { "type": "null" },
           "cap_id": { "type": "null" },
@@ -191,8 +231,7 @@
       },
       "else": {
         "properties": {
-          "event": { "type": "null" },
-          "event_detail": { "type": "null" }
+          "event": { "type": "null" }
         }
       }
     },
@@ -220,6 +259,31 @@
         "properties": { "result_code": { "enum": [null, "denied", "rate_limited"] } },
         "if": { "required": ["result_code"], "properties": { "result_code": { "const": "denied" } } },
         "else": { "properties": { "param_hash": { "$ref": "common.schema.json#/$defs/hash" } } }
+      }
+    },
+    {
+      "if": {
+        "required": ["kind", "result_code"],
+        "properties": { "kind": { "const": "call" }, "result_code": { "const": "denied" } }
+      },
+      "then": {
+        "properties": {
+          "event_detail": {
+            "anyOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rule"],
+                "properties": { "rule": { "$ref": "#/$defs/admission_rule" } }
+              }
+            ]
+          }
+        }
+      },
+      "else": {
+        "if": { "required": ["kind"], "properties": { "kind": { "const": "event" } } },
+        "else": { "properties": { "event_detail": { "type": "null" } } }
       }
     },
     {
@@ -297,6 +361,24 @@
         "properties": {
           "session_id": { "type": "string" },
           "call_id": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "required": ["event"], "properties": { "event": { "const": "admission_override" } } },
+      "then": {
+        "properties": {
+          "session_id": { "type": "string" },
+          "call_id": { "type": "string" },
+          "event_detail": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "rule"],
+            "properties": {
+              "role": { "type": "string", "minLength": 1 },
+              "rule": { "$ref": "#/$defs/admission_rule" }
+            }
+          }
         }
       }
     },

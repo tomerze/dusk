@@ -44,6 +44,7 @@ def test_every_topic_has_a_schema_and_examples() -> None:
         "dusk.process-results",
         "dusk.process-output",
         "dusk.files",
+        "dusk.intended-processes",
     }
     schemas = {
         path.name.removesuffix(".schema.json")

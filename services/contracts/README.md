@@ -16,6 +16,7 @@ over Kafka. Each topic has one JSON Schema (draft 2020-12) in
 | `dusk.process-results` | `<device_id>/<installation_id>` | dawn | twilight, vector | delete, 7 d | 3 / 48 |
 | `dusk.process-output` | `<device_id>/<installation_id>` | dawn | vector | delete, 7 d | 3 / 24 |
 | `dusk.files` | `<device_id>/<installation_id>` | dawn | vector | delete, 30 d | 3 / 12 |
+| `dusk.intended-processes` | `<device_id>/<installation_id>/<pid>` | twilight | nightfall | compact | 3 / 12 |
 | `dusk.otel-logs`, `dusk.otel-spans`, `dusk.otel-metrics` | none | otel collector | vector, signoz | delete, 3 d | 3 / 24 |
 
 In prod every topic has replication factor 3 and `min.insync.replicas` 2.
@@ -29,6 +30,13 @@ In prod every topic has replication factor 3 and `min.insync.replicas` 2.
   writes to its own partition, by default the one numbered by its StatefulSet ordinal,
   in transactions, so consumers read it with `isolation.level=read_committed`. The prod
   partition count is at least the largest number of nightfall replicas.
+* `dusk.intended-processes` holds every process twilight intends: under its key, the
+  latest record of it, written before twilight asks dawn for the process and again on
+  every resend, and a tombstone once it expires or twilight reaps it. nightfall reads
+  every partition from the beginning and refuses a call that no record allows. The
+  topic sets `segment.ms` 600000, `min.cleanable.dirty.ratio` 0.1 and
+  `delete.retention.ms` 3600000, so compaction keeps it close to the processes still
+  intended.
 * The otel topics set `max.message.bytes` 4194304. The OTel collector writes them in
   its own `otlp_json` format, so they have no schema here.
 
@@ -72,9 +80,10 @@ says so with `if`/`then`, so a validator reports each broken rule as its own err
 next to it is what every validator enforces.
 
 A tombstone (a record with a null value) has no message to validate: the census
-tombstones the chunk keys of a generation it has replaced, and a node-state tombstone
-means the node is back to its default lifecycle. Consumers handle a null value before
-validating.
+tombstones the chunk keys of a generation it has replaced, a node-state tombstone
+means the node is back to its default lifecycle, and an intended-processes tombstone
+means twilight no longer intends a process at that pid on that node: it expired or was
+reaped. Consumers handle a null value before validating.
 
 Every consumer must validate each message against its topic's schema and drop one that
 fails, counting it in a metric and logging a `warn` with the record's topic, partition

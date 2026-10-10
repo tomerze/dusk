@@ -1,0 +1,16 @@
+{
+  "schema": "dusk.intended-processes/v1",
+  "id": "01a112fe-d1bd-704c-9bd1-2339a1c7e5f4",
+  "time": "2026-10-06T09:15:39.512408216Z",
+  "pid": "4153296812709138212",
+  "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+  "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+  "campaign_id": "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+  "action_kind": "ensure_config",
+  "principal": "token:0192f3a4-1111-7d8e-9f01-23456789abcd",
+  "subject": "campaign:0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+  "created_at": "2026-10-06T09:15:39.511902330Z",
+  "expires_at": "2026-10-06T09:21:39.511902330Z",
+  "max_commands": 1,
+  "default_shell_commands": 6
+}

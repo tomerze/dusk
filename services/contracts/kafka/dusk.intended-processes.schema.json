@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "pid",
+    "device_id",
+    "installation_id",
+    "campaign_id",
+    "action_kind",
+    "principal",
+    "subject",
+    "created_at",
+    "expires_at",
+    "max_commands",
+    "default_shell_commands"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.intended-processes/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "pid": {
+      "description": "The pid twilight intends a process at on this node; never 0, which names no process, and never the default shell's pid, 17505437192229758416, which is no intended process's own.",
+      "allOf": [
+        { "$ref": "common.schema.json#/$defs/pid" },
+        { "not": { "enum": ["0", "17505437192229758416"] } }
+      ]
+    },
+    "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+    "installation_id": { "$ref": "common.schema.json#/$defs/installation_id" },
+    "campaign_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "action_kind": {
+      "enum": [
+        "run_script",
+        "ensure_version",
+        "ensure_config",
+        "quarantine",
+        "collect_facts",
+        "collect_file",
+        "stream_logs",
+        "interactive",
+        "reap"
+      ]
+    },
+    "principal": {
+      "description": "Who asked for the process: the campaign's creator or the operator.",
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "description": "What the process is for: campaign:<campaign_id>, or the operator who asked for it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "description": "When twilight first recorded the process.",
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "expires_at": {
+      "description": "After this, every call under the pid but Dusk.kill and Dusk.waitpid is refused. Twilight moves it later on every resend.",
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "max_commands": {
+      "description": "How many ShPortal.sh calls the shell at the pid may take, summed over every send of the process; 0 for a process that runs no shell of its own, like a reap.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "default_shell_commands": {
+      "description": "How many ShPortal.sh calls the node's default shell may take on this process's behalf while it is open, summed over every send.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  }
+}
