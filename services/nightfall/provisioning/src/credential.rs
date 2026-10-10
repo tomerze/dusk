@@ -128,6 +128,10 @@ impl FleetTokens {
         self.tokens.is_empty()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &FleetToken> {
+        self.tokens.iter()
+    }
+
     pub fn find(&self, presented: &str) -> Option<&FleetToken> {
         let digest = sha256(presented.as_bytes());
         let mut found = None;

@@ -393,6 +393,7 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
         &limits,
     )?);
 
+    let credential_files_seen = credential_files_modified(&config);
     let mut provisioning_config = ProvisioningConfig::load(&ProvisioningFiles {
         instance: &config.instance,
         fleet_tokens_file: &config.provision.fleet_tokens_file,
@@ -602,6 +603,11 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
         background.clone(),
     ));
     runtime.spawn(reload_permissions(shared.clone(), background.clone()));
+    runtime.spawn(reload_credentials(
+        shared.clone(),
+        credential_files_seen,
+        background.clone(),
+    ));
     runtime.spawn(update_gauges(
         shared.clone(),
         services.broker.clone(),
@@ -677,6 +683,65 @@ async fn reload_permissions(shared: Arc<Shared>, stop: CancellationToken) {
                 );
             }
         }
+    }
+}
+
+pub fn credential_files_modified(config: &Config) -> [Option<SystemTime>; 2] {
+    [
+        modified(&config.provision.fleet_tokens_file),
+        modified(&config.provision.install_token_keys),
+    ]
+}
+
+pub fn reload_credentials_if_changed(shared: &Shared, seen: &mut [Option<SystemTime>; 2]) {
+    let now = credential_files_modified(&shared.config);
+    let tokens_path = &shared.config.provision.fleet_tokens_file;
+    if now[0] != seen[0] {
+        match nightfall_provisioning::credential::FleetTokens::load(tokens_path) {
+            Ok(tokens) => {
+                seen[0] = now[0];
+                shared.provisioning.replace_fleet_tokens(tokens);
+            }
+            Err(error) => {
+                metrics::counter!("nightfall_credentials_reload_failures_total", "file" => "fleet_tokens_file").increment(1);
+                tracing::warn!(
+                    path = %tokens_path.display(),
+                    %error,
+                    "the fleet tokens changed but could not be loaded; the previous ones stay in use"
+                );
+            }
+        }
+    }
+    let keys_path = &shared.config.provision.install_token_keys;
+    if now[1] != seen[1] {
+        match nightfall_provisioning::credential::InstallTokenKeys::load(keys_path) {
+            Ok(keys) => {
+                seen[1] = now[1];
+                shared.provisioning.replace_install_token_keys(keys);
+            }
+            Err(error) => {
+                metrics::counter!("nightfall_credentials_reload_failures_total", "file" => "install_token_keys").increment(1);
+                tracing::warn!(
+                    path = %keys_path.display(),
+                    %error,
+                    "the install token keys changed but could not be loaded; the previous ones stay in use"
+                );
+            }
+        }
+    }
+}
+
+async fn reload_credentials(
+    shared: Arc<Shared>,
+    mut seen: [Option<SystemTime>; 2],
+    stop: CancellationToken,
+) {
+    loop {
+        tokio::select! {
+            () = stop.cancelled() => return,
+            () = tokio::time::sleep(RELOAD_PERIOD) => {}
+        }
+        reload_credentials_if_changed(&shared, &mut seen);
     }
 }
 

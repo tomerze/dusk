@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::provision_capnp::{RENEW_BEYOND_GRACE, credential, device_report, provisioning};
@@ -228,8 +228,8 @@ struct Assigned {
 
 pub struct Provisioning {
     instance: String,
-    fleet_tokens: FleetTokens,
-    install_token_keys: InstallTokenKeys,
+    fleet_tokens: RwLock<Arc<FleetTokens>>,
+    install_token_keys: RwLock<Arc<InstallTokenKeys>>,
     device_id_key: DeviceIdKey,
     endorsement_roots: Vec<TrustAnchor<'static>>,
     renew_grace: Duration,
@@ -252,6 +252,22 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn current<T>(shared: &RwLock<Arc<T>>) -> Arc<T> {
+    shared
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+fn replace<T>(shared: &RwLock<Arc<T>>, value: T) -> Arc<T> {
+    std::mem::replace(
+        &mut *shared
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        Arc::new(value),
+    )
 }
 
 fn unix_now() -> u64 {
@@ -310,8 +326,8 @@ impl Provisioning {
         );
         Ok(Arc::new(Provisioning {
             instance: config.instance,
-            fleet_tokens: config.fleet_tokens,
-            install_token_keys: config.install_token_keys,
+            fleet_tokens: RwLock::new(Arc::new(config.fleet_tokens)),
+            install_token_keys: RwLock::new(Arc::new(config.install_token_keys)),
             device_id_key: config.device_id_key,
             endorsement_roots,
             renew_grace: config.renew_grace,
@@ -338,6 +354,44 @@ impl Provisioning {
 
     pub fn trust(&self) -> Arc<FleetClientTrust> {
         self.trust.clone()
+    }
+
+    pub fn replace_fleet_tokens(&self, tokens: FleetTokens) {
+        let named = |tokens: &FleetTokens| -> std::collections::BTreeMap<String, Option<String>> {
+            tokens
+                .iter()
+                .map(|token| (token.name.clone(), token.tenant.clone()))
+                .collect()
+        };
+        let after = named(&tokens);
+        let count = tokens.len();
+        let before = named(&replace(&self.fleet_tokens, tokens));
+        let added: Vec<&String> = after
+            .keys()
+            .filter(|name| !before.contains_key(*name))
+            .collect();
+        let removed: Vec<&String> = before
+            .keys()
+            .filter(|name| !after.contains_key(*name))
+            .collect();
+        let changed: Vec<&String> = after
+            .iter()
+            .filter(|(name, entry)| before.get(*name).is_some_and(|previous| previous != *entry))
+            .map(|(name, _)| name)
+            .collect();
+        info!(
+            fleet_tokens = count,
+            ?added,
+            ?removed,
+            ?changed,
+            "fleet tokens reloaded"
+        );
+    }
+
+    pub fn replace_install_token_keys(&self, keys: InstallTokenKeys) {
+        let count = keys.len();
+        replace(&self.install_token_keys, keys);
+        info!(install_token_keys = count, "install token keys reloaded");
     }
 
     pub fn client(self: &Arc<Self>, connection: ConnectionInfo) -> provisioning::Client {
@@ -478,7 +532,7 @@ impl Provisioning {
     ) -> Result<Verified, Refusal> {
         let address = connection.remote_address.ip();
         let verified = match presented {
-            Presented::FleetToken(token) => match self.fleet_tokens.find(token) {
+            Presented::FleetToken(token) => match current(&self.fleet_tokens).find(token) {
                 Some(entry) => Verified {
                     reference: entry.name.clone(),
                     tenant: entry.tenant.clone(),
@@ -494,7 +548,7 @@ impl Provisioning {
                 }
             },
             Presented::InstallToken(token) => {
-                match self.install_token_keys.verify(token, unix_now()) {
+                match current(&self.install_token_keys).verify(token, unix_now()) {
                     Ok(install_token) => Verified {
                         reference: install_token.subject.clone(),
                         tenant: install_token.tenant.clone(),
