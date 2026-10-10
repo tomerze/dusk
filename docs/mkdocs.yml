@@ -105,6 +105,10 @@ nav:
       - Campaigns: stack/campaigns.md
       - The twilight UI: stack/ui.md
       - Security model: stack/security.md
+      - Runbooks:
+          - credential_quota_reached: stack/runbooks/credential-quota-reached.md
+          - denied_enrollments_spike: stack/runbooks/denied-enrollments-spike.md
+          - enrollment_from_new_network_burst: stack/runbooks/enrollment-from-new-network-burst.md
   - Telemetry:
       - Collected information: telemetry/collected-information.md
   - Customize:
