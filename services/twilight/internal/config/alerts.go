@@ -18,9 +18,15 @@ type Alerts struct {
 }
 
 type Receiver struct {
-	Name          string           `yaml:"name"`
-	RatePerMinute int              `yaml:"rate_per_minute"`
-	Webhook       *WebhookReceiver `yaml:"webhook"`
+	Name          string             `yaml:"name"`
+	RatePerMinute int                `yaml:"rate_per_minute"`
+	PagerDuty     *PagerDutyReceiver `yaml:"pagerduty"`
+	Webhook       *WebhookReceiver   `yaml:"webhook"`
+}
+
+type PagerDutyReceiver struct {
+	RoutingKeyFile string `yaml:"routing_key_file"`
+	URL            string `yaml:"url"`
 }
 
 type WebhookReceiver struct {
@@ -36,16 +42,25 @@ type Route struct {
 }
 
 const (
-	RunbookKind = "{kind}"
+	PagerDutyEventsURL = "https://events.pagerduty.com/v2/enqueue"
+	RunbookKind        = "{kind}"
 )
 
 var (
 	Severities    = []string{"critical", "high", "medium", "low"}
 	receiverName  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	receiverTypes = []string{
+		"pagerduty",
 		"webhook",
 	}
 )
+
+func (pagerDuty PagerDutyReceiver) EventsURL() string {
+	if pagerDuty.URL == "" {
+		return PagerDutyEventsURL
+	}
+	return pagerDuty.URL
+}
 
 func (route Route) Matches(severity, kind string, tenant *string) bool {
 	if len(route.Severities) > 0 && !slices.Contains(route.Severities, severity) {
@@ -87,6 +102,7 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 		}
 		types := 0
 		for _, set := range []bool{
+			receiver.PagerDuty != nil,
 			receiver.Webhook != nil,
 		} {
 			if set {
@@ -98,6 +114,13 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 			continue
 		}
 		switch {
+		case receiver.PagerDuty != nil:
+			if receiver.PagerDuty.RoutingKeyFile == "" {
+				problem("%s.pagerduty.routing_key_file is required", where)
+			}
+			if receiver.PagerDuty.URL != "" && !webURL(receiver.PagerDuty.URL) {
+				problem("%s.pagerduty.url must be an http or https URL", where)
+			}
 		case receiver.Webhook != nil:
 			if !webURL(receiver.Webhook.URL) {
 				problem("%s.webhook.url must be an http or https URL", where)
