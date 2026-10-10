@@ -278,7 +278,9 @@ func (store *Store) List(operation context.Context, open bool, cursor string, li
 }
 
 func (store *Store) Acknowledge(operation context.Context, identifier int64, actor string, now time.Time) (Alert, error) {
-	return scanAlert(store.pool.QueryRow(operation, `update alerts set acknowledged_by = coalesce(acknowledged_by, $2), acknowledged_at = coalesce(acknowledged_at, $3)
+	return scanAlert(store.pool.QueryRow(operation, `update alerts set
+			acknowledged_by = case when resolved_at is null then coalesce(acknowledged_by, $2) else acknowledged_by end,
+			acknowledged_at = case when resolved_at is null then coalesce(acknowledged_at, $3) else acknowledged_at end
 		where id = $1 returning `+alertColumns, identifier, actor, now))
 }
 
