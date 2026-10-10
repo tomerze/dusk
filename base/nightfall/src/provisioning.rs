@@ -227,9 +227,13 @@ impl Provisioner {
         current: &Identity,
         kvs: &Kvs,
     ) -> Result<Identity, ProvisioningError> {
-        let key = current.key.generate_like()?;
-        identity::stage(kvs, &key).await?;
-        let key = Arc::new(key);
+        let key = if current.leaf.identity.tpm_bound {
+            current.key.clone()
+        } else {
+            let key = current.key.generate_like()?;
+            identity::stage(kvs, &key).await?;
+            Arc::new(key)
+        };
         let renewed = self
             .session(
                 Some(current.certified_key()),
