@@ -1448,6 +1448,12 @@
 .dusk-start {
   background-color: var(--dusk-ground);
 }
+[data-md-color-scheme="default"] .dusk-start {
+  --dusk-ink-gold: #7b5600;
+  --dusk-ink-dawn: #875113;
+  --dusk-ink-twilight: #85458c;
+  --dusk-ink-data: #1b6295;
+}
 .dusk-landing .grid.cards {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1rem;
@@ -1481,8 +1487,23 @@
   --dusk-card-tone: var(--dusk-data);
   --dusk-card-ink: var(--dusk-ink-data);
 }
+[data-md-color-scheme="default"]
+  .dusk-landing
+  .grid.cards
+  > ul
+  > li:nth-child(n) {
+  --dusk-card-tone: var(--dusk-card-ink);
+}
 .dusk-landing .grid.cards > ul > li:hover {
   border-color: var(--dusk-card-tone);
+}
+[data-md-color-scheme="default"]
+  .dusk-landing
+  .grid.cards
+  > ul
+  > li:is(:hover, :focus-within) {
+  border-color: var(--dusk-card-tone);
+  box-shadow: none;
 }
 .dusk-landing .grid.cards > ul > li:nth-child(-n + 2) {
   grid-column: span 3;
@@ -1510,12 +1531,6 @@
 }
 .dusk-landing .grid.cards p:not(:first-child):not(:last-child) {
   color: var(--md-default-fg-color);
-  font-weight: 300;
-}
-[data-md-color-scheme="slate"]
-  .dusk-landing
-  .grid.cards
-  p:not(:first-child):not(:last-child) {
   font-weight: 400;
 }
 .dusk-landing .dusk-card-icon {
@@ -1634,6 +1649,9 @@
   outline: 2px solid #f0b441;
   outline-offset: 3px;
   border-radius: 0.2rem;
+}
+[data-md-color-scheme="default"] .dusk-start a:focus-visible {
+  outline-color: currentColor;
 }
 
 @media (prefers-reduced-motion: reduce) {
