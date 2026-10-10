@@ -30,7 +30,11 @@ At the prompt, list the processes currently running on the node:
 ps
 ```
 
-Type `help` to see every program the node can run. From here:
+Type `help` to see every program the node can run:
+
+![The dusk CLI connected to a node, listing the programs it can run](../../assets/dusk_showcase.png)
+
+From here:
 
 - the [Shell](../../features/shell.md) reference covers the command language,
 - [Connect a client](connect-a-client.md) shows the Python and HTTP entry points,
