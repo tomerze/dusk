@@ -107,7 +107,7 @@ func TestGatesKeepWatchingAPausedCampaign(test *testing.T) {
 	pool, _ := testsupport.Database(test)
 	operation := context.Background()
 	store := campaign.NewStore(pool)
-	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Logger: testsupport.Logger()})
+	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Alerts: testsupport.AlertStore(test, pool), Logger: testsupport.Logger()})
 	term, failure := store.Term(operation)
 	if failure != nil {
 		test.Fatal(failure)

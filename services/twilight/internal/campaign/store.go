@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/selector"
 )
@@ -272,10 +273,24 @@ type TransitionRequest struct {
 	OverrideGate bool
 	Now          time.Time
 	Detail       map[string]any
+	Alert        *alerts.Raised
+	Announce     func(alerts.Alert)
+}
+
+func raiseAlert(operation context.Context, transaction pgx.Tx, request TransitionRequest) (*alerts.Alert, error) {
+	if request.Alert == nil {
+		return nil, nil
+	}
+	alert, announce, failure := alerts.RaiseIn(operation, transaction, *request.Alert)
+	if failure != nil || !announce || request.Announce == nil {
+		return nil, failure
+	}
+	return &alert, nil
 }
 
 func (store *Store) Transition(operation context.Context, identifier uuid.UUID, request TransitionRequest) (*Campaign, error) {
 	var updated *Campaign
+	var raised *alerts.Alert
 	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
 		current, failure := scanCampaign(transaction.QueryRow(operation, `select `+campaignColumns+` from campaigns where id = $1 for update`, identifier))
 		if failure != nil {
@@ -360,6 +375,14 @@ func (store *Store) Transition(operation context.Context, identifier uuid.UUID, 
 				return failure
 			}
 		}
+		if request.Transition == TransitionResume || request.Transition == TransitionAbort || request.Transition == TransitionComplete || request.Transition == TransitionFail {
+			if failure := alerts.ResolveFingerprintIn(operation, transaction, alerts.KindCampaignPausedByGate+":"+identifier.String(), request.Actor, now); failure != nil {
+				return failure
+			}
+		}
+		if raised, failure = raiseAlert(operation, transaction, request); failure != nil {
+			return failure
+		}
 		if request.Transition == TransitionArchive {
 			return nil
 		}
@@ -367,6 +390,9 @@ func (store *Store) Transition(operation context.Context, identifier uuid.UUID, 
 	})
 	if failure != nil {
 		return nil, failure
+	}
+	if raised != nil {
+		request.Announce(*raised)
 	}
 	if request.Transition == TransitionArchive {
 		if failure := database.DropCampaignPartitions(operation, store.pool, identifier); failure != nil {
@@ -390,21 +416,28 @@ func (store *Store) AdvancePhase(operation context.Context, identifier uuid.UUID
 	return advanced, failure
 }
 
-func (store *Store) HoldForGate(operation context.Context, identifier uuid.UUID, reason string, detail map[string]any, now time.Time) (bool, error) {
+func (store *Store) HoldForGate(operation context.Context, identifier uuid.UUID, request TransitionRequest) (bool, error) {
 	held := false
+	var raised *alerts.Alert
 	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
 		tag, failure := transaction.Exec(operation, `update campaigns set pause_kind = 'gate', pause_reason = $2, updated_at = $3
-			where id = $1 and status = 'paused' and pause_kind is distinct from 'gate'`, identifier, reason, now)
+			where id = $1 and status = 'paused' and pause_kind is distinct from 'gate'`, identifier, request.Reason, request.Now)
 		if failure != nil || tag.RowsAffected() == 0 {
 			return failure
 		}
 		held = true
-		recorded := map[string]any{"reason": reason, "pause_kind": string(PauseGate)}
-		for key, value := range detail {
+		if raised, failure = raiseAlert(operation, transaction, request); failure != nil {
+			return failure
+		}
+		recorded := map[string]any{"reason": request.Reason, "pause_kind": string(PauseGate)}
+		for key, value := range request.Detail {
 			recorded[key] = value
 		}
-		return addEvent(operation, transaction, identifier, "gate_failed", "twilight", recorded)
+		return addEvent(operation, transaction, identifier, "gate_failed", request.Actor, recorded)
 	})
+	if failure == nil && raised != nil {
+		request.Announce(*raised)
+	}
 	return held, failure
 }
 
