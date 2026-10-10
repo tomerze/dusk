@@ -8,6 +8,7 @@ mod fake_step_ca;
 pub mod identity;
 pub mod jwt;
 pub mod limits;
+pub mod quota;
 pub mod renew;
 pub mod server;
 #[cfg(test)]

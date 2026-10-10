@@ -103,6 +103,7 @@ pub struct Topics {
     pub enrollments: String,
     pub node_state: String,
     pub intended_processes: String,
+    pub credential_quota: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -251,6 +252,7 @@ impl Default for Topics {
             enrollments: "dusk.enrollments".to_string(),
             node_state: "dusk.node-state".to_string(),
             intended_processes: "dusk.intended-processes".to_string(),
+            credential_quota: "dusk.credential-quota".to_string(),
         }
     }
 }
@@ -652,6 +654,7 @@ impl Config {
             &self.kafka.topics.enrollments,
             &self.kafka.topics.node_state,
             &self.kafka.topics.intended_processes,
+            &self.kafka.topics.credential_quota,
         ];
         if topics.iter().any(|topic| topic.is_empty()) {
             bail!("every kafka.topics entry must name a topic");
@@ -811,7 +814,7 @@ partition = -1
 brokers = "kafka:9092"
 allow_plaintext = true
 properties = {}
-topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes" }
+topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes", credential_quota = "dusk.credential-quota" }
 census_interval_seconds = 300
 census_heartbeat_seconds = 15
 

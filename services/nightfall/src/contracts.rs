@@ -8,6 +8,8 @@ const CENSUS: &str = include_str!("../../contracts/kafka/dusk.census.schema.json
 const NODE_STATE: &str = include_str!("../../contracts/kafka/dusk.node-state.schema.json");
 const INTENDED_PROCESSES: &str =
     include_str!("../../contracts/kafka/dusk.intended-processes.schema.json");
+const CREDENTIAL_QUOTA: &str =
+    include_str!("../../contracts/kafka/dusk.credential-quota.schema.json");
 
 struct Common;
 
@@ -29,6 +31,7 @@ pub enum Contract {
     Census,
     NodeState,
     IntendedProcesses,
+    CredentialQuota,
 }
 
 impl Contract {
@@ -40,6 +43,7 @@ impl Contract {
             Contract::IntendedProcesses => {
                 ("dusk.intended-processes.schema.json", INTENDED_PROCESSES)
             }
+            Contract::CredentialQuota => ("dusk.credential-quota.schema.json", CREDENTIAL_QUOTA),
         }
     }
 
@@ -99,6 +103,7 @@ mod tests {
             (Contract::Census, "dusk.census"),
             (Contract::NodeState, "dusk.node-state"),
             (Contract::IntendedProcesses, "dusk.intended-processes"),
+            (Contract::CredentialQuota, "dusk.credential-quota"),
         ] {
             let validator = contract.validator().unwrap();
             let examples = examples(topic);

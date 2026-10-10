@@ -25,6 +25,7 @@ use crate::identity::{
     new_installation_id,
 };
 use crate::limits::{CollisionTracker, EnrollmentBuckets, PenaltyBox, RateWindow, RenewLimiter};
+use crate::quota::{InstallationQuota, QuotaUnavailable, Reservation, UNCAPPED};
 use crate::renew::FleetClientTrust;
 use crate::state::NodeStateView;
 use crate::step_ca::{SignRequest, SignedCertificate, StepCaClient, StepCaError};
@@ -114,6 +115,7 @@ impl Presented {
 
 struct Verified {
     credential: CredentialName,
+    max_installations: Option<u64>,
     tenant: Option<String>,
     install_token: Option<InstallToken>,
 }
@@ -220,6 +222,38 @@ impl Attempt {
     }
 }
 
+struct HeldReservation {
+    quota: Arc<dyn InstallationQuota>,
+    reservation: Option<Reservation>,
+}
+
+impl HeldReservation {
+    fn keep(mut self) {
+        self.reservation = None;
+    }
+
+    fn give_back(mut self) {
+        if let Some(reservation) = self.reservation.take() {
+            self.quota.release(&reservation);
+        }
+    }
+}
+
+impl Drop for HeldReservation {
+    fn drop(&mut self) {
+        if let Some(reservation) = self.reservation.take() {
+            warn!(
+                credential_kind = reservation.credential.kind.name(),
+                credential = %reservation.credential.name,
+                reservation = %reservation.id,
+                installation_id = %reservation.installation_id,
+                "an enrollment ended before its certificate was signed; its reservation is given back"
+            );
+            self.quota.release(&reservation);
+        }
+    }
+}
+
 struct Assigned {
     device_id: String,
     installation_id: String,
@@ -241,6 +275,7 @@ pub struct Provisioning {
     events: Arc<dyn EnrollmentEvents>,
     state: Arc<dyn NodeStateView>,
     penalty_box: Arc<dyn PenaltyBox>,
+    quota: Arc<dyn InstallationQuota>,
     trust: Arc<FleetClientTrust>,
     challenges: ChallengeStore,
     buckets: Mutex<EnrollmentBuckets>,
@@ -272,6 +307,16 @@ fn replace<T>(shared: &RwLock<Arc<T>>, value: T) -> Arc<T> {
     )
 }
 
+fn quota_unavailable(unavailable: QuotaUnavailable) -> Refusal {
+    Refusal::failure(
+        "credential_quota_unavailable",
+        unavailable.to_string(),
+        capnp::Error::overloaded(String::from(
+            "the installations of this credential cannot be counted now; retry later",
+        )),
+    )
+}
+
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -298,6 +343,7 @@ impl Provisioning {
         events: Arc<dyn EnrollmentEvents>,
         state: Arc<dyn NodeStateView>,
         penalty_box: Arc<dyn PenaltyBox>,
+        quota: Arc<dyn InstallationQuota>,
     ) -> Result<Arc<Provisioning>, String> {
         let trust = Arc::new(FleetClientTrust::new(&config.fleet_client_roots)?);
         let endorsement_roots = config
@@ -340,6 +386,7 @@ impl Provisioning {
             events,
             state,
             penalty_box,
+            quota,
             trust,
             challenges: ChallengeStore::new(config.challenge_capacity, config.challenge_ttl),
             buckets: Mutex::new(EnrollmentBuckets::new(
@@ -360,13 +407,17 @@ impl Provisioning {
     }
 
     pub fn replace_fleet_tokens(&self, tokens: FleetTokens) {
-        let named =
-            |tokens: &FleetTokens| -> std::collections::BTreeMap<String, (Option<String>, bool)> {
-                tokens
-                    .iter()
-                    .map(|token| (token.name.clone(), (token.tenant.clone(), token.retired)))
-                    .collect()
-            };
+        let named = |tokens: &FleetTokens| -> std::collections::BTreeMap<String, (Option<String>, Option<u64>, bool)> {
+            tokens
+                .iter()
+                .map(|token| {
+                    (
+                        token.name.clone(),
+                        (token.tenant.clone(), token.max_installations, token.retired),
+                    )
+                })
+                .collect()
+        };
         let after = named(&tokens);
         let count = tokens.len();
         let retired_count = tokens.retired();
@@ -381,7 +432,7 @@ impl Provisioning {
             .collect();
         let retired: Vec<&String> = after
             .iter()
-            .filter(|(name, entry)| entry.1 && before.get(*name).is_none_or(|previous| !previous.1))
+            .filter(|(name, entry)| entry.2 && before.get(*name).is_none_or(|previous| !previous.2))
             .map(|(name, _)| name)
             .collect();
         let changed: Vec<&String> = after
@@ -411,6 +462,37 @@ impl Provisioning {
             ?changed,
             "install token keys reloaded"
         );
+    }
+
+    pub fn quota_limits(&self) -> Vec<(CredentialName, u64)> {
+        let mut limits: Vec<(CredentialName, u64)> = current(&self.fleet_tokens)
+            .iter()
+            .filter_map(|token| {
+                token.max_installations.map(|limit| {
+                    (
+                        CredentialName {
+                            kind: CredentialKind::FleetToken,
+                            name: token.name.clone(),
+                        },
+                        limit,
+                    )
+                })
+            })
+            .collect();
+        limits.extend(
+            current(&self.install_token_keys)
+                .limits()
+                .map(|(key_id, limit)| {
+                    (
+                        CredentialName {
+                            kind: CredentialKind::InstallToken,
+                            name: String::from(key_id),
+                        },
+                        limit,
+                    )
+                }),
+        );
+        limits
     }
 
     pub fn client(self: &Arc<Self>, connection: ConnectionInfo) -> provisioning::Client {
@@ -582,6 +664,7 @@ impl Provisioning {
                         kind: CredentialKind::FleetToken,
                         name: entry.name.clone(),
                     },
+                    max_installations: entry.max_installations,
                     tenant: entry.tenant.clone(),
                     install_token: None,
                 },
@@ -601,6 +684,7 @@ impl Provisioning {
                             kind: CredentialKind::InstallToken,
                             name: install_token.key_id.clone(),
                         },
+                        max_installations: install_token.max_installations,
                         tenant: install_token.tenant.clone(),
                         install_token: Some(install_token),
                     },
@@ -632,6 +716,20 @@ impl Provisioning {
             .map(|install_token| install_token.key_id.clone());
         attempt.event.tenant = verified.tenant.clone();
         Ok(verified)
+    }
+
+    fn check_quota(&self, verified: &Verified) -> Result<(), Refusal> {
+        let Some(limit) = verified.max_installations else {
+            return Ok(());
+        };
+        let used = self
+            .quota
+            .used(&verified.credential)
+            .map_err(quota_unavailable)?;
+        if used >= limit {
+            return Err(quota_reached(&verified.credential, used, limit));
+        }
+        Ok(())
     }
 
     fn check_fingerprint(&self, report: &Report) -> Result<String, Refusal> {
@@ -702,6 +800,7 @@ impl Provisioning {
         self.admit(connection, Operation::Assign)?;
         let verified = self.verify_credential(connection, presented, attempt)?;
         self.admit_credential(&verified, report.endorsement_key())?;
+        self.check_quota(&verified)?;
         let attested = report
             .tpm
             .as_ref()
@@ -797,10 +896,11 @@ impl Provisioning {
         challenge: &[u8],
         csr: &[u8],
         attempt: &mut Attempt,
-    ) -> Result<SignRequest, Refusal> {
+    ) -> Result<(SignRequest, Reservation), Refusal> {
         self.admit(connection, Operation::Enroll)?;
         let verified = self.verify_credential(connection, presented, attempt)?;
         self.admit_credential(&verified, report.endorsement_key())?;
+        self.check_quota(&verified)?;
         let device_id = self.check_fingerprint(report)?;
         let binding = self
             .challenges
@@ -842,7 +942,14 @@ impl Provisioning {
             Some(install_token) => install_token.one_time_token_id(),
             None => random_hex(&self.random, 32)?,
         };
-        Ok(SignRequest {
+        let reservation = Reservation {
+            id: uuid::Uuid::now_v7().to_string(),
+            credential: verified.credential.clone(),
+            limit: verified.max_installations.unwrap_or(UNCAPPED),
+            device_id: device_id.clone(),
+            installation_id: installation_id.clone(),
+        };
+        let request = SignRequest {
             csr_der: csr.to_vec(),
             subject: validated
                 .common_name
@@ -851,7 +958,26 @@ impl Provisioning {
             tenant: verified.tenant,
             token_id,
             tpm_bound: attempt.tpm_bound,
-        })
+        };
+        Ok((request, reservation))
+    }
+
+    async fn reserve(&self, reservation: &Reservation) -> Result<(), Refusal> {
+        match self.quota.reserve(reservation.clone()).await {
+            Ok(true) => Ok(()),
+            Ok(false) => {
+                let used = self
+                    .quota
+                    .used(&reservation.credential)
+                    .unwrap_or(reservation.limit);
+                Err(quota_reached(
+                    &reservation.credential,
+                    used,
+                    reservation.limit,
+                ))
+            }
+            Err(unavailable) => Err(quota_unavailable(unavailable)),
+        }
     }
 
     fn prepare_renew(
@@ -1035,6 +1161,18 @@ impl Provisioning {
     }
 }
 
+fn quota_reached(credential: &CredentialName, used: u64, limit: u64) -> Refusal {
+    Refusal::denied(
+        "credential_quota_reached",
+        format!(
+            "{} {} enrolled {used} of its {limit} installations",
+            credential.kind.name(),
+            credential.name
+        ),
+        "credential quota reached",
+    )
+}
+
 fn write_issued(
     mut issued: crate::provision_capnp::issued::Builder<'_>,
     signed: &SignedCertificate,
@@ -1148,12 +1286,24 @@ impl provisioning::Server for ProvisioningServer {
             &mut attempt,
         );
         Promise::from_future(async move {
-            let request = match prepared {
-                Ok(request) => request,
+            let (request, reservation) = match prepared {
+                Ok(prepared) => prepared,
                 Err(refusal) => {
                     shared.finish(attempt, Err(&refusal));
                     return Err(refusal.error);
                 }
+            };
+            let held = if reservation.limit < UNCAPPED {
+                if let Err(refusal) = shared.reserve(&reservation).await {
+                    shared.finish(attempt, Err(&refusal));
+                    return Err(refusal.error);
+                }
+                Some(HeldReservation {
+                    quota: shared.quota.clone(),
+                    reservation: Some(reservation.clone()),
+                })
+            } else {
+                None
             };
             match shared.sign(&request, &mut attempt).await {
                 Ok(signed) => {
@@ -1163,6 +1313,10 @@ impl provisioning::Server for ProvisioningServer {
                         shared.renew_after(&signed),
                     );
                     attempt.event.outcome = Outcome::Issued;
+                    match held {
+                        Some(held) => held.keep(),
+                        None => shared.quota.record(&reservation),
+                    }
                     if let (Some(device_id), Some(installation_id)) = (
                         attempt.event.device_id.clone(),
                         attempt.event.installation_id.clone(),
@@ -1173,6 +1327,9 @@ impl provisioning::Server for ProvisioningServer {
                     Ok(())
                 }
                 Err(refusal) => {
+                    if let Some(held) = held {
+                        held.give_back();
+                    }
                     shared.finish(attempt, Err(&refusal));
                     Err(refusal.error)
                 }
