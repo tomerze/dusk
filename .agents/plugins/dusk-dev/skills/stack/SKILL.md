@@ -47,7 +47,9 @@ process at a pid:
   installation_id + "/" + attempt)`, re-hashed with `/1`, `/2`, ... appended
   while it falls in the reserved range (below 65536, or a pid a `.capnp` names
   as a `const`, such as `sh.capnp`'s `defaultPid`). Other work gets a random
-  pid. Either is recorded in `intended_processes` before dawn is called.
+  pid. Either is recorded in `intended_processes` and written to the
+  compacted topic `dusk.intended-processes` - dawn is called only once Kafka
+  acknowledged it; a tombstone follows expiry or reap.
 - dawn runs `ps` in the node's default shell - `dusk.Dusk(address, port, ...)`
   without `sh_server_pid` connects to `defaultPid`. The pid present, running
   or exited and not reaped, means `duplicate`: nothing runs again, ever.
@@ -61,19 +63,27 @@ process at a pid:
 - Reads (`kvs get`, `logs dump`), kills and reaps all run in the default shell;
   dawn starts no other shells. A broken stream is resolved from
   `logs dump --replay-only`: the shell's `sh_exec` span for the pid not ended
-  means `running`, ended means `ended`. twilight's reconcile counts the
-  default shell's commands per node against the budgets of the node's open
-  intended processes (`reconcile.default_shell`): `default_shell_without_intent`
-  when none is open, `process_shape` beyond the budgets.
+  means `running`, ended means `ended`. nightfall refuses a default-shell
+  command while none of the node's intended processes is open, and one beyond
+  their budgets (`reconcile.default_shell`); twilight's reconcile counts the same
+  afterwards: `default_shell_without_intent` when none is open,
+  `process_shape` beyond the budgets.
 - A facts read, a file collection, a log stream or an interactive session runs
   in a shell at its own random pid, and dawn kills and reaps that pid itself
   when it is done.
 - Reap is `kill <pid>` then `kill --signal 8 <pid>` from the default shell,
   asked by twilight only once no duplicate can come. A node restart empties the
   process table, so a resend after one runs again.
+- nightfall admits a call only when an intended process of its node allows it -
+  its pid, its deadline, its command budget - and refuses everything else with
+  `denied: not intended` before forwarding (`docs/docs/stack/membrane.md`,
+  Admission). A `Dusk.process` without a pid is refused, but the read-only
+  `kvs bind` the `kvs` client starts for `kvs get`; a client-side argument
+  builder that starts any other helper process does not work through dawn.
 - nightfall attributes every call to the pid of the process at the root of its
-  capability, the ledger carries `pid`, and twilight's reconcile holds the
-  ledger against `intended_processes`.
+  capability, the ledger carries `pid` and the intent of that pid, and twilight's
+  reconcile holds the ledger against `intended_processes` as the check that
+  admission held.
 
 `docs/docs/stack/processes.md` is the reference.
 
@@ -115,7 +125,8 @@ SQL, shell, Go and TypeScript exactly as in Rust.
 
 Every Kafka message matches `services/contracts/kafka/<topic>.schema.json`; the
 topics dawn writes are `dusk.process-results`, `dusk.process-output` and
-`dusk.files`. A `/v1` schema never changes once released: any change is a new
+`dusk.files`, and twilight writes `dusk.node-state` and
+`dusk.intended-processes`. A `/v1` schema never changes once released: any change is a new
 `<topic>/v2` schema, consumers first, producers after
 (`services/contracts/README.md`).
 
