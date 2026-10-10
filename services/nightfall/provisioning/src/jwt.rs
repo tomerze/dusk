@@ -85,6 +85,36 @@ fn public_key_of(key: &Value) -> Result<(PublicKey, String), KeyError> {
 }
 
 impl Jwks {
+    pub fn changed_since(&self, before: &Jwks) -> (Vec<String>, Vec<String>, Vec<String>) {
+        let mut added: Vec<String> = self
+            .keys
+            .keys()
+            .filter(|key_id| !before.keys.contains_key(*key_id))
+            .cloned()
+            .collect();
+        let mut removed: Vec<String> = before
+            .keys
+            .keys()
+            .filter(|key_id| !self.keys.contains_key(*key_id))
+            .cloned()
+            .collect();
+        let mut changed: Vec<String> = self
+            .keys
+            .iter()
+            .filter(|(key_id, key)| {
+                before
+                    .keys
+                    .get(*key_id)
+                    .is_some_and(|previous| previous != *key)
+            })
+            .map(|(key_id, _)| key_id.clone())
+            .collect();
+        added.sort();
+        removed.sort();
+        changed.sort();
+        (added, removed, changed)
+    }
+
     pub fn from_json(text: &str) -> Result<Jwks, KeyError> {
         let document: Value =
             serde_json::from_str(text).map_err(|error| KeyError(format!("not JSON: {error}")))?;
@@ -394,6 +424,36 @@ mod tests {
         assert_eq!(
             jwks.verify(&unknown),
             Err(JwtError::UnknownKey(String::from("other")))
+        );
+    }
+
+    #[test]
+    fn names_the_keys_a_new_set_added_removed_and_changed() {
+        let kept = EdwardsSigner::new("factory-2025");
+        let rotated = EdwardsSigner::new("factory-2026");
+        let gone = EdwardsSigner::new("factory-2024");
+        let before = Jwks::from_json(
+            &json!({ "keys": [kept.public_jwk(), rotated.public_jwk(), gone.public_jwk()] })
+                .to_string(),
+        )
+        .unwrap();
+        let added = EdwardsSigner::new("factory-2027");
+        let after = Jwks::from_json(
+            &json!({ "keys": [kept.public_jwk(), EdwardsSigner::new("factory-2026").public_jwk(), added.public_jwk()] })
+                .to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            after.changed_since(&before),
+            (
+                vec![String::from("factory-2027")],
+                vec![String::from("factory-2024")],
+                vec![String::from("factory-2026")]
+            )
+        );
+        assert_eq!(
+            before.changed_since(&before),
+            (Vec::new(), Vec::new(), Vec::new())
         );
     }
 

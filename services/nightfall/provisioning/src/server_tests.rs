@@ -1438,3 +1438,66 @@ async fn renews_a_tpm_bound_certificate_only_with_the_key_it_has() {
     );
     assert_contract(&harness.events);
 }
+
+fn tokens_file(entries: &[(&str, &str, &str)]) -> FleetTokens {
+    let mut text = String::new();
+    for (name, secret, extra) in entries {
+        text.push_str(&format!(
+            "[[token]]\nname = \"{name}\"\nvalue_sha256 = \"{}\"\n{extra}\n",
+            hex::encode(sha256(secret.as_bytes()))
+        ));
+    }
+    FleetTokens::from_toml(&text).unwrap()
+}
+
+async fn enroll_new(
+    client: &provisioning::Client,
+    credential: Credential<'_>,
+    fingerprint: [u8; 32],
+) -> Result<Issued, capnp::Error> {
+    let assigned = assign(client, credential, &fingerprint).await?;
+    let request = csr(
+        &p256(),
+        None,
+        &uris(&assigned.device_id, &assigned.installation_id),
+    );
+    enroll(
+        client,
+        credential,
+        &fingerprint,
+        &assigned.challenge,
+        &request,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn takes_added_removed_and_re_tenanted_fleet_tokens_without_a_restart() {
+    let harness = harness().await;
+    let client = harness.client(ADDRESS, Vec::new());
+    harness.provisioning.replace_fleet_tokens(tokens_file(&[
+        ("retail-eu-2026", "retail secret", "tenant = \"retail-us\""),
+        ("batch-7", "batch secret", "tenant = \"acme\""),
+    ]));
+    let issued = enroll_new(&client, Credential::Fleet("batch secret"), [23u8; 32])
+        .await
+        .unwrap();
+    assert!(leaf_uris(&issued.chain[0]).contains(&tenant_uri("acme")));
+    assert_eq!(
+        harness.events.last().credential_ref.as_deref(),
+        Some("batch-7")
+    );
+    let issued = enroll_new(&client, Credential::Fleet("retail secret"), [24u8; 32])
+        .await
+        .unwrap();
+    assert!(leaf_uris(&issued.chain[0]).contains(&tenant_uri("retail-us")));
+    denied_with(
+        assign(&client, Credential::Fleet("lab secret"), &[25u8; 32]).await,
+        "invalid credential",
+    );
+    assert_eq!(
+        harness.events.last().reason.as_deref(),
+        Some("invalid_credential")
+    );
+    assert_contract(&harness.events);
+}

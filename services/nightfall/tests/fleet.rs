@@ -1556,6 +1556,117 @@ fn a_permissions_reload_drops_changed_clients_and_denies_new_ones_at_the_handsha
     );
 }
 
+async fn enroll_with_token(
+    provisioning: &nightfall_provisioning::provision_capnp::provisioning::Client,
+    token: &str,
+    fingerprint: [u8; 32],
+) -> Result<(), capnp::Error> {
+    let mut assign = provisioning.assign_request();
+    assign.get().init_credential().set_fleet_token(token);
+    device_report(assign.get().init_device());
+    assign
+        .get()
+        .get_device()
+        .unwrap()
+        .set_hardware_fingerprint(&fingerprint);
+    let assigned = assign.send().promise.await?;
+    let assignment = assigned.get()?.get_assignment()?;
+    let device_id = assignment.get_device_id()?.to_string().unwrap();
+    let installation_id = assignment.get_installation_id()?.to_string().unwrap();
+    let challenge = assignment.get_challenge()?.to_vec();
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    let mut parameters = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    parameters.distinguished_name = rcgen::DistinguishedName::new();
+    parameters.subject_alt_names = vec![
+        rcgen::SanType::URI(format!("urn:dusk:device:{device_id}").try_into().unwrap()),
+        rcgen::SanType::URI(
+            format!("urn:dusk:installation:{installation_id}")
+                .try_into()
+                .unwrap(),
+        ),
+    ];
+    let csr = parameters.serialize_request(&key).unwrap();
+    let mut enroll = provisioning.enroll_request();
+    enroll.get().init_credential().set_fleet_token(token);
+    device_report(enroll.get().init_device());
+    enroll
+        .get()
+        .get_device()
+        .unwrap()
+        .set_hardware_fingerprint(&fingerprint);
+    enroll.get().set_challenge(&challenge);
+    enroll.get().set_csr(csr.der());
+    enroll.send().promise.await.map(|_| ())
+}
+
+#[test]
+fn a_credential_file_that_does_not_load_keeps_the_previous_credentials() {
+    let environment = Environment::new();
+    let step_ca = support::step_ca::FakeStepCa::start(
+        environment.provisioner.public_jwk(),
+        environment.pki.fleet_client.clone(),
+    );
+    std::fs::write(
+        environment.paths().file("step-ca-root.crt"),
+        &step_ca.root_pem,
+    )
+    .unwrap();
+    let mut config = environment.config("nightfall-0", 0);
+    config.step_ca.url = step_ca.url.clone();
+    let (instance, _log) = environment.start(config);
+    let loaded = nightfall::server::credential_files_modified(&instance.shared.config);
+    let mut seen = loaded;
+    let tokens = environment.paths().file("fleet-tokens.toml");
+    run(async {
+        let anonymous =
+            support::harness::anonymous_config(&environment.pki.fleet_server.certificate);
+        let provisioning =
+            support::harness::connect_provisioning(instance.addresses.fleet, anonymous).await;
+        for (fingerprint, removed) in [(50u8, false), (51u8, true)] {
+            std::thread::sleep(Duration::from_millis(20));
+            if removed {
+                std::fs::remove_file(&tokens).unwrap();
+            } else {
+                std::fs::write(&tokens, "[[token]]\nname = \"test\"\nvalue_sha256 = \"").unwrap();
+            }
+            nightfall::server::reload_credentials_if_changed(&instance.shared, &mut seen);
+            assert_eq!(seen, loaded, "a file that did not load was taken as loaded");
+            enroll_with_token(
+                &provisioning.client,
+                support::harness::FLEET_TOKEN,
+                [fingerprint; 32],
+            )
+            .await
+            .unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(
+            &tokens,
+            format!(
+                "[[token]]\nname = \"rotated\"\nvalue_sha256 = \"{}\"\n",
+                nightfall_ledger::entry::sha256_hex(b"rotated fleet token")
+            ),
+        )
+        .unwrap();
+        nightfall::server::reload_credentials_if_changed(&instance.shared, &mut seen);
+        assert_ne!(seen, loaded);
+        enroll_with_token(&provisioning.client, "rotated fleet token", [52u8; 32])
+            .await
+            .unwrap();
+        let refused = error_of(enroll_with_token(
+            &provisioning.client,
+            support::harness::FLEET_TOKEN,
+            [53u8; 32],
+        ))
+        .await;
+        assert!(
+            refused.extra.contains("denied: invalid credential"),
+            "{refused}"
+        );
+    });
+    shutdown(instance);
+}
+
 #[test]
 fn a_node_session_closes_when_its_certificate_expires() {
     let environment = Environment::new();

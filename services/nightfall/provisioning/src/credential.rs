@@ -128,6 +128,10 @@ impl FleetTokens {
         self.tokens.is_empty()
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &FleetToken> {
+        self.tokens.iter()
+    }
+
     pub fn find(&self, presented: &str) -> Option<&FleetToken> {
         let digest = sha256(presented.as_bytes());
         let mut found = None;
@@ -183,6 +187,13 @@ pub enum InstallTokenError {
 }
 
 impl InstallTokenKeys {
+    pub fn changed_since(
+        &self,
+        before: &InstallTokenKeys,
+    ) -> (Vec<String>, Vec<String>, Vec<String>) {
+        self.jwks.changed_since(&before.jwks)
+    }
+
     pub fn load(path: &Path) -> Result<InstallTokenKeys, ConfigError> {
         let text =
             std::fs::read_to_string(path).map_err(|source| ConfigError::read(path, source))?;
