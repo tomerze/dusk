@@ -336,6 +336,9 @@ func TestAlerts(test *testing.T) {
 	if refused := current.call(http.MethodGet, "/api/v1/alerts?state=closed", nil, viewerToken); refused.Code != http.StatusBadRequest {
 		test.Fatalf("an unknown state answered %d", refused.Code)
 	}
+	if one := current.call(http.MethodGet, "/api/v1/alerts/7", nil, viewerToken); one.Code != http.StatusOK || current.backend.last("Alert")[0] != int64(7) || field(one, "tenant") != "acme" {
+		test.Fatalf("one alert %d %s", one.Code, one.Body.String())
+	}
 	acknowledged := current.call(http.MethodPost, "/api/v1/alerts/7/acknowledge", nil, operatorToken)
 	if acknowledged.Code != http.StatusOK || field(acknowledged, "acknowledged_by") != "token:00000000-0000-7000-8000-000000000002" || current.backend.last("AcknowledgeAlert")[0] != int64(7) {
 		test.Fatalf("acknowledge %d %s", acknowledged.Code, acknowledged.Body.String())
