@@ -18,6 +18,7 @@ cert_not_after = if is_null(message.cert_not_after) { null } else { parse_timest
   "tenant": message.tenant,
   "credential_kind": message.credential_kind,
   "credential_ref": message.credential_ref,
+  "credential_issuer": message.credential_issuer,
   "hardware_fingerprint_hash": message.hardware_fingerprint_hash,
   "remote_address": message.remote_address,
   "cert_serial": message.cert_serial,

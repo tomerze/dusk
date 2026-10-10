@@ -14,6 +14,7 @@
     "tenant",
     "credential_kind",
     "credential_ref",
+    "credential_issuer",
     "hardware_fingerprint_hash",
     "remote_address",
     "cert_serial",
@@ -47,6 +48,10 @@
     },
     "credential_ref": {
       "description": "The fleet token entry's name or the install token's sub claim, never the secret.",
+      "type": ["string", "null"]
+    },
+    "credential_issuer": {
+      "description": "The id of the key that signed the install token; null for every other credential.",
       "type": ["string", "null"]
     },
     "hardware_fingerprint_hash": {
@@ -101,6 +106,13 @@
           "installation_id": { "type": "string" }
         }
       }
+    },
+    {
+      "if": {
+        "required": ["credential_kind"],
+        "properties": { "credential_kind": { "const": "install_token" } }
+      },
+      "else": { "properties": { "credential_issuer": { "type": "null" } } }
     },
     {
       "if": { "required": ["operation"], "properties": { "operation": { "const": "renew" } } },

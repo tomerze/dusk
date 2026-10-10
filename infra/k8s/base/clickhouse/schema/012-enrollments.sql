@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS dusk.enrollments ON CLUSTER dusk
     tenant LowCardinality(Nullable(String)),
     credential_kind LowCardinality(String),
     credential_ref LowCardinality(Nullable(String)),
+    credential_issuer LowCardinality(Nullable(String)),
     hardware_fingerprint_hash Nullable(String),
     remote_address String,
     cert_serial Nullable(String),

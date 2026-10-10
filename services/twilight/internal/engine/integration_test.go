@@ -416,7 +416,7 @@ func (current *harness) enroll(target node) {
 	current.produceJSON(current.settings.Kafka.Topics.Enrollments, target.device+"/"+target.installation, kafka.ContractEnrollments, map[string]any{
 		"schema": "dusk.enrollments/v1", "id": kafka.NewMessageID(), "time": now, "operation": "enroll", "outcome": "issued", "reason": nil,
 		"device_id": target.device, "installation_id": target.installation, "tenant": nil, "credential_kind": "fleet_token", "credential_ref": "test",
-		"hardware_fingerprint_hash": hash, "remote_address": "203.0.113.5:40000", "cert_serial": "01", "cert_fingerprint": fingerprint, "cert_not_after": now,
+		"credential_issuer": nil, "hardware_fingerprint_hash": hash, "remote_address": "203.0.113.5:40000", "cert_serial": "01", "cert_fingerprint": fingerprint, "cert_not_after": now,
 		"dusk_version": target.version, "impl": "nix", "target_os": "linux", "target_arch": "x86_64", "hostname": "node", "instance": "nightfall-0",
 	})
 }

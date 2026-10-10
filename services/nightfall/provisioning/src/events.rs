@@ -60,6 +60,7 @@ pub struct EnrollmentEvent {
     pub tenant: Option<String>,
     pub credential_kind: CredentialKind,
     pub credential_ref: Option<String>,
+    pub credential_issuer: Option<String>,
     pub hardware_fingerprint_hash: Option<String>,
     pub remote_address: String,
     pub cert_serial: Option<String>,

@@ -146,6 +146,7 @@ pub struct InstallTokenKeys {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallToken {
+    pub key_id: String,
     pub issuer: String,
     pub token_id: String,
     pub subject: String,
@@ -208,7 +209,7 @@ impl InstallTokenKeys {
         token: &str,
         now_unix_seconds: u64,
     ) -> Result<InstallToken, InstallTokenError> {
-        let claims = self.jwks.verify(token)?;
+        let (key_id, claims) = self.jwks.verify_with_key_id(token)?;
         let text = |name: &'static str| {
             claims
                 .get(name)
@@ -242,6 +243,7 @@ impl InstallTokenKeys {
             Some(_) => return Err(InstallTokenError::Claim("tenant")),
         };
         Ok(InstallToken {
+            key_id,
             issuer,
             token_id,
             subject,
@@ -319,6 +321,7 @@ mod tests {
         }));
         let verified = keys(&signer).verify(&token, 1_791_278_043).unwrap();
         assert_eq!(verified.subject, SUBJECT);
+        assert_eq!(verified.key_id, "factory-2026");
         assert_eq!(verified.issuer, "factory");
         assert_eq!(verified.tenant.as_deref(), Some("retail-eu"));
         let mut material = b"\x00\x00\x00\x12dusk-install-token".to_vec();
@@ -329,6 +332,7 @@ mod tests {
     #[test]
     fn gives_every_issuer_and_token_id_pair_its_own_one_time_token_id() {
         let token = |issuer: &str, token_id: &str| InstallToken {
+            key_id: String::from("factory-2026"),
             issuer: String::from(issuer),
             token_id: String::from(token_id),
             subject: String::from(SUBJECT),

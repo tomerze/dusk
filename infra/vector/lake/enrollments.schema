@@ -10,6 +10,7 @@ message enrollments {
   optional binary tenant (STRING);
   required binary credential_kind (STRING);
   optional binary credential_ref (STRING);
+  optional binary credential_issuer (STRING);
   optional binary hardware_fingerprint_hash (STRING);
   required binary remote_address (STRING);
   optional binary cert_serial (STRING);

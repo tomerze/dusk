@@ -95,7 +95,7 @@ tests:
       - insert_at: enrollments
         type: vrl
         source: |
-          . = {"message": s'{"schema":"dusk.enrollments/v1","id":"01a112fe-d1bb-72ae-b6bf-fee79c1a0610","time":"2026-10-06T09:14:12.512408129Z","operation":"assign","outcome":"error","reason":"unimplemented: tpm attestation","device_id":null,"installation_id":null,"tenant":null,"credential_kind":"tpm_attestation","credential_ref":null,"hardware_fingerprint_hash":"c2e4a6b8d0f1e3c5a7b9d1f3e5c7a9b0d2f4e6c8a1b3d5f7e9c0a2b4d6f8e1c3","remote_address":"203.0.113.24:51730","cert_serial":null,"cert_fingerprint":null,"cert_not_after":null,"dusk_version":"0.1.0","impl":"nix","target_os":"linux","target_arch":"x86_64","hostname":"kiosk-0042","instance":"nightfall-0"}', "topic": "dusk.enrollments", "partition": 0, "offset": 3}
+          . = {"message": s'{"schema":"dusk.enrollments/v1","id":"01a112fe-d1bb-72ae-b6bf-fee79c1a0610","time":"2026-10-06T09:14:12.512408129Z","operation":"assign","outcome":"error","reason":"unimplemented: tpm attestation","device_id":null,"installation_id":null,"tenant":null,"credential_kind":"tpm_attestation","credential_ref":null,"credential_issuer":null,"hardware_fingerprint_hash":"c2e4a6b8d0f1e3c5a7b9d1f3e5c7a9b0d2f4e6c8a1b3d5f7e9c0a2b4d6f8e1c3","remote_address":"203.0.113.24:51730","cert_serial":null,"cert_fingerprint":null,"cert_not_after":null,"dusk_version":"0.1.0","impl":"nix","target_os":"linux","target_arch":"x86_64","hostname":"kiosk-0042","instance":"nightfall-0"}', "topic": "dusk.enrollments", "partition": 0, "offset": 3}
     outputs:
       - extract_from: enrollments
         conditions:
