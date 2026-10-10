@@ -105,6 +105,36 @@ func TestAnAdministratorRevokesADevice(test *testing.T) {
 	}
 }
 
+func TestAnAdministratorRevokesEverythingOneCredentialEnrolled(test *testing.T) {
+	current := newHarness(test, nil)
+	body := map[string]any{"credential_kind": "fleet_token", "credential": "retail-eu-2026", "enrolled_after": "2026-10-01T02:00:00Z", "reason": "leaked token"}
+	if refused := current.call(http.MethodPost, "/api/v1/revocations", body, operatorToken); refused.Code != http.StatusForbidden {
+		test.Fatalf("an operator started a revocation: %d", refused.Code)
+	}
+	started := current.call(http.MethodPost, "/api/v1/revocations", body, adminToken)
+	if started.Code != http.StatusAccepted || field(started, "matched") != float64(41) {
+		test.Fatalf("revocation %d %s", started.Code, started.Body.String())
+	}
+	arguments := current.backend.last("StartRevocation")
+	request := arguments[0].(engine.RevocationRequest)
+	if request.Credential != "retail-eu-2026" || request.EnrolledAfter == nil || !request.EnrolledAfter.Equal(time.Date(2026, 10, 1, 2, 0, 0, 0, time.UTC)) || arguments[1] != "token:00000000-0000-7000-8000-000000000003" {
+		test.Fatalf("StartRevocation %v", arguments)
+	}
+	body["dry_run"] = true
+	if counted := current.call(http.MethodPost, "/api/v1/revocations", body, adminToken); counted.Code != http.StatusOK || field(counted, "revocation") != nil {
+		test.Fatalf("dry run %d %s", counted.Code, counted.Body.String())
+	}
+	if listed := current.call(http.MethodGet, "/api/v1/revocations", nil, viewerToken); listed.Code != http.StatusOK {
+		test.Fatalf("list %d %s", listed.Code, listed.Body.String())
+	}
+	if found := current.call(http.MethodGet, "/api/v1/revocations/0192f0c4-4c1a-7b8e-9d2f-3a4b5c6d7e90", nil, viewerToken); found.Code != http.StatusOK || field(found, "credential") != "retail-eu-2026" {
+		test.Fatalf("get %d %s", found.Code, found.Body.String())
+	}
+	if malformed := current.call(http.MethodGet, "/api/v1/revocations/7", nil, viewerToken); malformed.Code != http.StatusBadRequest {
+		test.Fatalf("a malformed revocation id answered %d", malformed.Code)
+	}
+}
+
 func TestOperatorActionsOnANode(test *testing.T) {
 	current := newHarness(test, nil)
 	base := "/api/v1/nodes/" + deviceID + "/" + installationID

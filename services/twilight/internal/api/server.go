@@ -35,6 +35,9 @@ type Backend interface {
 	Node(operation context.Context, key inventory.Key) (engine.NodeDetail, error)
 	SetLifecycle(operation context.Context, key inventory.Key, lifecycle, reason, actor string, administrator bool) error
 	SetDeviceLifecycle(operation context.Context, device, lifecycle, reason, actor string) (inventory.DeviceLifecycle, error)
+	StartRevocation(operation context.Context, request engine.RevocationRequest, actor string) (engine.RevocationStarted, error)
+	Revocations(operation context.Context, cursor string, limit int) (inventory.RevocationPage, error)
+	Revocation(operation context.Context, identifier uuid.UUID) (inventory.Revocation, error)
 	OpenSession(operation context.Context, key inventory.Key, reason string, lifetimeSeconds int, actor string) (engine.OperatorProcess, error)
 	StreamLogs(operation context.Context, key inventory.Key, level string, durationSeconds int, actor string) (string, error)
 	CollectFile(operation context.Context, key inventory.Key, path, actor string) (string, error)
