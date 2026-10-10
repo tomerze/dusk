@@ -4,8 +4,8 @@ This page is for node developers: you build the `dusk_node` artifact, and you
 want every copy of it you ship to dial out to a nightfall server instead of
 waiting for clients to connect to it - a node behind NAT, or on a network that
 lets nothing in. It covers the build, the options, what the node keeps, what it
-does the first time it starts, how it stays connected and how it renews its
-certificate.
+does the first time it starts, how it stays connected, how it renews its
+certificate and how it keeps its key in a TPM.
 
 A node that dials out runs the [`nightfall`](../concepts/base.md#nightfall)
 program in connect mode instead of listen mode, and need not listen at all.
@@ -77,6 +77,7 @@ shares.
 nightfall -c <host>:<port> --provision <host>:<port> --ca <file>
           [--server-name <name>] [--provision-server-name <name>]
           [--install-token-file <file>] [--heartbeat-timeout <seconds>]
+          [--tpm <path> | --no-tpm]
 ```
 
 | Option | Meaning |
@@ -88,6 +89,8 @@ nightfall -c <host>:<port> --provision <host>:<port> --ca <file>
 | `--ca <file>` | The certificates of the CAs that sign nightfall's server certificates, PEM, at most 1 MiB. The node trusts no other CA, not even the system's. It reads the file again for every connection, so a replaced file takes effect without a restart. |
 | `--install-token-file <file>` | A file holding an install token, to enroll with instead of the fleet token. The node reads at most 64 KiB of it, which must be UTF-8, and ignores the whitespace around the token. |
 | `--heartbeat-timeout <seconds>` | How long the connection may stay silent before the node closes it: 90 by default, from 1 to 86400. |
+| `--tpm <path>` | The TPM to keep the node key in: `/dev/tpmrm0` by default. A path that does not exist means the machine has no TPM. The path can also be the Unix socket of a software TPM, such as swtpm's. See [The TPM](#the-tpm). |
+| `--no-tpm` | Keep the node key in the kvs even on a machine with a TPM. |
 
 `-l` (listen) and `-c` (connect) cannot be combined: one `nightfall` process
 does one thing. A node can run a `nightfall -l` beside its `nightfall -c` -
@@ -104,7 +107,7 @@ The node keeps its identity in [persistent](../../features/kvs.md#persistent-key
 | Key | Value |
 |-----|-------|
 | `nightfall.installation_id` | The installation id nightfall assigned when the node enrolled: 32 lowercase hex digits. |
-| `nightfall.private_key` | The node's private key: ECDSA P-256, PKCS#8 DER. [Sensitive](../../features/kvs.md#sensitive-keys). |
+| `nightfall.private_key` | The node's private key: ECDSA P-256, PKCS#8 DER - or, for a key kept in a TPM, a list of the key's TPM private and public areas (see [The TPM](#the-tpm)). [Sensitive](../../features/kvs.md#sensitive-keys). |
 | `nightfall.certificate_chain` | A list of the certificates nightfall issued for that key, DER, the node's own certificate first. |
 | `nightfall.staged_private_key` | A new key between its creation and the moment its certificate is stored. Sensitive. |
 | `nightfall.hardware_fingerprint` | Only on a machine that reports no machine id: 32 random bytes standing in for one (see [First start](#first-start)). |
@@ -114,12 +117,12 @@ every client the node serves can read it with `kvs get`, as it can read the
 fleet token with `Dusk.fleetToken`.
 
 A key that holds something the node cannot use - a value of the wrong kind, a
-key that is not a PKCS#8 ECDSA P-256 key, a certificate that is not one - is
-logged at `error` and treated as missing. A missing or unusable identity makes
-the node enroll again, and an enrollment always creates a new installation - so
-deleting the persistent kvs file is how a machine is reinstalled as far as
-nightfall is concerned. Its device id stays the same: that comes from the
-machine, not from the file.
+key that is not a PKCS#8 ECDSA P-256 key, a TPM key the TPM does not load, a
+certificate that is not one - is logged at `error` and treated as missing. A
+missing or unusable identity makes the node enroll again, and an enrollment
+always creates a new installation - so deleting the persistent kvs file is how a
+machine is reinstalled as far as nightfall is concerned. Its device id stays the
+same: that comes from the machine, not from the file.
 
 Every node keeps its own persistent kvs file, so every node has its own
 identity: two nodes on one device, or in one process, are two installations.
@@ -128,7 +131,8 @@ identity: two nodes on one device, or in one process, are two installations.
 
 1. The node waits a random 0 to 5 seconds, so machines that boot together do not
    arrive together.
-2. It finds no identity in the kvs, so it generates a key and keeps it in
+2. It finds no identity in the kvs, so it generates a key - in the TPM, on a
+   machine with one (see [The TPM](#the-tpm)) - and keeps it in
    `nightfall.staged_private_key` - which also proves it can write the kvs
    before it asks nightfall for anything. It connects to `--provision` (TLS 1.2
    or 1.3) and calls `assign` with its fleet token, or its install token, and a
@@ -212,6 +216,37 @@ nightfall refuses because the certificate expired too long ago, the node enrolls
 again with its token, as at its first start: the fleet token gives it a new
 installation, and an install token that was already used is refused until a new
 one is in its file.
+
+## The TPM
+
+On a machine with a TPM 2.0, the node creates its key in the TPM, where it
+stays: the TPM signs the node's certificate requests and every TLS handshake,
+and nothing outside the TPM ever holds the private key, so a copy of the node's
+persistent kvs file is no copy of its identity.
+
+The node uses the TPM at `--tpm`, `/dev/tpmrm0` by default - the Linux kernel's
+TPM resource manager. The account the node runs as must be able to read and
+write it: on most distributions, root or a member of the `tss` group.
+`--no-tpm` keeps the key in the kvs even on a machine with a TPM.
+
+The key is an ECDSA P-256 signing key that the TPM generates under its storage
+key and will not export. `nightfall.private_key` then holds a list of two byte
+strings: the key's TPM private area, which only that TPM can load, and its
+public area. The node loads it into the TPM again every time it starts.
+
+A TPM the node cannot use - one it cannot open, or one whose owner hierarchy has
+a password - leaves the key in the kvs, as on a machine without a TPM, and the
+node logs why at `warn`.
+
+**Renewing.** A key kept in the TPM is renewed with a new key, created in the
+same TPM.
+
+**A key that does not load.** When the stored TPM key does not load as the node
+starts, the node logs that at `error` and enrolls again, as a new installation -
+whatever the reason: the TPM was cleared, which changes its storage key; the
+persistent kvs file came from another machine; the TPM did not open on that
+start; or the node now runs with `--no-tpm`. When no TPM was opened, the new
+installation's key is a software key.
 
 ## Several `nightfall -c` on one node
 
