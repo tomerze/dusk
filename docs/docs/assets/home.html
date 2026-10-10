@@ -31,8 +31,6 @@
           <a href="{{ (section.children | first).url | url }}">{{ section.title }}</a>
         {% endfor %}
       </div>
-      {% include "partials/palette.html" %}
-      {% include "partials/javascripts/palette.html" %}
       {% if "material/search" in config.plugins %}
         <label class="md-header__button md-icon" for="__search">
           {% include ".icons/" ~ (config.theme.icon.search or "material/magnify") ~ ".svg" %}
