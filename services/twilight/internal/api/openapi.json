@@ -2163,6 +2163,33 @@
             "type": "string",
             "format": "date-time"
           },
+          "credential_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "fleet_token",
+              "install_token",
+              "tpm_attestation",
+              null
+            ],
+            "description": "The kind of credential the node enrolled with."
+          },
+          "credential_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The fleet token entry's name, or the install token's subject, the node enrolled with."
+          },
+          "credential_issuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The id of the key that signed the install token the node enrolled with."
+          },
           "online": {
             "type": "boolean",
             "description": "Whether the node has a live session now."
@@ -2204,6 +2231,9 @@
           "enrolled_at",
           "first_seen_at",
           "updated_at",
+          "credential_kind",
+          "credential_ref",
+          "credential_issuer",
           "online",
           "last_seen_at"
         ]
@@ -2583,6 +2613,33 @@
             "type": "string",
             "format": "date-time"
           },
+          "credential_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "fleet_token",
+              "install_token",
+              "tpm_attestation",
+              null
+            ],
+            "description": "The kind of credential the node enrolled with."
+          },
+          "credential_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The fleet token entry's name, or the install token's subject, the node enrolled with."
+          },
+          "credential_issuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The id of the key that signed the install token the node enrolled with."
+          },
           "online": {
             "type": "boolean",
             "description": "Whether the node has a live session now."
@@ -2648,6 +2705,9 @@
           "enrolled_at",
           "first_seen_at",
           "updated_at",
+          "credential_kind",
+          "credential_ref",
+          "credential_issuer",
           "online",
           "last_seen_at",
           "device",

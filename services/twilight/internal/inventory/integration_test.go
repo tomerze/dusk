@@ -30,14 +30,20 @@ func TestInventoryUpkeep(test *testing.T) {
 	store := inventory.NewStore(pool)
 	operation := context.Background()
 	at := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
-	fingerprint, renewed, tenant, version := strings.Repeat("a", 64), strings.Repeat("b", 64), "retail-eu", "0.1.0"
-	if failure := store.RecordEnrollment(operation, inventory.Enrollment{Key: key, Operation: "enroll", CertFingerprint: &fingerprint, Tenant: &tenant, DuskVersion: &version, At: at}); failure != nil {
+	fingerprint, renewed, tenant, version, reference := strings.Repeat("a", 64), strings.Repeat("b", 64), "retail-eu", "0.1.0", "unit-7"
+	issuer := "factory-2026"
+	if failure := store.RecordEnrollment(operation, inventory.Enrollment{Key: key, Operation: "enroll", CertFingerprint: &fingerprint, Tenant: &tenant, DuskVersion: &version,
+		CredentialKind: "install_token", CredentialRef: &reference, CredentialIssuer: &issuer, At: at}); failure != nil {
 		test.Fatal(failure)
 	}
 	node, failure := store.Get(operation, key)
 	if failure != nil || node.Lifecycle != "enrolled" || *node.CertFingerprint != fingerprint || node.EnrolledAt == nil || *node.DuskVersion != "0.1.0" {
 		test.Fatalf("enrolled node %+v %v", node, failure)
 	}
+	if node.CredentialKind == nil || *node.CredentialKind != "install_token" || *node.CredentialRef != reference || *node.CredentialIssuer != issuer {
+		test.Fatalf("the node's credential %v %v %v", node.CredentialKind, node.CredentialRef, node.CredentialIssuer)
+	}
+
 	accept := func(string) error { return nil }
 	refused := errors.New("the node-state record was not acknowledged")
 	if previous, failure := store.SetLifecycle(operation, key, "revoked", "test", at, func(string) error { return refused }); !errors.Is(failure, refused) || previous != "enrolled" {
@@ -278,5 +284,17 @@ func TestSortedPagesReadOnlyTheirIndex(test *testing.T) {
 		if !strings.Contains(plan, "Index Scan") && !strings.Contains(plan, "Index Only Scan") || strings.Contains(plan, "Sort") {
 			test.Errorf("a page ordered by %s sorts instead of reading an index:\n%s", ordering, plan)
 		}
+	}
+}
+
+func TestAnEnrollmentWithoutACredentialKindIsRecordedWithoutOne(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := inventory.NewStore(pool)
+	if failure := store.RecordEnrollment(context.Background(), inventory.Enrollment{Key: key, Operation: "enroll", At: time.Now()}); failure != nil {
+		test.Fatal(failure)
+	}
+	node, failure := store.Get(context.Background(), key)
+	if failure != nil || node.CredentialKind != nil {
+		test.Fatalf("node %+v %v", node, failure)
 	}
 }

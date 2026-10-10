@@ -448,6 +448,11 @@ export function NodePage() {
                 )}
               </Field>
               <Field label="Tenant">{maybe(node.tenant)}</Field>
+              <Field label="Enrolled with">
+                {node.credential_ref === null
+                  ? maybe(null)
+                  : `${node.credential_kind === 'install_token' ? 'install token' : 'fleet token'} ${node.credential_ref}${node.credential_issuer === null ? '' : ` signed by ${node.credential_issuer}`}`}
+              </Field>
               <Field label="Enrolled">
                 <RelativeTime value={node.enrolled_at} fallback="not recorded" />
               </Field>
