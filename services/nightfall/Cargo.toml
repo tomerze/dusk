@@ -51,6 +51,8 @@ x509-parser = "0.18"
 [dev-dependencies]
 base64 = "0.22"
 dusk_base = { path = "../../dusk/src/dusk_base", features = ["client"] }
+dusk_core = { path = "../../dusk/src/dusk_core" }
+dusk_nix = { path = "../../impls/nix" }
 dusk_tests = { path = "../../tests/common" }
 jsonschema = { version = "0.58", default-features = false, features = ["resolve-file"] }
 nightfall_membrane = { path = "membrane", features = ["test-support"] }

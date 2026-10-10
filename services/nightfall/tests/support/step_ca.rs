@@ -99,16 +99,21 @@ impl Signer {
         let Some(csr) = request["csr"].as_str().map(from_pem) else {
             return refuse(400, "no csr");
         };
-        let tenant: Vec<String> = claims
+        let mut extra: Vec<String> = claims
             .get("tenant")
             .and_then(Value::as_str)
             .map(|tenant| vec![format!("urn:dusk:tenant:{tenant}")])
             .unwrap_or_default();
+        if claims.get("attestation").and_then(Value::as_str) == Some("tpm") {
+            extra.push(String::from(
+                nightfall_provisioning::identity::TPM_ATTESTATION_URI,
+            ));
+        }
         let lifetime = request["notAfter"]
             .as_str()
             .and_then(|value| nightfall::config::parse_duration(value).ok())
             .unwrap_or(Duration::from_secs(3600));
-        let leaf = self.authority.sign_request(&csr, &tenant, lifetime);
+        let leaf = self.authority.sign_request(&csr, &extra, lifetime);
         let leaf_pem = pem("CERTIFICATE", &leaf);
         let root_pem = self.authority.pem.clone();
         self.signed.lock().unwrap().push(Value::Object(claims));
