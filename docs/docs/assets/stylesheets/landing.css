@@ -115,17 +115,28 @@
 .dusk-navbar .dusk-navbar__github:hover {
   color: #f0b441;
 }
-.dusk-navbar .md-search__form,
-[data-md-color-scheme="default"] .dusk-navbar .md-search__form {
+.dusk-navbar .md-search__form {
   background-color: rgba(243, 240, 251, 0.1);
   color: #f3f0fb;
 }
-[data-md-color-scheme="default"] .dusk-navbar .md-search__form:hover {
+[data-md-color-scheme="default"]
+  [data-md-toggle="search"]:not(:checked)
+  ~ .dusk-navbar
+  .md-search__form:hover {
   background-color: rgba(243, 240, 251, 0.16);
 }
-[data-md-color-scheme="default"] .dusk-navbar .md-search__input,
-[data-md-color-scheme="default"] .dusk-navbar .md-search__input::placeholder,
-[data-md-color-scheme="default"] .dusk-navbar .md-search__icon {
+[data-md-color-scheme="default"]
+  [data-md-toggle="search"]:not(:checked)
+  ~ .dusk-navbar
+  .md-search__input,
+[data-md-color-scheme="default"]
+  [data-md-toggle="search"]:not(:checked)
+  ~ .dusk-navbar
+  .md-search__input::placeholder,
+[data-md-color-scheme="default"]
+  [data-md-toggle="search"]:not(:checked)
+  ~ .dusk-navbar
+  .md-search__icon {
   color: rgba(243, 240, 251, 0.75);
 }
 @media screen and (min-width: 60em) {
