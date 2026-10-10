@@ -92,7 +92,7 @@ type Store struct {
 }
 
 func NewStore(pool *pgxpool.Pool, settings config.Alerts, instance string, logger *slog.Logger) (*Store, error) {
-	built, failure := newNotifier(settings, instance)
+	built, failure := newNotifier(settings, instance, logger)
 	if failure != nil {
 		return nil, failure
 	}

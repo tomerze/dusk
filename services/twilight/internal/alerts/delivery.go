@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -89,7 +90,7 @@ func readSecret(path string) (string, error) {
 	return secret, nil
 }
 
-func newNotifier(settings config.Alerts, instance string) (*notifier, error) {
+func newNotifier(settings config.Alerts, instance string, logger *slog.Logger) (*notifier, error) {
 	client := &http.Client{
 		Timeout:       requestTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -110,6 +111,9 @@ func newNotifier(settings config.Alerts, instance string) (*notifier, error) {
 		case receiver.Webhook != nil:
 			secretFile = receiver.Webhook.SecretFile
 			built.senders[receiver.Name] = webhookSender{client: client, url: receiver.Webhook.URL, secretFile: secretFile}
+		case receiver.Email != nil:
+			secretFile = receiver.Email.PasswordFile
+			built.senders[receiver.Name] = emailSender{settings: *receiver.Email, logger: logger}
 		}
 		if secretFile != "" {
 			if _, failure := readSecret(secretFile); failure != nil {
