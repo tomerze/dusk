@@ -127,31 +127,41 @@ func RaiseIn(operation context.Context, target Querier, raised Raised) (Alert, b
 		raised.At = time.Now()
 	}
 	var alert Alert
-	var inserted bool
-	failure = target.QueryRow(operation, `insert into alerts (time, last_seen_at, severity, kind, fingerprint, detail, tenant)
+	var announce bool
+	failure = target.QueryRow(operation, `with previous as (select severity from alerts where fingerprint = $4 and resolved_at is null)
+		insert into alerts (time, last_seen_at, severity, kind, fingerprint, detail, tenant)
 		values ($1, $1, $2, $3, $4, $5::jsonb, coalesce(nullif($6, ''),
 			(select tenant from nodes where device_id = $5::jsonb ->> 'device_id' and installation_id = $5::jsonb ->> 'installation_id'),
 			(select tenant from campaigns where id = case when $5::jsonb ->> 'campaign_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 				then ($5::jsonb ->> 'campaign_id')::uuid end)))
 		on conflict (fingerprint) where resolved_at is null do update set occurrences = alerts.occurrences + 1,
-			last_seen_at = greatest(alerts.last_seen_at, excluded.last_seen_at)
-		returning `+alertColumns+`, (xmax = 0)`, raised.At, raised.Severity, raised.Kind, raised.Fingerprint, detail, raised.Tenant).Scan(append(alertTargets(&alert), &inserted)...)
-	return alert, inserted, failure
+			last_seen_at = greatest(alerts.last_seen_at, excluded.last_seen_at),
+			severity = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then excluded.severity else alerts.severity end,
+			detail = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then excluded.detail else alerts.detail end,
+			acknowledged_by = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then null else alerts.acknowledged_by end,
+			acknowledged_at = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then null else alerts.acknowledged_at end
+		returning `+alertColumns+`, (xmax = 0) or alert_severity_rank(alerts.severity) > coalesce((select alert_severity_rank(severity) from previous), 5)`,
+		raised.At, raised.Severity, raised.Kind, raised.Fingerprint, detail, raised.Tenant).Scan(append(alertTargets(&alert), &announce)...)
+	return alert, announce, failure
 }
 
 func (store *Store) Raise(operation context.Context, raised Raised) (Alert, error) {
-	alert, inserted, failure := RaiseIn(operation, store.pool, raised)
+	alert, announce, failure := RaiseIn(operation, store.pool, raised)
 	if failure != nil {
 		return alert, fmt.Errorf("raise %s alert: %w", raised.Kind, failure)
 	}
-	if inserted {
+	if announce {
 		store.Announce(alert)
 	}
 	return alert, nil
 }
 
 func (store *Store) Announce(alert Alert) {
-	store.logger.Error("alert raised", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "tenant", alert.Tenant, "detail", alert.Detail)
+	message := "alert raised"
+	if alert.Occurrences > 1 {
+		message = "alert re-escalated"
+	}
+	store.logger.Error(message, "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "tenant", alert.Tenant, "detail", alert.Detail)
 	if store.webhookURL == "" || (alert.Severity != Critical && alert.Severity != High) {
 		return
 	}

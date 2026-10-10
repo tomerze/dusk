@@ -524,11 +524,11 @@ func raiseFindings(operation context.Context, transaction pgx.Tx, findings []ale
 		}
 		seen[finding.Fingerprint] = true
 		findingsTotal.WithLabelValues(finding.Kind).Inc()
-		alert, inserted, failure := alerts.RaiseIn(operation, transaction, finding)
+		alert, announce, failure := alerts.RaiseIn(operation, transaction, finding)
 		if failure != nil {
 			return nil, failure
 		}
-		if inserted {
+		if announce {
 			announced = append(announced, alert)
 		}
 	}
