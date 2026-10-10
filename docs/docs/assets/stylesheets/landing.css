@@ -27,6 +27,7 @@
   --dusk-ink-data: #1f6fa8;
   --dusk-ink-observability: #1c1c22;
   --dusk-ink-gold: #9a6b00;
+  --md-default-fg-color--light: rgba(0, 0, 0, 0.6);
 }
 [data-md-color-scheme="slate"] .dusk-landing {
   --dusk-sky: linear-gradient(
