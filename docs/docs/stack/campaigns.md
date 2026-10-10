@@ -271,7 +271,14 @@ node's `retry.max_attempts`.
 Each group is a value of a breakdown dimension, copied from the node when it
 was first dispatched, so a gate can say "failure rate 0.62 in
 os_build=22631.4317, 41 of 66". The gate is judged every 15 seconds (twilight's
-`engine.gate_interval_seconds`), and a failing gate pauses or fails the campaign before another process is sent. A gate
+`engine.gate_interval_seconds`), and a failing gate pauses or fails the campaign before another process is sent. The
+same transaction raises a high alert: `campaign_paused_by_gate` when it pauses
+the campaign, or when it fails on a campaign an operator paused, which from then
+on needs `override_gate` to resume; it resolves when the campaign is resumed,
+aborted, completed or fails. `campaign_failed_by_policy` is raised when the gate
+fails the campaign. Both carry the gate's
+reason, the failing group, the tallies and the thresholds, and reach people
+through twilight's [alert routes](twilight.md#alerts). A gate
 that holds says why in the campaign's events: `waiting for sample 7 of 20`,
 `waiting for silent-window sample 3 of 20`, or `the online view is degraded`.
 

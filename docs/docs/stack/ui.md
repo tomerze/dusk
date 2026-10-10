@@ -401,6 +401,8 @@ names.
 | Revocation not enforced | a revoked or retired node still appeared in a nightfall census, or never got its revoked disconnect |
 | Enrollment spike | more nodes enrolled in a minute than the threshold; a leaked fleet token looks like this, and so does a large rollout |
 | Campaign conflict | two running campaigns set the same key on the same nodes |
+| Campaign paused by its gate | a campaign's health gate failed and the campaign paused; resuming it needs a gate override |
+| Campaign failed by its policy | a campaign's health gate failed and its policy aborts on a gate failure, so the campaign failed |
 
 A process created without a pid, so that the node chose one, raises no alert;
 twilight counts it in the `twilight_unattributed_processes_total` metric.
