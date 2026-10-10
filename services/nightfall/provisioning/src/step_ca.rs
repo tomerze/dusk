@@ -81,6 +81,7 @@ pub struct SignRequest {
     pub sans: Vec<String>,
     pub tenant: Option<String>,
     pub token_id: String,
+    pub tpm_bound: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,6 +214,9 @@ impl StepCaClient {
         if let Some(tenant) = &request.tenant {
             claims["tenant"] = Value::from(tenant.as_str());
         }
+        if request.tpm_bound {
+            claims["attestation"] = Value::from("tpm");
+        }
         self.key
             .sign(&claims)
             .map_err(|error| StepCaError::Token(error.to_string()))
@@ -344,6 +348,7 @@ mod tests {
             ],
             tenant: Some(String::from("retail-eu")),
             token_id: String::from("0011"),
+            tpm_bound: false,
         };
         let token = client.one_time_token(&request, 1_791_278_043).unwrap();
         let jwks =
@@ -357,6 +362,7 @@ mod tests {
         assert_eq!(claims["exp"], 1_791_278_343u64);
         assert_eq!(claims["jti"], "0011");
         assert_eq!(claims["tenant"], "retail-eu");
+        assert!(claims.get("attestation").is_none());
         let header: Value = serde_json::from_slice(
             &base64::engine::general_purpose::URL_SAFE_NO_PAD
                 .decode(token.split('.').next().unwrap())
@@ -365,6 +371,16 @@ mod tests {
         .unwrap();
         assert_eq!(header["kid"], client.key.key_id());
         assert_eq!(header["alg"], "ES256");
+        let attested = client
+            .one_time_token(
+                &SignRequest {
+                    tpm_bound: true,
+                    ..request.clone()
+                },
+                1_791_278_043,
+            )
+            .unwrap();
+        assert_eq!(jwks.verify(&attested).unwrap()["attestation"], "tpm");
         let without_tenant = client
             .one_time_token(
                 &SignRequest {

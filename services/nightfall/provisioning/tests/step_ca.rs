@@ -10,7 +10,9 @@ use dusk_capnp::capnp;
 use nightfall_provisioning::config::{ProvisioningConfig, load_certificates};
 use nightfall_provisioning::credential::{FleetTokens, InstallTokenKeys, sha256};
 use nightfall_provisioning::events::{EnrollmentEvent, EnrollmentEvents, Outcome};
-use nightfall_provisioning::identity::{DeviceIdKey, device_uri, installation_uri, tenant_uri};
+use nightfall_provisioning::identity::{
+    DeviceIdKey, TPM_ATTESTATION_URI, device_uri, installation_uri, tenant_uri,
+};
 use nightfall_provisioning::limits::PenaltyBox;
 use nightfall_provisioning::provision_capnp::provisioning;
 use nightfall_provisioning::server::{ConnectionInfo, Provisioning};
@@ -391,6 +393,7 @@ async fn issues_node_certificates_through_a_real_step_ca() {
                 sans: three,
                 tenant: None,
                 token_id: unique(),
+                tpm_bound: false,
             },
             now,
         )
@@ -407,6 +410,7 @@ async fn issues_node_certificates_through_a_real_step_ca() {
                 sans: uris.clone(),
                 tenant: Some(String::from("Not A Tenant")),
                 token_id: unique(),
+                tpm_bound: false,
             },
             now,
         )
@@ -415,4 +419,22 @@ async fn issues_node_certificates_through_a_real_step_ca() {
         matches!(bad_tenant, Err(StepCaError::Refused { status: 400, .. })),
         "{bad_tenant:?}"
     );
+    let attested = direct
+        .sign(
+            &SignRequest {
+                csr_der: csr(&key, None, &uris),
+                subject: format!("{device_id}.{installation_id}"),
+                sans: uris.clone(),
+                tenant: None,
+                token_id: unique(),
+                tpm_bound: true,
+            },
+            now,
+        )
+        .await
+        .unwrap();
+    let (names, _, _, _) = describe(&attested.chain[0]);
+    let mut expected: BTreeSet<String> = uris.iter().cloned().collect();
+    expected.insert(String::from(TPM_ATTESTATION_URI));
+    assert_eq!(names, expected);
 }

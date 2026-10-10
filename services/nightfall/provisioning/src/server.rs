@@ -147,6 +147,7 @@ impl Report {
 
 struct Attempt {
     event: EnrollmentEvent,
+    tpm_bound: bool,
 }
 
 impl Attempt {
@@ -178,6 +179,7 @@ impl Attempt {
                 hostname: None,
                 instance: String::from(instance),
             },
+            tpm_bound: false,
         }
     }
 
@@ -324,7 +326,7 @@ impl Provisioning {
         match event.outcome {
             Outcome::Issued | Outcome::Assigned => info!(
                 operation, outcome, device_id = event.device_id.as_deref(), installation_id = event.installation_id.as_deref(),
-                tenant = event.tenant.as_deref(), credential_ref = event.credential_ref.as_deref(),
+                tenant = event.tenant.as_deref(), credential_ref = event.credential_ref.as_deref(), tpm_bound = attempt.tpm_bound,
                 remote_address = %event.remote_address, cert_serial = event.cert_serial.as_deref(), "provisioning request succeeded"
             ),
             Outcome::Denied | Outcome::RateLimited => warn!(
@@ -632,6 +634,7 @@ impl Provisioning {
             sans: vec![device_uri(&device_id), installation_uri(&installation_id)],
             tenant: verified.tenant,
             token_id,
+            tpm_bound: attempt.tpm_bound,
         })
     }
 
@@ -679,13 +682,21 @@ impl Provisioning {
         let validated = validate_csr(csr, &identity.device_id, &identity.installation_id).map_err(
             |failure| Refusal::denied("invalid_csr", failure.to_string(), &failure.to_string()),
         )?;
-        if validated.public_key == certificate.public_key {
+        if identity.tpm_bound && validated.public_key != certificate.public_key {
+            return Err(Refusal::denied(
+                "renew_key_changed",
+                "the CSR carries another key than the TPM-bound certificate",
+                "renew of a TPM-bound certificate needs the key it already has",
+            ));
+        }
+        if !identity.tpm_bound && validated.public_key == certificate.public_key {
             return Err(Refusal::denied(
                 "renew_key_reused",
                 "the CSR carries the key of the current certificate",
                 "renew needs a new key",
             ));
         }
+        attempt.tpm_bound = identity.tpm_bound;
         lock(&self.renewals)
             .admit(
                 &identity.device_id,
@@ -704,6 +715,7 @@ impl Provisioning {
             ],
             tenant: identity.tenant.clone(),
             token_id: random_hex(&self.random, 32)?,
+            tpm_bound: identity.tpm_bound,
         })
     }
 

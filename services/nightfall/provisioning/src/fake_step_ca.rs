@@ -216,11 +216,14 @@ fn answer(shared: &Shared, body: &[u8]) -> (u16, String) {
         .and_then(|value| value.strip_suffix('s'))
         .and_then(|seconds| seconds.parse::<i64>().ok())
         .unwrap_or(24 * 3600);
-    let extra: Vec<String> = claims
+    let mut extra: Vec<String> = claims
         .get("tenant")
         .and_then(Value::as_str)
         .map(|tenant| vec![format!("urn:dusk:tenant:{tenant}")])
         .unwrap_or_default();
+    if claims.get("attestation").and_then(Value::as_str) == Some("tpm") {
+        extra.push(String::from(crate::identity::TPM_ATTESTATION_URI));
+    }
     let leaf = shared
         .authority
         .sign_request(&csr, &extra, time::Duration::seconds(lifetime));

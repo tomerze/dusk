@@ -16,7 +16,9 @@ use crate::credential::{FleetTokens, InstallTokenKeys, sha256};
 use crate::csr::fixtures::{csr, p256};
 use crate::events::{EnrollmentEvent, EnrollmentEvents, Outcome};
 use crate::fake_step_ca::FakeStepCa;
-use crate::identity::{DeviceIdKey, common_name, device_uri, installation_uri, tenant_uri};
+use crate::identity::{
+    DeviceIdKey, TPM_ATTESTATION_URI, common_name, device_uri, installation_uri, tenant_uri,
+};
 use crate::jwt::SigningKey;
 use crate::jwt::fixtures::{EdwardsSigner, private_jwk};
 use crate::limits::PenaltyBox;
@@ -1049,4 +1051,53 @@ async fn reports_a_device_id_enrolling_from_many_addresses() {
         *harness.events.collisions.lock().unwrap(),
         vec![(device_id, 21, 7)]
     );
+}
+
+#[tokio::test]
+async fn renews_a_tpm_bound_certificate_only_with_the_key_it_has() {
+    let harness = harness().await;
+    let device_id = harness.device_key.device_id(&[8u8; 32]);
+    let current = p256();
+    let start = OffsetDateTime::now_utc() - time::Duration::hours(100);
+    let mut names = uris(&device_id, INSTALLATION);
+    names.push(tenant_uri("retail-eu"));
+    names.push(String::from(TPM_ATTESTATION_URI));
+    let leaf =
+        harness
+            .step_ca
+            .authority
+            .leaf(&current, &names, start, start + time::Duration::hours(168));
+    let client = harness.client(
+        ADDRESS,
+        vec![leaf, harness.step_ca.authority.intermediate.clone()],
+    );
+    let request_names = uris(&device_id, INSTALLATION);
+    denied_with(
+        renew(&client, &csr(&p256(), None, &request_names)).await,
+        "needs the key it already has",
+    );
+    let issued = renew(&client, &csr(&current, None, &request_names))
+        .await
+        .unwrap();
+    assert_eq!(
+        leaf_uris(&issued.chain[0]),
+        BTreeSet::from_iter(names.iter().cloned())
+    );
+    let claims = harness
+        .step_ca
+        .tokens
+        .lock()
+        .unwrap()
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(claims["attestation"], "tpm");
+    assert_eq!(
+        harness.events.outcomes(),
+        vec![
+            (Outcome::Denied, Some(String::from("renew_key_changed"))),
+            (Outcome::Issued, None),
+        ]
+    );
+    assert_contract(&harness.events);
 }

@@ -12,6 +12,7 @@ pub const MINIMUM_KEY_BYTES: usize = 32;
 const DEVICE_PREFIX: &str = "urn:dusk:device:";
 const INSTALLATION_PREFIX: &str = "urn:dusk:installation:";
 const TENANT_PREFIX: &str = "urn:dusk:tenant:";
+pub const TPM_ATTESTATION_URI: &str = "urn:dusk:attestation:tpm";
 
 pub struct DeviceIdKey(hmac::Key);
 
@@ -92,6 +93,7 @@ pub struct CertificateIdentity {
     pub device_id: String,
     pub installation_id: String,
     pub tenant: Option<String>,
+    pub tpm_bound: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -102,6 +104,8 @@ pub enum IdentityError {
     InstallationCount(usize),
     #[error("the certificate names {0} tenants")]
     TenantCount(usize),
+    #[error("the certificate names the TPM attestation {0} times")]
+    AttestationCount(usize),
     #[error("the certificate carries an unexpected URI {0}")]
     UnexpectedUri(String),
 }
@@ -112,6 +116,7 @@ pub fn identity_from_uris<'a>(
     let mut devices = Vec::new();
     let mut installations = Vec::new();
     let mut tenants = Vec::new();
+    let mut attestations = 0;
     for uri in uris {
         if let Some(device_id) = uri
             .strip_prefix(DEVICE_PREFIX)
@@ -128,6 +133,8 @@ pub fn identity_from_uris<'a>(
             .filter(|tenant| is_tenant(tenant))
         {
             tenants.push(String::from(tenant));
+        } else if uri == TPM_ATTESTATION_URI {
+            attestations += 1;
         } else {
             return Err(IdentityError::UnexpectedUri(String::from(uri)));
         }
@@ -141,10 +148,14 @@ pub fn identity_from_uris<'a>(
     if tenants.len() > 1 {
         return Err(IdentityError::TenantCount(tenants.len()));
     }
+    if attestations > 1 {
+        return Err(IdentityError::AttestationCount(attestations));
+    }
     Ok(CertificateIdentity {
         device_id: devices.remove(0),
         installation_id: installations.remove(0),
         tenant: tenants.pop(),
+        tpm_bound: attestations == 1,
     })
 }
 
@@ -206,6 +217,28 @@ mod tests {
         assert_eq!(identity.device_id, device);
         assert_eq!(identity.installation_id, installation);
         assert_eq!(identity.tenant.as_deref(), Some("retail-eu"));
+        assert!(!identity.tpm_bound);
+        let attested = identity_from_uris([
+            TPM_ATTESTATION_URI,
+            device_uri(device).as_str(),
+            installation_uri(installation).as_str(),
+        ])
+        .unwrap();
+        assert!(attested.tpm_bound);
+        assert_eq!(attested.device_id, device);
+        assert_eq!(
+            identity_from_uris([
+                device_uri(device).as_str(),
+                TPM_ATTESTATION_URI,
+                installation_uri(installation).as_str(),
+                TPM_ATTESTATION_URI,
+            ]),
+            Err(IdentityError::AttestationCount(2))
+        );
+        assert_eq!(
+            identity_from_uris([TPM_ATTESTATION_URI, device_uri(device).as_str()]),
+            Err(IdentityError::InstallationCount(0))
+        );
         assert_eq!(
             identity_from_uris([device_uri(device).as_str()]),
             Err(IdentityError::InstallationCount(0))
