@@ -9,13 +9,13 @@ groups:
       - uid: dusk-open-critical-alert
         title: "Open critical alert in twilight"
         condition: C
-        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-inventory", "model": {"refId": "A", "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'critical' AND resolved_at IS NULL AND acknowledged_at IS NULL", "format": "table", "rawQuery": true, "editorMode": "code"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-inventory", "model": {"refId": "A", "rawSql": "SELECT count(*) AS open FROM alerts WHERE severity = 'critical' AND resolved_at IS NULL AND acknowledged_at IS NULL AND time < now() - interval '15 minutes'", "format": "table", "rawQuery": true, "editorMode": "code"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
         noDataState: OK
         execErrState: Error
         for: 0s
         isPaused: false
         annotations:
-          summary: "{{ $values.B }} critical alert(s) in twilight are neither acknowledged nor resolved."
+          summary: "{{ $values.B }} critical alert(s) in twilight were raised more than 15 minutes ago and are neither acknowledged nor resolved."
           description: "Open the Alerts dashboard or twilight's Alerts page; acknowledge each alert once someone owns it."
         labels:
           severity: critical
