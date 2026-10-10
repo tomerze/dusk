@@ -92,6 +92,36 @@ These are checked as each action is taken:
   assuming a size - they differ by more than an order of magnitude. Reclaiming
   space means deleting the user's build caches, so **ask first**, and name the
   measured sizes and which branches are already merged so the choice is theirs.
+- **Build in a worktree with `CARGO_INCREMENTAL=0`.** Each worktree builds
+  into a `target` of its own, and incremental caches are most of a debug one:
+  in one measurement they were 26 GB of the main checkout's 37 GB
+  `target/debug`, while a worktree that built and tested the nightfall crates
+  with `CARGO_INCREMENTAL=0` held 17 GB and no incremental cache at all. A
+  fresh worktree also has `vendor/capnproto` empty: run
+  `git submodule update --init vendor/capnproto` before its first Rust build.
+  When several sessions share the machine, cap each build with
+  `CARGO_BUILD_JOBS=4` and run one heavy build per worktree at a time.
+
+## The Dusk stack's toolchains
+
+The Dusk stack's services - the `stack` skill - need more than Rust:
+
+- **Go 1.27** is in `~/.local/go`, with `go` and `gofmt` also linked in
+  `~/.local/bin`. twilight is the module in `services/twilight`:
+  `go -C services/twilight test ./...`.
+- **Node 22 and npm.** The twilight UI installs from its lockfile with `npm ci`
+  in `services/twilight/web`, and its pre-commit hook needs that done first.
+- **uv** runs every Python tool here, dawn's included.
+- **Docker** with Compose runs the compose stack, builds the images and hosts
+  the containers tests start. Give a throwaway container a unique name and
+  remove it when done, and never touch the host's firewall, sysctl or systemd.
+  Every image builds from the repository root with
+  `--build-arg GIT_REV=$(git rev-parse HEAD)` and needs `vendor/capnproto`
+  checked out; the Rust images compile the workspace from scratch, which is
+  slow.
+- **kind, kubectl and helm** are in `~/.local/bin`. kubectl carries kustomize
+  (`kubectl kustomize infra/k8s/overlays/dev`); helm only renders SigNoz's
+  manifests, which are committed, so nothing installs a chart.
 
 ## Driving the node by hand
 

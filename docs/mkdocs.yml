@@ -23,7 +23,11 @@ markdown_extensions:
       linenums: false
       auto_title: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 theme:
   name: material
   custom_dir: docs/assets
@@ -86,6 +90,21 @@ nav:
       - Ask Dusk: features/ask-dusk.md
       - MCP: features/gateway.md
       - Base programs: getting-started/concepts/base.md
+  - The Dusk stack:
+      - stack/index.md
+      - Identity and trust: stack/identity.md
+      - Deploy: stack/deploy.md
+      - Nodes that dial out: stack/nodes.md
+      - Provisioning: stack/provisioning.md
+      - nightfall: stack/nightfall.md
+      - The membrane: stack/membrane.md
+      - The ledger: stack/ledger.md
+      - dawn: stack/dawn.md
+      - Processes: stack/processes.md
+      - twilight: stack/twilight.md
+      - Campaigns: stack/campaigns.md
+      - The twilight UI: stack/ui.md
+      - Security model: stack/security.md
   - Telemetry:
       - Collected information: telemetry/collected-information.md
   - Customize:

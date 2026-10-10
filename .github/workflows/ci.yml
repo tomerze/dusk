@@ -1,11 +1,9 @@
 name: CI
 
-# Every push to a pull request runs the full set of checks, as does every push
-# to master.
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, services]
 
 # Every job only reads the repository. Declaring that here overrides whatever
 # the repository's default token permissions are, so a compromised dependency
@@ -18,9 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# No job here compiles the workspace, so there is no cargo cache and no
-# target directory to keep: cargo fmt parses sources and never runs a build
-# script, and the other four jobs never invoke cargo at all.
 jobs:
   python-lint:
     name: Python (ruff)
@@ -183,3 +178,237 @@ jobs:
       # vendor/capnproto submodule nor a target directory.
       - name: cargo fmt
         run: cargo fmt --all -- --check
+
+  go:
+    name: Go (gofmt, vet, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/twilight
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/twilight/go.mod
+          cache-dependency-path: services/twilight/go.sum
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          test -z "$unformatted" || { echo "$unformatted"; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -short ./...
+
+  go-integration:
+    name: Go (integration)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/twilight
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/twilight/go.mod
+          cache-dependency-path: services/twilight/go.sum
+
+      - name: go test -tags integration
+        run: go test -tags integration -timeout 30m ./...
+
+  ui:
+    name: UI (lint, typecheck, vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/twilight/web
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/twilight/web/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: vitest
+        run: npm test
+
+      - name: build
+        run: npm run build
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/twilight/go.mod
+          cache-dependency-path: services/twilight/go.sum
+
+      - name: go build -tags ui
+        working-directory: services/twilight
+        run: go build -tags ui -o /dev/null ./cmd/twilight
+
+  contracts:
+    name: Contracts (validate, pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: validate.py
+        run: uv run --no-project --with jsonschema --with referencing python services/contracts/validate.py
+
+      - name: pytest
+        run: uv run --no-project --with pytest --with jsonschema --with referencing pytest services/contracts/tests -q
+
+  rust:
+    name: Rust (clippy, nextest; the nightfall packages build once pull request #174 is merged)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: cargo clippy
+        run: >
+          cargo clippy --locked
+          --package nightfall
+          --package nightfall_membrane
+          --package nightfall_ledger
+          --package nightfall_provisioning
+          --package dusk_program_nightfall
+          --package dusk_connection
+          --package dusk_capnp
+          --package dusk_py
+          --package dusk_api_tests
+          --package dusk_py_tests
+          -- -D warnings
+
+      - name: cargo nextest
+        run: >
+          cargo nextest run --locked
+          --package nightfall
+          --package nightfall_membrane
+          --package nightfall_ledger
+          --package nightfall_provisioning
+          --package dusk_program_nightfall
+          --package dusk_connection
+          --package dusk_capnp
+          --package dusk_py
+          --package dusk_api_tests
+          --package dusk_py_tests
+
+  kustomize:
+    name: Kubernetes (kustomize)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-kubectl@v5
+        with:
+          version: v1.37.1
+
+      - name: dev overlay
+        run: kubectl kustomize infra/k8s/overlays/dev > /dev/null
+
+      - name: prod overlay
+        run: kubectl kustomize infra/k8s/overlays/prod > /dev/null
+
+  docker:
+    name: Docker (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: dusk-nightfall
+            dockerfile: services/nightfall/Dockerfile
+            arguments: --build-arg CPUSET=
+          - image: dusk-dawn
+            dockerfile: services/dawn/Dockerfile
+            arguments: --build-arg CPUSET=
+          - image: dusk-twilight
+            dockerfile: services/twilight/Dockerfile
+            arguments: --build-arg CPUSET=
+          - image: dusk-node
+            dockerfile: infra/node/Dockerfile
+            arguments: >-
+              --build-arg CPUSET=
+              --build-arg FLEET=fleet.dusk.test:8443
+              --build-arg PROVISION=provision.dusk.test:8443
+              --secret id=fleet-token,env=DUSK_FLEET_TOKEN
+          - image: dusk-vector
+            dockerfile: infra/vector/Dockerfile
+          - image: dusk-grafana
+            dockerfile: infra/grafana/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Generate a throwaway fleet token
+        if: matrix.image == 'dusk-node'
+        run: |
+          token=$(openssl rand -hex 32)
+          echo "::add-mask::$token"
+          echo "DUSK_FLEET_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: docker build
+        run: >
+          docker build
+          --file ${{ matrix.dockerfile }}
+          --build-arg GIT_REV=${{ github.sha }}
+          ${{ matrix.arguments }}
+          --tag ${{ matrix.image }}:ci
+          .
