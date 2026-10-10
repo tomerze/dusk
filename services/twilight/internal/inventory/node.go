@@ -43,6 +43,9 @@ type Node struct {
 	EnrolledAt         *time.Time      `json:"enrolled_at"`
 	FirstSeenAt        time.Time       `json:"first_seen_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`
+	CredentialKind     *string         `json:"credential_kind"`
+	CredentialRef      *string         `json:"credential_ref"`
+	CredentialIssuer   *string         `json:"credential_issuer"`
 	facts              map[string]any
 	sortValue          *string
 }
@@ -88,6 +91,12 @@ func (node *Node) Column(name string) (string, bool) {
 		value = node.ReportedVersion
 	case "reported_config_hash":
 		value = node.ReportedConfigHash
+	case "credential_kind":
+		value = node.CredentialKind
+	case "credential_ref":
+		value = node.CredentialRef
+	case "credential_issuer":
+		value = node.CredentialIssuer
 	}
 	if value == nil {
 		return "", false

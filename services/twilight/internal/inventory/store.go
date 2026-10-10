@@ -29,14 +29,15 @@ func NewStore(pool *pgxpool.Pool) *Store {
 const nodeColumns = `n.device_id, n.installation_id, n.cert_fingerprint, n.lifecycle, n.lifecycle_reason, n.lifecycle_changed_at,
 	n.country, n.os_name, n.os_version, n.os_build, n.dusk_version, n.hardware_class, n.tenant, n.locale, n.hostname, n.impl, n.target_arch,
 	n.facts, n.reported_version, n.reported_config_hash, n.reported_services, n.reported_at, n.facts_namespace_id, n.facts_read_at,
-	n.enrolled_at, n.first_seen_at, n.updated_at`
+	n.enrolled_at, n.first_seen_at, n.updated_at, n.credential_kind, n.credential_ref, n.credential_issuer`
 
 func scanNode(row pgx.Row, extra ...any) (Node, error) {
 	var node Node
 	failure := row.Scan(append([]any{&node.DeviceID, &node.InstallationID, &node.CertFingerprint, &node.Lifecycle, &node.LifecycleReason, &node.LifecycleChangedAt,
 		&node.Country, &node.OSName, &node.OSVersion, &node.OSBuild, &node.DuskVersion, &node.HardwareClass, &node.Tenant, &node.Locale,
 		&node.Hostname, &node.Impl, &node.TargetArch, &node.FactsJSON, &node.ReportedVersion, &node.ReportedConfigHash, &node.ReportedServices,
-		&node.ReportedAt, &node.FactsNamespaceID, &node.FactsReadAt, &node.EnrolledAt, &node.FirstSeenAt, &node.UpdatedAt}, extra...)...)
+		&node.ReportedAt, &node.FactsNamespaceID, &node.FactsReadAt, &node.EnrolledAt, &node.FirstSeenAt, &node.UpdatedAt,
+		&node.CredentialKind, &node.CredentialRef, &node.CredentialIssuer}, extra...)...)
 	return node, failure
 }
 
@@ -284,14 +285,17 @@ func (store *Store) LifecycleCounts(operation context.Context) (map[string]int64
 
 type Enrollment struct {
 	Key
-	Operation       string
-	CertFingerprint *string
-	Tenant          *string
-	DuskVersion     *string
-	Impl            *string
-	TargetArch      *string
-	Hostname        *string
-	At              time.Time
+	Operation        string
+	CertFingerprint  *string
+	Tenant           *string
+	DuskVersion      *string
+	Impl             *string
+	TargetArch       *string
+	Hostname         *string
+	CredentialKind   string
+	CredentialRef    *string
+	CredentialIssuer *string
+	At               time.Time
 }
 
 func (store *Store) RecordEnrollment(operation context.Context, enrollment Enrollment) error {
@@ -302,12 +306,14 @@ func (store *Store) RecordEnrollment(operation context.Context, enrollment Enrol
 			enrollment.DeviceID, enrollment.InstallationID, enrollment.CertFingerprint, enrollment.Tenant, enrollment.At)
 		return failure
 	}
-	_, failure := store.pool.Exec(operation, `insert into nodes (device_id, installation_id, cert_fingerprint, tenant, dusk_version, impl, target_arch, hostname, enrolled_at, first_seen_at, lifecycle, lifecycle_changed_at, lifecycle_reason)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 'enrolled', $9, 'enrolled')
+	_, failure := store.pool.Exec(operation, `insert into nodes (device_id, installation_id, cert_fingerprint, tenant, dusk_version, impl, target_arch, hostname, enrolled_at, first_seen_at, lifecycle, lifecycle_changed_at, lifecycle_reason,
+			credential_kind, credential_ref, credential_issuer)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 'enrolled', $9, 'enrolled', nullif($10, ''), $11, $12)
 		on conflict (device_id, installation_id) do update set cert_fingerprint = excluded.cert_fingerprint, tenant = excluded.tenant,
-			enrolled_at = coalesce(nodes.enrolled_at, excluded.enrolled_at), updated_at = now()`,
+			enrolled_at = coalesce(nodes.enrolled_at, excluded.enrolled_at), credential_kind = excluded.credential_kind,
+			credential_ref = excluded.credential_ref, credential_issuer = excluded.credential_issuer, updated_at = now()`,
 		enrollment.DeviceID, enrollment.InstallationID, enrollment.CertFingerprint, enrollment.Tenant, enrollment.DuskVersion,
-		enrollment.Impl, enrollment.TargetArch, enrollment.Hostname, enrollment.At)
+		enrollment.Impl, enrollment.TargetArch, enrollment.Hostname, enrollment.At, enrollment.CredentialKind, enrollment.CredentialRef, enrollment.CredentialIssuer)
 	return failure
 }
 

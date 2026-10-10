@@ -64,7 +64,8 @@ func (engine *Engine) runEnrollments(operation context.Context, term int64) {
 		if enrollment.Outcome == "issued" && enrollment.DeviceID != nil && enrollment.InstallationID != nil && (enrollment.Operation == "enroll" || enrollment.Operation == "renew") {
 			key := NodeKey{DeviceID: *enrollment.DeviceID, InstallationID: *enrollment.InstallationID}
 			if failure := engine.Inventory.RecordEnrollment(operation, inventory.Enrollment{Key: key, Operation: enrollment.Operation, CertFingerprint: enrollment.CertFingerprint,
-				Tenant: enrollment.Tenant, DuskVersion: enrollment.DuskVersion, Impl: enrollment.Impl, TargetArch: enrollment.TargetArch, Hostname: enrollment.Hostname, At: at}); failure != nil {
+				Tenant: enrollment.Tenant, DuskVersion: enrollment.DuskVersion, Impl: enrollment.Impl, TargetArch: enrollment.TargetArch, Hostname: enrollment.Hostname,
+				CredentialKind: enrollment.CredentialKind, CredentialRef: enrollment.CredentialRef, CredentialIssuer: enrollment.CredentialIssuer, At: at}); failure != nil {
 				return fmt.Errorf("record the enrollment of %s in inventory: %w", key, failure)
 			}
 			engine.Logger.Info("enrollment recorded", "operation", enrollment.Operation, "device_id", key.DeviceID, "installation_id", key.InstallationID)

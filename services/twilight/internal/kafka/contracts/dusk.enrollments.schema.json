@@ -118,6 +118,17 @@
       "if": { "required": ["operation"], "properties": { "operation": { "const": "renew" } } },
       "then": { "properties": { "credential_kind": { "const": "certificate" } } },
       "else": { "properties": { "hardware_fingerprint_hash": { "type": "string" } } }
+    },
+    {
+      "if": {
+        "required": ["operation", "outcome"],
+        "properties": { "operation": { "const": "enroll" }, "outcome": { "const": "issued" } }
+      },
+      "then": {
+        "properties": {
+          "credential_kind": { "enum": ["fleet_token", "install_token", "tpm_attestation"] }
+        }
+      }
     }
   ]
 }

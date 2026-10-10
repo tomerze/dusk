@@ -161,6 +161,9 @@ var columns = map[string]FieldKind{
 	"target_arch":          FieldText,
 	"reported_version":     FieldVersion,
 	"reported_config_hash": FieldText,
+	"credential_kind":      FieldText,
+	"credential_ref":       FieldText,
+	"credential_issuer":    FieldText,
 }
 
 func Columns() []string {

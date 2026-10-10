@@ -219,6 +219,9 @@ export interface NodeSummary extends NodeKey {
   enrolled_at: string | null
   first_seen_at: string
   updated_at: string
+  credential_kind: 'fleet_token' | 'install_token' | 'tpm_attestation' | null
+  credential_ref: string | null
+  credential_issuer: string | null
   online: boolean
   last_seen_at: string | null
 }

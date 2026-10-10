@@ -22,6 +22,15 @@ export const selectorFields: readonly SelectorField[] = [
   { name: 'reported_config_hash', description: 'Last reported config hash' },
   { name: 'hardware_class', description: 'Architecture, core and memory bucket' },
   { name: 'tenant', description: 'Tenant bound to the enrollment credential' },
+  {
+    name: 'credential_kind',
+    description: 'fleet_token or install_token: what the node enrolled with',
+  },
+  {
+    name: 'credential_ref',
+    description: 'Fleet token name or install token subject it enrolled with',
+  },
+  { name: 'credential_issuer', description: 'Key id that signed its install token' },
   { name: 'locale', description: 'Node locale, for example en_US' },
   { name: 'hostname', description: 'Node hostname' },
   { name: 'impl', description: 'Dusk impl, for example nix or windows' },
