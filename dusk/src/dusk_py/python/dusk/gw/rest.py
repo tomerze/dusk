@@ -50,6 +50,9 @@ if TYPE_CHECKING:
 
     from . import Connection, ConnectionRegistry
 
+    Owner = Callable[[Request], object]
+    ConnectRoute = Callable[[FastAPI, ConnectionRegistry, Owner], None]
+
 STATIC = pathlib.Path(__file__).parent / "static"
 """The vendored Swagger UI, served at ``/v1/static``. See its README."""
 
@@ -170,7 +173,10 @@ COMMAND_FAILED = {
 
 
 def build_application(
-    registry: "ConnectionRegistry", programs: "list[dict[str, Any]]"
+    registry: "ConnectionRegistry",
+    programs: "list[dict[str, Any]]",
+    connect: "ConnectRoute | None" = None,
+    owner: "Owner | None" = None,
 ) -> "FastAPI":
     """Build the REST application over ``registry`` and the node's ``programs``.
 
@@ -179,6 +185,8 @@ def build_application(
     changing how the MCP endpoint mounted beside it reports failures.
     """
     from . import REST_OWNER
+
+    owner_of: "Owner" = owner or (lambda request: REST_OWNER)
 
     # docs_url and redoc_url are off because both of FastAPI's built-in pages
     # load their JavaScript and CSS from a CDN, which a node's operator may have
@@ -210,29 +218,7 @@ def build_application(
             swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
         )
 
-    @api.post(
-        "/connect",
-        summary="Open a connection to a node",
-        description=(
-            "Opens a connection to the dusk node at `host:port` and returns the "
-            "descriptor that names it. Every call returns a new descriptor, so "
-            "repeat connections to one node stay distinct."
-        ),
-        response_description="The descriptor for the new connection.",
-        responses={400: MALFORMED, 502: NODE_UNREACHABLE},
-    )
-    async def connect(body: ConnectRequest) -> ConnectResponse:
-        try:
-            descriptor, _ = await anyio.to_thread.run_sync(
-                registry.connect, REST_OWNER, body.host, body.port
-            )
-        except Exception as failure:
-            # The node is the upstream this gateway fronts, so a node that will
-            # not accept a connection is a bad gateway, not a bad request.
-            raise HTTPException(
-                502, f"cannot connect to {body.host}:{body.port}: {failure}"
-            )
-        return ConnectResponse(descriptor=descriptor)
+    (connect or add_connect_route)(api, registry, owner_of)
 
     @api.post(
         "/disconnect",
@@ -241,10 +227,13 @@ def build_application(
         response_description="The descriptor that was closed.",
         responses={400: MALFORMED, 404: NO_SUCH_CONNECTION},
     )
-    async def disconnect(body: DisconnectRequest) -> DisconnectResponse:
+    async def disconnect(
+        body: DisconnectRequest, request: Request
+    ) -> DisconnectResponse:
+        request_owner = owner_of(request)
         try:
             await anyio.to_thread.run_sync(
-                registry.disconnect, REST_OWNER, body.descriptor
+                registry.disconnect, request_owner, body.descriptor
             )
         except KeyError:
             raise HTTPException(404, _unknown_descriptor(body.descriptor))
@@ -263,9 +252,10 @@ def build_application(
         response_description="Everything the program produced.",
         responses={400: MALFORMED, 404: NO_SUCH_CONNECTION, 502: COMMAND_FAILED},
     )
-    async def shell(body: ShellRequest) -> Response:
+    async def shell(body: ShellRequest, request: Request) -> Response:
+        request_owner = owner_of(request)
         try:
-            connection = registry.get(REST_OWNER, body.descriptor)
+            connection = registry.get(request_owner, body.descriptor)
         except KeyError:
             raise HTTPException(404, _unknown_descriptor(body.descriptor))
         try:
@@ -317,9 +307,10 @@ def build_application(
             404: NO_SUCH_CONNECTION,
         },
     )
-    async def shell_stream(body: ShellRequest) -> Response:
+    async def shell_stream(body: ShellRequest, request: Request) -> Response:
+        request_owner = owner_of(request)
         try:
-            connection = registry.get(REST_OWNER, body.descriptor)
+            connection = registry.get(request_owner, body.descriptor)
         except KeyError:
             raise HTTPException(404, _unknown_descriptor(body.descriptor))
         return StreamingResponse(
@@ -364,6 +355,35 @@ def build_application(
     api.add_exception_handler(RequestValidationError, _invalid_request_as_json)
     api.openapi = _openapi_without_the_unreachable_422(api)
     return api
+
+
+def add_connect_route(
+    api: "FastAPI", registry: "ConnectionRegistry", owner: "Owner"
+) -> None:
+    @api.post(
+        "/connect",
+        summary="Open a connection to a node",
+        description=(
+            "Opens a connection to the dusk node at `host:port` and returns the "
+            "descriptor that names it. Every call returns a new descriptor, so "
+            "repeat connections to one node stay distinct."
+        ),
+        response_description="The descriptor for the new connection.",
+        responses={400: MALFORMED, 502: NODE_UNREACHABLE},
+    )
+    async def connect(body: ConnectRequest, request: Request) -> ConnectResponse:
+        request_owner = owner(request)
+        try:
+            descriptor, _ = await anyio.to_thread.run_sync(
+                registry.connect, request_owner, body.host, body.port
+            )
+        except Exception as failure:
+            # The node is the upstream this gateway fronts, so a node that will
+            # not accept a connection is a bad gateway, not a bad request.
+            raise HTTPException(
+                502, f"cannot connect to {body.host}:{body.port}: {failure}"
+            )
+        return ConnectResponse(descriptor=descriptor)
 
 
 def _openapi_without_the_unreachable_422(api: "FastAPI") -> "Callable[[], dict]":
