@@ -1,0 +1,533 @@
+{
+  "spec": {
+    "display": {
+      "name": "Dusk process results",
+      "description": "What dawn reported for each process it dispatched to a node."
+    },
+    "variables": [],
+    "panels": {
+      "duplicates": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Duplicates",
+            "description": "The pid was already in the node's process table, so nothing ran."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status = 'duplicate'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "ended": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Ended",
+            "description": "The stream to the node broke and the node's logs show the script ended, but not how."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status = 'ended'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "latency": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Dispatch-to-result latency",
+            "description": "Time from the start of a dispatch to its final status: median, 95th and 99th percentile."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "ms",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT ts, level.1 AS percentile, level.2 AS value FROM (SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, quantiles(0.5, 0.95, 0.99)(dateDiff('millisecond', started_at, finished_at)) AS levels FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status != 'started' AND finished_at IS NOT NULL GROUP BY ts) ARRAY JOIN arrayZip(['p50', 'p95', 'p99'], levels) AS level ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "results": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Results",
+            "description": "Dispatches with a final status (every status but started)."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status != 'started'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "results-by-action-kind": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Results by action kind",
+            "description": "Dispatches with a final status per interval, by action kind."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, action_kind, count() AS value FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status != 'started' GROUP BY ts, action_kind ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "results-by-status": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Results by status",
+            "description": "Dispatches per interval, by final status."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, status, count() AS value FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status != 'started' GROUP BY ts, status ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "running": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Running",
+            "description": "The stream to the node broke and the node's logs show no end of the script."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status = 'running'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "status-by-action-kind": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Results by action kind and status",
+            "description": "Dispatches with a final status over the time range."
+          },
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "columnUnits": null,
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT action_kind, status, count() AS results FROM dusk.process_results WHERE time >= $start_datetime AND time < $end_datetime AND status != 'started' GROUP BY action_kind, status ORDER BY action_kind, results DESC",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/results"
+              }
+            },
+            {
+              "x": 3,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/duplicates"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/running"
+              }
+            },
+            {
+              "x": 9,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/ended"
+              }
+            },
+            {
+              "x": 0,
+              "y": 3,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/results-by-status"
+              }
+            },
+            {
+              "x": 6,
+              "y": 3,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/results-by-action-kind"
+              }
+            },
+            {
+              "x": 0,
+              "y": 9,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/latency"
+              }
+            },
+            {
+              "x": 6,
+              "y": 9,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/status-by-action-kind"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "duration": "6h",
+    "refreshInterval": "",
+    "links": null
+  },
+  "tags": [
+    {
+      "key": "dusk",
+      "value": "process-results"
+    }
+  ],
+  "image": ""
+}

@@ -710,6 +710,8 @@ services:
       - ../../base:/repository/base:ro
       - ../../dusk/src/dusk_capnp/capnp:/repository/dusk/src/dusk_capnp/capnp:ro
       - ../grafana/dashboards:/grafana/dashboards:ro
+      - ../k8s/base/signoz/dashboards:/k8s/base/signoz/dashboards:ro
+      - ../k8s/base/clickhouse/schema:/k8s/base/clickhouse/schema:ro
       - ../../services/contracts/kafka:/contracts:ro
       - { <<: *pki, target: /pki/trust-anchors, volume: { subpath: trust-anchors } }
       - { <<: *secret, target: /secrets/fleet-provisioner, volume: { subpath: fleet-provisioner } }

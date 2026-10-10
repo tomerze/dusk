@@ -1,0 +1,609 @@
+{
+  "spec": {
+    "display": {
+      "name": "Dusk ledger",
+      "description": "Calls nightfall forwarded to nodes, their results, and whether each ledger chain is intact."
+    },
+    "variables": [],
+    "panels": {
+      "broken-chains": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Broken chains",
+            "description": "Ledger chains with a gap, a broken link or two entries at one sequence, checked from the start of the time range."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT countIf(NOT intact) AS value FROM dusk.ledger_chain(since = $start_datetime)",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "calls": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Calls",
+            "description": "Calls nightfall forwarded or refused, in either direction."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND kind = 'call'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "calls-by-action": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Calls by action",
+            "description": "Calls per interval, by method."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, action, count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND kind = 'call' GROUP BY ts, action ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "calls-by-principal": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Calls by principal",
+            "description": "Calls per interval, by calling principal."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, principal, count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND kind = 'call' GROUP BY ts, principal ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "chain-status": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Chain status",
+            "description": "Every nightfall instance and ledger partition, checked from the start of the time range."
+          },
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "columnUnits": null,
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT instance, toString(partition) AS partition, if(intact, 'intact', 'broken') AS status, entries, first_sequence, last_sequence, gaps, broken_links, conflicting_entries, last_checkpoint_sequence, last_checkpoint_time, last_entry_time FROM dusk.ledger_chain(since = $start_datetime) ORDER BY instance, partition",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "denied-calls": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Denied calls",
+            "description": "Calls nightfall refused as not permitted or unknown."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND kind = 'call' AND result_code = 'denied'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "entries-by-result": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Calls and results by result code",
+            "description": "Refused calls and returned results per interval, by result code."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, result_code, count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND result_code IS NOT NULL GROUP BY ts, result_code ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "rate-limited-calls": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Rate-limited calls",
+            "description": "Calls nightfall refused by a rate limit."
+          },
+          "plugin": {
+            "kind": "signoz/NumberPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND kind = 'call' AND result_code = 'rate_limited'",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      },
+      "refused-calls": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Denied and rate-limited calls",
+            "description": "Refused calls per interval, by principal and result code."
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": {
+                "timePreference": "global_time",
+                "fillSpans": false
+              },
+              "formatting": {
+                "unit": "",
+                "decimalPrecision": "2"
+              },
+              "chartAppearance": {
+                "lineInterpolation": "spline",
+                "showPoints": false,
+                "lineStyle": "solid",
+                "fillMode": "none",
+                "spanGaps": {
+                  "fillOnlyBelow": false,
+                  "fillLessThan": ""
+                }
+              },
+              "axes": {
+                "softMin": null,
+                "softMax": null,
+                "isLogScale": false
+              },
+              "legend": {
+                "position": "bottom",
+                "mode": "list",
+                "customColors": null
+              },
+              "thresholds": null
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "clickhouse_sql",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfInterval(time, toIntervalSecond(greatest(60, intDiv($end_timestamp - $start_timestamp, 120)))) AS ts, concat(principal, ' ', result_code) AS refusal, count() AS value FROM dusk.ledger WHERE time >= $start_datetime AND time < $end_datetime AND kind = 'call' AND result_code IN ('denied', 'rate_limited') GROUP BY ts, refusal ORDER BY ts",
+                          "disabled": false,
+                          "legend": ""
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "links": null
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/calls"
+              }
+            },
+            {
+              "x": 3,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/denied-calls"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/rate-limited-calls"
+              }
+            },
+            {
+              "x": 9,
+              "y": 0,
+              "width": 3,
+              "height": 3,
+              "content": {
+                "$ref": "#/spec/panels/broken-chains"
+              }
+            },
+            {
+              "x": 0,
+              "y": 3,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/calls-by-action"
+              }
+            },
+            {
+              "x": 6,
+              "y": 3,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/calls-by-principal"
+              }
+            },
+            {
+              "x": 0,
+              "y": 9,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/entries-by-result"
+              }
+            },
+            {
+              "x": 6,
+              "y": 9,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/refused-calls"
+              }
+            },
+            {
+              "x": 0,
+              "y": 15,
+              "width": 12,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/chain-status"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "duration": "6h",
+    "refreshInterval": "",
+    "links": null
+  },
+  "tags": [
+    {
+      "key": "dusk",
+      "value": "ledger"
+    }
+  ],
+  "image": ""
+}
