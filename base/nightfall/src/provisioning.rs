@@ -151,10 +151,11 @@ impl Provisioner {
         &self,
         token: &Token,
         report: &DeviceReport,
+        key: NodeKey,
         kvs: &Kvs,
     ) -> Result<Identity, ProvisioningError> {
-        let (key, pkcs8) = NodeKey::generate()?;
-        identity::stage(kvs, &pkcs8).await?;
+        identity::stage(kvs, &key).await?;
+        let key = Arc::new(key);
         let enrolled = self.session(None, async |client: provisioning::Client| {
             let mut assign = client.assign_request();
             {
@@ -188,11 +189,11 @@ impl Provisioner {
             Ok(Identity {
                 leaf,
                 chain,
-                key: Arc::new(key),
+                key: key.clone(),
             })
         })
         .await?;
-        identity::store(kvs, &enrolled, &pkcs8).await?;
+        identity::store(kvs, &enrolled).await?;
         Ok(enrolled)
     }
 
@@ -201,8 +202,9 @@ impl Provisioner {
         current: &Identity,
         kvs: &Kvs,
     ) -> Result<Identity, ProvisioningError> {
-        let (key, pkcs8) = NodeKey::generate()?;
-        identity::stage(kvs, &pkcs8).await?;
+        let key = current.key.generate_like()?;
+        identity::stage(kvs, &key).await?;
+        let key = Arc::new(key);
         let renewed = self
             .session(
                 Some(current.certified_key()),
@@ -231,12 +233,12 @@ impl Provisioner {
                     Ok(Identity {
                         leaf,
                         chain,
-                        key: Arc::new(key),
+                        key: key.clone(),
                     })
                 },
             )
             .await?;
-        identity::store(kvs, &renewed, &pkcs8).await?;
+        identity::store(kvs, &renewed).await?;
         Ok(renewed)
     }
 }

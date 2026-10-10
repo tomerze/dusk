@@ -324,8 +324,13 @@ don't lean on its specifics. A node can dial out instead: `nightfall -c` connect
 to a nightfall server over TLS 1.3 and runs one `session` over that connection,
 reconnecting when it drops, and keeps the node's certificate and key in
 persistent kvs keys under `nightfall.` - names its launcher owns with
-`own_keys` - so it refuses to start on a node without a persistent kvs file. Its
-provisioning schema is `base/nightfall/capnp/provision.capnp`.
+`own_keys` - so it refuses to start on a node without a persistent kvs file. On
+a machine with a TPM at `--tpm` (`/dev/tpmrm0` by default, opened with std from
+the program, not through the driver) the node key is created in the TPM -
+`base/nightfall/src/tpm.rs`, on `tpm2-protocol` - and its private and public
+areas are kept in `nightfall.private_key`; without a TPM, or with one it cannot
+use, the key is a software key as before.
+Its provisioning schema is `base/nightfall/capnp/provision.capnp`.
 
 **`Dusk.process` → run.** `Dusk.process(programArgs)` asks the registry for the
 namespace's `LauncherSet` (`dusk_core::launchers::launchers(namespace_id)`) and
