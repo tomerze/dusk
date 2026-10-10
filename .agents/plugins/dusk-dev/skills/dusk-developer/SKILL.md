@@ -386,7 +386,7 @@ namespace terminates. The `init` process writes `dusk.target.arch`,
 `dusk.target.os` and `dusk.target.bits` beside `dusk.version`, and the driver's
 `tid()` and `hostname()` as `dusk.tid` and `dusk.hostname` - every key Dusk
 writes, the impl's keys and `logs`' counters included, carries `FLAG_STICKY`, which
-`kvs set`, `kvs delete` and the `kvs bind` portal refuse without
+`kvs set`, `kvs delete` and the `kvs server` portal refuse without
 forbidden-unstick, and `init`'s and `logs`' launchers own those names with
 `own_keys` for their thread's node, until they are dropped, so they are sticky
 before a value is stored - logs the target keys as `dusk target` and the impl's

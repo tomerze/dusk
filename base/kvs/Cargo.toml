@@ -18,6 +18,7 @@ capnp = { version = "0.21", public = false }
 linkme = { version = "0.3", optional = true, public = true }
 tracing = { version = "0.1.41", default-features = false }
 clap = { version = "4", features = ["derive"], optional = true }
+tokio = { version = "1.47.1", features = ["net", "io-util", "rt", "time"], optional = true }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
@@ -29,4 +30,5 @@ client = [
     "dusk_program_sh/client",
     "clap",
     "dusk_program_sh_proc",
+    "tokio",
 ]

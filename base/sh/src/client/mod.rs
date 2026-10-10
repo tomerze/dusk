@@ -28,7 +28,7 @@ use stop::StopSignal;
 use tokio::sync::Notify;
 
 const TERMINATE: u64 = 15;
-const SWEEP: u64 = 7;
+pub const SWEEP: u64 = 7;
 const RECONNECT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 const REFUSAL_REPORT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -134,7 +134,11 @@ impl created::Server for Created {
     }
 }
 
-async fn kill(client: &dusk::Client, process: &process::Client, signal: u64) -> capnp::Result<()> {
+pub async fn kill(
+    client: &dusk::Client,
+    process: &process::Client,
+    signal: u64,
+) -> capnp::Result<()> {
     let pid = process
         .pid_request()
         .send()

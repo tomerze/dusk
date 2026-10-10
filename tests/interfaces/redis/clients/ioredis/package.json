@@ -1,0 +1,7 @@
+{
+  "name": "dusk-redis-compatibility-ioredis",
+  "private": true,
+  "dependencies": {
+    "ioredis": "6.0.0"
+  }
+}
