@@ -98,6 +98,9 @@ func newNotifier(settings config.Alerts, instance string) (*notifier, error) {
 	for _, receiver := range settings.Receivers {
 		var secretFile string
 		switch {
+		case receiver.PagerDuty != nil:
+			secretFile = receiver.PagerDuty.RoutingKeyFile
+			built.senders[receiver.Name] = pagerDutySender{client: client, routingKeyFile: secretFile, url: receiver.PagerDuty.EventsURL()}
 		case receiver.Webhook != nil:
 			secretFile = receiver.Webhook.SecretFile
 			built.senders[receiver.Name] = webhookSender{client: client, url: receiver.Webhook.URL, secretFile: secretFile}
