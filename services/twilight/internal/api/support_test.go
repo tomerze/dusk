@@ -243,6 +243,10 @@ func (fake *fakeBackend) Alerts(operation context.Context, open bool, cursor str
 	return alerts.Page{Alerts: []alerts.Alert{sampleAlert()}}, fake.record("Alerts", open, cursor, limit)
 }
 
+func (fake *fakeBackend) Alert(operation context.Context, identifier int64) (alerts.Alert, error) {
+	return sampleAlert(), fake.record("Alert", identifier)
+}
+
 func (fake *fakeBackend) AcknowledgeAlert(operation context.Context, identifier int64, actor string) (alerts.Alert, error) {
 	alert := sampleAlert()
 	alert.AcknowledgedBy = &actor

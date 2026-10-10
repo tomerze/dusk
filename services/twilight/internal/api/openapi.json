@@ -1737,6 +1737,48 @@
         }
       }
     },
+    "/api/v1/alerts/{id}": {
+      "get": {
+        "operationId": "getAlert",
+        "summary": "Get an alert",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Alert"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The alert with its notifications.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alert"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
     "/api/v1/alerts/{id}/acknowledge": {
       "post": {
         "operationId": "acknowledgeAlert",
