@@ -4,7 +4,8 @@ This page is for fleet operators: the people who decide which nodes may join a
 fleet and who run the certificate authority that admits them. It covers the
 credentials nightfall accepts, how to issue, cap and retire them, TPM
 attestation, how to set up step-ca as the fleet-client certificate authority, the
-certificate template, and how certificates are renewed.
+certificate template, how certificates are renewed, and what to do when a
+credential leaks.
 
 The `step` commands on this page were run with step CLI 0.30.2 and step-ca
 0.30.2, both in the `smallstep/step-ca:0.30.2` image; the others need OpenSSL 3
@@ -151,7 +152,7 @@ alert on nodes that still present it, and keeps it unpenalized; a removed
 token is an unknown credential, which counts against the address that presents
 it. Either way, nodes that already hold certificates keep them, keep their
 sessions and keep renewing, since renewal needs only the certificate; to cut
-those nodes off, revoke them.
+those nodes off, revoke them (see [Revoking what a credential enrolled](#revoking-what-a-credential-enrolled)).
 
 ## Install tokens
 
@@ -577,3 +578,116 @@ expiry, what the node reported about itself, and the nightfall instance.
 
 nightfall's log holds the detail of every refusal under the same reason.
 
+## When a credential leaks
+
+### What whoever holds it can do
+
+A fleet token is in every binary built with it, and an install token key is
+wherever tokens are minted. Whoever extracts either one can, until it is
+retired:
+
+* **Enroll new installations.** Each gets a certificate, a new installation id
+  and the token's tenant, and a device id derived from whatever hardware
+  fingerprint it reports, another machine's included. No credential gets a
+  certificate for an installation that already exists, or renews another
+  installation's certificate.
+* **Link those installations to the stack.** They are ordinary nodes to dawn and
+  twilight: their reported facts are believed, they join the campaigns those
+  facts match and receive those campaigns' scripts, and the results they report
+  count in the campaigns' health gates.
+
+A single install token is good for one enrollment, by whoever presents it first.
+
+### What stops it
+
+* **Rates.** One credential enrolls at most 5 nodes a second through one
+  nightfall instance (`enrollments_per_second_per_credential`, counted at assign
+  and at enroll), each instance at most 25 (`enrollments_per_second`), and a
+  network with a `[[limits.cidr]]` table at most its `enrollments_per_hour`; see
+  [Limits](#limits). The rates are per instance, so they slow a leak down
+  rather than end it.
+* **A cap.** `max_installations` on the token's entry or the key is a hard limit
+  across every instance and every restart; see
+  [Capping installations](#capping-installations). Give every token and key the
+  cap its batch needs.
+* **Retiring it.** A retired or removed token is refused by every instance
+  within 30 seconds of its file changing, with no restart and no session
+  dropped.
+* **Revoking what it enrolled.** One request to twilight revokes every
+  installation the token enrolled; nightfall drops their sessions and refuses
+  them from then on. See
+  [Revoking what a credential enrolled](#revoking-what-a-credential-enrolled).
+
+### What you are alerted on
+
+twilight counts new enrollments only - an issued `enroll` and a refused
+`assign` or `enroll`, never a renewal - for each credential, each network (a
+/24 for IPv4, a /48 for IPv6) and the whole fleet, against the same hour of the
+previous seven days, and raises:
+
+| Alert | When |
+|-------|------|
+| `enrollment_rate` | More installations enrolled in five minutes, for one credential, one network or the fleet, than its floor and four times its baseline. |
+| `denied_enrollments_spike` | The same for refused enrollments: someone is presenting a retired, removed, capped or wrong credential, or pressing against the rate limits. |
+| `enrollment_from_new_network_burst` | The same for installations enrolled from networks none enrolled from in the seven days before: a leak used from many places at once. |
+| `credential_quota_reached` | A credential's cap refused an enrollment. |
+
+Every one names the credential, the networks, the count and the baseline, has
+its own fingerprint for each credential or network so that a second leak opens a
+second alert, notifies again when its count doubles, and resolves itself after
+the rate stays below its threshold for 15 minutes. The thresholds are twilight's
+`alerts.enrollments` settings ([twilight](twilight.md#alerts)); what to do about
+each alert is in the [runbooks](runbooks/enrollment-from-new-network-burst.md).
+Each nightfall instance also sets `nightfall_enrollment_rate_alert` above
+`enrollment_alert_per_minute` and counts `device_id_collision`, on its own
+enrollments only.
+
+### Rotating and retiring a token
+
+1. Create a new token and add its entry, with a cap, beside the old one;
+   nightfall takes it within 30 seconds. Build the nodes you ship from then on
+   with it.
+2. Set `retired = true` on the old entry. New enrollments with it are refused at
+   once; the nodes it enrolled keep their certificates and sessions.
+3. If the old token leaked, revoke what it enrolled since the leak, as below.
+
+A node rebuilt with another fleet token cannot read the persistent store the
+earlier build wrote, since the token keys its encryption (see
+[the security model](security.md#the-fleet-token)): such a node enrolls again
+as a new installation of the same device.
+
+### Revoking what a credential enrolled
+
+twilight keeps the credential every node enrolled with: `credential_kind`,
+`credential_ref` (the fleet token entry, or the install token's subject) and
+`credential_issuer` (the install token's key), all selector fields. List the
+nodes first:
+
+```sh
+curl -sS -H "Authorization: Bearer $TWILIGHT_TOKEN" -G \
+  --data-urlencode 'selector=credential_kind == "fleet_token" and credential_ref == "retail-eu-2025"' \
+  https://twilight.example.org/api/v1/nodes
+```
+
+Then count, and revoke, every installation one fleet token entry
+(`"credential_kind": "fleet_token"` and its name) or one install token key
+(`"credential_kind": "install_token"` and its key id) enrolled, optionally only
+within `enrolled_after` and `enrolled_before`. `dry_run` counts without changing
+anything:
+
+```sh
+curl -sS -X POST -H "Authorization: Bearer $TWILIGHT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"credential_kind": "fleet_token", "credential": "retail-eu-2025", "enrolled_after": "2026-10-09T02:00:00Z", "reason": "token leaked", "dry_run": true}' \
+  https://twilight.example.org/api/v1/revocations
+```
+
+The same request without `dry_run` needs the admin role and answers `202` with
+the revocation. twilight revokes the installations at
+`engine.revocations_per_second` (1000 by default). Each gets a
+`dusk.node-state` record with the reason and your name, every nightfall instance
+drops the installation's sessions when it reads the record, and twilight then
+marks its inventory row `revoked`. A revocation carries on across a twilight
+restart or a change of leader, and `GET /api/v1/revocations/{id}` shows how many
+installations it revoked so far. A revoked installation is refused at every
+handshake and every renewal. Retire the token before you revoke, so that
+nothing enrolls with it in the meantime.

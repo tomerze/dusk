@@ -73,7 +73,8 @@ persistent kvs store are the node's side as its pull requests build it (issues
 A fleet token is a shared secret compiled into every node built with it.
 **Whoever extracts it from one binary can enroll as many nodes as they like** -
 each enrollment creates a new installation, and the device id comes from a
-hardware fingerprint the enrolling node chooses - until the token is retired.
+hardware fingerprint the enrolling node chooses - until the token is retired or
+reaches its cap.
 Limiting by address does not stop that: an enrollment spread over many
 addresses passes every per-address limit. Nodes enrolled that way are ordinary
 installations to the rest of the stack: they appear in the inventory, join
@@ -83,13 +84,24 @@ those campaigns' health gates.
 What bounds and reveals it:
 
 * Every assign and enroll takes a token from a bucket for the nightfall
-  instance (50 per second by default) and one for the credential (10 per
-  second); beyond either the node is told `overloaded`.
+  instance (50 per second by default) and one for the credential - the fleet
+  token entry, or every install token one key signed (10 per second); beyond
+  either the node is told `overloaded`.
+* `max_installations` on a fleet token entry or an install token key caps the
+  installations it ever enrolls, across every instance and restart; beyond it
+  nightfall refuses with `credential_quota_reached`.
+* A retired or removed token is refused by every instance within 30 seconds of
+  its file changing, without a restart.
 * A failed credential counts against its address; more than 20 failures in an
   hour put the address in the penalty box.
-* Above 600 assign and enroll calls a minute nightfall logs a warning and sets
-  `nightfall_enrollment_rate_alert`, and twilight raises a high
-  `enrollment_rate` alert when `dusk.enrollments` exceeds its threshold.
+* twilight counts new enrollments, never renewals, per credential, per network
+  and across the fleet against the same hour of the previous week, and raises
+  `enrollment_rate`, `denied_enrollments_spike`,
+  `enrollment_from_new_network_burst` and `credential_quota_reached`, each naming
+  the credential and the networks (see
+  [When a credential leaks](provisioning.md#when-a-credential-leaks)). Above 600
+  assign and enroll calls a minute a nightfall instance also logs a warning and
+  sets `nightfall_enrollment_rate_alert`.
 * Each nightfall instance warns and counts `device_id_collision` when one
   device id enrolls more than 20 installations through it from more than 5
   addresses within 24 hours. It counts in memory, so enrollments spread over
@@ -99,10 +111,11 @@ What bounds and reveals it:
 
 The token is in the binary because the node needs it, so treat every binary as
 holding it: pass it to container builds as a build secret, so no image layer
-holds it, and use one token per product or batch so one can be retired without
-the others. Retiring a token (removing its entry and restarting nightfall) stops
-new enrollments only: nodes that already hold certificates keep renewing them,
-so revoke those that should not. No role in nightfall's shipped permissions
+holds it, use one token per product or batch so one can be retired without the
+others, and cap each at the installations its batch needs. Retiring a token
+stops new enrollments only: nodes that already hold certificates keep renewing
+them, so revoke those that should not - twilight revokes everything one token
+enrolled in one request. No role in nightfall's shipped permissions
 allows `Dusk.fleetToken`.
 
 The fleet token also keys the encryption of each node's persistent kvs store,
@@ -299,8 +312,9 @@ A process a client creates without naming a pid is counted per principal
 (`twilight_unattributed_processes_total`), not alerted: the one admission lets
 through, the `kvs bind` the `kvs` client starts to read key names, is created
 that way. twilight also raises
-`enrollment_rate` (high), `revocation_not_enforced` (critical) and
-`campaign_conflict`. Every new critical and high alert is posted to
+`enrollment_rate`, `denied_enrollments_spike`,
+`enrollment_from_new_network_burst` and `credential_quota_reached` (high),
+`revocation_not_enforced` (critical) and `campaign_conflict`. Every new critical and high alert is posted to
 `alerts.webhook_url` when one is set.
 
 ## Compromised components
@@ -454,8 +468,9 @@ By design, nothing in the stack detects:
   with the same parameters have the same hash.
 * **What a node says about itself.** Facts, reported state, `ps`, its logs and
   the hardware fingerprint come from the node.
-* **Nodes enrolled with a leaked fleet token** below the enrollment alert's
-  rate. They are ordinary installations to the stack.
+* **Nodes enrolled with a leaked fleet token** below the enrollment alerts'
+  thresholds, up to the token's cap. They are ordinary installations to the
+  stack.
 * **A capability returned to its owner.** When a client passes a node's own
   capability back to the node, the node holds its own object again, and
   dropping the membrane cannot take it back.
