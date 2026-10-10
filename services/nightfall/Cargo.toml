@@ -1,0 +1,60 @@
+[package]
+name = "nightfall"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[lib]
+name = "nightfall"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nightfall"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { version = "1.0", public = true }
+arc-swap = { version = "1.7", public = true }
+capnp = "0.21.7"
+capnp-rpc = "0.21.0"
+clap = { version = "4.5", features = ["derive"] }
+dusk_capnp = { path = "../../dusk/src/dusk_capnp" }
+futures = "0.3"
+http-body-util = "0.1"
+hyper = { version = "1.6", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+jsonschema = { version = "0.58", default-features = false }
+libc = "0.2"
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false, public = true }
+nightfall_ledger = { path = "ledger", public = true }
+nightfall_membrane = { path = "membrane", public = true }
+nightfall_provisioning = { path = "provisioning", public = true }
+rand = "0.9"
+rdkafka = { version = "0.39", default-features = false, features = ["cmake-build", "curl-static", "ssl-vendored", "tokio", "zstd"], public = true }
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std", "tls12"], public = true }
+rustls-pki-types = { version = "1.12", features = ["std"], public = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", public = true }
+socket2 = { version = "0.6", features = ["all"] }
+time = { version = "0.3.41", features = ["formatting", "parsing"] }
+tokio = { version = "1.47", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "sync", "time"], public = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "ring", "tls12"] }
+tokio-util = { version = "0.7", features = ["compat"], public = true }
+toml = { version = "0.9", public = true }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
+uuid = { version = "1.17", features = ["v4", "v7"] }
+x509-parser = "0.18"
+
+[dev-dependencies]
+base64 = "0.22"
+dusk_base = { path = "../../dusk/src/dusk_base", features = ["client"] }
+dusk_core = { path = "../../dusk/src/dusk_core" }
+dusk_nix = { path = "../../impls/nix" }
+dusk_tests = { path = "../../tests/common" }
+jsonschema = { version = "0.58", default-features = false, features = ["resolve-file"] }
+nightfall_membrane = { path = "membrane", features = ["test-support"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
+tempfile = "3"

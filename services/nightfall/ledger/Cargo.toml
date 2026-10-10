@@ -1,0 +1,23 @@
+[package]
+name = "nightfall_ledger"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+base64 = "0.22"
+rdkafka = { version = "0.39", default-features = false, features = ["cmake-build", "curl-static", "ssl-vendored", "zstd"], public = true }
+ring = "0.17"
+rustls-pki-types = { version = "1.12", features = ["std"] }
+ryu-js = "1.0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", public = true }
+thiserror = "2"
+time = { version = "0.3.41", features = ["formatting", "macros"], public = true }
+tokio = { version = "1.47.1", features = ["sync", "time"] }
+tracing = "0.1.41"
+uuid = { version = "1.17", features = ["v7"] }
+
+[dev-dependencies]
+jsonschema = { version = "0.58", default-features = false, features = ["resolve-file"] }
+tokio = { version = "1.47.1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
