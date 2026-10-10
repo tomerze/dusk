@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "pid",
+    "campaign_id",
+    "device_id",
+    "installation_id",
+    "namespace_id",
+    "node_path",
+    "bucket",
+    "object_key",
+    "size_bytes",
+    "sha256",
+    "content_type",
+    "uploaded_at",
+    "dawn_instance"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.files/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "pid": { "$ref": "common.schema.json#/$defs/pid" },
+    "campaign_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+    "installation_id": { "$ref": "common.schema.json#/$defs/installation_id" },
+    "namespace_id": { "$ref": "common.schema.json#/$defs/namespace_id" },
+    "node_path": { "type": "string", "minLength": 1 },
+    "bucket": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$" },
+    "object_key": {
+      "description": "files/<device_id>/<installation_id>/<pid>/<index>-<basename of node_path>, where index is node_path's position in the dispatched work's collect_files list (0-15), 0 for a single file collection.",
+      "type": "string",
+      "pattern": "^files/[0-9a-f]{32}/[0-9a-f]{32}/(0|[1-9][0-9]{0,19})/(1[0-5]|[0-9])-[^/]+$"
+    },
+    "size_bytes": { "type": "integer", "minimum": 0 },
+    "sha256": { "$ref": "common.schema.json#/$defs/hash" },
+    "content_type": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$"
+    },
+    "uploaded_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "dawn_instance": { "$ref": "common.schema.json#/$defs/instance" }
+  }
+}
