@@ -1,3 +1,4 @@
+use crate::admission::IntendedProcesses;
 use capnp::capability::Promise;
 use dusk_capnp::dusk_capnp::dusk;
 
@@ -15,4 +16,5 @@ pub trait NodeLink {
     fn identity(&self) -> &SessionIdentity;
     fn fresh_dusk(&self) -> Promise<dusk::Client, capnp::Error>;
     fn closed(&self) -> bool;
+    fn intended_processes(&self) -> Option<&IntendedProcesses>;
 }

@@ -6,6 +6,9 @@ use dusk_base::dusk_program_sh::sh_capnp::{self, sh_portal, sh_stop};
 use dusk_base::dusk_program_sh::{ShArgs, ShMode};
 use dusk_capnp::dusk_capnp::{created, dusk, process, stream, value};
 use dusk_tests::{DuskNixImpl, LISTEN_ADDRESS};
+use nightfall_membrane::admission::{
+    DEFAULT_SHELL_PID, IntendedProcess, IntendedProcesses, Intent, NodeKey,
+};
 use nightfall_membrane::audit::{AuditEntry, AuditEvent, Direction, EntryKind, ResultCode};
 use nightfall_membrane::filter::filter_vat_network;
 use nightfall_membrane::limits::{InstanceLimits, LimitState, Limits};
@@ -17,7 +20,8 @@ use nightfall_membrane::test_support::{MemoryAuditSink, TestNodeLink};
 use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::rc::Rc;
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 const EPOCH: u64 = 42;
@@ -46,7 +50,7 @@ allow = ["Dusk.hostname"]
 name = "shipped"
 allow = ["Dusk.process", "Dusk.run", "Dusk.ps", "Dusk.kill", "Dusk.hostname", "Dusk.waitpid", "Dusk.time", "Dusk.programs", "Dusk.namespaceId", "Dusk.dusk", "Process.*", "Portal.*", "OutputPortal.*", "ShPortal.*", "KvsPortal.get", "KvsPortal.exists", "KvsPortal.scan", "LogsPortal.*", "CpPortal.*", "SignalBatch.Ack.ack"]
 deny = ["Dusk.settime", "Dusk.fleetToken"]
-reverse_allow = ["Stream.*", "Created.created", "Sink.*", "LogsArgs.Server.openStream", "LogsArgs.Stream.*", "CpArgs.Server.write", "CpArgs.Server.stat", "ShStop.stop"]
+reverse_allow = ["Stream.*", "Created.created", "Sink.*", "LogsArgs.Server.openStream", "LogsArgs.Stream.*", "CpArgs.Server.write", "CpArgs.Server.stat", "KvsArgs.Server.transpose", "ShStop.stop"]
 [[principal]]
 name = "tester-*"
 roles = ["tester"]
@@ -56,9 +60,17 @@ roles = ["shipped"]
 [[principal]]
 name = "overrider-*"
 roles = ["overrider"]
+[[role]]
+name = "break-glass"
+allow = ["Dusk.process", "Dusk.run", "Dusk.ps", "Dusk.kill", "Dusk.waitpid", "Process.*", "Portal.*", "OutputPortal.*", "ShPortal.*"]
+reverse_allow = ["Stream.*", "ShStop.stop"]
+admission_exempt = true
 [[principal]]
 name = "dawn-*"
 roles = ["dawn"]
+[[principal]]
+name = "glass-*"
+roles = ["break-glass"]
 "#;
 
 struct Harness {
@@ -122,6 +134,16 @@ async fn membrane_harness(
     limits: Limits,
     port: u16,
 ) -> Harness {
+    membrane_harness_with(principal, quarantined, limits, port, None).await
+}
+
+async fn membrane_harness_with(
+    principal: &str,
+    quarantined: bool,
+    limits: Limits,
+    port: u16,
+    intended_processes: Option<Arc<IntendedProcesses>>,
+) -> Harness {
     let node_dusk = connect_node(port).await;
     let namespace_id = node_dusk
         .namespace_id_request()
@@ -139,7 +161,10 @@ async fn membrane_harness(
         instance: "nightfall-test".to_string(),
         quarantined,
     };
-    let node = TestNodeLink::new(node_dusk, identity, EPOCH);
+    let node = match intended_processes {
+        Some(table) => TestNodeLink::admitting(node_dusk, identity, EPOCH, table),
+        None => TestNodeLink::new(node_dusk, identity, EPOCH),
+    };
     let policy = Permissions::from_toml(PERMISSIONS)
         .unwrap()
         .policy_for(principal, quarantined)
@@ -1351,5 +1376,492 @@ fn a_call_pipelined_on_a_call_its_caller_let_go_of_still_reaches_the_node() {
                 .any(|entry| entry.result_code == Some(ResultCode::Ok))
         );
         kill(&harness.dusk, pid(&process).await.unwrap()).await;
+    });
+}
+
+const CAMPAIGN: &str = "0192f3a4-5b6c-7d8e-9f01-23456789abcd";
+const OTHER_INSTALLATION: &str = "00000000000000000000000000000001";
+
+fn node_key(installation: &str) -> NodeKey {
+    NodeKey::parse(DEVICE, installation).unwrap()
+}
+
+fn unix_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
+fn intended(lifetime_ms: i64, max_commands: u32, default_shell_commands: u32) -> IntendedProcess {
+    let now = unix_now_ms();
+    IntendedProcess {
+        created_at_ms: now - 1_000,
+        expires_at_ms: now + lifetime_ms,
+        max_commands,
+        default_shell_commands,
+        intent: Arc::new(Intent {
+            campaign_id: Some(CAMPAIGN.to_string()),
+            principal: "token:0192f3a4-1111-7d8e-9f01-23456789abcd".to_string(),
+            subject: format!("campaign:{CAMPAIGN}"),
+        }),
+    }
+}
+
+fn caught_up_table(clock_skew_ms: i64) -> Arc<IntendedProcesses> {
+    let table = Arc::new(IntendedProcesses::new(
+        1_000,
+        clock_skew_ms,
+        Duration::from_millis(50),
+    ));
+    table.mark_caught_up();
+    table
+}
+
+async fn shell_at(
+    dusk: &dusk::Client,
+    fixed: Option<u64>,
+) -> Result<process::Client, capnp::Error> {
+    let program_args = ShArgs::new(ShMode::Server)
+        .unwrap()
+        .as_program_args()
+        .unwrap();
+    program_args.set_pid(fixed).unwrap();
+    let mut request = dusk.process_request();
+    program_args
+        .with_reader(|reader| request.get().set_program_args(reader))
+        .unwrap();
+    request.send().promise.await?.get()?.get_result()
+}
+
+async fn command(
+    dusk: &dusk::Client,
+    shell: &process::Client,
+    source: &str,
+) -> Result<Vec<String>, capnp::Error> {
+    dusk_base::link_anchors();
+    let mut run_request = dusk.run_request();
+    run_request.get().set_process(shell.clone());
+    run_request.send().promise.await?;
+    let portal: sh_portal::Client = shell
+        .portal_request()
+        .send()
+        .promise
+        .await?
+        .get()?
+        .get_result()?
+        .cast_to();
+    let values = Rc::new(RefCell::new(Vec::new()));
+    let finished = Rc::new(Cell::new(false));
+    let output: stream::Client = capnp_rpc::new_client(Collect {
+        values: values.clone(),
+        finished: finished.clone(),
+        delay: Duration::ZERO,
+        active: Rc::new(Cell::new(0)),
+        peak: Rc::new(Cell::new(0)),
+    });
+    let mut sh_request = portal.sh_request();
+    dusk_base::dusk_program_sh::client::args::compile_into(
+        dusk.clone(),
+        source,
+        &[],
+        sh_request.get().init_script(),
+    )
+    .await
+    .map_err(|error| capnp::Error::failed(error.to_string()))?;
+    sh_request.get().set_output(output);
+    sh_request.get().set_stop(capnp_rpc::new_client(NeverStop));
+    sh_request.send().promise.await?;
+    for _ in 0..200 {
+        if finished.get() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let collected = values.borrow().clone();
+    Ok(collected)
+}
+
+fn refused_by(outcome: Result<impl Sized, capnp::Error>) -> capnp::Error {
+    let Err(error) = outcome else {
+        panic!("a call that admission should refuse was forwarded");
+    };
+    assert_eq!(error.kind, capnp::ErrorKind::Failed, "{error}");
+    assert!(error.extra.contains("denied: not intended"), "{error}");
+    error
+}
+
+fn refusals(harness: &Harness) -> Vec<(String, u64, String, Option<Arc<Intent>>)> {
+    harness
+        .audit
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.result_code == Some(ResultCode::Denied))
+        .filter_map(|entry| {
+            let rule = entry
+                .event_detail
+                .as_ref()?
+                .get("rule")?
+                .as_str()?
+                .to_string();
+            Some((
+                entry.action.clone().unwrap(),
+                entry.pid,
+                rule,
+                entry.intent.clone(),
+            ))
+        })
+        .collect()
+}
+
+#[test]
+fn admission_refuses_what_twilight_did_not_intend_and_lets_intended_work_flow() {
+    run(|port| async move {
+        let table = caught_up_table(5_000);
+        let harness = membrane_harness_with(
+            "shipped-0",
+            false,
+            Limits::default(),
+            port,
+            Some(table.clone()),
+        )
+        .await;
+        let intended_pid = 0x5eed_0000_0000_0000 | u64::from(port);
+        let other_pid = intended_pid + 1;
+        refused_by(shell_at(&harness.dusk, Some(DEFAULT_SHELL_PID)).await);
+        refused_by(shell_at(&harness.dusk, None).await);
+        refused_by(shell_at(&harness.dusk, Some(intended_pid)).await);
+        table.apply(
+            node_key(INSTALLATION),
+            intended_pid,
+            Some(intended(600_000, 2, 1)),
+        );
+        table.apply(
+            node_key(OTHER_INSTALLATION),
+            other_pid,
+            Some(intended(600_000, 9, 9)),
+        );
+        refused_by(shell_at(&harness.dusk, Some(other_pid)).await);
+        refused_by(shell_at(&harness.dusk, None).await);
+
+        let shell = shell_at(&harness.dusk, Some(intended_pid)).await.unwrap();
+        assert_eq!(
+            command(&harness.dusk, &shell, "echo hello").await.unwrap(),
+            ["hello"]
+        );
+        let facts = command(&harness.dusk, &shell, "kvs get dusk.version")
+            .await
+            .unwrap();
+        assert!(!facts.is_empty());
+        refused_by(command(&harness.dusk, &shell, "echo again").await);
+
+        let default_shell = shell_at(&harness.dusk, Some(DEFAULT_SHELL_PID))
+            .await
+            .unwrap();
+        assert_eq!(
+            command(&harness.dusk, &default_shell, "echo read")
+                .await
+                .unwrap(),
+            ["read"]
+        );
+        refused_by(command(&harness.dusk, &default_shell, "echo another").await);
+        kill(&harness.dusk, intended_pid).await;
+
+        let rules: Vec<(String, u64, String)> = refusals(&harness)
+            .into_iter()
+            .map(|(action, pid, rule, _)| (action, pid, rule))
+            .collect();
+        assert_eq!(
+            rules,
+            [
+                (
+                    "Dusk.process".to_string(),
+                    DEFAULT_SHELL_PID,
+                    "default_shell_without_intent".to_string()
+                ),
+                (
+                    "Dusk.process".to_string(),
+                    0,
+                    "process_without_pid".to_string()
+                ),
+                (
+                    "Dusk.process".to_string(),
+                    intended_pid,
+                    "process_without_intent".to_string()
+                ),
+                (
+                    "Dusk.process".to_string(),
+                    other_pid,
+                    "process_without_intent".to_string()
+                ),
+                (
+                    "Dusk.process".to_string(),
+                    0,
+                    "process_without_pid".to_string()
+                ),
+                (
+                    "ShPortal.sh".to_string(),
+                    intended_pid,
+                    "command_budget".to_string()
+                ),
+                (
+                    "ShPortal.sh".to_string(),
+                    DEFAULT_SHELL_PID,
+                    "default_shell_budget".to_string()
+                ),
+            ]
+        );
+        let stamped = intended(0, 1, 1).intent;
+        for (action, pid, _, intent) in refusals(&harness) {
+            let expected =
+                (pid == intended_pid && action == "ShPortal.sh").then(|| stamped.clone());
+            assert_eq!(intent, expected, "{action} at {pid}");
+        }
+        let entries = harness.audit.entries();
+        let under_pid: Vec<&AuditEntry> = entries
+            .iter()
+            .filter(|entry| {
+                entry.pid == intended_pid && entry.result_code != Some(ResultCode::Denied)
+            })
+            .collect();
+        assert!(
+            under_pid
+                .iter()
+                .any(|entry| entry.action.as_deref() == Some("Stream.send"))
+        );
+        assert!(
+            under_pid
+                .iter()
+                .any(|entry| entry.kind == EntryKind::Result)
+        );
+        for entry in &under_pid {
+            assert_eq!(
+                entry.intent,
+                Some(stamped.clone()),
+                "{:?} {:?}",
+                entry.kind,
+                entry.action
+            );
+        }
+        assert!(
+            entries
+                .iter()
+                .filter(|entry| entry.pid == 0 || entry.pid == DEFAULT_SHELL_PID)
+                .all(|entry| entry.intent.is_none())
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.action.as_deref() == Some("KvsPortal.scan") && entry.pid == 0)
+        );
+    });
+}
+
+#[test]
+fn admission_refuses_every_call_under_a_pid_after_its_deadline_but_kill_and_waitpid() {
+    run(|port| async move {
+        let table = caught_up_table(0);
+        let harness = membrane_harness_with(
+            "shipped-0",
+            false,
+            Limits::default(),
+            port,
+            Some(table.clone()),
+        )
+        .await;
+        let intended_pid = 0x5eed_0000_0000_0000 | u64::from(port);
+        table.apply(
+            node_key(INSTALLATION),
+            intended_pid,
+            Some(intended(1_500, 5, 0)),
+        );
+        let shell = shell_at(&harness.dusk, Some(intended_pid)).await.unwrap();
+        assert_eq!(
+            command(&harness.dusk, &shell, "echo early").await.unwrap(),
+            ["early"]
+        );
+        tokio::time::sleep(Duration::from_millis(1_600)).await;
+        refused_by(command(&harness.dusk, &shell, "echo late").await);
+        refused_by(shell_at(&harness.dusk, Some(intended_pid)).await);
+        kill(&harness.dusk, intended_pid).await;
+        let mut waitpid = harness.dusk.waitpid_request();
+        waitpid.get().set_pid(intended_pid);
+        waitpid.send().promise.await.unwrap();
+        let rules: Vec<(String, String)> = refusals(&harness)
+            .into_iter()
+            .map(|(action, _, rule, _)| (action, rule))
+            .collect();
+        assert_eq!(
+            rules,
+            [
+                ("Dusk.run".to_string(), "process_after_deadline".to_string()),
+                (
+                    "Dusk.process".to_string(),
+                    "process_after_deadline".to_string()
+                ),
+            ]
+        );
+        for action in ["Dusk.kill", "Dusk.waitpid"] {
+            assert!(
+                harness
+                    .entries(action)
+                    .iter()
+                    .any(|entry| entry.result_code == Some(ResultCode::Ok)),
+                "{action}"
+            );
+        }
+    });
+}
+
+#[test]
+fn admission_refuses_process_calls_until_the_intended_processes_are_read() {
+    run(|port| async move {
+        let table = Arc::new(IntendedProcesses::new(
+            1_000,
+            5_000,
+            Duration::from_millis(50),
+        ));
+        let harness = membrane_harness_with(
+            "shipped-0",
+            false,
+            Limits::default(),
+            port,
+            Some(table.clone()),
+        )
+        .await;
+        let intended_pid = 0x5eed_0000_0000_0000 | u64::from(port);
+        table.apply(
+            node_key(INSTALLATION),
+            intended_pid,
+            Some(intended(600_000, 1, 1)),
+        );
+        assert!(
+            !ps(&harness.dusk)
+                .await
+                .get()
+                .unwrap()
+                .get_process_entries()
+                .unwrap()
+                .is_empty()
+        );
+        refused_by(shell_at(&harness.dusk, Some(intended_pid)).await);
+        table.mark_caught_up();
+        let shell = shell_at(&harness.dusk, Some(intended_pid)).await.unwrap();
+        assert_eq!(
+            command(&harness.dusk, &shell, "echo caught up")
+                .await
+                .unwrap(),
+            ["caught up"]
+        );
+        kill(&harness.dusk, intended_pid).await;
+        let rules: Vec<String> = refusals(&harness)
+            .into_iter()
+            .map(|(_, _, rule, _)| rule)
+            .collect();
+        assert_eq!(rules, ["not_caught_up"]);
+    });
+}
+
+#[test]
+fn a_role_exempt_from_admission_forwards_what_admission_refuses_and_ledgers_each_call() {
+    run(|port| async move {
+        let table = caught_up_table(5_000);
+        let harness = membrane_harness_with(
+            "glass-0",
+            false,
+            Limits::default(),
+            port,
+            Some(table.clone()),
+        )
+        .await;
+        let unintended = 0x5eed_0000_0000_0000 | u64::from(port);
+        let shell = shell_at(&harness.dusk, Some(unintended)).await.unwrap();
+        assert_eq!(
+            command(&harness.dusk, &shell, "echo glass").await.unwrap(),
+            ["glass"]
+        );
+        kill(&harness.dusk, unintended).await;
+        assert!(refusals(&harness).is_empty());
+        let overrides = harness.events(AuditEvent::AdmissionOverride);
+        let ruled: Vec<(Option<String>, String)> = overrides
+            .iter()
+            .map(|event| {
+                let detail = event.event_detail.as_ref().unwrap();
+                assert_eq!(detail["role"], "break-glass");
+                assert_eq!(event.pid, unintended);
+                assert!(event.call_id.is_some());
+                (
+                    event.action.clone(),
+                    detail["rule"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            ruled,
+            [
+                (
+                    Some("Dusk.process".to_string()),
+                    "process_without_intent".to_string()
+                ),
+                (
+                    Some("Dusk.run".to_string()),
+                    "process_after_deadline".to_string()
+                ),
+                (
+                    Some("Process.portal".to_string()),
+                    "process_after_deadline".to_string()
+                ),
+                (
+                    Some("ShPortal.sh".to_string()),
+                    "process_after_deadline".to_string()
+                ),
+            ]
+        );
+    });
+}
+
+#[test]
+fn a_call_waits_for_an_intended_process_published_just_behind_it() {
+    run(|port| async move {
+        let table = Arc::new(IntendedProcesses::new(1_000, 5_000, Duration::from_secs(5)));
+        table.mark_caught_up();
+        let harness = membrane_harness_with(
+            "shipped-0",
+            false,
+            Limits::default(),
+            port,
+            Some(table.clone()),
+        )
+        .await;
+        let intended_pid = 0x5eed_0000_0000_0000 | u64::from(port);
+        let reader = table.clone();
+        tokio::task::spawn_local(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            reader.apply(
+                node_key(INSTALLATION),
+                intended_pid,
+                Some(intended(600_000, 1, 0)),
+            );
+            reader.serve(reader.requested());
+        });
+        let started = std::time::Instant::now();
+        let shell = shell_at(&harness.dusk, Some(intended_pid)).await.unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(300));
+        assert_eq!(
+            command(&harness.dusk, &shell, "echo just behind")
+                .await
+                .unwrap(),
+            ["just behind"]
+        );
+        kill(&harness.dusk, intended_pid).await;
+        assert!(refusals(&harness).is_empty());
+        for entry in harness.entries("Dusk.process") {
+            assert_eq!(
+                entry.intent,
+                Some(intended(0, 1, 0).intent),
+                "{:?}",
+                entry.kind
+            );
+        }
     });
 }

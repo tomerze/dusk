@@ -11,6 +11,7 @@ use capnp::traits::HasTypeId;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use dusk_capnp::dusk_capnp::dusk;
 use nightfall_ledger::entry::Event;
+use nightfall_membrane::admission::IntendedProcesses;
 use nightfall_membrane::membrane::Membrane;
 use nightfall_membrane::node::{NodeLink, SessionIdentity};
 use nightfall_membrane::permissions::Permissions;
@@ -278,14 +279,19 @@ pub struct SessionLink {
     session: Weak<NodeSession>,
     identity: SessionIdentity,
     epoch: u64,
+    intended_processes: Arc<IntendedProcesses>,
 }
 
 impl SessionLink {
-    pub fn new(session: &Rc<NodeSession>) -> Rc<SessionLink> {
+    pub fn new(
+        session: &Rc<NodeSession>,
+        intended_processes: Arc<IntendedProcesses>,
+    ) -> Rc<SessionLink> {
         Rc::new(SessionLink {
             session: Rc::downgrade(session),
             identity: session.identity_snapshot(),
             epoch: session.epoch,
+            intended_processes,
         })
     }
 }
@@ -322,6 +328,10 @@ impl NodeLink for SessionLink {
         self.session
             .upgrade()
             .is_none_or(|session| session.is_closing())
+    }
+
+    fn intended_processes(&self) -> Option<&IntendedProcesses> {
+        Some(&self.intended_processes)
     }
 }
 

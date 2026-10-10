@@ -17,6 +17,8 @@ pub const IDLE_POLL: Duration = Duration::from_millis(50);
 pub const RETRY_BASE: Duration = Duration::from_secs(1);
 pub const RETRY_CAP: Duration = Duration::from_secs(60);
 pub const CONNECTIONS_REWIND: Duration = Duration::from_secs(60);
+pub const EVICTION_PERIOD: Duration = Duration::from_secs(10);
+pub const FRESHNESS_POLL: Duration = Duration::from_millis(5);
 
 fn invalid(record: &IncomingRecord, reason: &str) {
     metrics::counter!("nightfall_invalid_messages_total", "topic" => record.topic.clone())
@@ -173,6 +175,111 @@ fn node_state(
                 states = shared.node_states.len(),
                 seconds = started.elapsed().as_secs_f64(),
                 "node state caught up"
+            );
+        }
+    }
+}
+
+fn intended_processes(
+    shared: Arc<Shared>,
+    broker: Arc<dyn Broker>,
+    validator: ContractValidator,
+    stop: CancellationToken,
+) {
+    let topic = shared.config.kafka.topics.intended_processes.clone();
+    let Some((mut consumer, targets)) = open(
+        broker.as_ref(),
+        "intended-processes",
+        &topic,
+        Start::Beginning,
+        &stop,
+    ) else {
+        return;
+    };
+    let table = shared.intended_processes.clone();
+    let started = Instant::now();
+    let mut last_eviction = Instant::now();
+    let mut failures = 0u32;
+    let mut applied = 0u64;
+    let mut served = 0u64;
+    let mut serving: Option<(u64, Vec<Watermarks>)> = None;
+    while !stop.is_cancelled() {
+        let waited_for = serving.is_some() || table.requested() > served;
+        let record = poll(
+            &mut consumer,
+            &topic,
+            if waited_for { FRESHNESS_POLL } else { POLL },
+            &mut failures,
+            &stop,
+        );
+        if let Some(record) = record {
+            let checked = match &record.payload {
+                Some(payload) => validator.check(payload).map(|_| ()),
+                None => Ok(()),
+            };
+            match checked.and_then(|()| {
+                crate::intended_processes::parse(record.key.as_deref(), record.payload.as_deref())
+            }) {
+                Ok(intended) => {
+                    applied += 1;
+                    if table.apply(intended.node, intended.pid, intended.process)
+                        == nightfall_membrane::admission::Applied::Full
+                    {
+                        metrics::counter!("nightfall_intended_processes_dropped_total")
+                            .increment(1);
+                        tracing::error!(
+                            topic = %record.topic,
+                            partition = record.partition,
+                            offset = record.offset,
+                            pid = intended.pid,
+                            capacity = shared.config.admission.max_intended_processes,
+                            "the table of intended processes is full; this process stays unintended and its calls are refused"
+                        );
+                    }
+                }
+                Err(reason) => invalid(&record, &reason),
+            }
+            if let Some(timestamp) = record.timestamp_ms {
+                let lag = (unix_milliseconds() - timestamp).max(0) as f64 / 1000.0;
+                metrics::gauge!("nightfall_intended_processes_lag_seconds").set(lag);
+            }
+        } else if table.caught_up() {
+            metrics::gauge!("nightfall_intended_processes_lag_seconds").set(0.0);
+        }
+        if last_eviction.elapsed() >= EVICTION_PERIOD {
+            last_eviction = Instant::now();
+            let evicted = table.evict_expired(unix_milliseconds());
+            if evicted > 0 {
+                tracing::debug!(evicted, "evicted expired intended processes");
+            }
+            metrics::gauge!("nightfall_intended_processes").set(table.len() as f64);
+        }
+        if table.caught_up() && serving.is_none() {
+            let requested = table.requested();
+            if requested > served {
+                match consumer.watermarks() {
+                    Ok(targets) => serving = Some((requested, targets)),
+                    Err(error) => {
+                        tracing::debug!(%error, "the end of the intended processes is not known yet")
+                    }
+                }
+            }
+        }
+        if let Some((generation, targets)) = &serving
+            && positions_reached(&mut consumer, targets)
+        {
+            served = *generation;
+            table.serve(served);
+            serving = None;
+        }
+        if !table.caught_up() && positions_reached(&mut consumer, &targets) {
+            table.mark_caught_up();
+            metrics::gauge!("nightfall_intended_processes").set(table.len() as f64);
+            tracing::info!(
+                records = applied,
+                intended_processes = table.len(),
+                seconds = started.elapsed().as_secs_f64(),
+                "intended processes caught up"
             );
         }
     }
@@ -373,6 +480,7 @@ pub fn start(
     stop: CancellationToken,
 ) -> anyhow::Result<Vec<std::thread::JoinHandle<()>>> {
     let node_state_validator = Contract::NodeState.validator()?;
+    let intended_processes_validator = Contract::IntendedProcesses.validator()?;
     let directory_consumer = DirectoryConsumer {
         shared: shared.clone(),
         census: Contract::Census.validator()?,
@@ -386,8 +494,20 @@ pub fn start(
             .name("nightfall-node-state".to_string())
             .spawn(move || node_state(shared, broker, node_state_validator, stop))?
     };
+    let intended_processes_thread = {
+        let shared = shared.clone();
+        let broker = broker.clone();
+        let stop = stop.clone();
+        std::thread::Builder::new()
+            .name("nightfall-intended".to_string())
+            .spawn(move || intended_processes(shared, broker, intended_processes_validator, stop))?
+    };
     let directory_thread = std::thread::Builder::new()
         .name("nightfall-directory".to_string())
         .spawn(move || directory(shared, broker, directory_consumer, stop))?;
-    Ok(vec![node_state_thread, directory_thread])
+    Ok(vec![
+        node_state_thread,
+        intended_processes_thread,
+        directory_thread,
+    ])
 }

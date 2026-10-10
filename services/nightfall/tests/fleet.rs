@@ -8,9 +8,9 @@ use serde_json::Value;
 use std::io::Read;
 use std::time::Duration;
 use support::harness::{
-    DEVICE, Environment, INSTALLATION, OTHER_DEVICE, connect_client, free_port, ledger, link_node,
-    local_session, run, run_returning, shutdown, wait_for_session, wait_until, with_action,
-    with_event,
+    CAMPAIGN, DEVICE, Environment, INSTALLATION, INTENT_PRINCIPAL, OTHER_DEVICE, connect_client,
+    free_port, ledger, link_node, local_session, run, run_returning, shutdown, wait_for_session,
+    wait_until, with_action, with_event,
 };
 use support::node::{kill, pid, ps, run_script, shell_server, shell_server_request};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -228,6 +228,7 @@ fn every_call_of_a_process_at_a_fixed_pid_is_ledgered_with_that_pid() {
     let (instance, log) = environment.start(environment.config("nightfall-0", 0));
     let (_node, node_port) = node();
     let fixed = 0x5eed_0000_0000_0000 | u64::from(node_port);
+    environment.intend(INSTALLATION, fixed, 1, 0);
     run(async {
         let _bridge = link_node(
             instance.addresses.fleet,
@@ -302,6 +303,139 @@ fn every_call_of_a_process_at_a_fixed_pid_is_ledgered_with_that_pid() {
         .collect();
     assert_eq!(fresh_ps.len(), 2);
     assert!(fresh_ps.iter().all(|entry| entry["pid"] == "0"));
+}
+
+#[test]
+fn a_dawn_principal_creates_only_the_processes_twilight_intended() {
+    let environment = Environment::new();
+    let (instance, log) = environment.start(environment.config("nightfall-0", 0));
+    let (_node, node_port) = node();
+    let intended = 0x5eed_0000_0000_0000 | u64::from(node_port);
+    let unintended = intended + 1;
+    run(async {
+        let _bridge = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(DEVICE, INSTALLATION),
+        )
+        .await;
+        let (namespace_id, _, _) = wait_for_session(&instance).await;
+        let dawn = connect_client(
+            instance.addresses.inner,
+            namespace_id,
+            environment.principal("dawn-0"),
+        )
+        .await;
+        let before = error_of(shell_server_request(&dawn.dusk, Some(intended)).promise).await;
+        assert!(before.extra.contains("denied: not intended"), "{before}");
+        environment.intend(INSTALLATION, intended, 1, 0);
+        environment.intend("00000000000000000000000000000001", unintended, 9, 9);
+        assert_eq!(
+            run_script(&dawn.dusk, Some(intended), "echo intended").await,
+            ["intended"]
+        );
+        assert_eq!(instance.shared.intended_processes.len(), 2);
+        let elsewhere = error_of(shell_server_request(&dawn.dusk, Some(unintended)).promise).await;
+        assert!(
+            elsewhere.extra.contains("denied: not intended"),
+            "{elsewhere}"
+        );
+        let operator = connect_client(
+            instance.addresses.inner,
+            namespace_id,
+            environment.principal("operator-0"),
+        )
+        .await;
+        assert_eq!(
+            run_script(&operator.dusk, Some(unintended), "echo glass").await,
+            ["glass"]
+        );
+        environment.unintend(INSTALLATION, intended);
+        wait_until(
+            "the tombstone to reach the table",
+            Duration::from_secs(10),
+            || instance.shared.intended_processes.len() == 1,
+        )
+        .await;
+        let after = error_of(shell_server_request(&dawn.dusk, Some(intended)).promise).await;
+        assert!(after.extra.contains("denied: not intended"), "{after}");
+        let metrics = http_get(instance.addresses.admin, "/metrics");
+        assert!(
+            metrics.contains("nightfall_admission_refused_total{rule=\"process_without_intent\"}"),
+            "{metrics}"
+        );
+        wait_until(
+            "the ledger to hold the refusals",
+            Duration::from_secs(10),
+            || {
+                with_action(&ledger(&log), "Dusk.process")
+                    .iter()
+                    .filter(|entry| entry["result_code"] == "denied")
+                    .count()
+                    >= 3
+            },
+        )
+        .await;
+    });
+    shutdown(instance);
+    let entries = ledger(&log);
+    verify_ledger(&environment, &log);
+    let refused: Vec<(String, String)> = with_action(&entries, "Dusk.process")
+        .into_iter()
+        .filter(|entry| entry["result_code"] == "denied")
+        .map(|entry| {
+            assert_eq!(entry["principal"], "dawn-0");
+            assert_eq!(entry["intent_principal"], Value::Null);
+            (
+                entry["pid"].as_str().unwrap().to_string(),
+                entry["event_detail"]["rule"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        refused,
+        [
+            (intended.to_string(), "process_without_intent".to_string()),
+            (unintended.to_string(), "process_without_intent".to_string()),
+            (intended.to_string(), "process_without_intent".to_string()),
+        ]
+    );
+    let intended_text = intended.to_string();
+    let admitted: Vec<&Value> = entries
+        .iter()
+        .filter(|entry| {
+            entry["pid"] == intended_text.as_str()
+                && entry["principal"] == "dawn-0"
+                && entry["result_code"] != "denied"
+                && entry["kind"] != "event"
+        })
+        .collect();
+    assert!(
+        admitted
+            .iter()
+            .any(|entry| entry["action"] == "ShPortal.sh")
+    );
+    for entry in admitted {
+        assert_eq!(entry["intent_principal"], INTENT_PRINCIPAL, "{entry}");
+        assert_eq!(entry["intent_campaign_id"], CAMPAIGN, "{entry}");
+        assert_eq!(
+            entry["intent_subject"],
+            format!("campaign:{CAMPAIGN}"),
+            "{entry}"
+        );
+    }
+    let overrides = with_event(&entries, "admission_override");
+    assert!(!overrides.is_empty());
+    for event in &overrides {
+        assert_eq!(event["principal"], "operator-0");
+        assert_eq!(event["event_detail"]["role"], "operator");
+        assert_eq!(event["pid"], unintended.to_string().as_str());
+    }
+    assert_eq!(overrides[0]["action"], "Dusk.process");
+    assert_eq!(
+        overrides[0]["event_detail"]["rule"],
+        "process_without_intent"
+    );
 }
 
 #[test]

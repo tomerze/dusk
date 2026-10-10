@@ -23,6 +23,7 @@ pub struct Config {
     pub kafka: KafkaConfig,
     pub schemas: SchemasConfig,
     pub permissions: PermissionsConfig,
+    pub admission: AdmissionConfig,
     pub limits: toml::Table,
     pub admin: AdminConfig,
 }
@@ -101,6 +102,7 @@ pub struct Topics {
     pub ledger: String,
     pub enrollments: String,
     pub node_state: String,
+    pub intended_processes: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -128,6 +130,14 @@ pub struct PermissionsConfig {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+pub struct AdmissionConfig {
+    pub max_intended_processes: usize,
+    pub clock_skew_ms: u64,
+    pub intent_wait_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct AdminConfig {
     pub listen: String,
     pub certificate: PathBuf,
@@ -149,6 +159,7 @@ impl Default for Config {
             kafka: KafkaConfig::default(),
             schemas: SchemasConfig::default(),
             permissions: PermissionsConfig::default(),
+            admission: AdmissionConfig::default(),
             limits: toml::Table::new(),
             admin: AdminConfig::default(),
         }
@@ -239,6 +250,7 @@ impl Default for Topics {
             ledger: "dusk.ledger".to_string(),
             enrollments: "dusk.enrollments".to_string(),
             node_state: "dusk.node-state".to_string(),
+            intended_processes: "dusk.intended-processes".to_string(),
         }
     }
 }
@@ -268,6 +280,16 @@ impl Default for PermissionsConfig {
     fn default() -> PermissionsConfig {
         PermissionsConfig {
             file: PathBuf::from("/etc/nightfall/permissions.toml"),
+        }
+    }
+}
+
+impl Default for AdmissionConfig {
+    fn default() -> AdmissionConfig {
+        AdmissionConfig {
+            max_intended_processes: 1_000_000,
+            clock_skew_ms: 5000,
+            intent_wait_ms: 3000,
         }
     }
 }
@@ -576,6 +598,15 @@ impl Config {
         if self.step_ca.max_concurrent == 0 {
             bail!("step_ca.max_concurrent must be greater than 0");
         }
+        if self.admission.max_intended_processes == 0 {
+            bail!("admission.max_intended_processes must be greater than 0");
+        }
+        if self.admission.clock_skew_ms > 3_600_000 {
+            bail!("admission.clock_skew_ms must be at most 3600000, an hour");
+        }
+        if self.admission.intent_wait_ms > 60_000 {
+            bail!("admission.intent_wait_ms must be at most 60000, a minute");
+        }
         if self.ledger.queue_entries < 2 {
             bail!("ledger.queue_entries must be at least 2");
         }
@@ -620,6 +651,7 @@ impl Config {
             &self.kafka.topics.ledger,
             &self.kafka.topics.enrollments,
             &self.kafka.topics.node_state,
+            &self.kafka.topics.intended_processes,
         ];
         if topics.iter().any(|topic| topic.is_empty()) {
             bail!("every kafka.topics entry must name a topic");
@@ -779,7 +811,7 @@ partition = -1
 brokers = "kafka:9092"
 allow_plaintext = true
 properties = {}
-topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state" }
+topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes" }
 census_interval_seconds = 300
 census_heartbeat_seconds = 15
 
@@ -788,6 +820,11 @@ directory = "/usr/share/nightfall/schemas"
 
 [permissions]
 file = "/etc/nightfall/permissions.toml"
+
+[admission]
+max_intended_processes = 1000000
+clock_skew_ms = 5000
+intent_wait_ms = 3000
 
 [limits]
 handshakes_per_second = 2000
@@ -1067,6 +1104,22 @@ client_ca = ""
                 "per_ip_exempt_cidrs",
             ),
             ("[kafka.topics]\nledger = \"\"", "every kafka.topics entry"),
+            (
+                "[kafka.topics]\nintended_processes = \"\"",
+                "every kafka.topics entry",
+            ),
+            (
+                "[admission]\nmax_intended_processes = 0",
+                "admission.max_intended_processes",
+            ),
+            (
+                "[admission]\nclock_skew_ms = 3600001",
+                "admission.clock_skew_ms",
+            ),
+            (
+                "[admission]\nintent_wait_ms = 60001",
+                "admission.intent_wait_ms",
+            ),
         ];
         for (fragment, expected) in cases {
             let text = if fragment.starts_with('[') {

@@ -172,7 +172,7 @@ pub async fn serve_client<Stream>(
         return;
     };
     let membrane = Membrane::new(
-        SessionLink::new(&session),
+        SessionLink::new(&session, shard.shared.intended_processes.clone()),
         principal.principal.clone(),
         policy,
         session.bundle.clone(),

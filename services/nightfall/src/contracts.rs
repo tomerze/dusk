@@ -6,6 +6,8 @@ const COMMON: &str = include_str!("../../contracts/kafka/common.schema.json");
 const CONNECTIONS: &str = include_str!("../../contracts/kafka/dusk.connections.schema.json");
 const CENSUS: &str = include_str!("../../contracts/kafka/dusk.census.schema.json");
 const NODE_STATE: &str = include_str!("../../contracts/kafka/dusk.node-state.schema.json");
+const INTENDED_PROCESSES: &str =
+    include_str!("../../contracts/kafka/dusk.intended-processes.schema.json");
 
 struct Common;
 
@@ -26,6 +28,7 @@ pub enum Contract {
     Connections,
     Census,
     NodeState,
+    IntendedProcesses,
 }
 
 impl Contract {
@@ -34,6 +37,9 @@ impl Contract {
             Contract::Connections => ("dusk.connections.schema.json", CONNECTIONS),
             Contract::Census => ("dusk.census.schema.json", CENSUS),
             Contract::NodeState => ("dusk.node-state.schema.json", NODE_STATE),
+            Contract::IntendedProcesses => {
+                ("dusk.intended-processes.schema.json", INTENDED_PROCESSES)
+            }
         }
     }
 
@@ -92,6 +98,7 @@ mod tests {
             (Contract::Connections, "dusk.connections"),
             (Contract::Census, "dusk.census"),
             (Contract::NodeState, "dusk.node-state"),
+            (Contract::IntendedProcesses, "dusk.intended-processes"),
         ] {
             let validator = contract.validator().unwrap();
             let examples = examples(topic);

@@ -15,6 +15,7 @@ use nightfall_ledger::signing::CheckpointSigner;
 use nightfall_ledger::writer::{
     LedgerConfig, LedgerObserver, LedgerStatus, LedgerThread, LedgerWriter,
 };
+use nightfall_membrane::admission::IntendedProcesses;
 use nightfall_membrane::limits::{InstanceLimits, Limits};
 use nightfall_membrane::permissions::Permissions;
 use nightfall_membrane::schema::SchemaRegistry;
@@ -58,6 +59,7 @@ pub struct Shared {
     pub instance_limits: Arc<InstanceLimits>,
     pub directory: Arc<Mutex<Directory>>,
     pub node_states: Arc<NodeStates>,
+    pub intended_processes: Arc<IntendedProcesses>,
     pub permissions: ArcSwap<Permissions>,
     pub registry: SchemaRegistry,
     pub audit: LedgerAudit,
@@ -89,6 +91,9 @@ impl Shared {
         }
         if !self.readiness.directory.load(Ordering::Acquire) {
             return Err("directory not caught up");
+        }
+        if !self.intended_processes.caught_up() {
+            return Err("intended processes not caught up");
         }
         if !self.readiness.topics.load(Ordering::Acquire) {
             return Err("a Kafka topic is missing or misconfigured");
@@ -183,6 +188,7 @@ fn expected_cleanup(config: &Config) -> Vec<(String, &'static str)> {
         (topics.ledger.clone(), "delete"),
         (topics.enrollments.clone(), "delete"),
         (topics.node_state.clone(), "compact"),
+        (topics.intended_processes.clone(), "compact"),
     ]
 }
 
@@ -497,6 +503,11 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
         max_sessions,
         instance_limits,
         node_states,
+        intended_processes: Arc::new(IntendedProcesses::new(
+            config.admission.max_intended_processes,
+            i64::try_from(config.admission.clock_skew_ms).unwrap_or(i64::MAX),
+            Duration::from_millis(config.admission.intent_wait_ms),
+        )),
         permissions: ArcSwap::from_pointee(permissions),
         registry,
         audit,
@@ -875,6 +886,7 @@ mod tests {
         broker.create_topic("dusk.ledger", 3, "delete");
         broker.create_topic("dusk.enrollments", 3, "delete");
         broker.create_topic("dusk.node-state", 1, "compact, delete");
+        broker.create_topic("dusk.intended-processes", 3, "compact");
         let problems = check_topics(&broker, &config);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].starts_with("dusk.node-state"), "{problems:?}");
@@ -885,5 +897,12 @@ mod tests {
         assert!(problems[0].starts_with("dusk.ledger"), "{problems:?}");
         broker.create_topic("dusk.ledger", 3, "delete");
         assert!(check_topics(&broker, &config).is_empty());
+        broker.create_topic("dusk.intended-processes", 3, "compact,delete");
+        let problems = check_topics(&broker, &config);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].starts_with("dusk.intended-processes"),
+            "{problems:?}"
+        );
     }
 }

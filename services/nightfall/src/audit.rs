@@ -51,14 +51,16 @@ fn event(event: AuditEvent) -> Event {
         AuditEvent::ChainLink => Event::ChainLink,
         AuditEvent::ChainResumed => Event::ChainResumed,
         AuditEvent::QuarantineOverride => Event::QuarantineOverride,
+        AuditEvent::AdmissionOverride => Event::AdmissionOverride,
     }
 }
 
 pub fn content(entry: AuditEntry) -> EntryContent {
+    let intent = entry.intent.as_deref();
     EntryContent {
-        intent_campaign_id: None,
-        intent_principal: None,
-        intent_subject: None,
+        intent_campaign_id: intent.and_then(|intent| intent.campaign_id.clone()),
+        intent_principal: intent.map(|intent| intent.principal.clone()),
+        intent_subject: intent.map(|intent| intent.subject.clone()),
         kind: kind(entry.kind),
         device_id: entry.device_id,
         installation_id: entry.installation_id,

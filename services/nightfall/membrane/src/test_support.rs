@@ -1,3 +1,4 @@
+use crate::admission::IntendedProcesses;
 use crate::audit::{AuditEntry, AuditRefused, AuditReservation, AuditSink, AuditSlot};
 use crate::node::{NodeLink, SessionIdentity};
 use capnp::capability::Promise;
@@ -5,6 +6,7 @@ use dusk_capnp::dusk_capnp::dusk;
 use futures::channel::oneshot;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub const TREE_SCHEMAS: &str = env!("NIGHTFALL_TREE_SCHEMAS");
@@ -136,6 +138,7 @@ pub struct TestNodeLink {
     epoch: Cell<u64>,
     closed: Cell<bool>,
     fresh: Cell<u32>,
+    intended_processes: Option<Arc<IntendedProcesses>>,
 }
 
 impl TestNodeLink {
@@ -146,6 +149,23 @@ impl TestNodeLink {
             epoch: Cell::new(epoch),
             closed: Cell::new(false),
             fresh: Cell::new(0),
+            intended_processes: None,
+        })
+    }
+
+    pub fn admitting(
+        dusk: dusk::Client,
+        identity: SessionIdentity,
+        epoch: u64,
+        intended_processes: Arc<IntendedProcesses>,
+    ) -> Rc<TestNodeLink> {
+        Rc::new(TestNodeLink {
+            dusk,
+            identity,
+            epoch: Cell::new(epoch),
+            closed: Cell::new(false),
+            fresh: Cell::new(0),
+            intended_processes: Some(intended_processes),
         })
     }
 
@@ -175,5 +195,9 @@ impl NodeLink for TestNodeLink {
 
     fn closed(&self) -> bool {
         self.closed.get()
+    }
+
+    fn intended_processes(&self) -> Option<&IntendedProcesses> {
+        self.intended_processes.as_deref()
     }
 }

@@ -1,8 +1,9 @@
+use crate::admission::{self, Intent, NodeKey, Rule};
 use crate::audit::{
     AuditEntry, AuditEvent, AuditReservation, AuditSink, Direction, EntryKind, ParamField,
     ResultCode,
 };
-use crate::canonical::{Sanitized, param_hash, sanitize};
+use crate::canonical::{RawPointerReader, Sanitized, param_hash, sanitize};
 use crate::copy::{Scratch, merge_into, path_operations, place_capability};
 use crate::gate::{Gate, GateTicket};
 use crate::limits::{
@@ -27,17 +28,21 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio_util::sync::CancellationToken;
 
 pub const BOOTSTRAP_CAP_ID: u64 = 0;
-pub const NO_PROCESS: u64 = 0;
+pub const NO_PROCESS: u64 = admission::NO_PROCESS;
 pub const MAXIMUM_CAPABILITIES_PER_MESSAGE: usize = 10_000;
 
 const PROCESS_METHOD: u16 = 0;
 const RUN_METHOD: u16 = 1;
 const KILL_METHOD: u16 = 4;
 const WAITPID_METHOD: u16 = 5;
+const SHELL_COMMAND: &str = "ShPortal.sh";
+const KVS_PROGRAM: &str = "kvs";
+const KVS_SCAN_ARM: &str = "bind";
+const NOT_INTENDED: &str = "denied: not intended";
 
 fn dusk_interface() -> u64 {
     <dusk::Client as HasTypeId>::TYPE_ID
@@ -45,6 +50,50 @@ fn dusk_interface() -> u64 {
 
 fn revoked() -> capnp::Error {
     capnp::Error::disconnected("session revoked".to_string())
+}
+
+fn unix_milliseconds() -> i64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn starts_kvs_scan(
+    bundle: &Bundle,
+    program_args: program_args::Reader<any_pointer::Owned, any_pointer::Owned>,
+) -> bool {
+    let program_id = program_args.get_program_id();
+    let kvs = bundle.manifest().programs.iter().any(|program| {
+        program.name == KVS_PROGRAM
+            && u64::from_str_radix(&program.program_id, 16) == Ok(program_id)
+    });
+    let Some(data) = bundle
+        .program_data(program_id)
+        .and_then(|struct_id| bundle.structure(struct_id))
+        .filter(|_| kvs)
+    else {
+        return false;
+    };
+    let Ok(RawPointerReader(pointer)) = program_args
+        .get_args()
+        .get_data()
+        .and_then(|data| data.get_as::<RawPointerReader>())
+    else {
+        return false;
+    };
+    let Ok(structure) = pointer.get_struct(None) else {
+        return false;
+    };
+    let offset = u64::from(data.discriminant_offset);
+    let discriminant = if (offset + 1) * 16 > u64::from(structure.get_data_section_size()) {
+        0
+    } else {
+        structure.get_data_field::<u16>(data.discriminant_offset as usize)
+    };
+    data.fields
+        .iter()
+        .any(|field| field.discriminant == Some(discriminant) && field.name == KVS_SCAN_ARM)
 }
 
 fn rate_limited(limit: &str) -> capnp::Error {
@@ -298,6 +347,7 @@ struct CallInfo {
     interface_id: u64,
     method_id: u16,
     pid: u64,
+    intent: Option<Arc<Intent>>,
     started: Instant,
 }
 
@@ -315,6 +365,7 @@ struct Prepared {
     waits: bool,
     needs_token: bool,
     revocation: CancellationToken,
+    admission: admission::Call,
 }
 
 struct ResultGuard {
@@ -408,6 +459,7 @@ enum MapFailure {
 
 struct ConnectionState {
     node: Rc<dyn NodeLink>,
+    node_key: Option<NodeKey>,
     principal: String,
     policy: Policy,
     bundle: Arc<Bundle>,
@@ -462,6 +514,7 @@ impl ConnectionState {
         entry.namespace_id = Some(identity.namespace_id);
         entry.epoch = Some(self.node.epoch());
         entry.pid = call.pid;
+        entry.intent = call.intent.clone();
         entry.session_id = Some(self.session_id.clone());
         entry.call_id = Some(call.call_id.clone());
         entry.cap_id = Some(call.cap_id);
@@ -526,6 +579,7 @@ impl ConnectionState {
         &self,
         call: &CallInfo,
         code: ResultCode,
+        detail: Option<serde_json::Map<String, serde_json::Value>>,
         parameters: impl FnOnce() -> (Vec<ParamField>, String),
     ) {
         Self::count_call(call, code);
@@ -547,6 +601,7 @@ impl ConnectionState {
         entry.param_fields = fields;
         entry.param_hash = hash;
         entry.result_code = Some(code);
+        entry.event_detail = detail;
         match self.audit.reserve_denial() {
             Ok(reservation) => {
                 if let Some(commit) = reservation.record(entry) {
@@ -580,7 +635,7 @@ impl ConnectionState {
             limit,
             "call rejected by a limit"
         );
-        self.record_rejection(call, ResultCode::RateLimited, parameters);
+        self.record_rejection(call, ResultCode::RateLimited, None, parameters);
         rate_limited(limit)
     }
 
@@ -766,6 +821,7 @@ impl ConnectionState {
             interface_id,
             method_id,
             pid: target.pid,
+            intent: self.intent_of(target.pid),
             started: Instant::now(),
         };
         let resolved = self.resolve(interface_id, method_id);
@@ -783,7 +839,9 @@ impl ConnectionState {
                 bundle = %self.bundle.name(),
                 "call on an interface the schema bundle does not know"
             );
-            self.record_rejection(&call, ResultCode::Denied, || (Vec::new(), String::new()));
+            self.record_rejection(&call, ResultCode::Denied, None, || {
+                (Vec::new(), String::new())
+            });
             return Err(capnp::Error::unimplemented(format!(
                 "unknown interface {interface_id:016x} method {method_id}"
             )));
@@ -797,6 +855,17 @@ impl ConnectionState {
             return Err(self.refuse(&call, exceeded.limit, || (Vec::new(), String::new())));
         }
         call.pid = self.call_pid(&target, interface_id, method_id, &params);
+        if call.pid != target.pid {
+            call.intent = self.intent_of(call.pid);
+        }
+        let admission = Self::admission_call(
+            &bundle,
+            interface_id,
+            method_id,
+            &call.action,
+            call.pid,
+            &params,
+        );
         let copy = |params: Params<any_pointer::Owned>| {
             params.get().and_then(Scratch::copy).and_then(|scratch| {
                 let sanitized =
@@ -814,7 +883,7 @@ impl ConnectionState {
                 pid = call.pid,
                 "call denied by permissions"
             );
-            self.record_rejection(&call, ResultCode::Denied, || match copy(params) {
+            self.record_rejection(&call, ResultCode::Denied, None, || match copy(params) {
                 Ok((_, sanitized)) => {
                     let hash = param_hash(&self.param_key, &sanitized.canonical);
                     (sanitized.fields, hash)
@@ -838,7 +907,9 @@ impl ConnectionState {
                     error = %error,
                     "call refused: its parameters could not be read"
                 );
-                self.record_rejection(&call, ResultCode::Denied, || (Vec::new(), String::new()));
+                self.record_rejection(&call, ResultCode::Denied, None, || {
+                    (Vec::new(), String::new())
+                });
                 return Err(error);
             }
         };
@@ -864,7 +935,144 @@ impl ConnectionState {
             waits,
             needs_token: token.is_err(),
             revocation: scope.revocation.clone(),
+            admission,
         })
+    }
+
+    fn admission_call(
+        bundle: &Bundle,
+        interface_id: u64,
+        method_id: u16,
+        action: &str,
+        pid: u64,
+        params: &Params<any_pointer::Owned>,
+    ) -> admission::Call {
+        if interface_id == dusk_interface() {
+            match method_id {
+                PROCESS_METHOD => {
+                    let program_args = params
+                        .get()
+                        .and_then(|parameters| parameters.get_as::<dusk::process_params::Reader>())
+                        .and_then(|parameters| parameters.get_program_args());
+                    let Ok(program_args) = program_args else {
+                        return admission::Call::Process {
+                            pid: None,
+                            scans_kvs: false,
+                        };
+                    };
+                    return match program_args.get_pid().which() {
+                        Ok(program_args::pid::Fixed(pid)) if pid != NO_PROCESS => {
+                            admission::Call::Process {
+                                pid: Some(pid),
+                                scans_kvs: false,
+                            }
+                        }
+                        _ => admission::Call::Process {
+                            pid: None,
+                            scans_kvs: starts_kvs_scan(bundle, program_args),
+                        },
+                    };
+                }
+                KILL_METHOD | WAITPID_METHOD => return admission::Call::Reap,
+                _ => {}
+            }
+        }
+        if action == SHELL_COMMAND {
+            admission::Call::Command { pid }
+        } else {
+            admission::Call::Other { pid }
+        }
+    }
+
+    fn intent_of(&self, pid: u64) -> Option<Arc<Intent>> {
+        self.node
+            .intended_processes()
+            .zip(self.node_key)
+            .and_then(|(table, node)| table.intent_of(node, pid))
+    }
+
+    async fn await_intent(&self, prepared: &Prepared) -> Result<(), capnp::Error> {
+        if prepared.call.direction != Direction::ClientToNode
+            || self.policy.admission_exempt_role().is_some()
+        {
+            return Ok(());
+        }
+        let (Some(table), Some(node)) = (self.node.intended_processes(), self.node_key) else {
+            return Ok(());
+        };
+        let worth_waiting = match table.would_refuse(node, prepared.admission, unix_milliseconds())
+        {
+            None | Some(Rule::NotCaughtUp) => false,
+            Some(Rule::ProcessWithoutPid) => matches!(
+                prepared.admission,
+                admission::Call::Process {
+                    scans_kvs: true,
+                    ..
+                }
+            ),
+            Some(_) => true,
+        };
+        if !worth_waiting {
+            return Ok(());
+        }
+        let fresh = table.fresh();
+        match tokio::time::timeout(
+            table.intent_wait(),
+            until_revoked(&prepared.revocation, fresh),
+        )
+        .await
+        {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                tracing::debug!(
+                    principal = %self.principal,
+                    session_id = %self.session_id,
+                    call_id = %prepared.call.call_id,
+                    action = %prepared.call.action,
+                    "the intended processes were not read to their end in time; the call is judged on what is known"
+                );
+                Ok(())
+            }
+        }
+    }
+
+    fn check_admission(&self, prepared: &Prepared) -> Result<(), Rule> {
+        if prepared.call.direction != Direction::ClientToNode {
+            return Ok(());
+        }
+        let Some(table) = self.node.intended_processes() else {
+            return Ok(());
+        };
+        let Some(node) = self.node_key else {
+            return Err(Rule::ProcessWithoutIntent);
+        };
+        table.admit(node, prepared.admission, unix_milliseconds())
+    }
+
+    fn refuse_admission(&self, prepared: &Prepared, rule: Rule) -> capnp::Error {
+        metrics::counter!("nightfall_admission_refused_total", "rule" => rule.as_str())
+            .increment(1);
+        tracing::info!(
+            principal = %self.principal,
+            session_id = %self.session_id,
+            call_id = %prepared.call.call_id,
+            action = %prepared.call.action,
+            pid = prepared.call.pid,
+            rule = rule.as_str(),
+            "call refused: no intended process allows it"
+        );
+        let mut detail = serde_json::Map::new();
+        detail.insert(
+            "rule".to_string(),
+            serde_json::Value::String(rule.as_str().to_string()),
+        );
+        self.record_rejection(&prepared.call, ResultCode::Denied, Some(detail), || {
+            (
+                prepared.sanitized.fields.clone(),
+                prepared.param_hash.clone(),
+            )
+        });
+        capnp::Error::failed(NOT_INTENDED.to_string())
     }
 
     fn pipeline(
@@ -1012,6 +1220,7 @@ impl ConnectionState {
             Err(_) => return Err(self.refuse_prepared(&prepared, "stream_wait_timeout_ms")),
         };
         self.admit(&prepared, deadline).await?;
+        self.await_intent(&prepared).await?;
         let begun = self.begin(prepared)?;
         let begun = self.wait_commit(begun).await?;
         let in_flight = self.send(begun, pipeline.take().unwrap_or_default());
@@ -1049,6 +1258,7 @@ impl ConnectionState {
         if self.dropped.get() {
             return Err(revoked());
         }
+        prepared.call.intent = self.intent_of(prepared.call.pid);
         let table = prepared.scratch.take_table();
         let (mapped, param_cap_ids) = match self.map_table(
             &scope,
@@ -1063,7 +1273,7 @@ impl ConnectionState {
                 return Err(self.refuse_prepared(&prepared, exceeded.limit));
             }
             Err(MapFailure::Refused(error)) => {
-                self.record_rejection(&prepared.call, ResultCode::Denied, || {
+                self.record_rejection(&prepared.call, ResultCode::Denied, None, || {
                     (
                         prepared.sanitized.fields.clone(),
                         prepared.param_hash.clone(),
@@ -1074,7 +1284,8 @@ impl ConnectionState {
         };
         drop(scope);
         let override_event = prepared.decision == Decision::AllowedByOverride;
-        let slots = 2 + u32::from(override_event);
+        let exempt_role = self.policy.admission_exempt_role();
+        let slots = 2 + u32::from(override_event) + u32::from(exempt_role.is_some());
         let mut reservation = self.audit.reserve(slots).map_err(|refused| {
             tracing::warn!(
                 principal = %self.principal,
@@ -1097,6 +1308,15 @@ impl ConnectionState {
         } else {
             None
         };
+        let admission_override = match (self.check_admission(&prepared), exempt_role) {
+            (Ok(()), _) => None,
+            (Err(rule), Some(role)) => Some((role.to_string(), rule, reservation.split())),
+            (Err(rule), None) => {
+                drop(reservation);
+                drop(mapped);
+                return Err(self.refuse_admission(&prepared, rule));
+            }
+        };
         let mut entry = self.base_entry(EntryKind::Call, &prepared.call);
         entry.param_fields = prepared.sanitized.fields.clone();
         entry.param_cap_ids = param_cap_ids;
@@ -1112,6 +1332,7 @@ impl ConnectionState {
         };
         if override_event {
             let mut event = self.event_entry(AuditEvent::QuarantineOverride, prepared.call.pid);
+            event.intent = prepared.call.intent.clone();
             event.call_id = Some(prepared.call.call_id.clone());
             event.action = Some(prepared.call.action.clone());
             event.cap_id = Some(prepared.call.cap_id);
@@ -1123,6 +1344,35 @@ impl ConnectionState {
                 "call on a quarantined node allowed by a quarantine override"
             );
             if let Some(slot) = override_slot
+                && let Some(commit) = slot.record(event)
+            {
+                drop(commit);
+            }
+        }
+        if let Some((role, rule, slot)) = admission_override {
+            let mut event = self.event_entry(AuditEvent::AdmissionOverride, prepared.call.pid);
+            event.intent = prepared.call.intent.clone();
+            event.call_id = Some(prepared.call.call_id.clone());
+            event.action = Some(prepared.call.action.clone());
+            event.cap_id = Some(prepared.call.cap_id);
+            let mut detail = serde_json::Map::new();
+            detail.insert("role".to_string(), serde_json::Value::String(role.clone()));
+            detail.insert(
+                "rule".to_string(),
+                serde_json::Value::String(rule.as_str().to_string()),
+            );
+            event.event_detail = Some(detail);
+            tracing::warn!(
+                principal = %self.principal,
+                session_id = %self.session_id,
+                call_id = %prepared.call.call_id,
+                action = %prepared.call.action,
+                pid = prepared.call.pid,
+                role = %role,
+                rule = rule.as_str(),
+                "call that no intended process allows forwarded by a role exempt from admission"
+            );
+            if let Some(slot) = slot
                 && let Some(commit) = slot.record(event)
             {
                 drop(commit);
@@ -1605,6 +1855,7 @@ impl Membrane {
         limits: Rc<LimitState>,
     ) -> Rc<Membrane> {
         let identity = node.identity().clone();
+        let node_key = NodeKey::parse(&identity.device_id, &identity.installation_id);
         let epoch = node.epoch();
         let session_limits = limits.session(identity.namespace_id, epoch);
         let bucket = limits.principal_bucket(&principal, identity.namespace_id, epoch);
@@ -1631,6 +1882,7 @@ impl Membrane {
         });
         let state = Rc::new(ConnectionState {
             node,
+            node_key,
             principal,
             policy,
             bundle,
@@ -1790,6 +2042,7 @@ mod tests {
             interface_id: dusk_interface(),
             method_id: 2,
             pid: NO_PROCESS,
+            intent: None,
             started: Instant::now(),
         };
         let table = |count: usize| -> CapTable {

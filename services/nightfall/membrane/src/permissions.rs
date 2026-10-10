@@ -29,6 +29,8 @@ struct RoleFile {
     reverse_allow: Vec<String>,
     #[serde(default)]
     quarantine_override: bool,
+    #[serde(default)]
+    admission_exempt: bool,
 }
 
 #[derive(Deserialize)]
@@ -121,6 +123,7 @@ struct Role {
     name: String,
     rules: Rules,
     quarantine_override: bool,
+    admission_exempt: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -195,6 +198,13 @@ impl Policy {
     pub fn role_names(&self) -> Vec<&str> {
         self.roles.iter().map(|role| role.name.as_str()).collect()
     }
+
+    pub fn admission_exempt_role(&self) -> Option<&str> {
+        self.roles
+            .iter()
+            .find(|role| role.admission_exempt)
+            .map(|role| role.name.as_str())
+    }
 }
 
 fn parse_certificate_digest(text: &str) -> anyhow::Result<[u8; 32]> {
@@ -252,6 +262,7 @@ impl Permissions {
                 name: role.name,
                 rules,
                 quarantine_override: role.quarantine_override,
+                admission_exempt: role.admission_exempt,
             };
             if roles.insert(name.clone(), parsed).is_some() {
                 bail!("the role {name} is defined twice");
@@ -451,6 +462,44 @@ roles = ["wide", "narrow"]
         assert_eq!(
             policy.reverse_allows("Stream", "send"),
             Decision::AllowedByOverride
+        );
+    }
+
+    #[test]
+    fn names_the_role_that_exempts_a_principal_from_admission() {
+        assert_eq!(
+            shipped()
+                .policy_for("operator-0", false)
+                .unwrap()
+                .admission_exempt_role(),
+            None
+        );
+        let permissions = Permissions::from_toml(
+            r#"
+[[role]]
+name = "reader"
+allow = ["Dusk.ps"]
+[[role]]
+name = "break-glass"
+allow = ["Dusk.*"]
+admission_exempt = true
+[[principal]]
+name = "operator-*"
+roles = ["reader", "break-glass"]
+[[principal]]
+name = "dawn-*"
+roles = ["reader"]
+"#,
+        )
+        .unwrap();
+        let exempt = permissions.policy_for("operator-1", false).unwrap();
+        assert_eq!(exempt.admission_exempt_role(), Some("break-glass"));
+        assert_eq!(
+            permissions
+                .policy_for("dawn-0", false)
+                .unwrap()
+                .admission_exempt_role(),
+            None
         );
     }
 

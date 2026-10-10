@@ -8,6 +8,7 @@ pub mod contracts;
 pub mod directory;
 pub mod events;
 pub mod inner;
+pub mod intended_processes;
 pub mod kafka;
 pub mod limits;
 pub mod listener;

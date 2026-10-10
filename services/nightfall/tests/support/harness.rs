@@ -31,6 +31,8 @@ pub const DEVICE: &str = "00112233445566778899aabbccddeeff";
 pub const INSTALLATION: &str = "ffeeddccbbaa99887766554433221100";
 pub const OTHER_DEVICE: &str = "0123456789abcdef0123456789abcdef";
 pub const FLEET_TOKEN: &str = "fleet token of the test fleet";
+pub const CAMPAIGN: &str = "0192f3a4-5b6c-7d8e-9f01-23456789abcd";
+pub const INTENT_PRINCIPAL: &str = "token:0192f3a4-1111-7d8e-9f01-23456789abcd";
 
 pub const PERMISSIONS: &str = r#"
 [[role]]
@@ -45,6 +47,7 @@ name = "operator"
 allow = ["Dusk.process", "Dusk.run", "Dusk.ps", "Dusk.kill", "Dusk.hostname", "Dusk.waitpid", "Dusk.time", "Dusk.programs", "Dusk.namespaceId", "Process.*", "Portal.*", "OutputPortal.*", "ShPortal.*"]
 deny = ["Dusk.settime"]
 reverse_allow = ["Stream.*", "Created.created", "ShStop.stop"]
+admission_exempt = true
 
 [[role]]
 name = "quarantine"
@@ -143,6 +146,7 @@ impl Environment {
         broker.create_topic("dusk.ledger", 2, "delete");
         broker.create_topic("dusk.enrollments", 3, "delete");
         broker.create_topic("dusk.node-state", 1, "compact");
+        broker.create_topic("dusk.intended-processes", 3, "compact");
         Environment {
             directory,
             pki,
@@ -244,6 +248,35 @@ impl Environment {
             .unwrap();
     }
 
+    pub fn intend(
+        &self,
+        installation_id: &str,
+        pid: u64,
+        max_commands: u32,
+        default_shell_commands: u32,
+    ) {
+        self.broker
+            .produce(intended_process_record(
+                "dusk.intended-processes",
+                installation_id,
+                pid,
+                max_commands,
+                default_shell_commands,
+            ))
+            .unwrap();
+    }
+
+    pub fn unintend(&self, installation_id: &str, pid: u64) {
+        self.broker
+            .produce(OutgoingRecord {
+                topic: "dusk.intended-processes".to_string(),
+                partition: None,
+                key: Some(format!("{DEVICE}/{installation_id}/{pid}")),
+                payload: None,
+            })
+            .unwrap();
+    }
+
     pub fn client_config(
         &self,
         roots: &CertificateDer<'static>,
@@ -307,6 +340,39 @@ pub fn wait_ready(instance: &Instance) {
             "nightfall did not become ready: {reason}"
         );
         std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+pub fn intended_process_record(
+    topic: &str,
+    installation_id: &str,
+    pid: u64,
+    max_commands: u32,
+    default_shell_commands: u32,
+) -> OutgoingRecord {
+    let now = time::OffsetDateTime::now_utc();
+    let format = |moment: time::OffsetDateTime| nightfall_ledger::time::format(moment);
+    let payload = serde_json::json!({
+        "schema": "dusk.intended-processes/v1",
+        "id": uuid::Uuid::now_v7().to_string(),
+        "time": format(now),
+        "pid": pid.to_string(),
+        "device_id": DEVICE,
+        "installation_id": installation_id,
+        "campaign_id": CAMPAIGN,
+        "action_kind": "run_script",
+        "principal": INTENT_PRINCIPAL,
+        "subject": format!("campaign:{CAMPAIGN}"),
+        "created_at": format(now - time::Duration::seconds(1)),
+        "expires_at": format(now + time::Duration::minutes(10)),
+        "max_commands": max_commands,
+        "default_shell_commands": default_shell_commands,
+    });
+    OutgoingRecord {
+        topic: topic.to_string(),
+        partition: None,
+        key: Some(format!("{DEVICE}/{installation_id}/{pid}")),
+        payload: Some(payload.to_string().into_bytes()),
     }
 }
 

@@ -17,10 +17,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 use support::harness::{
-    DEVICE, Environment, INSTALLATION, connect_client, free_port, link_node, local_session,
-    node_state_record, run, shutdown, wait_for_session, wait_ready, wait_until,
+    DEVICE, Environment, INSTALLATION, connect_client, free_port, intended_process_record,
+    link_node, local_session, node_state_record, run, shutdown, wait_for_session, wait_ready,
+    wait_until,
 };
-use support::node::ps;
+use support::node::{ps, run_script, shell_server_request};
 
 fn brokers() -> String {
     std::env::var("NIGHTFALL_KAFKA_TEST_BROKERS")
@@ -34,6 +35,7 @@ fn create_topics(brokers: &str, suffix: &str) -> Topics {
         ledger: format!("dusk.ledger.{suffix}"),
         enrollments: format!("dusk.enrollments.{suffix}"),
         node_state: format!("dusk.node-state.{suffix}"),
+        intended_processes: format!("dusk.intended-processes.{suffix}"),
     };
     let admin: AdminClient<DefaultClientContext> = ClientConfig::new()
         .set("bootstrap.servers", brokers)
@@ -49,6 +51,8 @@ fn create_topics(brokers: &str, suffix: &str) -> Topics {
         NewTopic::new(&topics.enrollments, 3, TopicReplication::Fixed(1))
             .set("cleanup.policy", "delete"),
         NewTopic::new(&topics.node_state, 1, TopicReplication::Fixed(1))
+            .set("cleanup.policy", "compact"),
+        NewTopic::new(&topics.intended_processes, 3, TopicReplication::Fixed(1))
             .set("cleanup.policy", "compact"),
     ];
     let created = futures::executor::block_on(admin.create_topics(
@@ -130,6 +134,33 @@ fn nightfall_runs_its_sessions_census_ledger_and_node_state_through_a_real_broke
         )
         .await;
         assert!(ps(&client.dusk).await.unwrap() > 0);
+        let intended = 0x5eed_0000_0000_0000 | u64::from(node_port);
+        let dawn = connect_client(
+            instance.addresses.inner,
+            namespace_id,
+            environment.principal("dawn-0"),
+        )
+        .await;
+        producer
+            .send(intended_process_record(
+                &topics.intended_processes,
+                INSTALLATION,
+                intended,
+                1,
+                0,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            run_script(&dawn.dusk, Some(intended), "echo intended").await,
+            ["intended"]
+        );
+        let refused = shell_server_request(&dawn.dusk, Some(intended + 1))
+            .promise
+            .await
+            .err()
+            .unwrap();
+        assert!(refused.extra.contains("denied: not intended"), "{refused}");
         producer
             .send(node_state_record(
                 &topics.node_state,

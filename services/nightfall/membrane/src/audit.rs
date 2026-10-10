@@ -1,5 +1,7 @@
+use crate::admission::Intent;
 use capnp::capability::Promise;
 use std::fmt;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntryKind {
@@ -73,6 +75,7 @@ pub enum AuditEvent {
     ChainLink,
     ChainResumed,
     QuarantineOverride,
+    AdmissionOverride,
 }
 
 impl EntryKind {
@@ -98,6 +101,7 @@ impl AuditEvent {
             AuditEvent::ChainLink => "chain_link",
             AuditEvent::ChainResumed => "chain_resumed",
             AuditEvent::QuarantineOverride => "quarantine_override",
+            AuditEvent::AdmissionOverride => "admission_override",
         }
     }
 }
@@ -117,6 +121,7 @@ pub struct AuditEntry {
     pub epoch: Option<u64>,
     pub principal: String,
     pub pid: u64,
+    pub intent: Option<Arc<Intent>>,
     pub session_id: Option<String>,
     pub call_id: Option<String>,
     pub cap_id: Option<u64>,
@@ -145,6 +150,7 @@ impl AuditEntry {
             epoch: None,
             principal: principal.into(),
             pid: 0,
+            intent: None,
             session_id: None,
             call_id: None,
             cap_id: None,
