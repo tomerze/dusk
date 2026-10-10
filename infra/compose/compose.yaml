@@ -43,6 +43,7 @@ volumes:
   ceph-demo: {}
   vector: {}
   grafana: {}
+  grafana-alerting: {}
   signoz: {}
 
 services:
@@ -400,16 +401,26 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin/password
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: mailpit:1025
+      GF_SMTP_FROM_ADDRESS: grafana@example.org
+      GF_SMTP_STARTTLS_POLICY: NoStartTLS
     depends_on:
       postgres:
         condition: service_healthy
       clickhouse-schema:
         condition: service_completed_successfully
+      grafana-alerting:
+        condition: service_completed_successfully
+      alert-receivers-init:
+        condition: service_completed_successfully
     volumes:
       - grafana:/var/lib/grafana
+      - { type: volume, source: grafana-alerting, target: /etc/grafana/provisioning/alerting/notifications.yaml, read_only: true, volume: { subpath: notifications.yaml } }
       - { <<: *secret, target: /run/secrets/grafana-admin, volume: { subpath: grafana-admin } }
       - { <<: *secret, target: /run/secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
       - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
+      - { <<: *secret, target: /run/secrets/alert-receivers, volume: { subpath: alert-receivers } }
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -590,6 +601,18 @@ services:
       - { <<: *secret, target: /etc/twilight/pki/ledger-verify-jwks.json, volume: { subpath: nightfall-ledger-verify/ledger-verify-jwks.json } }
       - { <<: *secret, target: /etc/twilight/secrets/postgres, volume: { subpath: postgres-twilight } }
       - { <<: *secret, target: /run/secrets/alert-receivers, volume: { subpath: alert-receivers } }
+
+  grafana-alerting:
+    image: dusk-twilight:dev
+    build: *twilight-build
+    user: "0:0"
+    command: ["grafana-alerting", "--output", "/provisioning/notifications.yaml"]
+    network_mode: none
+    environment:
+      TWILIGHT__INSTANCE: grafana-alerting
+    volumes:
+      - ./twilight.yaml:/etc/twilight/twilight.yaml:ro
+      - grafana-alerting:/provisioning
 
   twilight:
     <<: [*restart, *logging]
