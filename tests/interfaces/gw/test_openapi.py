@@ -1,4 +1,4 @@
-"""The API describes itself: the OpenAPI document and the Swagger UI over it.
+"""The API describes itself: the OpenAPI document.
 
 The document is generated from the same models that validate requests, so these
 tests are not checking that it was written down correctly - they check the things
@@ -8,8 +8,6 @@ API cannot deliver.
 """
 
 from __future__ import annotations
-
-import re
 
 import pytest
 from starlette.testclient import TestClient
@@ -142,77 +140,6 @@ def test_mcp_is_not_described_by_the_rest_document(spec: dict):
     assert not any(path.startswith("/mcp") for path in spec["paths"])
 
 
-def test_the_browsable_interface_is_served(client: TestClient):
-    response = client.get("/v1/docs")
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/html")
-    # It has to point at the document under the mount, not at the root, or the
-    # page renders empty.
-    assert "/v1/openapi.json" in response.text
-
-
-def test_the_browsable_interface_reaches_nothing_outside_this_gateway(
-    client: TestClient,
-):
-    """The property that makes `/v1/docs` usable on an air-gapped host.
-
-    Not "the assets are vendored" - that is the mechanism. This is the outcome:
-    nothing on the page is fetched from anywhere but this process, so it renders
-    the same with no route to the internet. FastAPI's built-in page would fail
-    this on three counts: its script, its stylesheet, and its favicon.
-    """
-    page = client.get("/v1/docs").text
-
-    external = re.findall(r"""["'(](https?://[^"')\s]+)""", page)
-
-    assert external == [], external
-
-
-def test_the_swagger_validator_badge_is_turned_off(client: TestClient):
-    """Swagger UI phones a third party for the badge unless told not to.
-
-    Its default ``validatorUrl`` is ``validator.swagger.io``, which it is handed
-    the address of this API's document - a request that cannot succeed on an
-    isolated network, and one that hands an internal API's URL to a stranger
-    anywhere else. The setting lives inside the page's script, not in a src or
-    href, so the external-URL check above does not cover it.
-    """
-    page = client.get("/v1/docs").text
-
-    assert '"validatorUrl": null' in page
-    assert "validator.swagger.io" not in page
-
-
-@pytest.mark.parametrize(
-    ("asset", "content_type"),
-    [
-        ("swagger-ui-bundle.js", "javascript"),
-        ("swagger-ui.css", "css"),
-    ],
-)
-def test_the_vendored_assets_the_page_asks_for_are_served(
-    client: TestClient, asset: str, content_type: str
-):
-    referenced = f"/v1/static/{asset}"
-    assert referenced in client.get("/v1/docs").text
-
-    response = client.get(referenced)
-
-    assert response.status_code == 200
-    assert content_type in response.headers["content-type"]
-    assert len(response.content) > 10_000
-
-
-def test_the_vendored_stylesheet_inlines_its_images(client: TestClient):
-    # A swagger-ui build whose CSS fetched its icons instead of inlining them
-    # would put the page back on the network without any of the above failing.
-    stylesheet = client.get("/v1/static/swagger-ui.css").text
-
-    fetched = [
-        reference
-        for reference in re.findall(r"url\(([^)]*)\)", stylesheet)
-        if not reference.lstrip("\"'").startswith("data:")
-    ]
-
-    assert fetched == [], fetched
+@pytest.mark.parametrize("path", ["/v1/docs", "/v1/static/swagger-ui.css"])
+def test_no_browsable_page_is_served(client: TestClient, path: str):
+    assert client.get(path).status_code == 404

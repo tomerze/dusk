@@ -56,7 +56,6 @@ fn test_gateway_rest_api_over_http() {
 
     let code = format!(
         r#"
-import re
 import socket
 import subprocess
 import sys
@@ -88,18 +87,6 @@ try:
     assert sorted(specification.json()["paths"]) == [
         "/connect", "/disconnect", "/help", "/help/{{program}}", "/sh", "/sh/stream",
     ], sorted(specification.json()["paths"])
-
-    swagger = httpx.get(base + "/v1/docs")
-    assert swagger.status_code == 200, swagger.text
-    assert "/v1/openapi.json" in swagger.text
-    # Nothing on the docs page may come from anywhere but the gateway, and the
-    # assets it does ask for have to be there: this is the check that a wheel
-    # missing its vendored Swagger UI fails.
-    assert not re.findall(r'''["'(](https?://[^"')\s]+)''', swagger.text), swagger.text
-    for asset in ("swagger-ui-bundle.js", "swagger-ui.css"):
-        served = httpx.get(base + "/v1/static/" + asset)
-        assert served.status_code == 200, asset
-        assert len(served.content) > 10000, (asset, len(served.content))
 
     opened = httpx.post(base + "/v1/connect", json={{"host": "{address}", "port": {port}}})
     assert opened.status_code == 200, opened.text

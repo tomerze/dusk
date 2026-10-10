@@ -2,7 +2,7 @@
 
 Dusk ships an **API gateway** - `dusk_gw` - that puts a dusk node's [shell](shell.md) programs behind HTTP. It serves two surfaces from one process:
 
-- a **REST API** under `/v1`, one endpoint per method of the [Python `Dusk` class](../sdk-reference/python-api.md), for scripts, dashboards, and anything that speaks HTTP - self-describing, with an [OpenAPI document and a Swagger UI](#openapi-and-swagger-ui);
+- a **REST API** under `/v1`, one endpoint per method of the [Python `Dusk` class](../sdk-reference/python-api.md), for scripts, dashboards, and anything that speaks HTTP - self-describing, with an [OpenAPI document](#openapi);
 - an **[MCP](https://modelcontextprotocol.io) server** at `/mcp`, one tool per dusk program, for an LLM agent or an IDE.
 
 Both drive [Base](../getting-started/concepts/base.md) programs on nodes - much like the interactive `dusk` CLI, but over the network and without a terminal.
@@ -75,22 +75,17 @@ curl -s localhost:9100/v1/help
 curl -s localhost:9100/v1/help/logs
 ```
 
-### OpenAPI and Swagger UI
+### OpenAPI
 
-The API describes itself. `GET /v1/openapi.json` is an OpenAPI 3.1 document, and `GET /v1/docs` is a **Swagger UI** over it - open it in a browser to read the endpoints and call them against a live node.
+The API describes itself. `GET /v1/openapi.json` is an OpenAPI 3.1 document.
 
 ```bash
-curl -s localhost:9100/v1/openapi.json     # the document
-open http://localhost:9100/v1/docs         # the browsable interface
+curl -s localhost:9100/v1/openapi.json
 ```
 
 The document is generated from the same pydantic models that validate incoming requests, so it cannot drift from what the gateway actually accepts. It covers `/v1` only - MCP negotiates its own capabilities in the protocol handshake and is not described here.
 
-Point any OpenAPI client generator at `/v1/openapi.json` to get a typed client in your language.
-
-**The docs page needs no internet.** Swagger UI's JavaScript and CSS are vendored into the `dusk` package and served by the gateway itself from `/v1/static/`, and the page requests nothing from anywhere else - no CDN, no web font, not even a favicon. It renders identically on a host with no route off its own network, which is where a fleet usually sits. The gateway's tests assert this by parsing the page and failing on any external URL, so it cannot regress quietly.
-
-The vendored copy is `swagger-ui-dist` 5.32.14; `dusk/src/dusk_py/python/dusk/gw/static/README.md` records the file hashes and how to update them.
+Point any OpenAPI client generator at `/v1/openapi.json` to get a typed client in your language, or open it in any OpenAPI viewer to read the endpoints.
 
 ### Errors
 
@@ -277,7 +272,7 @@ site = Starlette(
 )
 ```
 
-The REST API is then at `/dusk/v1/…` and MCP at `/dusk/mcp`. The OpenAPI document, the Swagger UI and its assets follow the mount by themselves - the document's `servers` becomes `/dusk/v1`, so a generated client targets the right prefix without being told.
+The REST API is then at `/dusk/v1/…` and MCP at `/dusk/mcp`. The OpenAPI document follows the mount by itself - the document's `servers` becomes `/dusk/v1`, so a generated client targets the right prefix without being told.
 
 Forwarding the lifespan is also what closes the gateway's connections when your application shuts down.
 
@@ -306,7 +301,7 @@ The last two are what let the gateway's own tests run with no node and no compil
 
 Your `connect` opens the connection its own way and passes it to `registry.register(owner, connection)`, which returns the descriptor and whether this is that owner's first connection. A connection needs only `Dusk`'s `sh(command)` and `disconnect()`. An MCP tool registers under `context.session` and, on that session's first connection, calls `dusk.gw.mcp.close_with_session(registry, context.session)` straight after `register`, with no `await` in between. That closes the session's connections when it ends; a cancellation at an `await` between the two would leave the connection open until the gateway stops.
 
-The REST app's `description`, the text at the top of its OpenAPI document and Swagger UI page, still says to connect with a host and port; set `description` on the FastAPI app `rest.build_application` returns to say how your `/connect` works.
+The REST app's `description`, the text at the top of its OpenAPI document, still says to connect with a host and port; set `description` on the FastAPI app `rest.build_application` returns to say how your `/connect` works.
 
 Put the two together the way `app()` does: set `DUSK_NON_INTERACTIVE=1` in the process (see [No interactive views](#no-interactive-views)), mount the REST app at `/v1` on the MCP app, whose lifespan runs MCP's session manager, and call `registry.disconnect_all()` when that lifespan ends.
 
