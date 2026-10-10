@@ -25,6 +25,10 @@ use crate::limits::PenaltyBox;
 use crate::server::{ConnectionInfo, Provisioning};
 use crate::state::{Lifecycle, NodeStateView};
 use crate::step_ca::{StepCaClient, StepCaConfig};
+use crate::tpm::Evidence;
+use crate::tpm::fixtures::{
+    Authority, activate, endorsement_key_public, endorsement_private_key, modulus_of, node_key_of,
+};
 
 const KEY: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
 const INSTALLATION: &str = "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70";
@@ -150,6 +154,7 @@ async fn harness_with(adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaCo
         .unwrap(),
         device_id_key: DeviceIdKey::from_hex(KEY).unwrap(),
         fleet_client_roots: vec![step_ca.authority.root.clone()],
+        endorsement_roots: Vec::new(),
         challenge_ttl: Duration::from_secs(300),
         challenge_capacity: 1000,
         renew_grace: Duration::from_secs(90 * 24 * 3600),
@@ -206,6 +211,8 @@ struct Assigned {
     installation_id: String,
     challenge: Vec<u8>,
     expires_unix_ms: u64,
+    credential_blob: Vec<u8>,
+    encrypted_secret: Vec<u8>,
 }
 
 struct Issued {
@@ -250,7 +257,11 @@ fn set_credential(
     }
 }
 
-fn set_device(mut device: crate::provision_capnp::device_report::Builder<'_>, fingerprint: &[u8]) {
+fn set_device(
+    mut device: crate::provision_capnp::device_report::Builder<'_>,
+    fingerprint: &[u8],
+    tpm: Option<&Evidence>,
+) {
     device.set_hardware_fingerprint(fingerprint);
     device.set_installation_hint("");
     device.set_dusk_version("0.1.0");
@@ -258,16 +269,30 @@ fn set_device(mut device: crate::provision_capnp::device_report::Builder<'_>, fi
     device.set_target_os("linux");
     device.set_target_arch("x86_64");
     device.set_hostname("kiosk-0042");
+    if let Some(evidence) = tpm {
+        let mut attestation = device.init_tpm();
+        attestation.set_endorsement_key(&evidence.endorsement_key);
+        attestation.set_endorsement_certificate(&evidence.endorsement_certificate);
+        let mut chain =
+            attestation.reborrow().init_endorsement_certificate_chain(
+                evidence.endorsement_certificate_chain.len() as u32,
+            );
+        for (index, certificate) in evidence.endorsement_certificate_chain.iter().enumerate() {
+            chain.set(index as u32, certificate);
+        }
+        attestation.set_node_key(&evidence.node_key);
+    }
 }
 
-async fn assign(
+async fn assign_device(
     client: &provisioning::Client,
     credential: Credential<'_>,
     fingerprint: &[u8],
+    tpm: Option<&Evidence>,
 ) -> Result<Assigned, capnp::Error> {
     let mut request = client.assign_request();
     set_credential(request.get().init_credential(), credential);
-    set_device(request.get().init_device(), fingerprint);
+    set_device(request.get().init_device(), fingerprint, tpm);
     let response = request.send().promise.await?;
     let assignment = response.get()?.get_assignment()?;
     Ok(Assigned {
@@ -275,7 +300,17 @@ async fn assign(
         installation_id: String::from(assignment.get_installation_id()?.to_str()?),
         challenge: assignment.get_challenge()?.to_vec(),
         expires_unix_ms: assignment.get_challenge_expires_unix_ms(),
+        credential_blob: assignment.get_credential_blob()?.to_vec(),
+        encrypted_secret: assignment.get_encrypted_secret()?.to_vec(),
     })
+}
+
+async fn assign(
+    client: &provisioning::Client,
+    credential: Credential<'_>,
+    fingerprint: &[u8],
+) -> Result<Assigned, capnp::Error> {
+    assign_device(client, credential, fingerprint, None).await
 }
 
 fn read_issued(issued: crate::provision_capnp::issued::Reader<'_>) -> Result<Issued, capnp::Error> {
@@ -290,6 +325,23 @@ fn read_issued(issued: crate::provision_capnp::issued::Reader<'_>) -> Result<Iss
     })
 }
 
+async fn enroll_device(
+    client: &provisioning::Client,
+    credential: Credential<'_>,
+    fingerprint: &[u8],
+    tpm: Option<&Evidence>,
+    challenge: &[u8],
+    csr_der: &[u8],
+) -> Result<Issued, capnp::Error> {
+    let mut request = client.enroll_request();
+    set_credential(request.get().init_credential(), credential);
+    set_device(request.get().init_device(), fingerprint, tpm);
+    request.get().set_challenge(challenge);
+    request.get().set_csr(csr_der);
+    let response = request.send().promise.await?;
+    read_issued(response.get()?.get_issued()?)
+}
+
 async fn enroll(
     client: &provisioning::Client,
     credential: Credential<'_>,
@@ -297,13 +349,7 @@ async fn enroll(
     challenge: &[u8],
     csr_der: &[u8],
 ) -> Result<Issued, capnp::Error> {
-    let mut request = client.enroll_request();
-    set_credential(request.get().init_credential(), credential);
-    set_device(request.get().init_device(), fingerprint);
-    request.get().set_challenge(challenge);
-    request.get().set_csr(csr_der);
-    let response = request.send().promise.await?;
-    read_issued(response.get()?.get_issued()?)
+    enroll_device(client, credential, fingerprint, None, challenge, csr_der).await
 }
 
 async fn renew(client: &provisioning::Client, csr_der: &[u8]) -> Result<Issued, capnp::Error> {
@@ -677,7 +723,7 @@ async fn refuses_a_request_it_cannot_read_and_records_it() {
         let token = credential.reborrow().init_fleet_token(2);
         token.as_bytes_mut().copy_from_slice(&[0xff, 0xfe]);
     }
-    set_device(assign_request.get().init_device(), &[14u8; 32]);
+    set_device(assign_request.get().init_device(), &[14u8; 32], None);
     denied_with(assign_request.send().promise.await, "malformed request");
     let event = harness.events.last();
     assert_eq!(event.outcome, Outcome::Denied);
@@ -1051,6 +1097,255 @@ async fn reports_a_device_id_enrolling_from_many_addresses() {
         *harness.events.collisions.lock().unwrap(),
         vec![(device_id, 21, 7)]
     );
+}
+
+fn tpm_device(root: &Authority) -> (Evidence, rcgen::KeyPair) {
+    let modulus = modulus_of(endorsement_private_key());
+    let node_key = p256();
+    let now = OffsetDateTime::now_utc();
+    let evidence = Evidence {
+        endorsement_key: endorsement_key_public(&modulus),
+        endorsement_certificate: root.endorsement_certificate(
+            &modulus,
+            now - time::Duration::days(1),
+            now + time::Duration::days(3650),
+            true,
+        ),
+        endorsement_certificate_chain: Vec::new(),
+        node_key: node_key_of(&node_key),
+    };
+    (evidence, node_key)
+}
+
+fn node_key_name(evidence: &Evidence) -> Vec<u8> {
+    let mut name = vec![0x00, 0x0b];
+    name.extend_from_slice(&sha256(&evidence.node_key));
+    name
+}
+
+async fn tpm_harness(root: &Authority) -> Harness {
+    let certificate = root.certificate.clone();
+    harness_with(move |config, _| {
+        config.endorsement_roots = vec![CertificateDer::from(certificate)];
+    })
+    .await
+}
+
+#[tokio::test]
+async fn enrolls_a_tpm_attested_node_and_marks_its_certificate() {
+    let root = Authority::root("tpm manufacturer");
+    let harness = tpm_harness(&root).await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let (evidence, node_key) = tpm_device(&root);
+    let fingerprint = sha256(&evidence.endorsement_key);
+    let assigned = assign_device(
+        &client,
+        Credential::Fleet("retail secret"),
+        &fingerprint,
+        Some(&evidence),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        assigned.device_id,
+        harness.device_key.device_id(&fingerprint)
+    );
+    assert!(assigned.challenge.is_empty());
+    let secret = activate(
+        endorsement_private_key(),
+        &node_key_name(&evidence),
+        &assigned.credential_blob,
+        &assigned.encrypted_secret,
+    )
+    .unwrap();
+    assert_eq!(secret.len(), 32);
+    let request = csr(
+        &node_key,
+        None,
+        &uris(&assigned.device_id, &assigned.installation_id),
+    );
+    let issued = enroll_device(
+        &client,
+        Credential::Fleet("retail secret"),
+        &fingerprint,
+        Some(&evidence),
+        &secret,
+        &request,
+    )
+    .await
+    .unwrap();
+    let mut expected = BTreeSet::from_iter(uris(&assigned.device_id, &assigned.installation_id));
+    expected.insert(tenant_uri("retail-eu"));
+    expected.insert(String::from(TPM_ATTESTATION_URI));
+    assert_eq!(leaf_uris(&issued.chain[0]), expected);
+    let claims = harness
+        .step_ca
+        .tokens
+        .lock()
+        .unwrap()
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(claims["attestation"], "tpm");
+    denied_with(
+        enroll_device(
+            &client,
+            Credential::Fleet("retail secret"),
+            &fingerprint,
+            Some(&evidence),
+            &secret,
+            &request,
+        )
+        .await,
+        "invalid challenge",
+    );
+    let events = harness.events.events.lock().unwrap().clone();
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| (event.outcome, event.reason.clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            (Outcome::Assigned, None),
+            (Outcome::Issued, None),
+            (Outcome::Denied, Some(String::from("invalid_challenge"))),
+        ]
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| event.credential_kind == crate::credential::CredentialKind::FleetToken)
+    );
+    assert_eq!(
+        events[1].hardware_fingerprint_hash,
+        Some(hex::encode(sha256(&fingerprint)))
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn refuses_a_csr_for_another_key_and_then_the_released_secret() {
+    let root = Authority::root("tpm manufacturer");
+    let harness = tpm_harness(&root).await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let (evidence, node_key) = tpm_device(&root);
+    let fingerprint = sha256(&evidence.endorsement_key);
+    let assigned = assign_device(
+        &client,
+        Credential::Fleet("lab secret"),
+        &fingerprint,
+        Some(&evidence),
+    )
+    .await
+    .unwrap();
+    let secret = activate(
+        endorsement_private_key(),
+        &node_key_name(&evidence),
+        &assigned.credential_blob,
+        &assigned.encrypted_secret,
+    )
+    .unwrap();
+    let names = uris(&assigned.device_id, &assigned.installation_id);
+    denied_with(
+        enroll_device(
+            &client,
+            Credential::Fleet("lab secret"),
+            &fingerprint,
+            Some(&evidence),
+            &secret,
+            &csr(&p256(), None, &names),
+        )
+        .await,
+        "not the attested TPM key",
+    );
+    denied_with(
+        enroll_device(
+            &client,
+            Credential::Fleet("lab secret"),
+            &fingerprint,
+            Some(&evidence),
+            &secret,
+            &csr(&node_key, None, &names),
+        )
+        .await,
+        "invalid challenge",
+    );
+    assert_eq!(
+        harness.events.outcomes(),
+        vec![
+            (Outcome::Assigned, None),
+            (Outcome::Denied, Some(String::from("tpm_key_mismatch"))),
+            (Outcome::Denied, Some(String::from("invalid_challenge"))),
+        ]
+    );
+    assert!(harness.step_ca.tokens.lock().unwrap().is_empty());
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn refuses_tpm_evidence_it_cannot_verify() {
+    let root = Authority::root("tpm manufacturer");
+    let (evidence, _) = tpm_device(&root);
+    let fingerprint = sha256(&evidence.endorsement_key);
+
+    let unconfigured = harness().await;
+    let client = unconfigured.client(ADDRESS, Vec::new());
+    denied_with(
+        assign_device(
+            &client,
+            Credential::Fleet("lab secret"),
+            &fingerprint,
+            Some(&evidence),
+        )
+        .await,
+        "trusts no TPM endorsement key roots",
+    );
+    assert_eq!(
+        unconfigured.events.last().reason.as_deref(),
+        Some("tpm_roots_missing")
+    );
+
+    let harness = tpm_harness(&root).await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let stranger = Authority::root("another manufacturer");
+    let (foreign, _) = tpm_device(&stranger);
+    let mut node_key = evidence.node_key.clone();
+    node_key[5] |= 0x01;
+    let cases = [
+        (
+            Evidence {
+                endorsement_certificate: Vec::new(),
+                ..evidence.clone()
+            },
+            fingerprint,
+            "tpm_certificate_missing",
+        ),
+        (evidence.clone(), [7u8; 32], "tpm_fingerprint_mismatch"),
+        (foreign, fingerprint, "tpm_certificate_untrusted"),
+        (
+            Evidence {
+                node_key,
+                ..evidence.clone()
+            },
+            fingerprint,
+            "tpm_key_template",
+        ),
+    ];
+    for (evidence, fingerprint, reason) in &cases {
+        denied_with(
+            assign_device(
+                &client,
+                Credential::Fleet("lab secret"),
+                fingerprint,
+                Some(evidence),
+            )
+            .await,
+            "denied",
+        );
+        assert_eq!(harness.events.last().reason.as_deref(), Some(*reason));
+    }
+    assert!(harness.penalties.failures.lock().unwrap().is_empty());
+    assert_contract(&harness.events);
 }
 
 #[tokio::test]

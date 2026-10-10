@@ -7,7 +7,7 @@ use crate::provision_capnp::{RENEW_BEYOND_GRACE, credential, device_report, prov
 use dusk_capnp::capnp;
 use dusk_capnp::capnp::capability::Promise;
 use ring::rand::{SecureRandom, SystemRandom};
-use rustls_pki_types::CertificateDer;
+use rustls_pki_types::{CertificateDer, TrustAnchor, UnixTime};
 use tracing::{error, info, warn};
 
 use crate::challenge::{Binding, ChallengeStore};
@@ -26,6 +26,7 @@ use crate::limits::{CollisionTracker, EnrollmentBuckets, PenaltyBox, RateWindow,
 use crate::renew::FleetClientTrust;
 use crate::state::NodeStateView;
 use crate::step_ca::{SignRequest, SignedCertificate, StepCaClient, StepCaError};
+use crate::tpm::{self, Evidence};
 
 pub const CREDENTIAL_BUCKETS: usize = 100_000;
 pub const RENEW_IDENTITIES: usize = 262_144;
@@ -123,6 +124,7 @@ struct Report {
     target_os: Option<String>,
     target_arch: Option<String>,
     hostname: Option<String>,
+    tpm: Option<Evidence>,
 }
 
 impl Report {
@@ -141,6 +143,11 @@ impl Report {
             target_os: text(reader.get_target_os()),
             target_arch: text(reader.get_target_arch()),
             hostname: text(reader.get_hostname()),
+            tpm: if reader.has_tpm() {
+                Some(Evidence::read(reader.get_tpm()?)?)
+            } else {
+                None
+            },
         })
     }
 }
@@ -204,11 +211,20 @@ impl Attempt {
     }
 }
 
+struct Assigned {
+    device_id: String,
+    installation_id: String,
+    challenge: [u8; 32],
+    expires_unix_ms: u64,
+    credential: Option<(Vec<u8>, Vec<u8>)>,
+}
+
 pub struct Provisioning {
     instance: String,
     fleet_tokens: FleetTokens,
     install_token_keys: InstallTokenKeys,
     device_id_key: DeviceIdKey,
+    endorsement_roots: Vec<TrustAnchor<'static>>,
     renew_grace: Duration,
     certificate_lifetime: Duration,
     enrollment_alert_per_minute: u64,
@@ -259,6 +275,17 @@ impl Provisioning {
         penalty_box: Arc<dyn PenaltyBox>,
     ) -> Result<Arc<Provisioning>, String> {
         let trust = Arc::new(FleetClientTrust::new(&config.fleet_client_roots)?);
+        let endorsement_roots = config
+            .endorsement_roots
+            .iter()
+            .map(|root| {
+                webpki::anchor_from_trusted_cert(root)
+                    .map(|anchor| anchor.to_owned())
+                    .map_err(|error| {
+                        format!("a TPM endorsement root is not a usable trust anchor: {error}")
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         if step_ca.certificate_lifetime() != config.certificate_lifetime {
             return Err(format!(
                 "the step-ca client asks for {:?} certificates but provisioning expects {:?}",
@@ -271,6 +298,7 @@ impl Provisioning {
             instance = %config.instance,
             fleet_tokens = config.fleet_tokens.len(),
             install_token_keys = config.install_token_keys.len(),
+            tpm_endorsement_roots = endorsement_roots.len(),
             "provisioning ready"
         );
         Ok(Arc::new(Provisioning {
@@ -278,6 +306,7 @@ impl Provisioning {
             fleet_tokens: config.fleet_tokens,
             install_token_keys: config.install_token_keys,
             device_id_key: config.device_id_key,
+            endorsement_roots,
             renew_grace: config.renew_grace,
             certificate_lifetime: config.certificate_lifetime,
             enrollment_alert_per_minute: config.enrollment_alert_per_minute,
@@ -529,15 +558,32 @@ impl Provisioning {
         Ok(())
     }
 
+    fn attest(&self, evidence: &Evidence, report: &Report) -> Result<tpm::Attested, Refusal> {
+        tpm::attest(
+            evidence,
+            &report.fingerprint,
+            &self.endorsement_roots,
+            UnixTime::now(),
+        )
+        .map_err(|failure| {
+            Refusal::denied(failure.reason(), failure.to_string(), &failure.to_string())
+        })
+    }
+
     fn assign(
         &self,
         connection: &ConnectionInfo,
         presented: &Presented,
         report: &Report,
         attempt: &mut Attempt,
-    ) -> Result<(String, String, [u8; 32], u64), Refusal> {
+    ) -> Result<Assigned, Refusal> {
         self.admit(connection, presented, Operation::Assign)?;
         self.verify_credential(connection, presented, attempt)?;
+        let attested = report
+            .tpm
+            .as_ref()
+            .map(|evidence| self.attest(evidence, report))
+            .transpose()?;
         let device_id = self.check_fingerprint(report)?;
         let installation_id = new_installation_id(&self.random).map_err(|_| {
             Refusal::failure(
@@ -556,11 +602,40 @@ impl Provisioning {
                 capnp::Error::failed(String::from("internal error")),
             )
         })?;
+        let credential = match &attested {
+            Some(attested) => {
+                let mut seed = [0u8; tpm::SEED_BYTES];
+                self.random.fill(&mut seed).map_err(|_| {
+                    Refusal::failure(
+                        "random_source",
+                        "the system random source failed",
+                        capnp::Error::failed(String::from("internal error")),
+                    )
+                })?;
+                Some(
+                    tpm::make_credential(
+                        &attested.endorsement_modulus,
+                        &attested.node_key_name,
+                        &challenge,
+                        &seed,
+                    )
+                    .map_err(|error| {
+                        Refusal::failure(
+                            "tpm_credential",
+                            format!("making the TPM credential failed: {error}"),
+                            capnp::Error::failed(String::from("internal error")),
+                        )
+                    })?,
+                )
+            }
+            None => None,
+        };
         let binding = Binding {
             credential_digest: sha256(presented.secret()),
             fingerprint_digest: sha256(&report.fingerprint),
             device_id: device_id.clone(),
             installation_id: installation_id.clone(),
+            node_key: attested.map(|attested| attested.node_key_public_key_info),
         };
         self.challenges
             .issue(challenge, binding, Instant::now())
@@ -581,7 +656,14 @@ impl Provisioning {
         if let Some(hint) = &report.installation_hint {
             info!(device_id = %device_id, installation_id = %installation_id, installation_hint = %hint, "node reported a previous installation");
         }
-        Ok((device_id, installation_id, challenge, expires_unix_ms))
+        attempt.tpm_bound = credential.is_some();
+        Ok(Assigned {
+            device_id,
+            installation_id,
+            challenge,
+            expires_unix_ms,
+            credential,
+        })
     }
 
     fn prepare_enroll(
@@ -622,6 +704,16 @@ impl Provisioning {
         let validated = validate_csr(csr, &device_id, &installation_id).map_err(|failure| {
             Refusal::denied("invalid_csr", failure.to_string(), &failure.to_string())
         })?;
+        if let Some(node_key) = &binding.node_key
+            && validated.public_key != *node_key
+        {
+            return Err(Refusal::denied(
+                "tpm_key_mismatch",
+                "the CSR carries another key than the attested TPM key",
+                "the CSR key is not the attested TPM key",
+            ));
+        }
+        attempt.tpm_bound = binding.node_key.is_some();
         let token_id = match &verified.install_token {
             Some(install_token) => install_token.one_time_token_id(),
             None => random_hex(&self.random, 32)?,
@@ -868,12 +960,18 @@ impl provisioning::Server for ProvisioningServer {
         };
         attempt.report(&report);
         match shared.assign(connection, &presented, &report, &mut attempt) {
-            Ok((device_id, installation_id, challenge, expires_unix_ms)) => {
+            Ok(assigned) => {
                 let mut assignment = results.get().init_assignment();
-                assignment.set_device_id(device_id.as_str());
-                assignment.set_installation_id(installation_id.as_str());
-                assignment.set_challenge(&challenge);
-                assignment.set_challenge_expires_unix_ms(expires_unix_ms);
+                assignment.set_device_id(assigned.device_id.as_str());
+                assignment.set_installation_id(assigned.installation_id.as_str());
+                match &assigned.credential {
+                    Some((credential_blob, encrypted_secret)) => {
+                        assignment.set_credential_blob(credential_blob);
+                        assignment.set_encrypted_secret(encrypted_secret);
+                    }
+                    None => assignment.set_challenge(&assigned.challenge),
+                }
+                assignment.set_challenge_expires_unix_ms(assigned.expires_unix_ms);
                 attempt.event.outcome = Outcome::Assigned;
                 shared.finish(attempt, Ok(()));
                 Promise::ok(())

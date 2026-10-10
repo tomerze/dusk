@@ -5,17 +5,21 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
+aes = "0.8"
 base64 = "0.22"
+cfb-mode = "0.8"
 dusk_capnp = { path = "../../../dusk/src/dusk_capnp", public = true }
 dusk_program_nightfall = { path = "../../../base/nightfall", public = true }
 hex = "0.4"
 metrics = "0.24"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 ring = "0.17"
+rsa = { version = "0.9", default-features = false, features = ["getrandom", "std", "u64_digit"] }
 rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std", "tls12"], public = true }
 rustls-pki-types = { version = "1.12", features = ["std"], public = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", public = true }
+sha2 = "0.10"
 thiserror = "2"
 time = { version = "0.3.41", features = ["formatting", "macros"] }
 tokio = { version = "1.47.1", features = ["sync", "time"] }

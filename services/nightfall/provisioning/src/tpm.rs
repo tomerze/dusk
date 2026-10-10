@@ -1,6 +1,10 @@
 use std::time::Duration;
 
+use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use dusk_capnp::capnp;
+use ring::hmac;
+use rsa::rand_core::OsRng;
+use rsa::{BigUint, Oaep, RsaPublicKey};
 use rustls_pki_types::{CertificateDer, TrustAnchor, UnixTime};
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
@@ -10,6 +14,7 @@ use crate::credential::sha256;
 use crate::provision_capnp::tpm_attestation;
 
 pub const ENDORSEMENT_KEY_CERTIFICATE_USAGE: &[u8] = &[0x67, 0x81, 0x05, 0x08, 0x01];
+pub const SEED_BYTES: usize = 32;
 
 const ENDORSEMENT_KEY_TEMPLATE: [u8; 58] = [
     0x00, 0x01, 0x00, 0x0b, 0x00, 0x03, 0x00, 0xb2, 0x00, 0x20, 0x83, 0x71, 0x97, 0x67, 0x44, 0x84,
@@ -29,6 +34,7 @@ const P256_PUBLIC_KEY_INFO: [u8; 26] = [
 ];
 const SHA256_ALGORITHM: [u8; 2] = [0x00, 0x0b];
 const RSA_EXPONENT: [u8; 3] = [0x01, 0x00, 0x01];
+const IDENTITY_LABEL: &str = "IDENTITY\0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Evidence {
@@ -223,12 +229,75 @@ pub fn attest(
     })
 }
 
+fn kdf_a<const BYTES: usize>(
+    key: &[u8],
+    label: &[u8],
+    context_u: &[u8],
+    context_v: &[u8],
+) -> [u8; BYTES] {
+    let key = hmac::Key::new(hmac::HMAC_SHA256, key);
+    let bits = (BYTES * 8) as u32;
+    let mut output = [0u8; BYTES];
+    for (counter, chunk) in (1u32..).zip(output.chunks_mut(32)) {
+        let mut context = hmac::Context::with_key(&key);
+        context.update(&counter.to_be_bytes());
+        context.update(label);
+        context.update(&[0]);
+        context.update(context_u);
+        context.update(context_v);
+        context.update(&bits.to_be_bytes());
+        chunk.copy_from_slice(&context.sign().as_ref()[..chunk.len()]);
+    }
+    output
+}
+
+fn credential_blob(seed: &[u8; SEED_BYTES], name: &[u8], secret: &[u8; 32]) -> Vec<u8> {
+    let storage_key = kdf_a::<16>(seed, b"STORAGE", name, &[]);
+    let mut identity = Vec::with_capacity(2 + secret.len());
+    identity.extend_from_slice(&(secret.len() as u16).to_be_bytes());
+    identity.extend_from_slice(secret);
+    cfb_mode::Encryptor::<aes::Aes128>::new(&storage_key.into(), &[0u8; 16].into())
+        .encrypt(&mut identity);
+    let integrity_key = kdf_a::<32>(seed, b"INTEGRITY", &[], &[]);
+    let mut integrity = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &integrity_key));
+    integrity.update(&identity);
+    integrity.update(name);
+    let mut blob = Vec::with_capacity(2 + 32 + identity.len());
+    blob.extend_from_slice(&32u16.to_be_bytes());
+    blob.extend_from_slice(integrity.sign().as_ref());
+    blob.extend_from_slice(&identity);
+    blob
+}
+
+pub(crate) fn make_credential(
+    endorsement_modulus: &[u8],
+    name: &[u8],
+    secret: &[u8; 32],
+    seed: &[u8; SEED_BYTES],
+) -> Result<(Vec<u8>, Vec<u8>), rsa::Error> {
+    let endorsement_key = RsaPublicKey::new(
+        BigUint::from_bytes_be(endorsement_modulus),
+        BigUint::from_bytes_be(&RSA_EXPONENT),
+    )?;
+    let encrypted_secret = endorsement_key.encrypt(
+        &mut OsRng,
+        Oaep::new_with_label::<sha2::Sha256, _>(IDENTITY_LABEL),
+        seed,
+    )?;
+    Ok((credential_blob(seed, name, secret), encrypted_secret))
+}
+
 #[cfg(test)]
 pub(crate) mod fixtures {
+    use std::sync::OnceLock;
+
+    use aes::cipher::{AsyncStreamCipher, KeyIvInit};
     use rcgen::{
         CertificateParams, DistinguishedName, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
         KeyUsagePurpose, PublicKeyData, SignatureAlgorithm,
     };
+    use rsa::traits::PublicKeyParts;
+    use rsa::{Oaep, RsaPrivateKey};
     use time::OffsetDateTime;
 
     use super::*;
@@ -263,12 +332,30 @@ pub(crate) mod fixtures {
         public
     }
 
+    pub(crate) fn node_key_of(key: &KeyPair) -> Vec<u8> {
+        let point = key.public_key_raw();
+        node_key_public(&point[1..33], &point[33..65])
+    }
+
     pub(crate) fn certificate_modulus(certificate: &[u8]) -> Vec<u8> {
         let (_, parsed) = X509Certificate::from_der(certificate).unwrap();
         let Ok(PublicKey::RSA(key)) = parsed.public_key().parsed() else {
             panic!("not an RSA certificate");
         };
         without_leading_zeros(key.modulus).to_vec()
+    }
+
+    pub(crate) fn endorsement_private_key() -> &'static RsaPrivateKey {
+        static KEY: OnceLock<RsaPrivateKey> = OnceLock::new();
+        KEY.get_or_init(|| RsaPrivateKey::new(&mut OsRng, 2048).unwrap())
+    }
+
+    pub(crate) fn modulus_of(key: &RsaPrivateKey) -> Vec<u8> {
+        let mut modulus = key.n().to_bytes_be();
+        while modulus.len() < ENDORSEMENT_KEY_MODULUS_BYTES {
+            modulus.insert(0, 0);
+        }
+        modulus
     }
 
     struct RsaPublicKeyInfo(Vec<u8>);
@@ -376,6 +463,37 @@ pub(crate) mod fixtures {
                 .to_owned()
         }
     }
+
+    pub(crate) fn activate(
+        key: &RsaPrivateKey,
+        name: &[u8],
+        credential_blob: &[u8],
+        encrypted_secret: &[u8],
+    ) -> Option<Vec<u8>> {
+        assert_eq!(encrypted_secret.len(), key.size());
+        let seed = key
+            .decrypt(
+                Oaep::new_with_label::<sha2::Sha256, _>(IDENTITY_LABEL),
+                encrypted_secret,
+            )
+            .ok()?;
+        let (size, rest) = credential_blob.split_first_chunk::<2>()?;
+        let (outer, identity) = rest.split_at_checked(usize::from(u16::from_be_bytes(*size)))?;
+        let integrity_key = kdf_a::<32>(&seed, b"INTEGRITY", &[], &[]);
+        let mut expected =
+            hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &integrity_key));
+        expected.update(identity);
+        expected.update(name);
+        if expected.sign().as_ref() != outer {
+            return None;
+        }
+        let storage_key = kdf_a::<16>(&seed, b"STORAGE", name, &[]);
+        let mut identity = identity.to_vec();
+        cfb_mode::Decryptor::<aes::Aes128>::new(&storage_key.into(), &[0u8; 16].into())
+            .decrypt(&mut identity);
+        let (size, secret) = identity.split_first_chunk::<2>()?;
+        (usize::from(u16::from_be_bytes(*size)) == secret.len()).then(|| secret.to_vec())
+    }
 }
 
 #[cfg(test)]
@@ -410,6 +528,10 @@ mod tests {
 
     fn now() -> UnixTime {
         UnixTime::now()
+    }
+
+    fn hex_bytes(text: &str) -> Vec<u8> {
+        hex::decode(text).unwrap()
     }
 
     #[test]
@@ -638,5 +760,46 @@ mod tests {
         assert_eq!(point[..2], [0x04, 0x00]);
         assert_eq!(point[2..33], GENERATOR_X[1..]);
         assert_eq!(point[33..], GENERATOR_Y);
+    }
+
+    #[test]
+    fn makes_the_credential_blob_of_the_reference_vector() {
+        let seed: [u8; 32] = std::array::from_fn(|index| index as u8);
+        let secret: [u8; 32] = std::array::from_fn(|index| 0xa0 + index as u8);
+        let name =
+            hex_bytes("000bb78abbc4c3a3d610134c32ee8cb3efb45bc08ca27acaa76bf06e531abf04d590");
+        assert_eq!(
+            kdf_a::<16>(&seed, b"STORAGE", &name, &[]).to_vec(),
+            hex_bytes("18b8e477555323606481012de838c0a3")
+        );
+        assert_eq!(
+            kdf_a::<32>(&seed, b"INTEGRITY", &[], &[]).to_vec(),
+            hex_bytes("bacf689f634ece301e1f1b15b072d9c87db6a69585db42b1a0cb8f73ebe2692e")
+        );
+        assert_eq!(
+            credential_blob(&seed, &name, &secret),
+            hex_bytes(
+                "0020d2aa208aee7b062ef98a00308062e39fbf9b0152b07df29d1ed10e28cd1d2d7b6dd4c8ad76755214d33a0b8d35ca0f168d3b007720636e7a12a21e8682c7bc6a327c"
+            )
+        );
+    }
+
+    #[test]
+    fn encrypts_the_seed_so_only_the_endorsement_key_recovers_the_secret() {
+        let key = endorsement_private_key();
+        let name =
+            hex_bytes("000bb78abbc4c3a3d610134c32ee8cb3efb45bc08ca27acaa76bf06e531abf04d590");
+        let secret = [0x5au8; 32];
+        let (blob, encrypted_secret) =
+            make_credential(&modulus_of(key), &name, &secret, &[9u8; SEED_BYTES]).unwrap();
+        assert_eq!(encrypted_secret.len(), 256);
+        assert_eq!(blob.len(), 2 + 32 + 2 + 32);
+        assert_eq!(
+            activate(key, &name, &blob, &encrypted_secret),
+            Some(secret.to_vec())
+        );
+        let mut another_name = name.clone();
+        another_name[2] ^= 1;
+        assert_eq!(activate(key, &another_name, &blob, &encrypted_secret), None);
     }
 }

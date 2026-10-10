@@ -230,6 +230,7 @@ async fn issues_node_certificates_through_a_real_step_ca() {
         install_token_keys: InstallTokenKeys::from_json(&installer_jwks.to_string()).unwrap(),
         device_id_key: DeviceIdKey::from_hex(&"5a".repeat(32)).unwrap(),
         fleet_client_roots: roots,
+        endorsement_roots: Vec::new(),
         challenge_ttl: Duration::from_secs(300),
         challenge_capacity: 100,
         renew_grace: Duration::from_secs(90 * 24 * 3600),

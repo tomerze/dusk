@@ -8,6 +8,7 @@ pub struct Binding {
     pub fingerprint_digest: [u8; 32],
     pub device_id: String,
     pub installation_id: String,
+    pub node_key: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -109,6 +110,7 @@ mod tests {
             fingerprint_digest: [number; 32],
             device_id: format!("{number:032x}"),
             installation_id: format!("{:032x}", number as u32 + 1000),
+            node_key: None,
         }
     }
 
