@@ -26,6 +26,8 @@ parallelism) and `DUSK_BUILD_CPUSET` (the CPUs the compiles run on, such as
 | twilight | http://127.0.0.1:8080 | `docker compose exec twilight twilight token create --name admin --role admin` |
 | Grafana | http://127.0.0.1:3000 | `admin`, password from `docker compose exec grafana cat /run/secrets/grafana-admin/password` |
 | SigNoz | http://127.0.0.1:8081 | after `docker compose --profile signoz up -d`: `admin@dusk.test`, password from `docker compose exec signoz cat /run/secrets/signoz-admin/password` |
+| Mailpit | http://127.0.0.1:8025 | none: the alert mail twilight and Grafana send |
+| Alert sink | http://127.0.0.1:8089/__admin/requests | none: the alert notifications twilight and Grafana post to their PagerDuty, Slack, Teams and webhook receivers |
 
 Check the infrastructure in a project of its own, since the tests write test
 data, then throw it away:
