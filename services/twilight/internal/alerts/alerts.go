@@ -134,7 +134,11 @@ func RaiseIn(operation context.Context, target Querier, raised Raised) (Alert, b
 			(select tenant from campaigns where id = case when $5::jsonb ->> 'campaign_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 				then ($5::jsonb ->> 'campaign_id')::uuid end)))
 		on conflict (fingerprint) where resolved_at is null do update set occurrences = alerts.occurrences + 1,
-			last_seen_at = greatest(alerts.last_seen_at, excluded.last_seen_at)
+			last_seen_at = greatest(alerts.last_seen_at, excluded.last_seen_at),
+			severity = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then excluded.severity else alerts.severity end,
+			detail = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then excluded.detail else alerts.detail end,
+			acknowledged_by = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then null else alerts.acknowledged_by end,
+			acknowledged_at = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then null else alerts.acknowledged_at end
 		returning `+alertColumns+`, (xmax = 0)`, raised.At, raised.Severity, raised.Kind, raised.Fingerprint, detail, raised.Tenant).Scan(append(alertTargets(&alert), &inserted)...)
 	return alert, inserted, failure
 }
