@@ -649,7 +649,14 @@ impl Connector {
             }),
             _ => None,
         };
-        let hardware_fingerprint = identity::hardware_fingerprint(&self.kvs).await?;
+        let hardware_fingerprint = match &tpm {
+            Some(attestation) => {
+                ring::digest::digest(&ring::digest::SHA256, &attestation.endorsement_key)
+                    .as_ref()
+                    .to_vec()
+            }
+            None => identity::hardware_fingerprint(&self.kvs).await?.to_vec(),
+        };
         let text = |value: Option<Value>| match value {
             Some(Value::String(text) | Value::Text(text)) => text,
             _ => String::new(),
@@ -659,7 +666,7 @@ impl Connector {
             String::new()
         });
         Ok(DeviceReport {
-            hardware_fingerprint: hardware_fingerprint.to_vec(),
+            hardware_fingerprint,
             installation_hint: identity::installation_id(&self.kvs)
                 .await
                 .unwrap_or_default(),
