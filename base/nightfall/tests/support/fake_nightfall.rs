@@ -902,6 +902,7 @@ pub(crate) struct Fleet {
     fleet_port: u16,
     provision_port: u16,
     pub(crate) directory: PathBuf,
+    pub(crate) tpm: Option<PathBuf>,
     events: Receiver<Event>,
     pub(crate) seen: Vec<Event>,
 }
@@ -1011,6 +1012,7 @@ impl Fleet {
             fleet_port,
             provision_port,
             directory,
+            tpm: None,
             events,
             seen: Vec::new(),
         }
@@ -1021,8 +1023,12 @@ impl Fleet {
     }
 
     pub(crate) fn command(&self, extra: &str) -> String {
+        let tpm = match &self.tpm {
+            Some(path) => format!(" --tpm {}", path.display()),
+            None => String::from(" --no-tpm"),
+        };
         format!(
-            "nightfall -c 127.0.0.1:{} --server-name fleet.test --provision localhost:{} --provision-server-name provision.test --ca {}{extra}",
+            "nightfall -c 127.0.0.1:{} --server-name fleet.test --provision localhost:{} --provision-server-name provision.test --ca {}{tpm}{extra}",
             self.fleet_port,
             self.provision_port,
             self.directory.join("fleet-server-ca.pem").display(),
