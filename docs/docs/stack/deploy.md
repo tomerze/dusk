@@ -91,6 +91,8 @@ Open the UIs, published on 127.0.0.1 only:
 | twilight | http://127.0.0.1:8080 | `docker compose exec twilight twilight token create --name admin --role admin` prints a token |
 | Grafana | http://127.0.0.1:3000 | user `admin`, password from `docker compose exec grafana cat /run/secrets/grafana-admin/password` |
 | SigNoz | http://127.0.0.1:8081 | user `admin@dusk.test`, password from `docker compose exec signoz cat /run/secrets/signoz-admin/password` (needs the `signoz` profile, below) |
+| Mailpit | http://127.0.0.1:8025 | none: the mail twilight and Grafana send to their email receivers |
+| Alert sink | http://127.0.0.1:8089/__admin/requests | none: the requests twilight and Grafana made to their PagerDuty, Slack, Teams and webhook receivers, newest first |
 
 Nodes outside Docker reach nightfall on 127.0.0.1:8443. They must connect by
 the names on its certificates, `fleet.dusk.test` and `provision.dusk.test`,
@@ -154,6 +156,32 @@ Every setting is an environment variable read by `docker compose`:
 | `DUSK_DAWN_PORT` | `9443` | Host port for dawn's API. Set it empty for a random port. |
 | `DUSK_GRAFANA_PORT` | `3000` | Host port for Grafana. Set it empty for a random port. |
 | `DUSK_SIGNOZ_PORT` | `8081` | Host port for SigNoz. Set it empty for a random port. |
+| `DUSK_MAILPIT_PORT` | `8025` | Host port for Mailpit. Set it empty for a random port. |
+| `DUSK_ALERT_SINK_PORT` | `8089` | Host port for the alert sink. Set it empty for a random port. |
+
+### Alerts
+
+twilight in the local stack reads `infra/compose/twilight.yaml`: the shipped
+configuration (`infra/k8s/base/twilight/twilight.yaml`) plus an `alerts`
+section with a receiver of every kind ([alerts](twilight.md#alerts)), all of
+them local: `mail` sends to Mailpit, and `on-call` (PagerDuty), `chat` (Slack),
+`noc` (Teams) and `siem` (webhook) post to the alert sink, a WireMock 3.13.2
+server that answers each the way the real service answers a notification it
+accepts, and keeps the last 1,000 requests. alert-receivers-init writes their secrets once, into the
+`alert-receivers` directory of the `secrets` volume, and grafana-alerting writes
+Grafana's contact points, policy and templates from the same file before
+Grafana starts, so Grafana's alert rules reach the same receivers. Grafana
+sends its mail to Mailpit too.
+
+Notifications link their runbooks at `http://127.0.0.1:8000/stack/runbooks/`,
+where `uv run mkdocs serve` in `docs/` serves the documentation. After changing
+the receivers or routes:
+
+```bash
+docker compose up -d --force-recreate twilight
+docker compose run --rm grafana-alerting
+docker compose restart grafana
+```
 
 ### Running only the infrastructure
 
@@ -280,8 +308,12 @@ flows: nodes reach nightfall's 8443 from anywhere, dawn reaches nightfall's
 8444, nightfall reaches other nightfall pods' 8445, twilight reaches dawn,
 Postgres and Kafka, and so on. Two policies allow more than in-cluster traffic
 and are yours to narrow: `bootstrap` lets the init jobs reach the Kubernetes
-API on TCP 443 and 6443 anywhere, and `twilight-oidc` lets twilight reach public
-addresses on 443 for its OIDC issuer and alert webhook. twilight's, Grafana's
+API on TCP 443 and 6443 anywhere, `twilight-oidc` lets twilight reach public
+addresses on 443 for its OIDC issuer and its alert receivers (PagerDuty, Slack,
+Teams, webhooks), and `twilight-alert-receivers` and `grafana-alert-receivers`
+let twilight and Grafana reach SMTP servers on 25, 465 and 587 anywhere, and
+Grafana public addresses on 443. A webhook receiver on a private address needs a
+policy of its own. twilight's, Grafana's
 and SigNoz's policies accept traffic from the `ingress-nginx` namespace; change
 that selector if your ingress controller runs elsewhere. In the prod overlay,
 dawn's accepts the ingress controller's pods on 8443 too, those that
@@ -461,6 +493,67 @@ nightfall's LoadBalancer Service sends port 443 to its pods' 8443 with
 which its per-address limits depend on. On AWS use a Network Load Balancer in
 IP target mode for the same reason.
 
+### Alert receivers
+
+twilight's receivers and routes go in the `alerts` section of its
+configuration ([alerts](twilight.md#alerts)): `infra/k8s/base/twilight/twilight.yaml`,
+or `infra/k8s/overlays/prod/dusk/configuration/twilight.yaml` in prod. Grafana's
+init container `alerting-provisioning` runs `twilight grafana-alerting` on the
+same ConfigMap before Grafana starts, so Grafana's rules reach the same
+receivers. Put the receivers' secrets in a Secret and mount it at the same path
+in twilight and in Grafana:
+
+```bash
+kubectl -n dusk create secret generic alert-receivers \
+  --from-file=pagerduty-routing-key=./pagerduty-routing-key \
+  --from-file=webhook-secret=./webhook-secret
+```
+
+```yaml title="alert-receivers.yaml, next to your overlay's kustomization.yaml"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twilight
+spec:
+  template:
+    spec:
+      containers:
+        - name: twilight
+          volumeMounts:
+            - name: alert-receivers
+              mountPath: /run/secrets/alert-receivers
+              readOnly: true
+      volumes:
+        - name: alert-receivers
+          secret:
+            secretName: alert-receivers
+            defaultMode: 0440
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  template:
+    spec:
+      containers:
+        - name: grafana
+          volumeMounts:
+            - name: alert-receivers
+              mountPath: /run/secrets/alert-receivers
+              readOnly: true
+      volumes:
+        - name: alert-receivers
+          secret:
+            secretName: alert-receivers
+            defaultMode: 0440
+```
+
+and list it under `patches:` in that `kustomization.yaml` (`- path:
+alert-receivers.yaml`). For an email receiver, also give the `grafana`
+container the `GF_SMTP_*` variables of the same server. The network policies
+above let both reach SMTP servers and public HTTPS addresses.
+
 ## Secrets
 
 The secrets-init job (compose: the `secrets-init` service) generates every
@@ -483,6 +576,11 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz |
 | `grafana-admin` | `password` | Grafana |
 | `signoz-admin` | `password`, the password of SigNoz's root account | SigNoz, signoz-dashboards |
+
+In compose, alert-receivers-init also writes `alert-receivers` once:
+`pagerduty-routing-key`, `slack-webhook-url`, `teams-webhook-url` and
+`webhook-secret`, the secrets of the local receivers, which twilight and Grafana
+read at `/run/secrets/alert-receivers`.
 
 pki-init adds, in Kubernetes:
 
