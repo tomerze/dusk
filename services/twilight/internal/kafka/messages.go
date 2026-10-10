@@ -81,6 +81,7 @@ type Enrollment struct {
 	Tenant                  *string `json:"tenant"`
 	CredentialKind          string  `json:"credential_kind"`
 	CredentialRef           *string `json:"credential_ref"`
+	CredentialIssuer        *string `json:"credential_issuer"`
 	HardwareFingerprintHash *string `json:"hardware_fingerprint_hash"`
 	RemoteAddress           string  `json:"remote_address"`
 	CertSerial              *string `json:"cert_serial"`

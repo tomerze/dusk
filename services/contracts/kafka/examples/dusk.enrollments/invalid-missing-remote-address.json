@@ -10,6 +10,7 @@
   "tenant": "retail-eu",
   "credential_kind": "fleet_token",
   "credential_ref": "retail-eu-2026",
+  "credential_issuer": null,
   "hardware_fingerprint_hash": "c2e4a6b8d0f1e3c5a7b9d1f3e5c7a9b0d2f4e6c8a1b3d5f7e9c0a2b4d6f8e1c3",
   "cert_serial": null,
   "cert_fingerprint": null,

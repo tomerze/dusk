@@ -114,6 +114,13 @@ impl Jwks {
     }
 
     pub fn verify(&self, token: &str) -> Result<Map<String, Value>, JwtError> {
+        self.verify_with_key_id(token).map(|(_, claims)| claims)
+    }
+
+    pub fn verify_with_key_id(
+        &self,
+        token: &str,
+    ) -> Result<(String, Map<String, Value>), JwtError> {
         let mut parts = token.split('.');
         let (Some(header), Some(payload), Some(signature), None) =
             (parts.next(), parts.next(), parts.next(), parts.next())
@@ -153,7 +160,7 @@ impl Jwks {
         };
         verified.map_err(|_| JwtError::Signature)?;
         match serde_json::from_slice(&decode(payload)?) {
-            Ok(Value::Object(claims)) => Ok(claims),
+            Ok(Value::Object(claims)) => Ok((String::from(key_id), claims)),
             _ => Err(JwtError::Claims),
         }
     }

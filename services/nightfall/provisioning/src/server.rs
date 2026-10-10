@@ -180,6 +180,7 @@ impl Attempt {
                 tenant: None,
                 credential_kind: kind,
                 credential_ref: None,
+                credential_issuer: None,
                 hardware_fingerprint_hash: None,
                 remote_address: remote_address(connection.remote_address),
                 cert_serial: None,
@@ -518,6 +519,10 @@ impl Provisioning {
             }
         };
         attempt.event.credential_ref = Some(verified.reference.clone());
+        attempt.event.credential_issuer = verified
+            .install_token
+            .as_ref()
+            .map(|install_token| install_token.key_id.clone());
         attempt.event.tenant = verified.tenant.clone();
         Ok(verified)
     }

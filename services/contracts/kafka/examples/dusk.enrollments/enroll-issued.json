@@ -10,6 +10,7 @@
   "tenant": "retail-eu",
   "credential_kind": "fleet_token",
   "credential_ref": "retail-eu-2026",
+  "credential_issuer": null,
   "hardware_fingerprint_hash": "c2e4a6b8d0f1e3c5a7b9d1f3e5c7a9b0d2f4e6c8a1b3d5f7e9c0a2b4d6f8e1c3",
   "remote_address": "203.0.113.24:51730",
   "cert_serial": "4f1c0e9a2b7d3e5f8a6c1b0d9e2f7a43",
