@@ -50,10 +50,15 @@ Usage:
   twilight migrate [--config FILE]
   twilight token create --name NAME --role viewer|operator|admin [--config FILE]
   twilight token revoke ID [--config FILE]
+  twilight grafana-alerting [--config FILE] [--output FILE]
   twilight version
 
 Configuration comes from FILE (default /etc/twilight/twilight.yaml) and from
 TWILIGHT__<SECTION>__<KEY> environment variables, which override it.
+
+grafana-alerting writes Grafana's contact points, notification policy and
+message templates for the receivers and routes in alerts, as a Grafana
+alerting provisioning file.
 `
 
 type usageError struct{ message string }
@@ -77,6 +82,8 @@ func run(operation context.Context, arguments, environment []string, output, dia
 		failure = migrate(operation, arguments[1:], environment, diagnostics)
 	case "token":
 		failure = token(operation, arguments[1:], environment, output, diagnostics)
+	case "grafana-alerting":
+		failure = grafanaAlerting(arguments[1:], environment, output, diagnostics)
 	case "version":
 		fmt.Fprintf(output, "twilight %s (%s, %s)\n", version, buildRevision(), runtime.Version())
 	case "help", "-h", "--help":
@@ -186,6 +193,40 @@ func migrate(operation context.Context, arguments, environment []string, diagnos
 		return failure
 	}
 	logger.Info("the database schema is current", "applied", len(applied), "known", len(loaded))
+	return nil
+}
+
+func grafanaAlerting(arguments, environment []string, output, diagnostics io.Writer) error {
+	var target string
+	parsed, failure := parse("grafana-alerting", arguments, diagnostics, func(flags *flag.FlagSet) {
+		flags.StringVar(&target, "output", "", "the file to write; standard output when not given")
+	})
+	if failure != nil {
+		return failure
+	}
+	if len(parsed.positional) > 0 {
+		return usageError{"grafana-alerting takes no arguments besides its flags"}
+	}
+	settings, failure := parsed.load(environment)
+	if failure != nil {
+		return failure
+	}
+	content, failure := alerts.GrafanaProvisioning(settings.Alerts)
+	if failure != nil {
+		return failure
+	}
+	if target == "" {
+		_, failure = output.Write(content)
+		return failure
+	}
+	staging := target + ".writing"
+	if failure := os.WriteFile(staging, content, 0o644); failure != nil {
+		return failure
+	}
+	if failure := os.Rename(staging, target); failure != nil {
+		return failure
+	}
+	fmt.Fprintf(diagnostics, "wrote Grafana's alerting provisioning for %d receivers and %d routes to %s\n", len(settings.Alerts.Receivers), len(settings.Alerts.Routes), target)
 	return nil
 }
 
