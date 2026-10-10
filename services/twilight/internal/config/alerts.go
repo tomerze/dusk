@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/mail"
 	"net/url"
 	"regexp"
 	"slices"
@@ -22,6 +23,7 @@ type Receiver struct {
 	RatePerMinute int                `yaml:"rate_per_minute"`
 	PagerDuty     *PagerDutyReceiver `yaml:"pagerduty"`
 	Slack         *SlackReceiver     `yaml:"slack"`
+	Email         *EmailReceiver     `yaml:"email"`
 	Teams         *TeamsReceiver     `yaml:"teams"`
 	Webhook       *WebhookReceiver   `yaml:"webhook"`
 }
@@ -44,6 +46,16 @@ type WebhookReceiver struct {
 	SecretFile string `yaml:"secret_file"`
 }
 
+type EmailReceiver struct {
+	Host         string   `yaml:"host"`
+	Port         int      `yaml:"port"`
+	Security     string   `yaml:"security"`
+	Username     string   `yaml:"username"`
+	PasswordFile string   `yaml:"password_file"`
+	From         string   `yaml:"from"`
+	To           []string `yaml:"to"`
+}
+
 type Route struct {
 	Receiver   string   `yaml:"receiver"`
 	Severities []string `yaml:"severities"`
@@ -53,6 +65,9 @@ type Route struct {
 
 const (
 	PagerDutyEventsURL = "https://events.pagerduty.com/v2/enqueue"
+	EmailStartTLS      = "starttls"
+	EmailTLS           = "tls"
+	EmailPlaintext     = "none"
 	RunbookKind        = "{kind}"
 )
 
@@ -62,6 +77,7 @@ var (
 	receiverTypes = []string{
 		"pagerduty",
 		"slack",
+		"email",
 		"teams",
 		"webhook",
 	}
@@ -72,6 +88,26 @@ func (pagerDuty PagerDutyReceiver) EventsURL() string {
 		return PagerDutyEventsURL
 	}
 	return pagerDuty.URL
+}
+
+func (email EmailReceiver) SecurityMode() string {
+	if email.Security == "" {
+		return EmailStartTLS
+	}
+	return email.Security
+}
+
+func (email EmailReceiver) PortNumber() int {
+	if email.Port != 0 {
+		return email.Port
+	}
+	switch email.SecurityMode() {
+	case EmailTLS:
+		return 465
+	case EmailPlaintext:
+		return 25
+	}
+	return 587
 }
 
 func (route Route) Matches(severity, kind string, tenant *string) bool {
@@ -116,6 +152,7 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 		for _, set := range []bool{
 			receiver.PagerDuty != nil,
 			receiver.Slack != nil,
+			receiver.Email != nil,
 			receiver.Teams != nil,
 			receiver.Webhook != nil,
 		} {
@@ -150,6 +187,8 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 			if receiver.Webhook.SecretFile == "" {
 				problem("%s.webhook.secret_file is required", where)
 			}
+		case receiver.Email != nil:
+			receiver.Email.validate(where, problem)
 		}
 	}
 	routed := map[string]bool{}
@@ -173,6 +212,38 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 	for _, receiver := range alerts.Receivers {
 		if receiverName.MatchString(receiver.Name) && !routed[receiver.Name] {
 			problem("alerts.receivers[%s] is named by no route in alerts.routes", receiver.Name)
+		}
+	}
+}
+
+func (email EmailReceiver) validate(where string, problem func(format string, arguments ...any)) {
+	if strings.TrimSpace(email.Host) == "" {
+		problem("%s.email.host is required", where)
+	}
+	if email.Port < 0 || email.Port > 65535 {
+		problem("%s.email.port must be between 1 and 65535", where)
+	}
+	switch email.SecurityMode() {
+	case EmailStartTLS, EmailTLS:
+	case EmailPlaintext:
+		if email.Username != "" {
+			problem("%s.email.security none sends no credentials; use starttls or tls with a username", where)
+		}
+	default:
+		problem("%s.email.security must be starttls, tls or none", where)
+	}
+	if (email.Username == "") != (email.PasswordFile == "") {
+		problem("%s.email.username and password_file are set together", where)
+	}
+	if address, failure := mail.ParseAddress(email.From); failure != nil || address.Name != "" {
+		problem("%s.email.from must be one bare email address", where)
+	}
+	if len(email.To) == 0 {
+		problem("%s.email.to needs at least one address", where)
+	}
+	for _, recipient := range email.To {
+		if address, failure := mail.ParseAddress(recipient); failure != nil || address.Name != "" {
+			problem("%s.email.to holds %q, which is not a bare email address", where, recipient)
 		}
 	}
 }
