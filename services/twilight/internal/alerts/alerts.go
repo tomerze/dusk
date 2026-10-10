@@ -43,6 +43,8 @@ const (
 	KindResultWithoutLedger       = "result_without_ledger"
 	KindQuarantineOverride        = "quarantine_override"
 	KindLedgerChainBroken         = "ledger_chain_broken"
+	KindCampaignPausedByGate      = "campaign_paused_by_gate"
+	KindCampaignFailedByPolicy    = "campaign_failed_by_policy"
 )
 
 type Alert struct {
@@ -226,6 +228,11 @@ func (store *Store) Acknowledge(operation context.Context, identifier int64, act
 func (store *Store) Resolve(operation context.Context, identifier int64, actor string, now time.Time) (Alert, error) {
 	return scanAlert(store.pool.QueryRow(operation, `update alerts set resolved_by = coalesce(resolved_by, $2), resolved_at = coalesce(resolved_at, $3)
 		where id = $1 returning `+alertColumns, identifier, actor, now))
+}
+
+func ResolveFingerprintIn(operation context.Context, target Querier, fingerprint, actor string, now time.Time) error {
+	_, failure := target.Exec(operation, `update alerts set resolved_by = $2, resolved_at = $3 where fingerprint = $1 and resolved_at is null`, fingerprint, actor, now)
+	return failure
 }
 
 type Counts struct {

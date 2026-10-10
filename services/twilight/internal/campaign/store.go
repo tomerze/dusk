@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/selector"
 )
@@ -272,6 +273,7 @@ type TransitionRequest struct {
 	OverrideGate bool
 	Now          time.Time
 	Detail       map[string]any
+	Alert        *alerts.Raised
 }
 
 func (store *Store) Transition(operation context.Context, identifier uuid.UUID, request TransitionRequest) (*Campaign, error) {
@@ -357,6 +359,16 @@ func (store *Store) Transition(operation context.Context, identifier uuid.UUID, 
 		if cancelRows {
 			if _, failure := transaction.Exec(operation, `update campaign_nodes set state = 'cancelled', finished_at = $2, next_attempt_at = null, deadline_at = null, revision = revision + 1, updated_at = now()
 				where campaign_id = $1 and state in ('pending', 'backoff', 'excluded', 'conflict', 'verifying')`, identifier, now); failure != nil {
+				return failure
+			}
+		}
+		if request.Transition == TransitionResume || request.Transition == TransitionAbort || request.Transition == TransitionComplete || request.Transition == TransitionFail {
+			if failure := alerts.ResolveFingerprintIn(operation, transaction, alerts.KindCampaignPausedByGate+":"+identifier.String(), request.Actor, now); failure != nil {
+				return failure
+			}
+		}
+		if request.Alert != nil {
+			if _, _, failure := alerts.RaiseIn(operation, transaction, *request.Alert); failure != nil {
 				return failure
 			}
 		}

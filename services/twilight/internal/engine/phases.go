@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 )
 
@@ -55,6 +56,18 @@ func (engine *Engine) transition(operation context.Context, target *campaign.Cam
 	engine.Logger.Info("campaign transition", "campaign_id", target.ID, "transition", request.Transition, "status", updated.Status, "reason", request.Reason)
 }
 
+func gateAlert(kind, message string, target *campaign.Campaign, report GateReport, now time.Time) *alerts.Raised {
+	raised := &alerts.Raised{Severity: alerts.High, Kind: kind, Fingerprint: kind + ":" + target.ID.String(), At: now, Detail: map[string]any{
+		"message": message, "campaign_id": target.ID.String(), "campaign_name": target.Name, "phase": target.CurrentPhase,
+		"phase_name": target.Policy.Phases[target.CurrentPhase].Name, "reason": report.Reason, "group": report.FailingGroup, "overall": report.Overall,
+		"thresholds": map[string]any{"max_failure_rate": report.MaxFailureRate, "max_silent_rate": report.MaxSilentRate, "min_sample": report.MinSample},
+	}}
+	if target.Tenant != nil {
+		raised.Tenant = *target.Tenant
+	}
+	return raised
+}
+
 func (engine *Engine) gate(operation context.Context, term int64, target *campaign.Campaign) error {
 	now := time.Now()
 	if target.Policy.Deadline != nil && !now.Before(*target.Policy.Deadline) {
@@ -79,7 +92,8 @@ func (engine *Engine) gate(operation context.Context, term int64, target *campai
 		detail := map[string]any{"group": report.FailingGroup, "overall": report.Overall}
 		switch {
 		case target.Policy.Abort.OnGateFailure == campaign.GateActionAbort:
-			engine.transition(operation, target, campaign.TransitionRequest{Transition: campaign.TransitionFail, PauseKind: campaign.PauseGate, Actor: "twilight", Reason: report.Reason, Now: now, Detail: detail})
+			engine.transition(operation, target, campaign.TransitionRequest{Transition: campaign.TransitionFail, PauseKind: campaign.PauseGate, Actor: "twilight", Reason: report.Reason, Now: now, Detail: detail,
+				Alert: gateAlert(alerts.KindCampaignFailedByPolicy, "the campaign failed: its health gate failed and its policy aborts on a gate failure", target, report, now)})
 		case paused:
 			held, failure := engine.Campaigns.HoldForGate(operation, target.ID, report.Reason, detail, now)
 			if failure != nil {
@@ -92,7 +106,8 @@ func (engine *Engine) gate(operation context.Context, term int64, target *campai
 				engine.Logger.Info("a paused campaign's gate failed; resuming it needs a gate override", "campaign_id", target.ID, "reason", report.Reason)
 			}
 		default:
-			engine.transition(operation, target, campaign.TransitionRequest{Transition: campaign.TransitionPause, PauseKind: campaign.PauseGate, Actor: "twilight", Reason: report.Reason, Now: now, Detail: detail})
+			engine.transition(operation, target, campaign.TransitionRequest{Transition: campaign.TransitionPause, PauseKind: campaign.PauseGate, Actor: "twilight", Reason: report.Reason, Now: now, Detail: detail,
+				Alert: gateAlert(alerts.KindCampaignPausedByGate, "the campaign paused: its health gate failed; resuming it needs a gate override", target, report, now)})
 		}
 		return nil
 	case VerdictHold:

@@ -46,6 +46,8 @@ var kindLabels = map[string]string{
 	KindRevocationNotEnforced:     "Revocation not enforced",
 	KindEnrollmentRate:            "Enrollment spike",
 	KindCampaignConflict:          "Campaign conflict",
+	KindCampaignPausedByGate:      "Campaign paused by its gate",
+	KindCampaignFailedByPolicy:    "Campaign failed by its policy",
 }
 
 var kindSummaries = map[string]string{
