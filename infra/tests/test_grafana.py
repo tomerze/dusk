@@ -216,7 +216,7 @@ def test_the_evidence_alert_fires_while_every_vector_instance_is_stalled(
 def test_the_chain_alert_counts_each_broken_chain(
     clickhouse: Callable[[str], list[dict[str, Any]]], scratch: str
 ) -> None:
-    moment = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
+    moment = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=30)
     insert_chains(
         clickhouse,
         scratch,
