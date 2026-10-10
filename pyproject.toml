@@ -30,9 +30,6 @@ module-name = "dusk"
 python-source = "dusk/src/dusk_py/python"
 include = [
     "dusk/src/dusk_py/python/dusk/dusk.pyi",
-    # The vendored Swagger UI. Without these in the wheel, /v1/docs is a
-    # broken page wherever dusk_gw is installed from one.
-    "dusk/src/dusk_py/python/dusk/gw/static/*",
 ]
 
 [tool.uv.workspace]
