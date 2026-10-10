@@ -357,16 +357,18 @@ const tracked = [
     name: "--dusk-sunk",
     aim: () => Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
   })),
-  ...[...document.querySelectorAll(".dusk-section > h2")].map((element) => ({
-    element,
-    name: "--dusk-passed",
-    aim: () => {
-      const box = element.getBoundingClientRect();
-      const passed =
-        (window.innerHeight - box.top) / (window.innerHeight + box.height);
-      return Math.max(0, Math.min(1, passed));
-    },
-  })),
+  ...[...document.querySelectorAll(".dusk-section > h2, .dusk-os__title")].map(
+    (element) => ({
+      element,
+      name: "--dusk-passed",
+      aim: () => {
+        const box = element.getBoundingClientRect();
+        const passed =
+          (window.innerHeight - box.top) / (window.innerHeight + box.height);
+        return Math.max(0, Math.min(1, passed));
+      },
+    }),
+  ),
 ].map((item) => ({ ...item, target: item.aim(), value: item.aim() }));
 let gliding = false;
 let lastGlide = 0;
@@ -434,4 +436,69 @@ for (const head of document.querySelectorAll(".dusk-stack__head")) {
   window.addEventListener("scroll", read, { passive: true });
   window.addEventListener("resize", read);
   read();
+}
+
+for (const stage of document.querySelectorAll(".dusk-os__stage")) {
+  new ResizeObserver(() => {
+    stage
+      .closest(".dusk-os")
+      .style.setProperty("--dusk-os-height", `${stage.offsetHeight}px`);
+  }).observe(stage);
+}
+
+const namespaceId = Array.from(
+  crypto.getRandomValues(new Uint8Array(8)),
+  (byte) => byte.toString(16).padStart(2, "0"),
+).join("");
+for (const namespace of document.querySelectorAll(".dusk-os__namespace")) {
+  namespace.textContent = namespaceId;
+}
+
+const latencySteps = {
+  17: { 16: { 17: 0.6 }, 17: { 16: 0.2, 18: 0.2 }, 18: { 17: 0.6 } },
+  66: {
+    65: { 66: 0.6 },
+    66: { 65: 0.2, 67: 0.15 },
+    67: { 66: 0.69, 68: 0.2 },
+    68: { 67: 0.37 },
+  },
+};
+for (const element of document.querySelectorAll(".dusk-os__latency")) {
+  const steps = latencySteps[element.textContent];
+  let latency = element.textContent;
+  const flicker = () => {
+    let roll = Math.random();
+    for (const [next, chance] of Object.entries(steps[latency])) {
+      if (roll < chance) {
+        latency = next;
+        break;
+      }
+      roll -= chance;
+    }
+    element.textContent = latency;
+    setTimeout(flicker, 400 + Math.random() * 900);
+  };
+  flicker();
+}
+
+if (
+  !CSS.supports("animation-timeline: view()") &&
+  !matchMedia("(prefers-reduced-motion: reduce)").matches
+) {
+  for (const tour of document.querySelectorAll(".dusk-os__tour")) {
+    tour.closest(".dusk-os").classList.add("is-touring");
+    const stage = tour.querySelector(".dusk-os__stage");
+    const follow = () => {
+      const progress =
+        (stage.getBoundingClientRect().top - tour.getBoundingClientRect().top) /
+        (tour.offsetHeight - stage.offsetHeight);
+      tour.style.setProperty(
+        "--dusk-os-progress",
+        Math.max(0, Math.min(1, progress)),
+      );
+    };
+    window.addEventListener("scroll", follow, { passive: true });
+    window.addEventListener("resize", follow);
+    follow();
+  }
 }

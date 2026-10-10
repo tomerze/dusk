@@ -470,10 +470,11 @@
 .dusk-section {
   padding: 5rem 0.8rem;
 }
-.dusk-landing .dusk-section > h2 {
+.dusk-landing .dusk-section > h2,
+.dusk-landing .dusk-os__title {
   display: table;
   margin: 0 auto;
-  padding: 0;
+  padding: 0 0.1em;
   font-size: clamp(3.6rem, 10vw, 6.4rem);
   font-weight: 800;
   line-height: 1;
@@ -482,18 +483,23 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.dusk-landing .dusk-fleet > h2 {
+.dusk-landing .dusk-fleet > h2,
+.dusk-landing .dusk-os__title {
   color: #a86f12;
-  background-image: linear-gradient(
-    100deg,
-    #a86f12 0%,
-    #f0b441 35%,
-    #fff1c4 50%,
-    #f0b441 65%,
-    #a86f12 100%
-  );
-  background-size: 300% 100%;
-  background-position-x: calc(var(--dusk-passed, 0) * 100%);
+  background-image:
+    var(--dusk-title-ink, none),
+    linear-gradient(
+      100deg,
+      #a86f12 0%,
+      #f0b441 35%,
+      #fff1c4 50%,
+      #f0b441 65%,
+      #a86f12 100%
+    );
+  background-size:
+    100% 100%,
+    300% 100%;
+  background-position-x: 0, calc(var(--dusk-passed, 0) * 100%);
 }
 .dusk-landing .dusk-stack > h2 {
   color: var(--dusk-ink-twilight);
@@ -643,6 +649,469 @@
   }
 }
 
+@property --dusk-os-title-ink {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+.dusk-os {
+  --dusk-os-fill: #f4a83c;
+  --dusk-os-ink: var(--dusk-ground);
+  --dusk-os-pin: 90svh;
+  --dusk-os-from: calc(var(--dusk-os-height, 100lvh) - 100lvh);
+  --dusk-os-sun: max(17rem, 50vw + 7.5rem);
+  --dusk-os-start: calc(1.4 / 17);
+  --dusk-os-sun-top: calc(100% - 10.9rem);
+  --dusk-os-lead-colour: var(--md-default-bg-color);
+  background-color: var(--dusk-ground);
+}
+.dusk-os__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5rem 0.8rem;
+  overflow-x: clip;
+  background-color: var(--dusk-os-fill);
+  text-align: center;
+}
+.dusk-landing .dusk-os__title {
+  position: relative;
+  z-index: 1;
+  --dusk-title-ink: linear-gradient(
+    180deg,
+    color-mix(
+      in srgb,
+      var(--dusk-os-ink) calc(var(--dusk-os-title-ink) * 100%),
+      transparent
+    ),
+    color-mix(
+      in srgb,
+      var(--md-default-bg-color) calc(var(--dusk-os-title-ink) * 100%),
+      transparent
+    )
+  );
+}
+.dusk-landing .dusk-os__lead {
+  position: relative;
+  z-index: 1;
+  max-width: 32rem;
+  margin: 1rem auto 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dusk-os-lead-colour);
+  text-wrap: balance;
+}
+.dusk-os__terminals {
+  position: relative;
+  width: 100%;
+  max-width: 40rem;
+  margin-top: 2.5rem;
+}
+.dusk-os__dot {
+  display: none;
+}
+.dusk-os__terminal {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 0.8rem;
+  background-color: #14112a;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 1.5rem 3rem rgba(20, 12, 2, 0.45);
+  text-align: left;
+}
+.dusk-os__terminal--ps,
+.dusk-landing .dusk-os__session--wide {
+  display: none;
+}
+.dusk-os__bar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  background-color: #1d1838;
+}
+.dusk-os__bar span {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background-color: #3d3569;
+}
+.dusk-landing .dusk-os__session {
+  margin: 0;
+  padding: 0.9rem 0.9rem 1.1rem;
+  overflow-x: auto;
+  color: #d2cce8;
+  font-family: "JetBrains Mono", var(--md-code-font-family);
+  font-size: 0.6rem;
+  font-variant-ligatures: none;
+  line-height: 1.32;
+  white-space: pre;
+}
+@media screen and (min-width: 76.25em) {
+  .dusk-os {
+    --dusk-os-sun: 17rem;
+    --dusk-os-start: calc(1.4 / 17);
+    --dusk-os-sun-top: 3.5rem;
+  }
+  .dusk-os__terminals {
+    display: grid;
+    max-width: 62rem;
+    margin-top: 1.6rem;
+  }
+  .dusk-os__terminal {
+    grid-area: 1 / 1;
+    width: max-content;
+  }
+  .dusk-os__terminal--ps {
+    display: block;
+    align-self: start;
+    justify-self: end;
+    margin-right: -5rem;
+  }
+  .dusk-os__terminal--cp {
+    justify-self: start;
+    margin: 6rem 0 0 3rem;
+  }
+  .dusk-landing .dusk-os__session {
+    font-size: 0.56rem;
+  }
+  .dusk-landing .dusk-os__session--narrow {
+    display: none;
+  }
+  .dusk-landing .dusk-os__session--wide {
+    display: block;
+  }
+}
+.dusk-os__cell {
+  display: inline-block;
+  width: 1ch;
+  text-indent: -0.5ch;
+}
+.dusk-os__yellow {
+  color: #f5c542;
+}
+.dusk-os__cyan {
+  color: #3fc5d6;
+}
+.dusk-os__bright-cyan {
+  color: #6ef2ff;
+}
+.dusk-os__green {
+  color: #5af78e;
+}
+.dusk-os__white {
+  color: #ece8f7;
+}
+.dusk-os__blue {
+  color: #9fb0ff;
+}
+.dusk-os__gray {
+  color: #7d7896;
+}
+.dusk-os__bold {
+  font-weight: 700;
+}
+@property --dusk-os-plain {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+.dusk-os.is-touring .dusk-os__tour {
+  --dusk-os-grown: clamp(0, var(--dusk-os-progress, 0) / 0.65, 1);
+  --dusk-os-eased: calc(
+    var(--dusk-os-grown) * var(--dusk-os-grown) * (3 - 2 * var(--dusk-os-grown))
+  );
+  --dusk-os-quiet: clamp(0, (var(--dusk-os-progress, 0) - 0.14) / 0.06, 1);
+  --dusk-os-shown: clamp(0, (var(--dusk-os-progress, 0) - 0.18) / 0.32, 1);
+  --dusk-os-lead-ink: clamp(0, (var(--dusk-os-progress, 0) - 0.28) / 0.18, 1);
+  --dusk-os-rays: clamp(0, (var(--dusk-os-progress, 0) - 0.47) / 0.18, 1);
+}
+.dusk-os.is-touring .dusk-os__tour::after {
+  content: "";
+  display: block;
+  height: var(--dusk-os-pin);
+}
+.dusk-os.is-touring .dusk-os__stage {
+  position: sticky;
+  top: calc(100lvh - var(--dusk-os-height, 100lvh));
+  padding: 6rem 0.8rem 3rem;
+  clip-path: inset(
+    calc(-1 * var(--dusk-os-pin)) 0 calc(-1 * var(--dusk-os-below, 0px))
+  );
+  background-color: transparent;
+}
+.dusk-landing .dusk-os.is-touring .dusk-os__title {
+  --dusk-os-title-ink: clamp(0, (var(--dusk-os-progress, 0) - 0.34) / 0.18, 1);
+  scroll-margin-top: calc(100lvh - var(--dusk-os-height, 100lvh) + 6rem);
+}
+.dusk-landing .dusk-os.is-touring .dusk-os__lead {
+  color: color-mix(
+    in srgb,
+    var(--dusk-os-lead-colour) calc(var(--dusk-os-lead-ink) * 100%),
+    var(--md-default-fg-color--light)
+  );
+}
+.dusk-os.is-touring .dusk-os__dot {
+  position: absolute;
+  top: var(--dusk-os-sun-top);
+  left: 50%;
+  display: block;
+  width: calc(2 * var(--dusk-os-sun));
+  height: calc(2 * var(--dusk-os-sun));
+  margin: calc(-1 * var(--dusk-os-sun)) 0 0 calc(-1 * var(--dusk-os-sun));
+  --dusk-os-plain: clamp(0, 1 - (var(--dusk-os-progress, 0) - 0.05) / 0.35, 1);
+  border-radius: 50%;
+  background:
+    linear-gradient(
+      color-mix(
+        in srgb,
+        var(--dusk-gold) calc(var(--dusk-os-plain) * 100%),
+        transparent
+      ),
+      color-mix(
+        in srgb,
+        var(--dusk-gold) calc(var(--dusk-os-plain) * 100%),
+        transparent
+      )
+    ),
+    radial-gradient(
+      ellipse 70% 70% at 50% 32%,
+      #ffe4a6,
+      #f7c35a 38%,
+      #f09a42 72%,
+      #e5643a
+    );
+  transform: scale(
+    calc(
+      var(--dusk-os-start) + (1 - var(--dusk-os-start)) * var(--dusk-os-eased)
+    )
+  );
+  will-change: transform;
+}
+.dusk-os.is-touring .dusk-os__dot::before {
+  content: "";
+  position: absolute;
+  inset: -32.5%;
+  background:
+    url("../landing/rays.svg") center / 100% 100% no-repeat,
+    var(--dusk-os-glow, none);
+  -webkit-mask: radial-gradient(closest-side, transparent 60.6%, #000 60.6%);
+  mask: radial-gradient(closest-side, transparent 60.6%, #000 60.6%);
+  opacity: var(--dusk-os-rays);
+  transform: scale(calc(0.85 + 0.15 * var(--dusk-os-rays)));
+  rotate: calc(-540deg / 7 * var(--dusk-os-progress, 0));
+}
+.dusk-os.is-touring .dusk-os__dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-color: var(--dusk-gold);
+  filter: opacity(calc(1 - var(--dusk-os-quiet)));
+  animation: dusk-pulse 2.4s ease-out infinite;
+}
+.dusk-os.is-touring .dusk-os__terminal {
+  opacity: var(--dusk-os-shown);
+  translate: 0 calc((1 - var(--dusk-os-shown)) * 1.5rem);
+}
+@media screen and (min-width: 76.25em) {
+  .dusk-os.is-touring {
+    --dusk-os-below: 9.5rem;
+    --dusk-os-glow: radial-gradient(
+      closest-side,
+      rgb(240 150 64 / 0.45) 60%,
+      rgb(240 150 64 / 0)
+    );
+    padding-bottom: var(--dusk-os-below);
+  }
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .dusk-os__tour {
+      view-timeline: --dusk-os-tour block;
+    }
+    .dusk-os__tour::after {
+      content: "";
+      display: block;
+      height: var(--dusk-os-pin);
+    }
+    .dusk-os__stage {
+      position: sticky;
+      top: calc(100lvh - var(--dusk-os-height, 100lvh));
+      padding: 6rem 0.8rem 3rem;
+      clip-path: inset(
+        calc(-1 * var(--dusk-os-pin)) 0 calc(-1 * var(--dusk-os-below, 0px))
+      );
+      background-color: transparent;
+    }
+    .dusk-landing .dusk-os__title {
+      scroll-margin-top: calc(100lvh - var(--dusk-os-height, 100lvh) + 6rem);
+      animation: dusk-os-title-ink linear both;
+      animation-timeline: --dusk-os-tour;
+      animation-range: contain
+        calc(var(--dusk-os-from) + 0.34 * var(--dusk-os-pin)) contain
+        calc(var(--dusk-os-from) + 0.52 * var(--dusk-os-pin));
+    }
+    .dusk-landing .dusk-os__lead {
+      color: var(--md-default-fg-color--light);
+      animation: dusk-os-lead linear both;
+      animation-timeline: --dusk-os-tour;
+      animation-range: contain
+        calc(var(--dusk-os-from) + 0.28 * var(--dusk-os-pin)) contain
+        calc(var(--dusk-os-from) + 0.46 * var(--dusk-os-pin));
+    }
+    .dusk-os__dot {
+      position: absolute;
+      top: var(--dusk-os-sun-top);
+      left: 50%;
+      display: block;
+      width: calc(2 * var(--dusk-os-sun));
+      height: calc(2 * var(--dusk-os-sun));
+      margin: calc(-1 * var(--dusk-os-sun)) 0 0 calc(-1 * var(--dusk-os-sun));
+      border-radius: 50%;
+      background:
+        linear-gradient(
+          color-mix(
+            in srgb,
+            var(--dusk-gold) calc(var(--dusk-os-plain) * 100%),
+            transparent
+          ),
+          color-mix(
+            in srgb,
+            var(--dusk-gold) calc(var(--dusk-os-plain) * 100%),
+            transparent
+          )
+        ),
+        radial-gradient(
+          ellipse 70% 70% at 50% 32%,
+          #ffe4a6,
+          #f7c35a 38%,
+          #f09a42 72%,
+          #e5643a
+        );
+      will-change: transform;
+      animation:
+        dusk-os-grow ease-in-out both,
+        dusk-os-gradient linear both;
+      animation-timeline: --dusk-os-tour, --dusk-os-tour;
+      animation-range:
+        contain var(--dusk-os-from) contain
+          calc(var(--dusk-os-from) + 0.65 * var(--dusk-os-pin)),
+        contain calc(var(--dusk-os-from) + 0.05 * var(--dusk-os-pin)) contain
+          calc(var(--dusk-os-from) + 0.4 * var(--dusk-os-pin));
+    }
+    .dusk-os__dot::before {
+      content: "";
+      position: absolute;
+      inset: -32.5%;
+      background:
+        url("../landing/rays.svg") center / 100% 100% no-repeat,
+        var(--dusk-os-glow, none);
+      -webkit-mask: radial-gradient(
+        closest-side,
+        transparent 60.6%,
+        #000 60.6%
+      );
+      mask: radial-gradient(closest-side, transparent 60.6%, #000 60.6%);
+      animation:
+        dusk-os-rays ease-out both,
+        dusk-os-turn linear both;
+      animation-timeline: --dusk-os-tour, --dusk-os-tour;
+      animation-range:
+        contain calc(var(--dusk-os-from) + 0.47 * var(--dusk-os-pin)) contain
+          calc(var(--dusk-os-from) + 0.65 * var(--dusk-os-pin)),
+        contain var(--dusk-os-from) contain
+          calc(var(--dusk-os-from) + var(--dusk-os-pin));
+    }
+    .dusk-os__dot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background-color: var(--dusk-gold);
+      animation:
+        dusk-pulse 2.4s ease-out infinite,
+        dusk-os-quiet linear both;
+      animation-timeline: auto, --dusk-os-tour;
+      animation-range:
+        normal,
+        contain calc(var(--dusk-os-from) + 0.14 * var(--dusk-os-pin)) contain
+          calc(var(--dusk-os-from) + 0.2 * var(--dusk-os-pin));
+    }
+    .dusk-os__terminal {
+      animation: dusk-os-show ease-out both;
+      animation-timeline: --dusk-os-tour;
+      animation-range: contain
+        calc(var(--dusk-os-from) + 0.18 * var(--dusk-os-pin)) contain
+        calc(var(--dusk-os-from) + 0.5 * var(--dusk-os-pin));
+    }
+    @media screen and (min-width: 76.25em) {
+      .dusk-os {
+        --dusk-os-below: 9.5rem;
+        --dusk-os-glow: radial-gradient(
+          closest-side,
+          rgb(240 150 64 / 0.45) 60%,
+          rgb(240 150 64 / 0)
+        );
+        padding-bottom: var(--dusk-os-below);
+      }
+    }
+  }
+}
+@keyframes dusk-os-grow {
+  from {
+    transform: scale(var(--dusk-os-start));
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes dusk-os-title-ink {
+  from {
+    --dusk-os-title-ink: 0;
+  }
+  to {
+    --dusk-os-title-ink: 1;
+  }
+}
+@keyframes dusk-os-lead {
+  to {
+    color: var(--dusk-os-lead-colour);
+  }
+}
+@keyframes dusk-os-gradient {
+  from {
+    --dusk-os-plain: 1;
+  }
+  to {
+    --dusk-os-plain: 0;
+  }
+}
+@keyframes dusk-os-quiet {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dusk-os-rays {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+@keyframes dusk-os-turn {
+  to {
+    rotate: calc(-540deg / 7);
+  }
+}
+@keyframes dusk-os-show {
+  from {
+    opacity: 0;
+    translate: 0 1.5rem;
+  }
+}
+
 .dusk-stack__body {
   display: grid;
   gap: 2.5rem;
@@ -686,10 +1155,10 @@
 }
 @keyframes dusk-hover {
   from {
-    translate: 0 3px;
+    translate: 0 5px;
   }
   to {
-    translate: 0 -3px;
+    translate: 0 -5px;
   }
 }
 .dusk-plate polygon,
