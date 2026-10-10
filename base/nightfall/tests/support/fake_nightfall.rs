@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use aes::cipher::{BlockEncrypt as _, KeyInit as _, generic_array::GenericArray};
 use async_io::{Async, Timer};
 use capnp::capability::{FromClientHook as _, Promise};
 use dusk_capnp::capnp_rpc::{self, RpcSystem, rpc_twoparty_capnp::Side, twoparty};
@@ -25,11 +26,14 @@ use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{DigitallySignedStruct, DistinguishedName, SignatureScheme};
+use tpm2_protocol::TpmUnmarshal as _;
+use tpm2_protocol::data::{TpmaObject, TpmtPublic, TpmuPublicId};
 use x509_parser::extensions::{GeneralName, ParsedExtension};
 use x509_parser::prelude::FromDer as _;
 
 const DEVICE_ID: &str = "0123456789abcdef0123456789abcdef";
 pub(crate) const INSTALL_TOKEN: &str = "an-install-token-for-the-tests";
+pub(crate) const TPM_BOUND_URI: &str = "urn:dusk:attestation:tpm";
 pub(crate) const FIRST_LINK_TIMEOUT: Duration = Duration::from_secs(40);
 pub(crate) const INSTALLATION_ID: u64 =
     dusk_program_kvs_internal::key_id("nightfall.installation_id");
@@ -71,10 +75,192 @@ pub(crate) fn fingerprint(der: &[u8]) -> String {
     hex(ring::digest::digest(&ring::digest::SHA256, der).as_ref())
 }
 
-fn random_identifier() -> String {
-    let mut bytes = [0u8; 16];
+fn random_bytes<const LENGTH: usize>() -> [u8; LENGTH] {
+    let mut bytes = [0u8; LENGTH];
     ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut bytes).unwrap();
-    hex(&bytes)
+    bytes
+}
+
+fn random_identifier() -> String {
+    hex(&random_bytes::<16>())
+}
+
+pub(crate) fn sha256(bytes: &[u8]) -> Vec<u8> {
+    ring::digest::digest(&ring::digest::SHA256, bytes)
+        .as_ref()
+        .to_vec()
+}
+
+fn derive_key(key: &[u8], label: &str, context: &[u8], bits: u32) -> Vec<u8> {
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, key);
+    let length = usize::try_from(bits.div_ceil(8)).unwrap();
+    let mut output = Vec::new();
+    for counter in 1u32.. {
+        if output.len() >= length {
+            break;
+        }
+        let mut hmac = ring::hmac::Context::with_key(&key);
+        hmac.update(&counter.to_be_bytes());
+        hmac.update(label.as_bytes());
+        hmac.update(&[0]);
+        hmac.update(context);
+        hmac.update(&bits.to_be_bytes());
+        output.extend_from_slice(hmac.sign().as_ref());
+    }
+    output.truncate(length);
+    output
+}
+
+fn mask(seed: &[u8], length: usize) -> Vec<u8> {
+    let mut output = Vec::new();
+    for counter in 0u32.. {
+        if output.len() >= length {
+            break;
+        }
+        output.extend_from_slice(&sha256(&[seed, &counter.to_be_bytes()].concat()));
+    }
+    output.truncate(length);
+    output
+}
+
+fn rsa_oaep_sha256(modulus: &[u8], label: &[u8], message: &[u8]) -> Vec<u8> {
+    let size = modulus.len();
+    let mut block = sha256(label);
+    block.resize(size - message.len() - 34, 0);
+    block.push(0x01);
+    block.extend_from_slice(message);
+    let mut seed = random_bytes::<32>().to_vec();
+    for (byte, masked) in block.iter_mut().zip(mask(&seed, size - 33)) {
+        *byte ^= masked;
+    }
+    for (byte, masked) in seed.iter_mut().zip(mask(&block, 32)) {
+        *byte ^= masked;
+    }
+    let encoded = [&[0u8][..], &seed, &block].concat();
+    let encrypted = num_bigint::BigUint::from_bytes_be(&encoded)
+        .modpow(
+            &num_bigint::BigUint::from(65537u32),
+            &num_bigint::BigUint::from_bytes_be(modulus),
+        )
+        .to_bytes_be();
+    let mut padded = vec![0u8; size - encrypted.len()];
+    padded.extend_from_slice(&encrypted);
+    padded
+}
+
+fn aes_128_cfb(key: &[u8], data: &mut [u8]) {
+    let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+    let mut feedback = [0u8; 16];
+    for chunk in data.chunks_mut(16) {
+        let mut stream = GenericArray::clone_from_slice(&feedback);
+        cipher.encrypt_block(&mut stream);
+        for (byte, key) in chunk.iter_mut().zip(stream.iter()) {
+            *byte ^= key;
+        }
+        feedback[..chunk.len()].copy_from_slice(chunk);
+    }
+}
+
+pub(crate) fn make_credential(
+    endorsement_modulus: &[u8],
+    name: &[u8],
+    secret: &[u8],
+) -> (Vec<u8>, Vec<u8>) {
+    let seed = random_bytes::<32>();
+    let encrypted_secret = rsa_oaep_sha256(endorsement_modulus, b"IDENTITY\0", &seed);
+    let mut identity = u16::try_from(secret.len()).unwrap().to_be_bytes().to_vec();
+    identity.extend_from_slice(secret);
+    aes_128_cfb(&derive_key(&seed, "STORAGE", name, 128), &mut identity);
+    let integrity = ring::hmac::Key::new(
+        ring::hmac::HMAC_SHA256,
+        &derive_key(&seed, "INTEGRITY", &[], 256),
+    );
+    let mut hmac = ring::hmac::Context::with_key(&integrity);
+    hmac.update(&identity);
+    hmac.update(name);
+    let mut credential_blob = 32u16.to_be_bytes().to_vec();
+    credential_blob.extend_from_slice(hmac.sign().as_ref());
+    credential_blob.extend_from_slice(&identity);
+    (credential_blob, encrypted_secret)
+}
+
+fn strip_zeros(bytes: &[u8]) -> &[u8] {
+    &bytes[bytes
+        .iter()
+        .position(|byte| *byte != 0)
+        .unwrap_or(bytes.len())..]
+}
+
+fn parse_public(public: &[u8]) -> Result<TpmtPublic, String> {
+    match TpmtPublic::unmarshal(public) {
+        Ok((parsed, [])) => Ok(parsed),
+        Ok(_) => Err(String::from("trailing bytes after a TPM public area")),
+        Err(error) => Err(format!("not a TPM public area: {error}")),
+    }
+}
+
+struct Attested {
+    endorsement_modulus: Vec<u8>,
+    node_key_name: Vec<u8>,
+    node_key_point: Vec<u8>,
+}
+
+fn attest(report: &Report, tpm: &TpmAttestation) -> Result<Attested, String> {
+    let endorsement = parse_public(&tpm.endorsement_key)?;
+    let TpmuPublicId::Rsa(modulus) = &endorsement.unique else {
+        return Err(String::from("the endorsement key is not RSA"));
+    };
+    if report.hardware_fingerprint != sha256(&tpm.endorsement_key) {
+        return Err(String::from(
+            "the hardware fingerprint is not the SHA-256 of the endorsement key",
+        ));
+    }
+    let (_, certificate) =
+        x509_parser::certificate::X509Certificate::from_der(&tpm.endorsement_certificate)
+            .map_err(|error| format!("the endorsement certificate is unreadable: {error}"))?;
+    let x509_parser::public_key::PublicKey::RSA(certified) = certificate
+        .public_key()
+        .parsed()
+        .map_err(|error| format!("the endorsement certificate's key is unreadable: {error}"))?
+    else {
+        return Err(String::from(
+            "the endorsement certificate does not certify an RSA key",
+        ));
+    };
+    if strip_zeros(certified.modulus) != strip_zeros(modulus)
+        || strip_zeros(certified.exponent) != [0x01, 0x00, 0x01]
+    {
+        return Err(String::from(
+            "the endorsement certificate certifies another key",
+        ));
+    }
+    let node_key = parse_public(&tpm.node_key)?;
+    let required = TpmaObject::FIXED_TPM
+        | TpmaObject::FIXED_PARENT
+        | TpmaObject::SENSITIVE_DATA_ORIGIN
+        | TpmaObject::SIGN_ENCRYPT;
+    if !node_key.object_attributes.contains(required)
+        || node_key.object_attributes & (TpmaObject::RESTRICTED | TpmaObject::DECRYPT)
+            != TpmaObject::empty()
+    {
+        return Err(format!(
+            "the node key's attributes {:?} do not make it a TPM-resident signing key",
+            node_key.object_attributes
+        ));
+    }
+    let TpmuPublicId::Ecc(point) = &node_key.unique else {
+        return Err(String::from("the node key is not ECC"));
+    };
+    let mut node_key_point = vec![0x04];
+    node_key_point.extend_from_slice(&point.x);
+    node_key_point.extend_from_slice(&point.y);
+    let mut node_key_name = vec![0x00, 0x0b];
+    node_key_name.extend_from_slice(&sha256(&tpm.node_key));
+    Ok(Attested {
+        endorsement_modulus: modulus.to_vec(),
+        node_key_name,
+        node_key_point,
+    })
 }
 
 pub(crate) fn public_key_of(pkcs8: &[u8]) -> Vec<u8> {
@@ -155,6 +341,7 @@ impl Authorities {
         installation_id: &str,
         public_key: &[u8],
         validity_seconds: (i64, i64),
+        tpm_bound: bool,
     ) -> CertificateDer<'static> {
         let mut parameters = rcgen::CertificateParams::default();
         parameters.distinguished_name = rcgen::DistinguishedName::new();
@@ -169,6 +356,11 @@ impl Authorities {
                 .unwrap(),
             ),
         ];
+        if tpm_bound {
+            parameters.subject_alt_names.push(rcgen::SanType::URI(
+                rcgen::string::Ia5String::try_from(TPM_BOUND_URI).unwrap(),
+            ));
+        }
         parameters.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
         parameters.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
         parameters.not_before = time_from_unix(validity_seconds.0);
@@ -265,6 +457,15 @@ pub(crate) struct Report {
     pub(crate) target_os: String,
     pub(crate) target_arch: String,
     pub(crate) hostname: String,
+    pub(crate) tpm: Option<Box<TpmAttestation>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TpmAttestation {
+    pub(crate) endorsement_key: Vec<u8>,
+    pub(crate) endorsement_certificate: Vec<u8>,
+    pub(crate) endorsement_certificate_chain: Vec<Vec<u8>>,
+    pub(crate) node_key: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -316,11 +517,13 @@ pub(crate) enum Event {
         installation_id: String,
         certificate: String,
         public_key: Vec<u8>,
+        tpm_bound: bool,
     },
     Renewed {
         presented: String,
         certificate: String,
         public_key: Vec<u8>,
+        tpm_bound: bool,
     },
     RenewRefused {
         presented: String,
@@ -368,6 +571,8 @@ pub(crate) struct Behaviour {
     pub(crate) certificate_lifetime_seconds: i64,
     pub(crate) refuse_renew_as_beyond_grace: bool,
     pub(crate) fleet_offers_only_tls12: bool,
+    pub(crate) attest_tpm: bool,
+    pub(crate) credential_for_another_key: bool,
     pub(crate) links: Vec<LinkMode>,
 }
 
@@ -377,16 +582,23 @@ impl Default for Behaviour {
             certificate_lifetime_seconds: 3600,
             refuse_renew_as_beyond_grace: false,
             fleet_offers_only_tls12: false,
+            attest_tpm: false,
+            credential_for_another_key: false,
             links: Vec::new(),
         }
     }
+}
+
+struct Binding {
+    challenge: Vec<u8>,
+    node_key_point: Option<Vec<u8>>,
 }
 
 struct ProvisioningState {
     authorities: Arc<Authorities>,
     behaviour: Behaviour,
     events: Sender<Event>,
-    challenges: RefCell<HashMap<String, Vec<u8>>>,
+    challenges: RefCell<HashMap<String, Binding>>,
 }
 
 struct FakeProvisioning {
@@ -456,6 +668,7 @@ impl FakeProvisioning {
         &self,
         installation_id: &str,
         public_key: &[u8],
+        tpm_bound: bool,
         mut issued: provision_capnp::issued::Builder<'_>,
     ) -> String {
         let now = now_seconds();
@@ -464,6 +677,7 @@ impl FakeProvisioning {
             installation_id,
             public_key,
             (now - 1, not_after),
+            tpm_bound,
         );
         let mut chain = issued.reborrow().init_certificate_chain(2);
         chain.set(0, leaf.as_ref());
@@ -519,18 +733,53 @@ impl provisioning::Server for FakeProvisioning {
                 target_os: text(device.get_target_os())?,
                 target_arch: text(device.get_target_arch())?,
                 hostname: text(device.get_hostname())?,
+                tpm: if device.has_tpm() {
+                    let tpm = device.get_tpm()?;
+                    Some(Box::new(TpmAttestation {
+                        endorsement_key: tpm.get_endorsement_key()?.to_vec(),
+                        endorsement_certificate: tpm.get_endorsement_certificate()?.to_vec(),
+                        endorsement_certificate_chain: tpm
+                            .get_endorsement_certificate_chain()?
+                            .iter()
+                            .map(|certificate| certificate.map(<[u8]>::to_vec))
+                            .collect::<capnp::Result<_>>()?,
+                        node_key: tpm.get_node_key()?.to_vec(),
+                    }))
+                } else {
+                    None
+                },
             };
-            let mut challenge = vec![0u8; 32];
-            ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut challenge)
-                .map_err(|_| capnp::Error::failed(String::from("no randomness")))?;
-            self.state
-                .challenges
-                .borrow_mut()
-                .insert(installation_id.clone(), challenge.clone());
+            let challenge = random_bytes::<32>().to_vec();
             let mut assignment = results.get().init_assignment();
             assignment.set_device_id(DEVICE_ID);
             assignment.set_installation_id(&installation_id);
-            assignment.set_challenge(&challenge);
+            let node_key_point = match &report.tpm {
+                Some(tpm) if self.state.behaviour.attest_tpm => {
+                    let attested = attest(&report, tpm)
+                        .map_err(|reason| capnp::Error::failed(format!("denied: {reason}")))?;
+                    let name = if self.state.behaviour.credential_for_another_key {
+                        [&[0x00, 0x0b][..], &random_bytes::<32>()].concat()
+                    } else {
+                        attested.node_key_name
+                    };
+                    let (credential_blob, encrypted_secret) =
+                        make_credential(&attested.endorsement_modulus, &name, &challenge);
+                    assignment.set_credential_blob(&credential_blob);
+                    assignment.set_encrypted_secret(&encrypted_secret);
+                    Some(attested.node_key_point)
+                }
+                _ => {
+                    assignment.set_challenge(&challenge);
+                    None
+                }
+            };
+            self.state.challenges.borrow_mut().insert(
+                installation_id.clone(),
+                Binding {
+                    challenge,
+                    node_key_point,
+                },
+            );
             self.state
                 .events
                 .send(Event::Assigned {
@@ -554,20 +803,31 @@ impl provisioning::Server for FakeProvisioning {
             let params = params.get()?;
             let request =
                 read_certificate_request(params.get_csr()?).map_err(capnp::Error::failed)?;
-            let expected = self
+            let binding = self
                 .state
                 .challenges
                 .borrow_mut()
                 .remove(&request.installation_id)
                 .ok_or_else(|| capnp::Error::failed(String::from("denied: no assignment")))?;
-            if params.get_challenge()? != expected.as_slice() {
+            if params.get_challenge()? != binding.challenge.as_slice() {
                 return Err(capnp::Error::failed(String::from(
                     "denied: wrong challenge",
                 )));
             }
+            if binding
+                .node_key_point
+                .as_ref()
+                .is_some_and(|point| *point != request.public_key)
+            {
+                return Err(capnp::Error::failed(String::from(
+                    "denied: the request's key is not the attested node key",
+                )));
+            }
+            let tpm_bound = binding.node_key_point.is_some();
             let certificate = self.issue(
                 &request.installation_id,
                 &request.public_key,
+                tpm_bound,
                 results.get().init_issued(),
             );
             self.state
@@ -576,6 +836,7 @@ impl provisioning::Server for FakeProvisioning {
                     installation_id: request.installation_id,
                     certificate,
                     public_key: request.public_key,
+                    tpm_bound,
                 })
                 .ok();
             Ok(())
@@ -606,9 +867,32 @@ impl provisioning::Server for FakeProvisioning {
             }
             let request =
                 read_certificate_request(params.get()?.get_csr()?).map_err(capnp::Error::failed)?;
+            let (_, presented_certificate) =
+                x509_parser::certificate::X509Certificate::from_der(&presented)
+                    .map_err(|error| capnp::Error::failed(error.to_string()))?;
+            let tpm_bound = presented_certificate
+                .subject_alternative_name()
+                .ok()
+                .flatten()
+                .is_some_and(|names| {
+                    names
+                        .value
+                        .general_names
+                        .contains(&GeneralName::URI(TPM_BOUND_URI))
+                });
+            let same_key =
+                presented_certificate.public_key().subject_public_key.data == request.public_key;
+            if tpm_bound != same_key {
+                return Err(capnp::Error::failed(String::from(if tpm_bound {
+                    "denied: a TPM-bound certificate renews with its own key"
+                } else {
+                    "denied: renew needs a new key"
+                })));
+            }
             let certificate = self.issue(
                 &request.installation_id,
                 &request.public_key,
+                tpm_bound,
                 results.get().init_issued(),
             );
             self.state
@@ -617,6 +901,7 @@ impl provisioning::Server for FakeProvisioning {
                     presented: presented_fingerprint,
                     certificate,
                     public_key: request.public_key,
+                    tpm_bound,
                 })
                 .ok();
             Ok(())
@@ -756,6 +1041,7 @@ async fn replace_certificate(
             &stored.installation(),
             &stored.public_key(),
             validity_seconds,
+            false,
         );
         let mut set = kvs.set_request();
         set.get().set_key(CERTIFICATE_CHAIN);

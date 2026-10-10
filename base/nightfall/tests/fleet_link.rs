@@ -145,6 +145,7 @@ fn renewal_replaces_the_key_and_certificate_and_links_again() {
         presented,
         certificate: second,
         public_key: second_key,
+        ..
     } = fleet.expect(Duration::from_secs(20), "renewal", |event| {
         matches!(event, Event::Renewed { .. })
     })

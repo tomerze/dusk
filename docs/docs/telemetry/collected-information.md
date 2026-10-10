@@ -13,11 +13,16 @@ collector; and a node built to
 [connect to nightfall](../getting-started/guides/connect-to-nightfall.md) sends
 nightfall a report every time it enrolls - the SHA-256 of the device's id, the
 device's network name, Dusk's version, the impl, and the operating system and
-processor architecture the node was built for. None of it is kept across a
-restart; the node gathers it again each time it starts.
+processor architecture the node was built for. On a machine whose TPM attests
+the node's key, the report carries the TPM's endorsement key, its certificate
+and the certificates of its issuers, and the public half of the node's key, and
+the SHA-256 of that endorsement key takes the place of the device's id. None of it
+is kept across a restart; the node gathers it again each time it starts.
 
 Some of these facts can identify more than the node: the device's id, which
-stays the same for as long as the operating system is installed; the device's
+stays the same for as long as the operating system is installed; a TPM's
+endorsement key and its certificate, which stay the same for as long as the TPM
+is in the machine; the device's
 network name, or on Windows its computer name, which on many computers includes
 its owner's name; and the path of the program the node runs from and of the
 directory it was started in, which can include the name of an account's home

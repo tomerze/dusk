@@ -331,6 +331,8 @@ the program, not through the driver) the node key is created in the TPM -
 `base/nightfall/src/tpm.rs`, on `tpm2-protocol` - and its private and public
 areas are kept in `nightfall.private_key`; without a TPM, or with one it cannot
 use, the key is a software key as before.
+At enrollment the node attests a TPM key by credential activation against the
+TPM's RSA endorsement key, when the TPM has a certificate for it.
 Its provisioning schema is `base/nightfall/capnp/provision.capnp`.
 
 **`Dusk.process` → run.** `Dusk.process(programArgs)` asks the registry for the
