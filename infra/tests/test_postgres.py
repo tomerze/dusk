@@ -26,6 +26,8 @@ REPORTING_TABLES = {
     "campaign_events",
     "campaign_nodes",
     "alerts",
+    "alert_transitions",
+    "alert_deliveries",
     "ledger_chain_heads",
 }
 
