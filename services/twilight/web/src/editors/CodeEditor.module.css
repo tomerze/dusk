@@ -1,0 +1,45 @@
+.editor {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-default);
+  overflow: hidden;
+}
+
+.editor:focus-within {
+  border-color: var(--mantine-primary-color-filled);
+  outline: 1px solid var(--mantine-primary-color-filled);
+}
+
+.editor[data-invalid] {
+  border-color: var(--mantine-color-red-filled);
+}
+
+.editor[data-readonly] {
+  background: var(--twilight-surface-sunken);
+}
+
+.editor[data-readonly]:focus-within {
+  border-color: var(--mantine-color-default-border);
+  outline: none;
+}
+
+.editor :global(.cm-editor) {
+  min-height: inherit;
+}
+
+.editor :global(.cm-editor.cm-focused) {
+  outline: none;
+}
+
+.editor :global(.cm-scroller) {
+  min-height: inherit;
+  line-height: 1.55;
+}
+
+.editor[data-single-line] :global(.cm-scroller) {
+  overflow-x: auto;
+}
+
+.editor[data-single-line] :global(.cm-content) {
+  padding: 6px 0;
+}

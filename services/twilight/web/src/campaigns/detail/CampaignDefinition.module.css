@@ -1,0 +1,47 @@
+.summary {
+  padding: 16px 18px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-left: 3px solid var(--mantine-primary-color-filled);
+  border-radius: var(--mantine-radius-md);
+  background: var(--twilight-surface);
+}
+
+.headline {
+  font-size: var(--mantine-font-size-lg);
+  line-height: 1.45;
+  color: var(--twilight-text-strong);
+  max-width: 80ch;
+}
+
+.details {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  max-width: 80ch;
+}
+
+.details li + li {
+  margin-top: 2px;
+}
+
+.facts {
+  --data-list-label-width: 150px;
+}
+
+.phases {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.phases th {
+  padding: 4px 12px 6px 0;
+  text-align: left;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+
+.phases td {
+  padding: 6px 12px 6px 0;
+  border-top: 1px solid var(--twilight-border-subtle);
+}

@@ -1,0 +1,15 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 100%, var(--twilight-accent-soft), transparent 70%),
+    var(--mantine-color-body);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--twilight-surface);
+}

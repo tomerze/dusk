@@ -1,0 +1,16 @@
+.presence {
+  white-space: nowrap;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--mantine-color-dimmed);
+}
+
+.dot[data-online='true'] {
+  border-color: var(--mantine-color-green-filled);
+  background: var(--mantine-color-green-filled);
+}
