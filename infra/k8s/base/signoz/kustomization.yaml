@@ -6,11 +6,19 @@ labels:
 resources:
   - signoz.yaml
   - network-policy.yaml
+  - dashboards-job.yaml
 configMapGenerator:
   - name: signoz-otel-collector
     behavior: merge
     files:
       - otel-collector-config.yaml=collector.yaml
+  - name: signoz-dashboards
+    files:
+      - dashboards.py
+      - dashboards/connections.json
+      - dashboards/enrollments.json
+      - dashboards/ledger.json
+      - dashboards/process-results.json
 patches:
   - target:
       kind: Deployment

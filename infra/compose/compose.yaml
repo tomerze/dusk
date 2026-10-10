@@ -647,6 +647,23 @@ services:
       retries: 30
       start_period: 20s
 
+  signoz-dashboards:
+    profiles: [signoz]
+    image: python:3.14.8-slim-trixie
+    entrypoint: ["python", "/scripts/dashboards.py", "/dashboards"]
+    networks: [stack]
+    environment:
+      SIGNOZ_URL: http://signoz:8080
+      SIGNOZ_EMAIL: admin@${DUSK_DOMAIN:-dusk.test}
+      SIGNOZ_PASSWORD_FILE: /run/secrets/signoz-admin/password
+    depends_on:
+      signoz:
+        condition: service_healthy
+    volumes:
+      - ../k8s/base/signoz/dashboards.py:/scripts/dashboards.py:ro
+      - ../k8s/base/signoz/dashboards:/dashboards:ro
+      - { <<: *secret, target: /run/secrets/signoz-admin, volume: { subpath: signoz-admin } }
+
   signoz-ingester:
     <<: [*restart, *logging]
     profiles: [signoz]
