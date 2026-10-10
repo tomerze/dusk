@@ -73,6 +73,7 @@ kvs get dusk.version         # read a value
 kvs get dusk                 # read every key starting with dusk
 kvs set deploy.stage canary  # store a string
 kvs scan                     # list every key
+kvs bind 127.0.0.1:6379      # serve the store to redis-cli from this client
 ```
 
 ## `cp`

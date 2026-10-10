@@ -20,6 +20,8 @@ kvs set <key> <value>    # store <value> under <key>, replacing what was there
 kvs delete <key>         # remove <key>; prints whether it was there
 kvs exists <key>         # print whether <key> is there
 kvs scan                 # list every key, with its flags
+kvs server               # start the node's default kvs server (see below)
+kvs bind <address>       # serve the store over the Redis protocol (see below)
 ```
 
 A value typed at the prompt is stored as a string. Values written by programs
@@ -104,11 +106,12 @@ The node logs every override that sets or removes a key at `warn`, with the
 key's id in a `key` field: `forbidden-unstick overwrote a sticky key` or
 `forbidden-unstick removed a sticky key`.
 
-A client driving a `kvs bind` process over its portal meets the same refusal:
+A client driving a `kvs server` process over its portal meets the same refusal:
 `KvsPortal.set` and `KvsPortal.delete` refuse a sticky key unless the call sets
-its `forbiddenUnstick` parameter, the portal's `--forbidden-unstick`. A server
-for a protocol in which stickiness means nothing, such as the Redis server of
-PR #83, would pass it on every call.
+its `forbiddenUnstick` parameter, the portal's `--forbidden-unstick`. Stickiness
+means nothing to a Redis client, so [`kvs bind`](#use-it-from-a-redis-client)
+passes it on every call: a Redis `SET` or `DEL` overrides a sticky key, and the
+node logs the override like any other.
 
 A program on the node writing through `dusk_program_kvs_internal::Kvs::set` sets a
 sticky key like any other, which is how Dusk writes the keys that are sticky.
@@ -146,7 +149,7 @@ get`.
 
 A program on the node marks a key the same way, passing `FLAG_SENSITIVE` in
 the flags of `dusk_program_kvs_internal::Kvs::set`, and a client driving a
-`kvs bind` process passes it in the `flags` of `KvsPortal.set`. A program that
+`kvs server` process passes it in the `flags` of `KvsPortal.set`. A program that
 reads a key with `Kvs::get_with_flags`, and a client that reads one with
 `KvsPortal.get`, gets its flags with its value, and keeps a sensitive one out of
 its own logs too.
@@ -300,6 +303,138 @@ node logs a warning that it did.
 
 A `kvs get` compiled into an init script cannot ask the node for its keys
 either, so it reads the one key you name, by its whole name or its id.
+
+## Use it from a Redis client
+
+`kvs bind <address>` makes the client you ran it from listen on `<address>`,
+speaking the
+[Redis protocol](https://redis.io/docs/latest/develop/reference/protocol-spec/),
+RESP2 or, for a client that asks with `HELLO 3`, RESP3. Any Redis client can
+then read and write the store. `redis-cli` works as is:
+
+```sh
+# in the dusk prompt
+kvs bind 127.0.0.1:6379
+```
+
+```sh
+# in another terminal, on the same machine as the dusk prompt
+redis-cli -p 6379
+127.0.0.1:6379> GET dusk.version
+"0.1.0"
+127.0.0.1:6379> SET deploy.stage canary
+OK
+127.0.0.1:6379> KEYS deploy.*
+1) "deploy.stage"
+```
+
+There is no password: anything that can reach `<address>` reads and writes every
+key, [sensitive](#sensitive-keys) ones included. Bind to `127.0.0.1` unless you
+mean the store to be reachable from other machines.
+
+### What a Redis write is
+
+A Redis `SET` stores its value as a string and replaces the key's flags, the way
+`kvs set` does. It overrides a [sticky](#sticky-keys) key, since a Redis client
+has no way to say `--forbidden-unstick`. `kvs bind --sensitive` and
+`kvs bind --persistent` mark every key the binding writes, so
+`kvs bind --persistent 127.0.0.1:6379` keeps every key a Redis client sets in the
+node's [persistent file](#persistent-keys), and a write to a node built without
+one answers `ERR this node keeps no persistent kvs keys: its kvs launcher was built without a file`.
+A binding without `--persistent` takes every key it writes out of the file, as a
+`kvs set` without `--persistent` does.
+
+The Redis front never logs a value. It logs each connection that opens, closes
+or fails, and the node logs a sticky key a Redis write overrode, by its id.
+
+### Key names
+
+The node holds ids, not names, so a Redis client sees a key by the name the
+program that writes it registered, or by a name this binding has hashed: one it
+wrote, or one it read and found. `SET session:abc v` followed by
+`KEYS session:*` answers `session:abc`. Any other key - one a different client
+set, say - shows as its id, `0x…`, which `GET` and the rest accept back.
+
+### The binding is a process
+
+The listener runs on the client, but what decides how long it lives is a
+process on the node, named after the machine the client is on: `ps` shows it
+as `kvs[bind ⟷ pc1]`, where `pc1` is the hostname of the *client*, not of the
+node - so two people binding one node's store can tell their own from each
+other's. Set `DUSK_CLIENT_HOSTNAME` to send a different name.
+
+That process does nothing else: it holds no keys and answers no Redis command.
+`kvs bind` waits on it, the way `sh --prompt` waits on a prompt, so the command
+stays in the foreground for as long as the binding is up. Ending the process
+ends the binding and closes every Redis connection with it - ctrl+c where you
+ran it, or `kill <pid>` from anywhere else. A refused address fails the command
+and leaves no process behind:
+
+```text
+the process's created callback failed: … bind 127.0.0.1:6379: Address already in use (os error 98)
+```
+
+The listener itself lives in the client, so the binding also ends when the
+client does, whether or not anything terminated the process. The node does not
+notice that, so a client that goes away without being terminated leaves its
+`kvs[bind ⟷ …]` in `ps` with no listener behind it; `kill <pid>` clears it.
+That is why `sh -d "kvs bind …"` is not a way to leave a binding running: the
+command detaches, but the listener still belongs to the client that ran it.
+
+Each Redis connection is served by the node's **default kvs server**, a process
+at a fixed pid that the first connection starts if nothing is running it, and
+that outlives any one binding: `ps` shows it as `kvs[server]`. A connection
+that finds it gone starts it again. `kvs bind <address> <pid>` serves from the
+kvs server at `<pid>` instead, and refuses each connection with
+`ERR pid 0x… runs another program, not kvs` when another program holds that pid.
+`kvs server [<pid>]` starts one without binding anything to it.
+
+The store belongs to the node, not to either process: `kvs get` and the rest
+read the same keys whether or not any server is running.
+
+### Commands served
+
+| Redis command | What it does here |
+|---------------|-------------------|
+| `PING [message]` | Answers `PONG`, or echoes `message`. |
+| `GET key` | The value as a string, nil if the key is absent, `WRONGTYPE` if it holds a list or a record. |
+| `SET key value` | Stores `value` as a string. Options (`EX`, `NX`, `GET`, …) answer `ERR SET option '…' is not supported`: keys here do not expire. |
+| `MGET key [key …]` | The values, in order, nil for each key that is absent or holds a list or a record. |
+| `MSET key value [key value …]` | Stores each value as a string, one key after another; answers `OK`. |
+| `DEL key [key …]` | Removes the keys; answers how many were present. |
+| `EXISTS key [key …]` | Answers how many of the keys are present. |
+| `TYPE key` | `string`, `list` (a Dusk list), `hash` (a Dusk record), or `none`. |
+| `KEYS pattern` | Every key matching the glob (`*`, `?`), sorted. |
+| `SCAN cursor [MATCH pattern] [COUNT n]` | One page of keys and the cursor the next page starts at, `0` at the end. `COUNT` is the page size, 10 by default, and `MATCH` filters the page. |
+| `QUIT` | Closes the connection. |
+| `HELLO [2\|3]` | Switches the connection to RESP2 or RESP3, or with no version keeps the one it speaks, and answers `server` `dusk`, `version`, `proto`, `mode` `standalone`, `role` `master` and an empty `modules`. `SETNAME` is accepted and ignored; `AUTH` answers `ERR HELLO option 'AUTH' is not supported`. |
+| `INFO` | `server_name`, `dusk_version`, `redis_mode`, `loading` and `role`, whatever section is asked for. |
+
+Anything else answers `ERR unknown command`. `COMMAND` answers an empty array
+and `CLIENT` answers `OK` to every subcommand, so that `redis-cli` and the client
+libraries that announce themselves connect without a warning. `HELLO` and `INFO` are there
+for the libraries that open every connection with them: redis-py and go-redis
+ask for RESP3 with `HELLO 3`, and ioredis checks `INFO` before its first command.
+
+Redis bulk strings are binary-safe; these are not. A command carrying an
+argument that is not UTF-8 answers `ERR arguments must be UTF-8` and the
+connection stays open, so a Redis library that stores encoded values will fail
+on the first one.
+
+A connection is closed with an `ERR` naming why when it breaks the protocol, or
+when the node cannot be reached. A command may carry at most 1,048,576
+arguments and 512 MiB in all, and a header line at most 64 KiB.
+
+### How values appear
+
+| Dusk value | Redis reply to `GET` |
+|------------|----------------------|
+| string, text | bulk string |
+| unsigned integer | bulk string of its decimal digits |
+| bool | bulk string `1` or `0` |
+| bytes | bulk string of the raw bytes |
+| null | nil |
+| list, record | `WRONGTYPE`; `TYPE` names it `list` or `hash` |
 
 ## What Dusk records
 
