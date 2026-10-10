@@ -308,11 +308,13 @@ and after a change of toolchain or of a crate `dusk_core` depends on. Set
 **One secret in every node.** Every node of a build holds the same token, and
 it is easy to take from any of them: it is in the binary, and every client that
 connects to a node can ask for it with `Dusk.fleetToken`. Whoever extracts it
-once can enroll as many nodes as they like, as if they were yours. Keep a node's
-port off networks you do not trust. Building with a new token gives the nodes
-built from then on a new one; it does not stop the leaked token working, and the
-nodes already shipped still carry it. Only whoever accepts enrollments can stop
-accepting it.
+once can enroll as many nodes as they like, as if they were yours - unless
+nightfall refuses nodes that do not attest a TPM; see
+[The TPM](../getting-started/guides/connect-to-nightfall.md#the-tpm). Keep a
+node's port off networks you do not trust. Building with a new token gives the
+nodes built from then on a new one; it does not stop the leaked token working,
+and the nodes already shipped still carry it. Only whoever accepts enrollments
+can stop accepting it.
 
 ## 3. Link
 

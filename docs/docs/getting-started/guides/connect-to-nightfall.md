@@ -145,6 +145,9 @@ identity: two nodes on one device, or in one process, are two installations.
    or `uninitialized`) gets 32 random bytes, kept in
    `nightfall.hardware_fingerprint`; such a machine gets a new device id when it
    is reinstalled, and the node says so in its logs at `warn`.
+   A node that attests its key with a TPM reports instead the SHA-256 of the
+   TPM's endorsement key public area, the `TPMT_PUBLIC` it sends as
+   `TpmAttestation.endorsementKey` (see [The TPM](#the-tpm)).
 3. nightfall answers with the device id it derived, a new installation id and a
    one-time challenge.
 4. The node calls `enroll` with a certificate request for its new key: an empty
@@ -206,6 +209,8 @@ certificate and storing its key is finished from the staged key at the next
 start, so the node always has a working identity. A certificate already past its
 renewal point when the node starts, or when it is about to connect again, is
 renewed before connecting.
+A certificate issued to a key nightfall attested is renewed with that same key;
+see [The TPM](#the-tpm).
 
 A failed renewal is retried after a random wait growing up to 10 minutes, and
 the node stays connected while it retries.
@@ -223,6 +228,9 @@ On a machine with a TPM 2.0, the node creates its key in the TPM, where it
 stays: the TPM signs the node's certificate requests and every TLS handshake,
 and nothing outside the TPM ever holds the private key, so a copy of the node's
 persistent kvs file is no copy of its identity.
+When it enrolls, the node also proves to nightfall that the key is in a genuine
+TPM. A nightfall that refuses nodes that do not prove it lets a fleet token
+taken from one machine enroll only as many nodes as whoever took it has TPMs.
 
 The node uses the TPM at `--tpm`, `/dev/tpmrm0` by default - the Linux kernel's
 TPM resource manager. The account the node runs as must be able to read and
@@ -238,8 +246,45 @@ A TPM the node cannot use - one it cannot open, or one whose owner hierarchy has
 a password - leaves the key in the kvs, as on a machine without a TPM, and the
 node logs why at `warn`.
 
+**Enrolling.** The node reads the TPM's RSA endorsement key certificate from NV
+index `0x01C00002`, and its issuers' certificates from NV indices `0x01C00100`
+onward when the TPM keeps any, and recreates the TPM's RSA 2048 endorsement key
+from the TCG template. `assign` carries them in the device report's `tpm` field
+with the node key's public area, and the hardware fingerprint is the SHA-256 of
+the endorsement key's public area, its `TPMT_PUBLIC` as the report carries it,
+instead of the device's id, so the device id follows the TPM. nightfall answers with a credential that only that TPM can decrypt, and
+only while it holds that node key; the node has the TPM decrypt it, and sends
+the result to `enroll` with a certificate request the TPM signed. A nightfall
+that asks for no attestation answers with a plain challenge, and gets a node key
+kept in the TPM all the same.
+
+**What nightfall needs.** nightfall checks the endorsement key certificate
+against the certificate authorities of TPM manufacturers, and Dusk ships none:
+whoever runs nightfall gives it a bundle of the manufacturers' root
+certificates, with the intermediates their TPMs do not keep. Without a bundle,
+nightfall refuses every node that attests; with one, it refuses a TPM whose
+certificate does not chain to it. To see which manufacturer's authority a
+machine's TPM needs, read its certificate's issuer with tpm2-tools and OpenSSL:
+
+```sh
+tpm2_nvread 0x1c00002 -o ek.der
+openssl x509 -inform der -in ek.der -noout -issuer
+```
+
+**A TPM without a certificate.** nightfall refuses an endorsement key that has no
+certificate: such a key proves nothing about the TPM it is in. Some firmware
+TPMs serve their certificate from the manufacturer's web service instead of
+keeping it in NV, and many virtual machines' TPMs have none. The node does not
+offer nightfall such a key: it keeps its key in the TPM all the same, enrolls
+with its token alone, as with a nightfall that asks for no attestation, and logs
+at `warn` that it did not attest. So it does with a TPM whose endorsement
+hierarchy has a password.
+
 **Renewing.** A key kept in the TPM is renewed with a new key, created in the
 same TPM.
+A certificate nightfall issued to an attested key, though, carries a third
+subject alternative name, `urn:dusk:attestation:tpm`, and is renewed with the
+same key: the key never leaves the TPM, so there is nothing to replace.
 
 **A key that does not load.** When the stored TPM key does not load as the node
 starts, the node logs that at `error` and enrolls again, as a new installation -
@@ -247,6 +292,8 @@ whatever the reason: the TPM was cleared, which changes its storage key; the
 persistent kvs file came from another machine; the TPM did not open on that
 start; or the node now runs with `--no-tpm`. When no TPM was opened, the new
 installation's key is a software key.
+A node that attests keeps its device id through a cleared TPM: clearing a TPM
+leaves its endorsement key as it was.
 
 ## Several `nightfall -c` on one node
 
