@@ -97,8 +97,6 @@ dawn:
   service: dawn
 reconcile:
   ledger_keys: /etc/twilight/pki/ledger-keys.json
-alerts:
-  webhook_url: https://alerts.example.org/dusk
 ```
 
 The same `instance` from the environment is `TWILIGHT__INSTANCE=twilight-0`,
@@ -219,14 +217,217 @@ is skipped for 30 seconds.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `webhook_url` | | An `http` or `https` URL every new critical or high alert is posted to. |
 | `enrollment_rate_per_minute` | `600` | More enrollments than this in one minute raise a high `enrollment_rate` alert. |
+| `public_url` | | twilight's address as people open it, such as `https://twilight.example.org`. Every notification links its alert as `<public_url>/alerts?alert=<id>`. Required with `receivers`. |
+| `runbook_url` | | Where the [runbooks](runbooks/index.md) are published, with `{kind}` where the alert's kind goes, such as `https://docs.example.org/stack/runbooks/{kind}/`. Every notification links its kind's runbook. Required with `receivers`. |
+| `delivery_horizon_seconds` | `86400` | How long twilight keeps retrying a notification before it gives up on it. |
+| `receivers` | none | Where notifications go: each receiver has a `name` (lowercase letters, digits and dashes, at most 63 characters) and exactly one of `pagerduty`, `slack`, `email`, `teams` or `webhook`. |
+| `routes` | none | Which alerts each receiver gets. A receiver no route names stops twilight from starting. |
 
-The webhook receives the alert as JSON - `id`, `time`, `severity`, `kind`,
-`fingerprint`, `detail` and the rest of the alert's columns - with up to five
-attempts per alert. A delivery that gives up is counted in
-`twilight_alert_webhook_failures_total`; the alert itself is in the `alerts`
-table either way.
+`receivers` and `routes` are set in the file only; `TWILIGHT__ALERTS__RECEIVERS`
+and `TWILIGHT__ALERTS__ROUTES` are refused. Every secret a receiver needs - a
+PagerDuty routing key, a Slack or Teams webhook URL, an SMTP password, a webhook
+signing secret - comes from a file. twilight reads each one when it starts, and
+does not start while one is missing or empty, then again for every attempt, so
+a replaced file is used without a restart; a change to `receivers` or `routes`
+themselves takes a restart. A secret never appears in a log line, a metric, the
+API or a delivery's `last_error`.
+
+```yaml title="/etc/twilight/twilight.yaml"
+alerts:
+  public_url: https://twilight.example.org
+  runbook_url: https://docs.example.org/stack/runbooks/{kind}/
+  receivers:
+    - name: on-call
+      pagerduty:
+        routing_key_file: /run/secrets/alert-receivers/pagerduty-routing-key
+    - name: ops-chat
+      slack:
+        webhook_url_file: /run/secrets/alert-receivers/slack-webhook-url
+    - name: soc-mail
+      email:
+        host: smtp.example.org
+        username: dusk-alerts
+        password_file: /run/secrets/alert-receivers/smtp-password
+        from: dusk-alerts@example.org
+        to: [soc@example.org]
+    - name: noc
+      teams:
+        webhook_url_file: /run/secrets/alert-receivers/teams-webhook-url
+    - name: siem
+      webhook:
+        url: https://siem.example.org/dusk/alerts
+        secret_file: /run/secrets/alert-receivers/webhook-secret
+  routes:
+    - receiver: on-call
+      severities: [critical]
+    - receiver: ops-chat
+      severities: [high, medium, low]
+    - receiver: soc-mail
+      tenants: [acme]
+    - receiver: noc
+      kinds: [process_without_intent, default_shell_without_intent, ledger_chain_broken]
+    - receiver: siem
+```
+
+#### Receivers
+
+| Receiver | Key | Default | Meaning |
+|----------|-----|---------|---------|
+| `pagerduty` | `routing_key_file` | | A file holding the integration key of a PagerDuty service's Events API v2 integration. |
+| | `url` | `https://events.pagerduty.com/v2/enqueue` | The Events API v2 endpoint. |
+| `slack` | `webhook_url_file` | | A file holding a Slack incoming webhook URL. |
+| `teams` | `webhook_url_file` | | A file holding the URL of a Microsoft Teams Workflows webhook, such as one made from the *Send webhook alerts to a channel* template. |
+| `email` | `host` | | The SMTP server. |
+| | `port` | `587` with `starttls`, `465` with `tls`, `25` with `none` | |
+| | `security` | `starttls` | `starttls` (refuses a server that does not offer STARTTLS), `tls` (TLS from the first byte) or `none` (plaintext, without credentials; for a relay on the same host or a test sink only). The server's certificate is verified against the system's certificate authorities; set the environment variable `SSL_CERT_FILE` to a PEM bundle to trust a private one. |
+| | `username`, `password_file` | | Sign in with PLAIN, or LOGIN when the server offers only that. Set together, never with `none`. |
+| | `from` | | The sender, one bare address. |
+| | `to` | | The recipients, bare addresses. |
+| `webhook` | `url` | | An `http` or `https` URL. |
+| | `secret_file` | | A file holding the secret the body is signed with ([below](#the-webhook)). |
+
+#### Routes
+
+Each route names a `receiver` and may narrow what it gets with lists:
+
+| Key | Matches |
+|-----|---------|
+| `severities` | `critical`, `high`, `medium`, `low` |
+| `kinds` | alert kinds, such as `process_without_intent` (the [runbooks](runbooks/index.md) list every kind) |
+| `tenants` | the alert's tenant: the tenant of the node it names (`device_id` and `installation_id` in its detail) or of the campaign it names. An alert with no tenant never matches a route that lists tenants. |
+
+An absent or empty list matches everything. An alert goes to the receiver of
+every route it matches, once per receiver even when several routes name the
+same one. An acknowledgement or a resolution goes to every receiver that got
+the alert's opening or escalation, whatever the routes say by then.
+
+#### What is sent, and when
+
+Every change to an alert is a transition, and every transition is a
+notification to its receivers:
+
+| Transition | When |
+|------------|------|
+| `opened` | An alert is raised whose fingerprint has no open alert. |
+| `re_escalated` | An open alert is raised again at a higher severity. It takes the new severity and the new detail, and loses its acknowledgement, so it waits for someone to acknowledge it again. A repeat at the same or a lower severity only counts an occurrence and sends nothing. |
+| `acknowledged` | Someone acknowledges the alert. |
+| `resolved` | Someone resolves the alert, or twilight does (`campaign_paused_by_gate` resolves when the campaign is resumed, aborted, completed or fails). |
+
+twilight records each transition in Postgres (`alert_transitions`) in the same
+transaction that changes the alert, so a transition is never lost and never
+recorded twice, whichever code path made it. Within a second it becomes one row
+per receiver in `alert_deliveries`, which every twilight instance delivers
+from; an instance takes a row for two minutes at a time, so a row is sent by one
+instance at a time, and the row of an instance that died is taken by another
+once that time is up. Each receiver gets an alert's notifications in order: a
+resolution waits until the opening was delivered or given up on.
+
+A failed attempt is retried with full-jitter exponential backoff, from up to 5
+seconds after the first failure to up to 10 minutes, or after the receiver's
+`Retry-After` (up to an hour) when it answers 429. A network failure, HTTP 408,
+425, 429 or 5xx, or an SMTP 4xx reply is retried; any other HTTP 4xx answer or
+an SMTP 5xx reply gives up at once; a notification still not delivered
+`delivery_horizon_seconds` after its transition gives up then. A notification
+twilight gave up on is not sent again; [Alert delivery
+failing](runbooks/alert_delivery_failing.md) is the Grafana rule that pages for
+it.
+
+Restarts, crashes and leader changes neither lose nor repeat a notification,
+with one exception: when twilight stops after a receiver accepted a
+notification and before it recorded that, the notification is sent again with
+the same idempotency key. PagerDuty folds the repeat into the incident it
+already has, a webhook receiver can drop it by its `Idempotency-Key`, and a mail
+client by its `Message-ID`; Slack and Teams show it twice.
+
+Every notification says what happened and links the alert in twilight and its
+kind's runbook. An opening or an escalation also carries the alert's severity,
+kind and tenant, its node (host name, device id and installation id), campaign
+(name and id), principal and credential when it names them, when it was raised
+and how many times it occurred, and its evidence: the rest of the alert's
+detail.
+
+| Receiver | What it gets |
+|----------|--------------|
+| PagerDuty | `trigger` for `opened` and `re_escalated`, `acknowledge`, `resolve`. `dedup_key` is the alert's fingerprint (`sha256:` and its SHA-256 when the fingerprint is longer than PagerDuty's 255 characters), so a resolution in twilight resolves the incident. `payload.severity` is `critical`, `error`, `warning` or `info` for critical, high, medium and low; `class` is the kind, `group` the tenant, `custom_details` the facts and evidence, and `links` the alert and its runbook. PagerDuty sends nothing more for an incident acknowledged there, even on a new trigger, and an acknowledgement or resolution made in PagerDuty does not reach twilight. |
+| Slack | A Block Kit message: a header, what happened, the facts and the evidence, and the links. An acknowledgement or a resolution is a follow-up message saying who did it and when. |
+| Teams | An Adaptive Card 1.4 with the same content and two buttons for the links. |
+| Email | `multipart/alternative`, a plain-text and an HTML part, `Auto-Submitted: auto-generated`. An acknowledgement or a resolution replies to the opening (`In-Reply-To`, `References`), so mail clients show an alert as one thread. |
+| Webhook | The JSON below. |
+
+#### The webhook
+
+twilight POSTs one JSON object per notification:
+
+| Field | Value |
+|-------|-------|
+| `schema` | `dusk.alert-notification/v1` |
+| `id` | A UUID per notification, the same on every attempt; also the `Idempotency-Key` header. |
+| `receiver` | The receiver's name. |
+| `transition`, `transition_at`, `actor` | The transition, when it happened (RFC 3339, UTC) and who made it (`null` when twilight did). |
+| `severity` | The alert's severity at the transition. |
+| `title`, `summary` | One line saying what happened, and the alert's message. |
+| `hostname`, `campaign_name` | The node's host name and the campaign's name, when the alert names them; otherwise `null`. |
+| `alert` | The alert as `GET /api/v1/alerts/{id}` answers it, without `deliveries`: `id`, `time`, `last_seen_at`, `occurrences`, `severity`, `kind`, `fingerprint`, `tenant`, `detail`, `acknowledged_by`, `acknowledged_at`, `resolved_by`, `resolved_at`. |
+| `links` | `alert` and `runbook`: the two links. |
+
+| Header | Value |
+|--------|-------|
+| `Content-Type` | `application/json` |
+| `Idempotency-Key` | The notification's `id`. |
+| `Dusk-Timestamp` | When this attempt was made, in Unix seconds. |
+| `Dusk-Signature` | The lowercase hex HMAC-SHA256, keyed with the secret in `secret_file`, of the timestamp, a colon and the body: `<Dusk-Timestamp>:<body>`. |
+
+The body is the same bytes on every attempt; the timestamp and the signature
+are new on each. A receiver checks the signature over the raw body, refuses a
+timestamp more than 300 seconds from its own clock, and drops an `id` it has
+seen, so a captured request cannot be replayed:
+
+```python title="verify.py (Python 3.10 or newer)"
+import hashlib
+import hmac
+import time
+
+WINDOW_SECONDS = 300
+
+
+def verify(secret: bytes, headers: dict[str, str], body: bytes) -> bool:
+    timestamp = headers.get("Dusk-Timestamp", "")
+    if not (timestamp.isascii() and timestamp.isdigit()):
+        return False
+    if abs(time.time() - int(timestamp)) > WINDOW_SECONDS:
+        return False
+    signed = timestamp.encode() + b":" + body
+    expected = hmac.new(secret, signed, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, headers.get("Dusk-Signature", ""))
+```
+
+Grafana's webhook contact point signs its own notifications the same way with
+the same two headers when it is provisioned by `twilight grafana-alerting`
+(below), so one check serves both; Grafana's body is Grafana's JSON, not
+`dusk.alert-notification/v1`.
+
+#### Grafana
+
+Grafana's alert rules notify through the same receivers. `twilight
+grafana-alerting [--config FILE] [--output FILE]` reads the same configuration
+and writes a Grafana alerting provisioning file: a contact point per receiver,
+with the receiver's name and the uid `dusk-<name>`; the notification policy,
+one child policy per route matching the rule labels `severity`, `kind` and
+`tenant` and letting the alert go on to the next (`continue`), under a root
+policy that sends to the first route's receiver; and the template group `dusk`,
+whose titles and messages link each rule's runbook from `runbook_url` and its
+`kind` label. Provisioning the policy replaces Grafana's whole notification
+policy tree.
+
+The file names each secret as `$__file{<path>}`, the path twilight reads it
+from, so Grafana must see every receiver's secret file at the same path.
+Grafana sends its email through its own SMTP settings: set
+`GF_SMTP_ENABLED=true`, `GF_SMTP_HOST` (`host:port`), `GF_SMTP_USER`,
+`GF_SMTP_PASSWORD__FILE`, `GF_SMTP_FROM_ADDRESS` and `GF_SMTP_STARTTLS_POLICY`
+to the email receiver's server. The local stack and the Kubernetes overlays run
+`grafana-alerting` before Grafana starts ([Deploy](deploy.md)); after a change
+to the receivers or routes, run it again and restart Grafana.
 
 ### `reconcile`
 
@@ -565,7 +766,8 @@ to the query that made it: a node cursor made for one `sort` is refused with
 | `POST /api/v1/campaigns/{id}/nodes/resolve` | operator | `{"nodes", "outcome", "reason"}` closes `unknown` rows by hand as `succeeded` or `failed`; answers `{"count"}`. |
 | `GET /api/v1/campaigns/{id}/events?after=&limit=` | viewer | The campaign's history. |
 | `GET /api/v1/campaigns/{id}/gates` | viewer | The health gate as it stands: the tallies overall and per breakdown group, the verdict and its reason, the thresholds, the sample the gate waits for, the phase and its bake time. |
-| `GET /api/v1/alerts?state=&limit=&cursor=` | viewer | Alerts, newest first; `state` is `open` (the default) or `all`. |
+| `GET /api/v1/alerts?state=&limit=&cursor=` | viewer | Alerts, newest first; `state` is `open` (the default) or `all`. Each alert carries its `tenant` and its `deliveries`: one per transition and receiver, with its `state` (`pending`, `delivered` or `failed`), `attempts`, `last_error`, `next_attempt_at` and `delivered_at`. |
+| `GET /api/v1/alerts/{id}` | viewer | One alert, with its deliveries. |
 | `POST /api/v1/alerts/{id}/acknowledge`, `/resolve` | operator | Acknowledges or resolves an alert. |
 | `GET /api/v1/stream` | viewer | [Live updates](#live-updates). |
 
@@ -621,7 +823,8 @@ On `health_listen`:
 | `twilight_dawn_requests_total{route,outcome}`, `twilight_dawn_request_seconds{route}`, `twilight_dawn_endpoints` | Calls to dawn and the endpoints routed to. |
 | `twilight_kafka_invalid_messages_total{topic}` | Kafka records dropped because they failed their contract. |
 | `twilight_kafka_refused_records_total{consumer}` | Kafka records skipped because the database refused their data; each is logged at `error` with its topic, partition and offset. U+0000 in a string from a node is replaced with U+FFFD before it is stored, so this stays at zero unless something else is wrong. |
-| `twilight_alerts_open{severity,kind}`, `twilight_alert_webhook_failures_total` | Open alerts, refreshed every 30 seconds, and webhook deliveries that gave up. A kind with no open alert left drops out of the gauge. |
+| `twilight_alerts_open{severity,kind}` | Open alerts, refreshed every 30 seconds. A kind with no open alert left drops out of the gauge. |
+| `twilight_alert_deliveries_total{receiver,transition,outcome}`, `twilight_alert_deliveries_pending{receiver}` | Notification attempts by outcome - `delivered`, `retry` or `failed` (given up) - and the notifications not yet delivered, refreshed every 30 seconds. |
 | `twilight_feed_subscribers_dropped_total` | Live-update streams ended because they fell behind. |
 | `twilight_reconcile_entries_total{kind}`, `twilight_reconcile_duplicate_entries_total` | Ledger entries reconciled, and exact duplicates skipped. |
 | `twilight_reconcile_findings_total{kind}` | Reconcile findings, repeats of an open alert included. |
