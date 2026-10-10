@@ -1472,6 +1472,54 @@ async fn enroll_new(
 }
 
 #[tokio::test]
+async fn refuses_a_retired_fleet_token_at_once_and_without_a_penalty() {
+    let harness = harness().await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let fingerprint = [21u8; 32];
+    let assigned = assign(&client, Credential::Fleet("retail secret"), &fingerprint)
+        .await
+        .unwrap();
+    harness.provisioning.replace_fleet_tokens(tokens_file(&[
+        (
+            "retail-eu-2026",
+            "retail secret",
+            "tenant = \"retail-eu\"\nretired = true",
+        ),
+        ("lab", "lab secret", ""),
+    ]));
+    let request = csr(
+        &p256(),
+        None,
+        &uris(&assigned.device_id, &assigned.installation_id),
+    );
+    denied_with(
+        enroll(
+            &client,
+            Credential::Fleet("retail secret"),
+            &fingerprint,
+            &assigned.challenge,
+            &request,
+        )
+        .await,
+        "denied: credential retired",
+    );
+    denied_with(
+        assign(&client, Credential::Fleet("retail secret"), &fingerprint).await,
+        "denied: credential retired",
+    );
+    let refused = harness.events.last();
+    assert_eq!(refused.outcome, Outcome::Denied);
+    assert_eq!(refused.reason.as_deref(), Some("credential_retired"));
+    assert_eq!(refused.credential_ref.as_deref(), Some("retail-eu-2026"));
+    assert_eq!(refused.tenant.as_deref(), Some("retail-eu"));
+    assert!(harness.penalties.failures.lock().unwrap().is_empty());
+    enroll_new(&client, Credential::Fleet("lab secret"), [22u8; 32])
+        .await
+        .unwrap();
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
 async fn takes_added_removed_and_re_tenanted_fleet_tokens_without_a_restart() {
     let harness = harness().await;
     let client = harness.client(ADDRESS, Vec::new());
