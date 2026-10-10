@@ -348,6 +348,20 @@ export interface Gates {
   converging: boolean
 }
 
+export type AlertTransition = 'opened' | 're_escalated' | 'acknowledged' | 'resolved'
+
+export type DeliveryState = 'pending' | 'delivered' | 'failed'
+
+export interface AlertDelivery {
+  receiver: string
+  transition: AlertTransition
+  state: DeliveryState
+  attempts: number
+  last_error: string | null
+  next_attempt_at: string | null
+  delivered_at: string | null
+}
+
 export interface Alert {
   id: number
   time: string
@@ -362,6 +376,7 @@ export interface Alert {
   acknowledged_at: string | null
   resolved_by: string | null
   resolved_at: string | null
+  deliveries: AlertDelivery[]
 }
 
 export type SeverityCounts = Partial<Record<Severity, number>>

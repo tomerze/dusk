@@ -95,6 +95,19 @@
   color: var(--mantine-color-text);
 }
 
+.deliveries {
+  margin-top: 4px;
+}
+
+.notifications {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .when {
   display: flex;
   flex-direction: column;

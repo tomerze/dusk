@@ -19,7 +19,7 @@ import { Link, useSearchParams } from 'react-router'
 import { errorMessage } from '../api/client'
 import { usePermissions } from '../api/permissions'
 import { searchLimit, useAlertCommand, useAlerts, useEveryAlert } from '../api/queries'
-import type { Alert, JsonValue, Severity } from '../api/types'
+import type { Alert, AlertDelivery, AlertTransition, JsonValue, Severity } from '../api/types'
 import { severities } from '../api/types'
 import { CursorPagination } from '../components/CursorPagination'
 import { MonoId } from '../components/MonoId'
@@ -27,7 +27,8 @@ import { PageHeader } from '../components/PageHeader'
 import { QueryError } from '../components/QueryError'
 import { RelativeTime } from '../components/RelativeTime'
 import { StatusPill } from '../components/StatusPill'
-import { severityStyles } from '../components/status'
+import type { DeliveryDisplay } from '../components/status'
+import { deliveryStyles, severityStyles } from '../components/status'
 import { formatNumber } from '../format'
 import { useCursorPages } from '../hooks/useCursorPages'
 import { alertKindLabel, alertKinds, alertMessage, alertSubject } from './kinds'
@@ -65,6 +66,46 @@ function detailValue(key: string, value: JsonValue, alert: Alert): ReactNode {
     <Code className={classes.value}>
       {typeof value === 'string' ? value : JSON.stringify(value)}
     </Code>
+  )
+}
+
+const transitionLabels: Record<AlertTransition, string> = {
+  opened: 'Opening',
+  re_escalated: 'Escalation',
+  acknowledged: 'Acknowledgement',
+  resolved: 'Resolution',
+}
+
+function deliveryDisplay(delivery: AlertDelivery): DeliveryDisplay {
+  if (delivery.state === 'pending') {
+    return delivery.attempts > 0 ? 'retrying' : 'queued'
+  }
+  return delivery.state
+}
+
+function deliveryDetail(delivery: AlertDelivery): string {
+  const attempts = `${formatNumber(delivery.attempts)} ${delivery.attempts === 1 ? 'attempt' : 'attempts'}`
+  const failure =
+    delivery.state === 'delivered' || delivery.last_error === null ? '' : `: ${delivery.last_error}`
+  return `${transitionLabels[delivery.transition]}, ${attempts}${failure}`
+}
+
+function latestDeliveries(alert: Alert): AlertDelivery[] {
+  const latest = new Map<string, AlertDelivery>()
+  for (const delivery of alert.deliveries) {
+    latest.set(delivery.receiver, delivery)
+  }
+  return [...latest.values()]
+}
+
+function DeliveryPill({ delivery }: { delivery: AlertDelivery }) {
+  const style = deliveryStyles[deliveryDisplay(delivery)]
+  return (
+    <StatusPill
+      status={{ ...style, label: `${delivery.receiver} ${style.label.toLowerCase()}` }}
+      size="xs"
+      detail={deliveryDetail(delivery)}
+    />
   )
 }
 
@@ -143,6 +184,13 @@ function AlertRow({ alert, canOperate }: { alert: Alert; canOperate: boolean }) 
                 </Text>
               )}
             </Text>
+            {alert.deliveries.length > 0 && (
+              <Group gap={4} wrap="wrap" className={classes.deliveries}>
+                {latestDeliveries(alert).map((delivery) => (
+                  <DeliveryPill key={delivery.receiver} delivery={delivery} />
+                ))}
+              </Group>
+            )}
           </span>
           <span className={classes.when}>
             <Text component="span" size="xs">
@@ -251,6 +299,40 @@ function AlertRow({ alert, canOperate }: { alert: Alert; canOperate: boolean }) 
                     {' '}
                     by {alert.resolved_by ?? 'someone'}
                   </Text>
+                </dd>
+              </div>
+            )}
+            {alert.deliveries.length > 0 && (
+              <div className={classes.field}>
+                <dt>notifications</dt>
+                <dd>
+                  <ul className={classes.notifications} aria-label="Notifications">
+                    {alert.deliveries.map((delivery) => (
+                      <li key={`${delivery.receiver}/${delivery.transition}`}>
+                        <Group gap={6} wrap="wrap">
+                          <StatusPill
+                            status={deliveryStyles[deliveryDisplay(delivery)]}
+                            size="xs"
+                          />
+                          <Text component="span" size="sm">
+                            {transitionLabels[delivery.transition]} to{' '}
+                            <Text component="span" className="mono" size="sm">
+                              {delivery.receiver}
+                            </Text>
+                          </Text>
+                          <Text component="span" size="xs" c="dimmed">
+                            {deliveryDetail(delivery).replace(/^[^,]*, /, '')}
+                          </Text>
+                          {delivery.state === 'pending' && delivery.next_attempt_at !== null && (
+                            <Text component="span" size="xs" c="dimmed">
+                              next attempt{' '}
+                              <RelativeTime value={delivery.next_attempt_at} size="xs" c="dimmed" />
+                            </Text>
+                          )}
+                        </Group>
+                      </li>
+                    ))}
+                  </ul>
                 </dd>
               </div>
             )}

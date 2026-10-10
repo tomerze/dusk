@@ -1030,10 +1030,37 @@ export function createHandlers(
         return notFound('alert')
       }
       const now = new Date().toISOString()
+      const notify = (transition: 'acknowledged' | 'resolved') => {
+        const receivers = new Set(
+          alert.deliveries
+            .filter(
+              (delivery) =>
+                delivery.transition === 'opened' || delivery.transition === 're_escalated',
+            )
+            .map((delivery) => delivery.receiver),
+        )
+        for (const receiver of receivers) {
+          alert.deliveries.push({
+            receiver,
+            transition,
+            state: 'delivered',
+            attempts: 1,
+            last_error: null,
+            next_attempt_at: null,
+            delivered_at: now,
+          })
+        }
+      }
       if (parameters.command === 'acknowledge') {
+        if (alert.acknowledged_at === null) {
+          notify('acknowledged')
+        }
         alert.acknowledged_at ??= now
         alert.acknowledged_by ??= actor()
       } else if (parameters.command === 'resolve') {
+        if (alert.resolved_at === null) {
+          notify('resolved')
+        }
         alert.resolved_at ??= now
         alert.resolved_by ??= actor()
       } else {
