@@ -40,10 +40,12 @@ allows a number of default-shell commands, set by twilight's
 `reconcile.default_shell` configuration: for a campaign's process the `ps`, the
 reads of its reported state, one `logs dump` and the kill; for any other work
 the kill and the reaps that release its pid, and for a reap one more per pid it
-reaps. Reconcile counts the default-shell commands on each node: one while none
-of the node's intended processes is open raises `default_shell_without_intent`
-(critical), and more than the open processes' budgets together raises
-`process_shape` (high).
+reaps. nightfall holds every node's default shell to those budgets: it refuses
+a default-shell command while none of the node's intended processes is open, and
+one beyond the open processes' budgets together
+([Admission](membrane.md#admission)). Reconcile counts the same commands
+afterwards: one while none is open raises `default_shell_without_intent`
+(critical), and more than the budgets raises `process_shape` (high).
 
 ## Running work once
 
@@ -130,22 +132,38 @@ that restarts reaps everything at once, by forgetting it.
 
 Before every call to dawn that reaches a node - dispatch, reap, facts, logs,
 files, interactive sessions - twilight records the pid in its
-`intended_processes` table, and commits it before the call: the pid, the device and installation, the campaign and attempt when there is
+`intended_processes` table, commits it, writes it to the compacted Kafka topic
+`dusk.intended-processes`, and calls dawn only once Kafka has acknowledged the
+record: the pid, the device and installation, the campaign and attempt when there is
 one, the kind of work, who asked for it (`campaign:<id>` or the operator), until
 when it is intended, how many shell commands may run in its own shell - for a
 campaign's process its script, one `cp` per collected file and one
 `logs stream` - and how many it allows in the node's default shell
 ([The default shell](#the-default-shell)).
 
-That table is what the ledger is checked against. nightfall records every call
+A resend of the same pid writes the record again, with the later deadline and
+the budgets of every send added up. If twilight stops between committing a
+record and writing it to Kafka, its leader writes every record that is not on
+the topic yet within seconds, and dawn is never called for it meanwhile. When a
+process expires, or twilight reaps it, the leader writes a tombstone for it.
+
+nightfall reads that topic into a table of every node's intended processes and
+refuses every call none of them allows - a process at another pid or with no
+pid, a call after the deadline, a command beyond the budget, the default shell
+while nothing is open ([Admission](membrane.md#admission)) - and records the
+refusal. A refused call never reaches the node.
+
+The table is also what the ledger is checked against. nightfall records every call
 it forwards with the pid of the process the call works under - the pid a
 `Dusk.process` names, the pid a `Dusk.kill` or `Dusk.waitpid` names, or the pid
 of the process every capability of the call descends from - and twilight's
 reconcile raises an alert for a process at a pid twilight never intended, a pid
 on the wrong node, calls after a process's deadline or its result, and more
 shell commands than a process was intended to run, in its own shell or in the
-default shell ([Reconcile alerts](campaigns.md#reconcile-alerts)). Processes a
-client starts without naming a pid belong to no intended process and are only
-counted; the [security model](security.md#what-stays-undetectable) says what
-that, and the content of default-shell commands within their budget, leaves
-open.
+default shell ([Reconcile alerts](campaigns.md#reconcile-alerts)). Since
+nightfall refuses those calls before they reach a node, an alert means a call got
+past admission. The one process nightfall lets a client start without naming a
+pid - the read-only `kvs bind` that `kvs get` starts to read key names - belongs
+to no intended process and is only counted; the
+[security model](security.md#what-stays-undetectable) says what that, and the
+content of commands within their budgets, leaves open.

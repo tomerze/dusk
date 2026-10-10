@@ -145,12 +145,13 @@ nodes through dawn at a pid twilight records for them.
 | `dusk.ledger` | nightfall | twilight, Vector |
 | `dusk.enrollments` | nightfall | twilight, Vector |
 | `dusk.node-state` | twilight | nightfall |
+| `dusk.intended-processes` | twilight | nightfall |
 | `dusk.process-results` | dawn | twilight, Vector |
 | `dusk.process-output` | dawn | Vector |
 | `dusk.files` | dawn | Vector |
 | `dusk.otel-logs`, `dusk.otel-spans`, `dusk.otel-metrics` | OTel collector | Vector, SigNoz |
 
-Every message on the eight topics above the telemetry ones is one JSON object
+Every message on the nine topics above the telemetry ones is one JSON object
 that matches its topic's schema in `services/contracts/kafka/`, and every
 consumer of them validates each message it reads and drops one that does not
 match. The `dusk.otel-*` topics carry OTLP JSON as the OTel collector writes
@@ -166,7 +167,8 @@ details).
 1. **twilight decides.** A campaign's selector matches a node that is online and
    due, or an operator asks for something on one node. twilight picks the pid -
    derived from the campaign, the node and the attempt for campaign work,
-   random for anything else - and records it in its `intended_processes` table
+   random for anything else - records it in its `intended_processes` table, and
+   writes it to `dusk.intended-processes`, waiting for Kafka to acknowledge it,
    before it calls dawn.
 2. **twilight hands it to dawn.** It calls dawn with the node - device id,
    installation id, and the namespace id and nightfall instance of its current
@@ -175,9 +177,11 @@ details).
 3. **dawn connects through nightfall.** dawn connects to nightfall's inner
    listener with the server name `<namespace id>.<suffix>`, and nightfall hands
    it a `Dusk` of that node behind the membrane. From here on every call dawn
-   makes is checked against dawn's permissions, written to the ledger with the
-   pid it works under - a command before it is forwarded - and only then passed
-   to the node.
+   makes is checked against dawn's permissions and against the processes
+   twilight intends on that node - a call none of them allows is refused with
+   `denied: not intended` - written to the ledger with the pid it works under
+   and who asked for that process - a command before it is forwarded - and only
+   then passed to the node.
 4. **dawn checks the node's process table.** In the node's default shell it runs
    `ps`. A process already at the pid means the work was dispatched before:
    dawn reports `duplicate` and runs nothing.
@@ -191,9 +195,11 @@ details).
    and the result to `dusk.process-results`; twilight applies the result to the
    campaign and its health gates.
 7. **twilight checks the ledger.** Reconcile reads every call nightfall
-   recorded in `dusk.ledger` and checks it against the intended processes, and
-   checks the ledger's hash chain and signed checkpoints. A process no campaign
-   or operator asked for is the most important alert in the stack.
+   forwarded, as recorded in `dusk.ledger`, and checks it against the intended
+   processes, and checks the ledger's hash chain and signed checkpoints. nightfall
+   already refused what was not intended, so a process no campaign or operator
+   asked for in the ledger means a call got past that - the most important alert
+   in the stack.
 
 ## Where to go next
 

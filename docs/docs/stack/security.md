@@ -2,10 +2,10 @@
 
 This page is for security reviewers and for the people who run the Dusk stack.
 It says what the stack protects, which checks stand between an operator's
-request and a node, how nodes are admitted and cut off, what the ledger proves,
-how reconcile holds the ledger against the processes twilight intended, what an
-attacker who holds one component can and cannot do, and what no part of the
-stack can detect. It describes the services as they are built in this
+request and a node, how nodes are admitted and cut off, how nightfall refuses
+every call twilight did not intend, what the ledger proves, how reconcile checks
+afterwards that nothing else got through, what an attacker who holds one
+component can and cannot do, and what no part of the stack can detect. It describes the services as they are built in this
 repository and the shipped Kubernetes overlays; the identifiers and certificate
 authorities it refers to are on [Identity and trust](identity.md).
 
@@ -30,10 +30,12 @@ command before it reaches the next.
 | Where | Check |
 |-------|-------|
 | twilight | The caller is authenticated (OpenID Connect, an API token, or a client certificate from the internal CA) and has the role the route needs: `operator` to run campaigns, open interactive sessions, stream logs, collect files or set a node `active` or `quarantined`; `admin` to set a node `retired` or `revoked`, to lift either, and to revoke or retire a whole device. |
-| twilight | It records the pid in `intended_processes` - the node, the campaign and attempt, the kind of work, who asked, until when, how many shell commands - and commits it before it calls dawn. |
+| twilight | It records the pid in `intended_processes` - the node, the campaign and attempt, the kind of work, who asked, until when, how many shell commands - commits it, writes it to the Kafka topic `dusk.intended-processes`, and calls dawn only once Kafka has acknowledged it. |
 | dawn | The caller is authenticated and its role allows the route: twilight is a `dispatcher`, people are `operator`s. dawn never takes identity from a proxy header. The nightfall instance the request names must be one dawn's configuration allows. |
 | nightfall | dawn's TLS certificate chains to the internal CA, carries exactly one principal and no node identity, is not in `deny_certificates`, and its principal is not denied and has a role in `permissions.toml`. The server name `<namespace id>.<suffix>` reaches the node whose certificate claimed that namespace id. |
-| nightfall | The [membrane](membrane.md) allows only the calls the principal's roles allow, applies the rate, in-flight and capability limits, and writes the call to the ledger with the pid it works under. A command that does not stream is forwarded only once its ledger entry is committed in Kafka; if the ledger cannot take it within 5 seconds, the command fails and the node never sees it. |
+| nightfall | The [membrane](membrane.md) allows only the calls the principal's roles allow and applies the rate, in-flight and capability limits. |
+| nightfall | [Admission](#admission): the call must be allowed by a process twilight intends on that node - its pid, its deadline, its command budget. Anything else fails with `denied: not intended` and never reaches the node. |
+| nightfall | It writes the call to the ledger with the pid it works under and who asked for that process. A command that does not stream is forwarded only once its ledger entry is committed in Kafka; if the ledger cannot take it within 5 seconds, the command fails and the node never sees it. |
 | dawn, node | dawn looks for the pid in the node's `ps` and runs nothing when a process is there; otherwise the work runs in a shell server of its own at that pid. |
 
 Three consequences reviewers should keep in mind:
@@ -42,12 +44,14 @@ Three consequences reviewers should keep in mind:
   node, whatever else it denies.** A script is one call; the programs it starts
   run inside the node and never cross nightfall. The shipped `dawn` role allows
   both, because work on a node is a shell script.
-* **Nothing ties a call to an intended process before it reaches the node.**
-  There is no per-process credential: a principal with the `dawn` role can
-  reach every node connected to nightfall, at any pid. The intended processes
-  are checked after the fact, by reconcile, against a ledger written before
-  each command is forwarded. The ledger is complete; the alerts are only as
-  complete as the rules below.
+* **A call reaches a node only if twilight intended it, but not what it says.**
+  A principal with the `dawn` role can create a process only at a pid twilight
+  intends on that node, while that process is open, and can run only as many
+  shell commands as twilight allowed it and the node's default shell. What a
+  command runs inside that budget is not checked: there is no per-process
+  credential, and a script is one call. Reconcile still holds the ledger
+  against the intended processes afterwards, so a gap in admission shows as an
+  alert.
 * **A command given to dawn runs partly inside dawn.** A campaign's script, a
   command sent to dawn's `/v1/sh` and a call to its MCP tools are dusk shell
   commands, and the client side of a command - the part that builds its
@@ -235,13 +239,48 @@ never a parameter value, a result or command output.
   reached, so a tail removed later shows. `nightfall verify-ledger` verifies any
   copy ([the ledger](ledger.md#verifying)).
 
+## Admission
+
+nightfall is the place that blocks: it terminates every node link and every
+client call, so a compromised dawn cannot reach a node around it. Every
+client-to-node call is held, before it is forwarded, against the processes
+twilight intends on the call's node, which twilight writes to the compacted
+Kafka topic `dusk.intended-processes` before it asks dawn for them, and
+tombstones once they expire or are reaped. nightfall refuses:
+
+* `Dusk.process` at a pid twilight did not intend for that node, and
+  `Dusk.process` with no pid - but the read-only `kvs bind` process the `kvs`
+  client starts to read key names, while one of the node's intended processes
+  is open;
+* any call under a pid after its intended process expired, but killing and
+  reaping it;
+* `ShPortal.sh` under a pid beyond the commands twilight allowed it;
+* the node's default shell while none of the node's intended processes is open,
+  and beyond the default-shell commands they allow together;
+* all of these until the instance has read `dusk.intended-processes` to its end
+  after it starts.
+
+A refusal answers `denied: not intended`, is a `denied` entry in the ledger that
+names the rule, and is counted in `nightfall_admission_refused_total`. Every
+ledger entry under an intended pid also carries the campaign, the principal and
+the subject of the process, so the ledger and its evidence copy name who asked
+for every process after twilight has dropped its own record. A role with
+`admission_exempt = true` - an operator's break-glass role; the shipped
+permissions define `break-glass` and give it to no principal - is not held to
+the intended processes, and every call of it that admission would have refused
+is recorded with an `admission_override` event. The rules, the waiting for a
+record that arrives just behind dawn's call, and the bounds are on
+[the membrane](membrane.md#admission).
+
 ## Reconcile
 
 twilight's reconcile reads every call in the ledger and holds it against the
-processes twilight intended. These are the most important alerts in the stack:
-a process no campaign or operator asked for means a stolen client certificate,
-someone driving nodes with the SDK directly, or a compromised dawn. What to do
-about each is in [Campaigns](campaigns.md#reconcile-alerts).
+processes twilight intended. Admission is the defense; reconcile is the check
+that admission held. It judges only calls nightfall forwarded - a refused call
+never reached a node - so an alert below means a call got past admission: a
+role exempt from it, a nightfall that does not enforce it, an instance that
+counted a reconnected node's commands from zero, or a defect. What to do about
+each is in [Campaigns](campaigns.md#reconcile-alerts).
 
 | Alert | Severity | Raised when |
 |-------|----------|-------------|
@@ -257,8 +296,9 @@ about each is in [Campaigns](campaigns.md#reconcile-alerts).
 | `quarantine_override` | high | A role allowed past quarantine sent a command to a quarantined node. |
 
 A process a client creates without naming a pid is counted per principal
-(`twilight_unattributed_processes_total`), not alerted: client-side argument
-builders start helper processes that way. twilight also raises
+(`twilight_unattributed_processes_total`), not alerted: the one admission lets
+through, the `kvs bind` the `kvs` client starts to read key names, is created
+that way. twilight also raises
 `enrollment_rate` (high), `revocation_not_enforced` (critical) and
 `campaign_conflict`. Every new critical and high alert is posted to
 `alerts.webhook_url` when one is set.
@@ -291,32 +331,35 @@ with another fingerprint, as another device.
 
 ### dawn
 
-**Can:** with its principal's `dawn` role, reach every node connected to
-nightfall and make every call that role allows - which, through `ShPortal.sh`
-and `Dusk.process`, means running anything on any of those nodes; read a node's
-identity - its private key and certificate - with `kvs get` or a script, and
-connect as that node until it is revoked; read everything that passes through
-it: script output, collected files, streamed node logs, facts; write false
-records to `dusk.process-results`, `dusk.process-output` and `dusk.files`, and
-upload objects to the files bucket; tell twilight false facts.
+**Can:** run anything on a node inside a process twilight intends there:
+replace a campaign's script with its own, at that process's pid, while it is
+open, within its command budget, and run its own commands in the node's default
+shell within the budgets of the node's open processes; read a node's identity -
+its private key and certificate - with `kvs get` or a script inside such a
+process, and connect as that node until it is revoked; start read-only
+`kvs bind` processes while one of a node's intended processes is open; read
+everything that passes through it: script output, collected files, streamed
+node logs, facts; write false records to `dusk.process-results`,
+`dusk.process-output` and `dusk.files`, and upload objects to the files bucket;
+tell twilight false facts.
 
-**Cannot:** make calls the `dawn` role does not allow, `Dusk.settime` and
-`Dusk.fleetToken` among them; make a call nightfall does not record, with its
-principal, node and pid; write the ledger, `dusk.node-state` or the connection
-topics; read or delete objects in the files bucket, whose policy gives dawn's
-user only uploads.
+**Cannot:** create a process twilight did not intend - at another pid, on
+another node, after its deadline, or with no pid - or run more shell commands
+than twilight allowed, or use a node's default shell while none of its intended
+processes is open: nightfall refuses each with `denied: not intended`, and
+records the refusal; make calls the `dawn` role does not allow, `Dusk.settime`
+and `Dusk.fleetToken` among them; make a call nightfall does not record, with
+its principal, node and pid; write the ledger, `dusk.node-state`,
+`dusk.intended-processes` or the connection topics; read or delete objects in
+the files bucket, whose policy gives dawn's user only uploads.
 
-**Detected:** a process at a pid twilight never intended
-(`process_without_intent`), on another node than intended (`target_mismatch`),
-reused (`pid_reused`), past its deadline or its result
-(`process_after_deadline`, `process_after_result`), running more commands than
-intended (`process_shape`), results for processes the ledger never saw
-(`result_without_ledger`), a command in a node's default shell while none of
-the node's intended processes is open (`default_shell_without_intent`) or
-beyond their budgets (`process_shape`). **Not detected:** what it runs in a
-node's default shell within those budgets; processes it creates without
-naming a pid, which are only counted; different content run inside one intended process's shape; false
-outcomes reported for processes that ran.
+**Refused, and in the ledger:** every attempt above, as a `denied` entry naming
+the admission rule. **Detected after the fact:** a pid reused across client
+sessions (`pid_reused`), calls after a process's final result
+(`process_after_result`), results for processes the ledger never saw
+(`result_without_ledger`). **Not detected:** what it runs in a node's default
+shell within those budgets; different content run inside one intended
+process's shape; false outcomes reported for processes that ran.
 
 ### nightfall
 
@@ -327,15 +370,16 @@ keys, the fleet tokens' digests and the install token keys - and in the prod
 overlay all instances share one Kafka user, so one compromised instance holds
 what all of them hold.
 
-**Can:** make any call on every node connected to it, without a membrane and
-without writing it to the ledger; have step-ca sign a certificate for any
+**Can:** make any call on every node connected to it, without a membrane,
+without admission and without writing it to the ledger; have step-ca sign a certificate for any
 device and installation, and so connect to other instances as any node whose
 state does not refuse it; sign ledger checkpoints, and write ledger entries to
 any partition of `dusk.ledger`; write false connection, census and enrollment
 events; test guesses of call parameters against `param_hash`, since it holds
 the param key; derive the device id of any machine id.
 
-**Cannot:** write `dusk.node-state`, which only twilight may write; change
+**Cannot:** write `dusk.node-state` or `dusk.intended-processes`, which only
+twilight may write; change
 ledger entries already in Kafka or in the evidence bucket; issue a certificate
 outside the template's shape.
 
@@ -354,8 +398,10 @@ values scripts produced, and the node logs and telemetry on the `dusk.otel-*`
 topics; write any record to any topic: lift a revocation or a quarantine with a
 forged `dusk.node-state` record, which nightfall follows; forge presence, and so
 make twilight send a node's work to the namespace id of another node; make
-twilight's view of a campaign's results wrong; withhold records - when it
-withholds the ledger, nightfall forwards no commands.
+twilight's view of a campaign's results wrong; forge a `dusk.intended-processes`
+record, which nightfall admits; withhold records - when it withholds the
+ledger, nightfall forwards no commands, and when it withholds intended
+processes, nightfall admits none of them.
 
 **Cannot:** issue certificates or sign ledger checkpoints; reach a node; change
 an entry undetected once reconcile has read it or Vector has copied it to the
@@ -371,9 +417,10 @@ anything read them.
 
 ### twilight
 
-**Can:** intend any process on any node and have dawn run it; set any node's
-lifecycle; read the inventory; and since reconcile runs inside twilight, it can
-hide its own alerts.
+**Can:** intend any process on any node, write it to `dusk.intended-processes`
+so nightfall admits it, and have dawn run it; set any node's lifecycle; read the
+inventory; and since reconcile runs inside twilight, it can hide its own
+alerts.
 
 **Cannot:** reach a node itself - nightfall's permissions give twilight's
 principal no role, so only dawn reaches nodes; avoid the ledger: every call its
@@ -385,14 +432,13 @@ bucket.
 By design, nothing in the stack detects:
 
 * **The content of commands in a node's default shell, within their budget.**
-  dawn's `ps`, reads, kills and reaps run there. Reconcile counts them per node
-  against the budgets of the node's open intended processes, and alerts on one
-  while none is open or on more than the budgets allow, but the ledger keeps
-  only a keyed hash of a script, so a `ps` and any other script within the
-  budget look alike. Each such call is still in the ledger, with its
-  principal, node and time.
-* **Processes created without a pid.** They are counted per principal, never
-  alerted.
+  dawn's `ps`, reads, kills and reaps run there. nightfall refuses one while
+  none of the node's intended processes is open and more than their budgets
+  allow, but the ledger keeps only a keyed hash of a script, so a `ps` and any
+  other script within the budget look alike. Each such call is still in the
+  ledger, with its principal, node and time.
+* **The read-only `kvs bind` processes** dawn may start without a pid while one
+  of a node's intended processes is open. They are counted per principal.
 * **Calls a compromised nightfall makes on its own** and never writes to the
   ledger.
 * **The newest ledger entries removed** after the last checkpoint, before
