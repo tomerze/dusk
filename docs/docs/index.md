@@ -176,7 +176,7 @@ connect the tools you already have.
 
 ## Node { .dusk-os__title }
 
-Feels like an OS inside. Somehow you already know how to drive it.
+Feels like an OS inside. Somehow you already know how to drive one.
 { .dusk-os__lead }
 
 <div class="dusk-os__terminals">
