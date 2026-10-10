@@ -22,6 +22,7 @@ mod link;
 mod node_key;
 mod provisioning;
 mod tls;
+mod tpm;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
