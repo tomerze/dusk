@@ -87,7 +87,7 @@ func (harness *reconcileHarness) start() {
 	harness.stopped = make(chan struct{})
 	logger := testsupport.Logger()
 	reconciler := New(Dependencies{
-		Config: harness.settings, Pool: harness.pool, Alerts: alerts.NewStore(harness.pool, "", logger), Validator: harness.validator,
+		Config: harness.settings, Pool: harness.pool, Alerts: testsupport.AlertStore(harness.test, harness.pool), Validator: harness.validator,
 		KafkaOptions: harness.options, Keys: harness.keys, Logger: logger,
 	})
 	go func() {
@@ -172,7 +172,7 @@ func (harness *reconcileHarness) intend(pid campaign.Pid, device, kind string, m
 
 func (harness *reconcileHarness) openAlerts() map[string][]alerts.Alert {
 	harness.test.Helper()
-	listed, failure := alerts.NewStore(harness.pool, "", testsupport.Logger()).List(context.Background(), true, "", 1000)
+	listed, failure := testsupport.AlertStore(harness.test, harness.pool).List(context.Background(), true, "", 1000)
 	if failure != nil {
 		harness.test.Fatal(failure)
 	}
@@ -348,7 +348,7 @@ func TestReconcileRaisesEveryRuleFromTheLedgerAndResults(test *testing.T) {
 		_ = harness.pool.QueryRow(context.Background(), `select count(*) from reconcile_offsets`).Scan(&partitions)
 		return behind == 0 && partitions == 3, "partitions behind or missing"
 	})
-	reconciler := New(Dependencies{Config: harness.settings, Pool: harness.pool, Alerts: alerts.NewStore(harness.pool, "", testsupport.Logger()), Logger: testsupport.Logger()})
+	reconciler := New(Dependencies{Config: harness.settings, Pool: harness.pool, Alerts: testsupport.AlertStore(test, harness.pool), Logger: testsupport.Logger()})
 	eventually(test, "the delivered result with no Dusk.process in the ledger was found", 30*time.Second, func() (bool, string) {
 		reconciler.checkLedger(context.Background())
 		found := harness.openAlerts()[alerts.KindResultWithoutLedger]

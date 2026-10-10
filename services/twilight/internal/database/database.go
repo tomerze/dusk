@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	migrationLockKey int64 = 0x7477696c69676d01
-	partitionLockKey int64 = 0x7477696c69677002
-	LeaderLockKey    int64 = 0x7477696c69676c03
+	migrationLockKey    int64 = 0x7477696c69676d01
+	partitionLockKey    int64 = 0x7477696c69677002
+	LeaderLockKey       int64 = 0x7477696c69676c03
+	AlertRoutingLockKey int64 = 0x7477696c69676104
 )
 
 func Open(operation context.Context, url string, maximumConnections int32) (*pgxpool.Pool, error) {

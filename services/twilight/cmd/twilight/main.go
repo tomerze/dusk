@@ -321,7 +321,10 @@ func serve(operation context.Context, arguments, environment []string, output, d
 	if failure != nil {
 		return failure
 	}
-	alertStore := alerts.NewStore(pool, settings.Alerts.WebhookURL, logger)
+	alertStore, failure := alerts.NewStore(pool, settings.Alerts, settings.Instance, logger)
+	if failure != nil {
+		return failure
+	}
 	core := engine.New(engine.Dependencies{
 		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: alertStore,
 		Dawn: dawnClient, KafkaOptions: options, Validator: validator,

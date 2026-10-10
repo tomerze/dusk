@@ -1,15 +1,12 @@
 package alerts
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"dusk/services/twilight/internal/config"
 )
 
 type Severity string
@@ -83,23 +82,21 @@ var (
 		Name: "twilight_alerts_open",
 		Help: "Alerts that are not resolved, by severity and kind.",
 	}, []string{"severity", "kind"})
-	webhookFailures = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "twilight_alert_webhook_failures_total",
-		Help: "Alert webhook deliveries that failed after their retries.",
-	})
 )
 
 type Store struct {
-	pool       *pgxpool.Pool
-	logger     *slog.Logger
-	webhookURL string
-	http       *http.Client
-	queue      chan Alert
-	exported   map[[2]string]bool
+	pool     *pgxpool.Pool
+	logger   *slog.Logger
+	notifier *notifier
+	exported map[[2]string]bool
 }
 
-func NewStore(pool *pgxpool.Pool, webhookURL string, logger *slog.Logger) *Store {
-	return &Store{pool: pool, logger: logger, webhookURL: webhookURL, http: &http.Client{Timeout: 10 * time.Second}, queue: make(chan Alert, 1024)}
+func NewStore(pool *pgxpool.Pool, settings config.Alerts, instance string, logger *slog.Logger) (*Store, error) {
+	built, failure := newNotifier(settings, instance)
+	if failure != nil {
+		return nil, failure
+	}
+	return &Store{pool: pool, logger: logger, notifier: built}, nil
 }
 
 const alertColumns = `id, time, last_seen_at, occurrences, severity, kind, fingerprint, tenant, detail, acknowledged_by, acknowledged_at, resolved_by, resolved_at`
@@ -156,56 +153,6 @@ func (store *Store) Raise(operation context.Context, raised Raised) (Alert, erro
 
 func (store *Store) Announce(alert Alert) {
 	store.logger.Error("alert raised", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "tenant", alert.Tenant, "detail", alert.Detail)
-	if store.webhookURL == "" || (alert.Severity != Critical && alert.Severity != High) {
-		return
-	}
-	select {
-	case store.queue <- alert:
-	default:
-		webhookFailures.Inc()
-		store.logger.Error("alert webhook queue is full; the alert stays in the alerts table", "alert_id", alert.ID, "kind", alert.Kind)
-	}
-}
-
-func (store *Store) RunWebhook(operation context.Context) {
-	for {
-		select {
-		case <-operation.Done():
-			return
-		case alert := <-store.queue:
-			store.deliver(operation, alert)
-		}
-	}
-}
-
-func (store *Store) deliver(operation context.Context, alert Alert) {
-	body, _ := json.Marshal(alert)
-	delay := time.Second
-	for attempt := 1; attempt <= 5; attempt++ {
-		request, failure := http.NewRequestWithContext(operation, http.MethodPost, store.webhookURL, bytes.NewReader(body))
-		if failure != nil {
-			store.logger.Error("alert webhook request", "error", failure)
-			return
-		}
-		request.Header.Set("Content-Type", "application/json")
-		response, failure := store.http.Do(request)
-		if failure == nil {
-			response.Body.Close()
-			if response.StatusCode < 300 {
-				return
-			}
-			failure = fmt.Errorf("status %d", response.StatusCode)
-		}
-		store.logger.Warn("alert webhook delivery failed", "alert_id", alert.ID, "attempt", attempt, "error", failure)
-		select {
-		case <-operation.Done():
-			return
-		case <-time.After(time.Duration(rand.Int64N(int64(delay)) + 1)):
-		}
-		delay = min(2*delay, time.Minute)
-	}
-	webhookFailures.Inc()
-	store.logger.Error("alert webhook gave up", "alert_id", alert.ID, "kind", alert.Kind)
 }
 
 type Page struct {
@@ -337,6 +284,25 @@ func (store *Store) exportGauge(operation context.Context) error {
 		}
 	}
 	store.exported = current
+	if len(store.notifier.senders) == 0 {
+		return nil
+	}
+	rows, failure := store.pool.Query(operation, `select receiver, count(*) from alert_deliveries where state = 'pending' group by receiver`)
+	if failure != nil {
+		return failure
+	}
+	var receiver string
+	var count int64
+	waiting := map[string]int64{}
+	if _, failure := pgx.ForEachRow(rows, []any{&receiver, &count}, func() error {
+		waiting[receiver] = count
+		return nil
+	}); failure != nil {
+		return failure
+	}
+	for name := range store.notifier.senders {
+		pendingDeliveries.WithLabelValues(name).Set(float64(waiting[name]))
+	}
 	return nil
 }
 

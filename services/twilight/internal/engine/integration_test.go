@@ -21,7 +21,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/dawn"
@@ -359,7 +358,7 @@ func (current *harness) start() {
 		Pool:         current.pool,
 		Campaigns:    campaign.NewStore(current.pool),
 		Inventory:    inventory.NewStore(current.pool),
-		Alerts:       alerts.NewStore(current.pool, "", logger),
+		Alerts:       testsupport.AlertStore(current.test, current.pool),
 		Dawn:         dawnClient,
 		KafkaOptions: options,
 		Validator:    current.validator,

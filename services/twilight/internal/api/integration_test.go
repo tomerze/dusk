@@ -23,7 +23,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 
-	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/dawn"
@@ -203,7 +202,7 @@ func newStack(test *testing.T) *stack {
 	}
 	test.Cleanup(nodeState.Close)
 	core := engine.New(engine.Dependencies{
-		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: alerts.NewStore(pool, "", logger),
+		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: testsupport.AlertStore(test, pool),
 		Dawn: dawnClient, KafkaOptions: options, Validator: current.validator,
 		NodeState: kafka.NewNodeStateProducer(nodeState, current.validator, settings.Kafka.Topics.NodeState),
 		Intended:  kafka.NewIntendedProcessProducer(nodeState, current.validator, settings.Kafka.Topics.IntendedProcesses), Logger: logger,

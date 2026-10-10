@@ -108,7 +108,6 @@ func TestValidation(test *testing.T) {
 		"kafka.topics.ledger":            minimal + "  topics: {ledger: \"\"}\n",
 		"dawn.ca":                        minimal + "dawn: {ca: \"\"}\n",
 		"engine.dispatch_workers":        minimal + "engine: {dispatch_workers: 0}\n",
-		"alerts.webhook_url":             minimal + "alerts: {webhook_url: \"ftp://x\"}\n",
 		"log_level":                      minimal + "log_level: loud\n",
 		"reconcile.ledger_keys":          minimal + "reconcile: {ledger_keys: \"\"}\n",
 		"reconcile.commands_per_session": minimal + "reconcile: {commands_per_session: 0}\n",

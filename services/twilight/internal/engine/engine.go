@@ -130,7 +130,7 @@ func (engine *Engine) Run(operation context.Context) {
 	start(engine.runExpiry)
 	start(engine.leadership.Run)
 	start(engine.feed.run)
-	start(engine.Alerts.RunWebhook)
+	start(engine.Alerts.RunDelivery)
 	start(func(operation context.Context) { engine.Alerts.RunMetrics(operation, 30*time.Second) })
 	running.Wait()
 }
