@@ -4,12 +4,14 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/testsupport"
@@ -162,6 +164,73 @@ func TestGatesKeepWatchingAPausedCampaign(test *testing.T) {
 			if after.Status != campaign.StatusFailed || gateEvents != 1 {
 				test.Fatalf("a paused campaign whose policy aborts on a failing gate: %+v, %d gate events", after, gateEvents)
 			}
+		}
+	}
+}
+
+func TestAGateThatPausesOrFailsACampaignRaisesAnAlert(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	operation := context.Background()
+	store := campaign.NewStore(pool)
+	alertStore := testsupport.AlertStore(test, pool)
+	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Alerts: alertStore, Logger: testsupport.Logger()})
+	term, failure := store.Term(operation)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	created := time.Now().Add(-2 * time.Hour)
+	tenant := "acme"
+	for _, onFailure := range []campaign.GateAction{campaign.GateActionPause, campaign.GateActionAbort} {
+		policy := campaign.Policy{Phases: []campaign.Phase{{Name: "canary", Percent: 10, BakeSeconds: 60}, {Name: "all", Percent: 100, BakeSeconds: 60}},
+			NodeTimeoutSeconds: 60, Gates: campaign.Gates{MinSample: 1, MaxFailureRate: 0.1, MaxSilentRate: 1}, Abort: campaign.Abort{OnGateFailure: onFailure}}
+		target, failure := store.Create(operation, campaign.Definition{Name: "gated " + string(onFailure), Tenant: &tenant, Selector: "has(device_id)",
+			Action: campaign.Action{Kind: campaign.KindRunScript, Script: "ps"}, Policy: policy}, "operator@example.org", created)
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		started, failure := store.Transition(operation, target.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: created})
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, attempt, last_status, dispatched_at, finished_at, revision)
+			values ($1, $2, $3, 0, 'failed', 1, 'failed', $4, $4, 1)`, target.ID, strings.Repeat("a", 32), strings.Repeat("b", 32), created); failure != nil {
+			test.Fatal(failure)
+		}
+		if failure := engine.gate(operation, term, started); failure != nil {
+			test.Fatal(failure)
+		}
+		kind := alerts.KindCampaignPausedByGate
+		if onFailure == campaign.GateActionAbort {
+			kind = alerts.KindCampaignFailedByPolicy
+		}
+		listed, failure := alertStore.List(operation, true, "", 100)
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		var raised *alerts.Alert
+		for index := range listed.Alerts {
+			if listed.Alerts[index].Fingerprint == kind+":"+target.ID.String() {
+				raised = &listed.Alerts[index]
+			}
+		}
+		if raised == nil || raised.Severity != alerts.High || raised.Tenant == nil || *raised.Tenant != "acme" {
+			test.Fatalf("%s: no %s alert among %+v", onFailure, kind, listed.Alerts)
+		}
+		var detail map[string]any
+		_ = json.Unmarshal(raised.Detail, &detail)
+		if detail["campaign_name"] != "gated "+string(onFailure) || detail["phase_name"] != "canary" || !strings.Contains(detail["reason"].(string), "failure rate 1.00") {
+			test.Fatalf("%s: detail %v", onFailure, detail)
+		}
+		if onFailure == campaign.GateActionAbort {
+			continue
+		}
+		if _, failure := store.Transition(operation, target.ID, campaign.TransitionRequest{Transition: campaign.TransitionResume, Actor: "operator@example.org", OverrideGate: true,
+			Reason: "the failing node was a lab machine", Now: time.Now()}); failure != nil {
+			test.Fatal(failure)
+		}
+		resolved, failure := alertStore.Get(operation, raised.ID)
+		if failure != nil || resolved.ResolvedAt == nil || *resolved.ResolvedBy != "operator@example.org" {
+			test.Fatalf("resuming did not resolve the gate alert: %+v %v", resolved, failure)
 		}
 	}
 }
