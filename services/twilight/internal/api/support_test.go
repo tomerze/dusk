@@ -95,10 +95,17 @@ func sampleCampaign() *campaign.Campaign {
 
 func sampleAlert() alerts.Alert {
 	tenant := "acme"
+	failure := "HTTP 503 unavailable"
+	retry := sampleTime().Add(time.Minute)
+	delivered := sampleTime()
 	return alerts.Alert{
 		ID: 7, Time: sampleTime(), LastSeenAt: sampleTime(), Occurrences: 1, Severity: alerts.Critical, Kind: alerts.KindProcessWithoutIntent, Fingerprint: "f",
 		Tenant: &tenant,
 		Detail: json.RawMessage(`{"pid":"12808937078074471924"}`),
+		Deliveries: []alerts.Delivery{
+			{Receiver: "on-call", Transition: "opened", State: "delivered", Attempts: 1, DeliveredAt: &delivered},
+			{Receiver: "team", Transition: "opened", State: "pending", Attempts: 2, LastError: &failure, NextAttemptAt: &retry},
+		},
 	}
 }
 

@@ -3640,6 +3640,13 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "deliveries": {
+            "type": "array",
+            "description": "The alert's notifications: one per transition (opened, re_escalated, acknowledged, resolved) and receiver, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/AlertDelivery"
+            }
           }
         },
         "required": [
@@ -3655,7 +3662,71 @@
           "acknowledged_by",
           "acknowledged_at",
           "resolved_by",
-          "resolved_at"
+          "resolved_at",
+          "deliveries"
+        ]
+      },
+      "AlertDelivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "receiver": {
+            "type": "string",
+            "description": "The receiver's name in alerts.receivers."
+          },
+          "transition": {
+            "type": "string",
+            "enum": [
+              "opened",
+              "re_escalated",
+              "acknowledged",
+              "resolved"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "delivered",
+              "failed"
+            ],
+            "description": "pending: not delivered yet, retried while attempts is above zero; delivered; failed: given up."
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the latest attempt failed."
+          },
+          "next_attempt_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When a pending notification is tried next."
+          },
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "receiver",
+          "transition",
+          "state",
+          "attempts",
+          "last_error",
+          "next_attempt_at",
+          "delivered_at"
         ]
       },
       "Overview": {

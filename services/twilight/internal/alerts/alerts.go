@@ -61,6 +61,17 @@ type Alert struct {
 	AcknowledgedAt *time.Time      `json:"acknowledged_at"`
 	ResolvedBy     *string         `json:"resolved_by"`
 	ResolvedAt     *time.Time      `json:"resolved_at"`
+	Deliveries     []Delivery      `json:"deliveries"`
+}
+
+type Delivery struct {
+	Receiver      string     `json:"receiver"`
+	Transition    string     `json:"transition"`
+	State         string     `json:"state"`
+	Attempts      int        `json:"attempts"`
+	LastError     *string    `json:"last_error"`
+	NextAttemptAt *time.Time `json:"next_attempt_at"`
+	DeliveredAt   *time.Time `json:"delivered_at"`
 }
 
 type Raised struct {
@@ -114,6 +125,7 @@ func scanAlert(row pgx.Row) (Alert, error) {
 	if errors.Is(failure, pgx.ErrNoRows) {
 		return alert, ErrNotFound
 	}
+	alert.Deliveries = []Delivery{}
 	return alert, failure
 }
 
@@ -139,6 +151,7 @@ func RaiseIn(operation context.Context, target Querier, raised Raised) (Alert, b
 			acknowledged_by = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then null else alerts.acknowledged_by end,
 			acknowledged_at = case when alert_severity_rank(excluded.severity) > alert_severity_rank(alerts.severity) then null else alerts.acknowledged_at end
 		returning `+alertColumns+`, (xmax = 0)`, raised.At, raised.Severity, raised.Kind, raised.Fingerprint, detail, raised.Tenant).Scan(append(alertTargets(&alert), &inserted)...)
+	alert.Deliveries = []Delivery{}
 	return alert, inserted, failure
 }
 
@@ -217,17 +230,60 @@ func (store *Store) List(operation context.Context, open bool, cursor string, li
 	if page.Alerts == nil {
 		page.Alerts = []Alert{}
 	}
-	return page, nil
+	return page, store.attachDeliveries(operation, page.Alerts)
+}
+
+func (store *Store) attachDeliveries(operation context.Context, listed []Alert) error {
+	if len(listed) == 0 {
+		return nil
+	}
+	identifiers := make([]int64, len(listed))
+	byIdentifier := make(map[int64]*Alert, len(listed))
+	for index := range listed {
+		identifiers[index] = listed[index].ID
+		byIdentifier[listed[index].ID] = &listed[index]
+	}
+	rows, failure := store.pool.Query(operation, `select delivery.alert_id, delivery.receiver, transition.transition, delivery.state, delivery.attempts,
+			delivery.last_error, case when delivery.state = 'pending' then delivery.next_attempt_at end, delivery.delivered_at
+		from alert_deliveries delivery join alert_transitions transition on transition.id = delivery.transition_id
+		where delivery.alert_id = any($1) order by delivery.alert_id, delivery.transition_id, delivery.receiver`, identifiers)
+	if failure != nil {
+		return failure
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var identifier int64
+		var delivery Delivery
+		if failure := rows.Scan(&identifier, &delivery.Receiver, &delivery.Transition, &delivery.State, &delivery.Attempts,
+			&delivery.LastError, &delivery.NextAttemptAt, &delivery.DeliveredAt); failure != nil {
+			return failure
+		}
+		byIdentifier[identifier].Deliveries = append(byIdentifier[identifier].Deliveries, delivery)
+	}
+	return rows.Err()
+}
+
+func (store *Store) withDeliveries(operation context.Context, alert Alert, failure error) (Alert, error) {
+	if failure != nil {
+		return alert, failure
+	}
+	listed := []Alert{alert}
+	if failure := store.attachDeliveries(operation, listed); failure != nil {
+		return alert, failure
+	}
+	return listed[0], nil
 }
 
 func (store *Store) Acknowledge(operation context.Context, identifier int64, actor string, now time.Time) (Alert, error) {
-	return scanAlert(store.pool.QueryRow(operation, `update alerts set acknowledged_by = coalesce(acknowledged_by, $2), acknowledged_at = coalesce(acknowledged_at, $3)
+	alert, failure := scanAlert(store.pool.QueryRow(operation, `update alerts set acknowledged_by = coalesce(acknowledged_by, $2), acknowledged_at = coalesce(acknowledged_at, $3)
 		where id = $1 returning `+alertColumns, identifier, actor, now))
+	return store.withDeliveries(operation, alert, failure)
 }
 
 func (store *Store) Resolve(operation context.Context, identifier int64, actor string, now time.Time) (Alert, error) {
-	return scanAlert(store.pool.QueryRow(operation, `update alerts set resolved_by = coalesce(resolved_by, $2), resolved_at = coalesce(resolved_at, $3)
+	alert, failure := scanAlert(store.pool.QueryRow(operation, `update alerts set resolved_by = coalesce(resolved_by, $2), resolved_at = coalesce(resolved_at, $3)
 		where id = $1 returning `+alertColumns, identifier, actor, now))
+	return store.withDeliveries(operation, alert, failure)
 }
 
 func ResolveFingerprintIn(operation context.Context, target Querier, fingerprint, actor string, now time.Time) error {
