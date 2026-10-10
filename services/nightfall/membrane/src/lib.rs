@@ -1,3 +1,4 @@
+pub mod admission;
 pub mod audit;
 pub mod canonical;
 mod copy;
