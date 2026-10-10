@@ -21,9 +21,9 @@ use crate::backoff::{Backoff, uniform_up_to};
 use crate::identity::{self, Identity};
 use crate::link::{self, LinkGuard};
 use crate::node_key::NodeKey;
-use crate::provisioning::{DeviceReport, Provisioner, ProvisioningError, Token};
+use crate::provisioning::{DeviceReport, Provisioner, ProvisioningError, Token, TpmAttestation};
 use crate::tls::{self, HostPort, embassy_duration};
-use crate::tpm::Tpm;
+use crate::tpm::{Endorsement, Tpm};
 
 pub const DEFAULT_HEARTBEAT_TIMEOUT_SECONDS: u32 = 90;
 pub const DEFAULT_TPM: &str = "/dev/tpmrm0";
@@ -564,18 +564,20 @@ impl Connector {
     async fn enroll(&self) -> Result<Identity, ProvisioningError> {
         let token = self.token().await?;
         let key = self.new_key()?;
-        let report = self.device_report().await?;
+        let endorsement = self.endorsement(&key);
+        let report = self.device_report(&key, endorsement.as_ref()).await?;
         tracing::info!(
             provision = %self.settings.provisioner.target,
             installation_hint = report.installation_hint.as_str(),
             credential = token.kind(),
             node_key = if key.tpm_object().is_some() { "tpm" } else { "kvs" },
+            attesting = endorsement.is_some(),
             "enrolling"
         );
         let identity = self
             .settings
             .provisioner
-            .enroll(&token, &report, key, &self.kvs)
+            .enroll(&token, &report, key, endorsement.as_ref(), &self.kvs)
             .await?;
         tracing::info!(
             device_id = identity.device_id(),
@@ -618,7 +620,35 @@ impl Connector {
         NodeKey::generate()
     }
 
-    async fn device_report(&self) -> anyhow::Result<DeviceReport> {
+    fn endorsement(&self, key: &NodeKey) -> Option<Endorsement> {
+        let tpm = key.tpm_object()?.tpm();
+        match tpm.endorsement() {
+            Ok(endorsement) => Some(endorsement),
+            Err(error) => {
+                tracing::warn!(
+                    tpm = tpm.path.as_str(),
+                    error = %format_args!("{error:#}"),
+                    "couldn't read the TPM's endorsement key; enrolling without attesting the node key"
+                );
+                None
+            }
+        }
+    }
+
+    async fn device_report(
+        &self,
+        key: &NodeKey,
+        endorsement: Option<&Endorsement>,
+    ) -> anyhow::Result<DeviceReport> {
+        let tpm = match (endorsement, key.tpm_object()) {
+            (Some(endorsement), Some(object)) => Some(TpmAttestation {
+                endorsement_key: endorsement.key.public.clone(),
+                endorsement_certificate: endorsement.certificate.clone(),
+                endorsement_certificate_chain: endorsement.chain.clone(),
+                node_key: object.public.clone(),
+            }),
+            _ => None,
+        };
         let hardware_fingerprint = identity::hardware_fingerprint(&self.kvs).await?;
         let text = |value: Option<Value>| match value {
             Some(Value::String(text) | Value::Text(text)) => text,
@@ -638,6 +668,7 @@ impl Connector {
             target_os: text(self.kvs.get(TARGET_OS_KEY).await),
             target_arch: text(self.kvs.get(TARGET_ARCH_KEY).await),
             hostname,
+            tpm,
         })
     }
 }
