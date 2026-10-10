@@ -382,9 +382,13 @@ by severity and kind (those two filters look through the 2,000 newest alerts).
 Each row says what happened, which call and principal it concerns when the alert
 names them, when it was last seen and how many times. Critical and high open
 alerts have a coloured edge; resolved ones are dimmed. *Acknowledge* says someone is on it (and removes a
-critical alert from the banner); *Resolve* closes it. Click an alert to read
-what its kind means and see its fields, with links to the node and campaigns it
-names.
+critical alert from the banner); *Resolve* closes it. Under its message each
+alert shows where its notifications went: one pill per receiver with the state
+of its latest notification - *delivered*, *retrying*, *queued* or *failed*, the
+reason on hover. Click an alert to read what its kind means and see its fields,
+its tenant, every notification with its attempts and why the latest one failed,
+and links to the node and campaigns it names. The link in a notification,
+`/alerts?alert=<id>`, opens that one alert.
 
 | kind | means |
 |------|-------|
