@@ -150,6 +150,7 @@ creates.
 | `topics.enrollments` | `dusk.enrollments` | |
 | `topics.node_state` | `dusk.node-state` | |
 | `topics.process_results` | `dusk.process-results` | |
+| `topics.intended_processes` | `dusk.intended-processes` | |
 | `results_group` | `twilight-results` | The consumer group the leader applies process results in. |
 | `inventory_group` | `twilight-inventory` | The consumer group the leader records enrollments in. |
 | `reconcile_group` | `twilight-reconcile` | The consumer group every instance shares to reconcile the ledger. |
@@ -162,12 +163,13 @@ groups and these topic ACLs:
 | Topic | Operations |
 |-------|------------|
 | `dusk.connections`, `dusk.census`, `dusk.ledger`, `dusk.enrollments`, `dusk.process-results` | Read, Describe, DescribeConfigs |
-| `dusk.node-state` | Write, Describe, DescribeConfigs |
+| `dusk.node-state`, `dusk.intended-processes` | Write, Describe, DescribeConfigs |
 
-twilight never creates topics. An instance is not ready while one of the six is
+twilight never creates topics. An instance is not ready while one of the seven is
 missing or its `cleanup.policy` is not the one the Kafka contracts in
-`services/contracts/kafka/` give it (`compact` for `dusk.census` and
-`dusk.node-state`, `delete` for the others); it checks again every 30 seconds.
+`services/contracts/kafka/` give it (`compact` for `dusk.census`,
+`dusk.node-state` and `dusk.intended-processes`, `delete` for the others); it
+checks again every 30 seconds.
 
 ### `dawn`
 
@@ -712,6 +714,21 @@ the leader sweeps every campaign once the view recovers.
   dawn's reads, kills and reaps run (`reconcile.default_shell`). For campaign
   work that row and the node's move to `dispatching` are one transaction; a
   resend extends the row's expiry.
+* nightfall admits only the calls an intended process allows
+  ([Admission](membrane.md#admission)), so after committing the row twilight
+  writes it to `dusk.intended-processes` - keyed
+  `<device id>/<installation id>/<pid>`, with the campaign, who asked, the
+  subject, `created_at`, `expires_at` and both command budgets - and calls dawn
+  only once Kafka has acknowledged the record. While it writes, it holds the
+  row locked and writes what the row says then, so the topic always ends with
+  the row's latest state. When the write fails, dawn is not called: campaign
+  work goes back to `pending` with the status `intent_unpublished` and is tried
+  again after a backoff of up to five minutes, and other work fails its
+  request. A row that was committed and never written - twilight stopped
+  between the two, or Kafka refused the write - is written by the leader within
+  five seconds; so is a tombstone for every row that has expired or been
+  reaped, and a resend of an expired row writes it again. Each write is
+  counted in `twilight_intended_process_publications_total{kind, outcome}`.
 * The reap sweep looks at every online node once per `reap_interval_seconds`,
   and at every node that connects. A pid is reaped once no row of a campaign
   can send it again - its row has finished, or moved on to a later attempt -
@@ -730,7 +747,9 @@ the leader sweeps every campaign once the view recovers.
 ### Reconcile
 
 Every instance takes a share of the `dusk.ledger` partitions and checks each
-call nightfall forwarded against the processes twilight intended, verifies each
+call nightfall forwarded against the processes twilight intended - a call
+nightfall refused, `denied` or `rate_limited`, never reached a node and is not
+judged - verifies each
 partition's hash chain and checkpoint signatures, and raises the alerts
 [Campaigns](campaigns.md#reconcile-alerts) describes. The offsets, the chain
 heads and the alerts of one batch are written in one transaction, so a restart
