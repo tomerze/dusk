@@ -1,4 +1,4 @@
-import type { Alert, Campaign, JsonValue, Role, Severity } from '../api/types'
+import type { Alert, AlertDelivery, Campaign, JsonValue, Role, Severity } from '../api/types'
 import type { MockCampaign } from './campaigns'
 import { countersOf, generateCampaigns } from './campaigns'
 import type { MockNode } from './nodes'
@@ -81,6 +81,7 @@ interface AlertSeed {
   lastSeenMinutesAgo?: number
   acknowledged?: { by: string; minutesAgo: number }
   resolved?: { by: string; minutesAgo: number }
+  failing?: AlertDelivery
 }
 
 function generateAlerts(state: MockState): Alert[] {
@@ -131,6 +132,15 @@ function generateAlerts(state: MockState): Alert[] {
       ),
       occurrences: 3,
       lastSeenMinutesAgo: 4,
+      failing: {
+        receiver: 'siem',
+        transition: 'opened',
+        state: 'pending',
+        attempts: 4,
+        last_error: 'HTTP 503 upstream unavailable',
+        next_attempt_at: new Date(state.now + 90_000).toISOString(),
+        delivered_at: null,
+      },
     },
     {
       minutesAgo: 26,
@@ -319,6 +329,36 @@ function generateAlerts(state: MockState): Alert[] {
     }
     return state.nodeIndex.get(nodeKey(device, installation))?.tenant ?? null
   }
+  const deliveriesOf = (seed: AlertSeed): AlertDelivery[] => {
+    const receivers =
+      seed.severity === 'critical' || seed.severity === 'high'
+        ? ['on-call', 'siem']
+        : ['chat', 'siem']
+    const transitions: [AlertDelivery['transition'], number][] = [['opened', seed.minutesAgo]]
+    if (seed.acknowledged !== undefined) {
+      transitions.push(['acknowledged', seed.acknowledged.minutesAgo])
+    }
+    if (seed.resolved !== undefined) {
+      transitions.push(['resolved', seed.resolved.minutesAgo])
+    }
+    return transitions.flatMap(([transition, minutesAgo]) =>
+      receivers.map((receiver) =>
+        seed.failing !== undefined &&
+        seed.failing.receiver === receiver &&
+        seed.failing.transition === transition
+          ? seed.failing
+          : {
+              receiver,
+              transition,
+              state: 'delivered' as const,
+              attempts: 1,
+              last_error: null,
+              next_attempt_at: null,
+              delivered_at: minutes(minutesAgo),
+            },
+      ),
+    )
+  }
   return seeds.map((seed, index) => ({
     id: 9000 + seeds.length - index,
     time: minutes(seed.minutesAgo),
@@ -333,6 +373,7 @@ function generateAlerts(state: MockState): Alert[] {
     acknowledged_at: seed.acknowledged === undefined ? null : minutes(seed.acknowledged.minutesAgo),
     resolved_by: seed.resolved?.by ?? null,
     resolved_at: seed.resolved === undefined ? null : minutes(seed.resolved.minutesAgo),
+    deliveries: deliveriesOf(seed),
   }))
 }
 

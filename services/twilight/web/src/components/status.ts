@@ -293,6 +293,30 @@ export const severityStyles: Record<Severity, StatusStyle> = {
   low: { label: 'Low', color: 'gray', icon: IconInfoCircle, description: 'For the record.' },
 }
 
+export type DeliveryDisplay = 'delivered' | 'retrying' | 'queued' | 'failed'
+
+export const deliveryStyles: Record<DeliveryDisplay, StatusStyle> = {
+  delivered: {
+    label: 'Delivered',
+    color: 'green',
+    icon: IconCircleCheck,
+    description: 'The receiver accepted the notification.',
+  },
+  retrying: {
+    label: 'Retrying',
+    color: 'orange',
+    icon: IconRefresh,
+    description: 'The last attempt failed; twilight tries again.',
+  },
+  queued: { label: 'Queued', color: 'gray', icon: IconClock, description: 'Not sent yet.' },
+  failed: {
+    label: 'Failed',
+    color: 'red',
+    icon: IconCircleX,
+    description: 'twilight gave up on this notification.',
+  },
+}
+
 export const gateVerdictStyles: Record<GateDisplay, StatusStyle> = {
   pass: {
     label: 'Passing',

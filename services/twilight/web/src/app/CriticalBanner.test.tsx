@@ -23,6 +23,7 @@ function newerOpenAlert(index: number): Alert {
     acknowledged_at: null,
     resolved_by: null,
     resolved_at: null,
+    deliveries: [],
   }
 }
 
