@@ -14,5 +14,6 @@ pub mod server;
 mod server_tests;
 pub mod state;
 pub mod step_ca;
+pub mod tpm;
 
 pub use dusk_program_nightfall::provision_capnp;
