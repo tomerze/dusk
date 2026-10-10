@@ -11,12 +11,34 @@ use crate::jwt::{Jwks, JwtError};
 pub const CLOCK_SKEW_SECONDS: u64 = 60;
 const MAXIMUM_CLAIM_BYTES: usize = 256;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialKind {
     FleetToken,
     InstallToken,
     Certificate,
+}
+
+impl CredentialKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            CredentialKind::FleetToken => "fleet_token",
+            CredentialKind::InstallToken => "install_token",
+            CredentialKind::Certificate => "certificate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CredentialName {
+    pub kind: CredentialKind,
+    pub name: String,
+}
+
+impl CredentialName {
+    pub fn key(&self) -> String {
+        format!("{}/{}", self.kind.name(), self.name)
+    }
 }
 
 pub fn sha256(bytes: &[u8]) -> [u8; 32] {

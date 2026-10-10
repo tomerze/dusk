@@ -12,7 +12,9 @@ use tracing::{error, info, warn};
 
 use crate::challenge::{Binding, ChallengeStore};
 use crate::config::ProvisioningConfig;
-use crate::credential::{CredentialKind, FleetTokens, InstallToken, InstallTokenKeys, sha256};
+use crate::credential::{
+    CredentialKind, CredentialName, FleetTokens, InstallToken, InstallTokenKeys, sha256,
+};
 use crate::csr::validate_csr;
 use crate::events::{
     EnrollmentEvent, EnrollmentEvents, Operation, Outcome, format_unix_seconds, remote_address,
@@ -111,7 +113,7 @@ impl Presented {
 }
 
 struct Verified {
-    reference: String,
+    credential: CredentialName,
     tenant: Option<String>,
     install_token: Option<InstallToken>,
 }
@@ -497,11 +499,9 @@ impl Provisioning {
         refusal.error
     }
 
-    fn admit(
+    fn admit_address(
         &self,
         connection: &ConnectionInfo,
-        presented: &Presented,
-        endorsement_key: Option<&[u8]>,
         operation: Operation,
     ) -> Result<(), Refusal> {
         let address = connection.remote_address.ip();
@@ -517,7 +517,15 @@ impl Provisioning {
                 format!("the enrollments per hour of the network of {address} are used up"),
             ));
         }
-        let bucket = hex::encode(sha256(presented.secret()));
+        Ok(())
+    }
+
+    fn admit_credential(
+        &self,
+        verified: &Verified,
+        endorsement_key: Option<&[u8]>,
+    ) -> Result<(), Refusal> {
+        let bucket = verified.credential.key();
         let endorsement_bucket =
             endorsement_key.map(|key| format!("tpm:{}", hex::encode(sha256(key))));
         lock(&self.buckets)
@@ -553,7 +561,10 @@ impl Provisioning {
                     ));
                 }
                 Some(entry) => Verified {
-                    reference: entry.name.clone(),
+                    credential: CredentialName {
+                        kind: CredentialKind::FleetToken,
+                        name: entry.name.clone(),
+                    },
                     tenant: entry.tenant.clone(),
                     install_token: None,
                 },
@@ -569,7 +580,10 @@ impl Provisioning {
             Presented::InstallToken(token) => {
                 match current(&self.install_token_keys).verify(token, unix_now()) {
                     Ok(install_token) => Verified {
-                        reference: install_token.subject.clone(),
+                        credential: CredentialName {
+                            kind: CredentialKind::InstallToken,
+                            name: install_token.key_id.clone(),
+                        },
                         tenant: install_token.tenant.clone(),
                         install_token: Some(install_token),
                     },
@@ -591,7 +605,10 @@ impl Provisioning {
                 ));
             }
         };
-        attempt.event.credential_ref = Some(verified.reference.clone());
+        attempt.event.credential_ref = Some(match &verified.install_token {
+            Some(install_token) => install_token.subject.clone(),
+            None => verified.credential.name.clone(),
+        });
         attempt.event.credential_issuer = verified
             .install_token
             .as_ref()
@@ -665,13 +682,9 @@ impl Provisioning {
         report: &Report,
         attempt: &mut Attempt,
     ) -> Result<Assigned, Refusal> {
-        self.admit(
-            connection,
-            presented,
-            report.endorsement_key(),
-            Operation::Assign,
-        )?;
-        self.verify_credential(connection, presented, attempt)?;
+        self.admit_address(connection, Operation::Assign)?;
+        let verified = self.verify_credential(connection, presented, attempt)?;
+        self.admit_credential(&verified, report.endorsement_key())?;
         let attested = report
             .tpm
             .as_ref()
@@ -768,13 +781,9 @@ impl Provisioning {
         csr: &[u8],
         attempt: &mut Attempt,
     ) -> Result<SignRequest, Refusal> {
-        self.admit(
-            connection,
-            presented,
-            report.endorsement_key(),
-            Operation::Enroll,
-        )?;
+        self.admit_address(connection, Operation::Enroll)?;
         let verified = self.verify_credential(connection, presented, attempt)?;
+        self.admit_credential(&verified, report.endorsement_key())?;
         let device_id = self.check_fingerprint(report)?;
         let binding = self
             .challenges

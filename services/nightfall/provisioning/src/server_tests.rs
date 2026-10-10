@@ -1549,3 +1549,34 @@ async fn takes_added_removed_and_re_tenanted_fleet_tokens_without_a_restart() {
     );
     assert_contract(&harness.events);
 }
+
+#[tokio::test]
+async fn rate_limits_every_install_token_of_one_key_together() {
+    let harness = harness_with(|config, _| {
+        config.enrollments_per_second_per_credential = 2;
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let first = harness.install_token("unit-1", "batch-9-unit-1", None);
+    enroll_new(&client, Credential::Install(&first), [38u8; 32])
+        .await
+        .unwrap();
+    let issued = harness.events.last();
+    assert_eq!(issued.credential_ref.as_deref(), Some("unit-1"));
+    assert_eq!(issued.credential_issuer.as_deref(), Some("factory-2026"));
+    let second = harness.install_token("unit-2", "batch-9-unit-2", None);
+    let limited = assign(&client, Credential::Install(&second), &[39u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(limited.kind, capnp::ErrorKind::Overloaded);
+    assert_eq!(
+        harness.events.last().reason.as_deref(),
+        Some("credential_rate")
+    );
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assign(&client, Credential::Install(&second), &[39u8; 32])
+        .await
+        .unwrap();
+    assert_contract(&harness.events);
+}
