@@ -299,9 +299,11 @@ A process a client creates without naming a pid is counted per principal
 (`twilight_unattributed_processes_total`), not alerted: the one admission lets
 through, the `kvs bind` the `kvs` client starts to read key names, is created
 that way. twilight also raises
-`enrollment_rate` (high), `revocation_not_enforced` (critical) and
-`campaign_conflict`. Every new critical and high alert is posted to
-`alerts.webhook_url` when one is set.
+`enrollment_rate` (high), `revocation_not_enforced` (critical),
+`campaign_conflict`, `campaign_paused_by_gate` and `campaign_failed_by_policy`.
+Every alert reaches the receivers its routes name - PagerDuty, Slack, email,
+Teams or a signed webhook - from an outbox in Postgres, and each kind links its
+[runbook](runbooks/index.md) ([alerts](twilight.md#alerts)).
 
 ## Compromised components
 
