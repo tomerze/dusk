@@ -17,6 +17,7 @@ function newerOpenAlert(index: number): Alert {
     severity: 'high',
     kind: 'process_after_deadline',
     fingerprint: `process_after_deadline:probe:${index}`,
+    tenant: null,
     detail: { message: 'calls arrived under a pid after its deadline' },
     acknowledged_by: null,
     acknowledged_at: null,

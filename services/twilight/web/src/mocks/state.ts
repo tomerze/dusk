@@ -311,6 +311,14 @@ function generateAlerts(state: MockState): Alert[] {
       resolved: { by: index % 3 === 0 ? 'security' : 'release-bot', minutesAgo: hours * 60 - 90 },
     })
   }
+  const tenantOf = (detail: Record<string, JsonValue>): string | null => {
+    const device = detail.device_id
+    const installation = detail.installation_id
+    if (typeof device !== 'string' || typeof installation !== 'string') {
+      return null
+    }
+    return state.nodeIndex.get(nodeKey(device, installation))?.tenant ?? null
+  }
   return seeds.map((seed, index) => ({
     id: 9000 + seeds.length - index,
     time: minutes(seed.minutesAgo),
@@ -319,6 +327,7 @@ function generateAlerts(state: MockState): Alert[] {
     severity: seed.severity,
     kind: seed.kind,
     fingerprint: seed.fingerprint,
+    tenant: tenantOf(seed.detail),
     detail: seed.detail,
     acknowledged_by: seed.acknowledged?.by ?? null,
     acknowledged_at: seed.acknowledged === undefined ? null : minutes(seed.acknowledged.minutesAgo),

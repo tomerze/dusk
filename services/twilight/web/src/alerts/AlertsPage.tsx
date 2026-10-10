@@ -197,6 +197,14 @@ function AlertRow({ alert, canOperate }: { alert: Alert; canOperate: boolean }) 
                 <Code className={classes.value}>{alert.kind}</Code>
               </dd>
             </div>
+            {alert.tenant !== null && (
+              <div className={classes.field}>
+                <dt>tenant</dt>
+                <dd>
+                  <Code className={classes.value}>{alert.tenant}</Code>
+                </dd>
+              </div>
+            )}
             {Object.entries(alert.detail)
               .filter(([key]) => key !== 'message')
               .map(([key, value]) => (
