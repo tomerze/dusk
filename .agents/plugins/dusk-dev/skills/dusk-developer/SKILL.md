@@ -366,7 +366,12 @@ registers, `waitpid` unregisters, and `bootstrap` only changes state. The
 exit status instead of returning it, and the `Sweep` signal (wire value 7)
 unregisters a process that is still suspended, which is how a process nobody
 ever ran - one whose created callback failed, say - is taken out. `Dusk.kill`
-handles both in the namespace and never delivers them to a process.
+handles both in the namespace and never delivers them to a process. All three
+take out only the process they looked up: `Namespace::unregister` is handed that
+process's exit watch and leaves the pid alone when another process holds it by
+then. So a `waitpid` woken by an exit, whose pid a fixed-pid `Dusk.process`
+gives to a new process before the waiter runs again, leaves the new one
+registered.
 
 **The two runs answer at different moments, and that is what separates them.**
 `Dusk.run` answers as soon as the process has a task of its own, which is what a

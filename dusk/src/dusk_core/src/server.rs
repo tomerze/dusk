@@ -242,7 +242,7 @@ impl dusk::Server for DuskServer {
                 changed = true;
             };
 
-            namespace.unregister(pid).await;
+            namespace.unregister(pid, &entry.exit).await;
 
             result.map_err(capnp::Error::failed)
         })
