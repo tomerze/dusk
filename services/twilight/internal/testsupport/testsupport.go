@@ -22,6 +22,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/redpanda"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/config"
@@ -32,6 +33,7 @@ import (
 const (
 	PostgresImage = "postgres:17-alpine"
 	RedpandaImage = "docker.redpanda.com/redpandadata/redpanda:v25.2.4"
+	MailpitImage  = "axllent/mailpit:v1.31.2"
 )
 
 var (
@@ -67,6 +69,10 @@ func localPorts(ports ...string) testcontainers.CustomizeRequestOption {
 }
 
 func Main(suite *testing.M) {
+	os.Exit(Run(suite))
+}
+
+func Run(suite *testing.M) int {
 	code := suite.Run()
 	mutex.Lock()
 	for _, started := range containers {
@@ -77,7 +83,7 @@ func Main(suite *testing.M) {
 		cancel()
 	}
 	mutex.Unlock()
-	os.Exit(code)
+	return code
 }
 
 func Logger() *slog.Logger {
@@ -196,4 +202,39 @@ func AlertStore(test testing.TB, pool *pgxpool.Pool) *alerts.Store {
 		test.Fatal(failure)
 	}
 	return store
+}
+
+func Mailpit(test testing.TB, environment map[string]string, files ...testcontainers.ContainerFile) (string, string) {
+	test.Helper()
+	operation, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	started, failure := testcontainers.Run(operation, MailpitImage,
+		testcontainers.WithName(containerName("mailpit")),
+		testcontainers.WithExposedPorts("1025/tcp", "8025/tcp"),
+		testcontainers.WithEnv(environment),
+		testcontainers.WithFiles(files...),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/livez").WithPort("8025/tcp")),
+		localPorts("1025/tcp", "8025/tcp"),
+	)
+	if started != nil {
+		test.Cleanup(func() {
+			stopping, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			if failure := started.Terminate(stopping); failure != nil {
+				test.Logf("terminate mailpit: %v", failure)
+			}
+		})
+	}
+	if failure != nil {
+		test.Fatalf("start mailpit: %v", failure)
+	}
+	smtpEndpoint, failure := started.PortEndpoint(operation, "1025/tcp", "")
+	if failure != nil {
+		test.Fatalf("mailpit smtp port: %v", failure)
+	}
+	apiEndpoint, failure := started.PortEndpoint(operation, "8025/tcp", "http")
+	if failure != nil {
+		test.Fatalf("mailpit api port: %v", failure)
+	}
+	return smtpEndpoint, apiEndpoint
 }
