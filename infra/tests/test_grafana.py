@@ -18,6 +18,14 @@ ALERT_RULES = {
     "dusk-ledger-chain-broken",
     "dusk-ledger-evidence-stalled",
     "dusk-contract-messages-dropped",
+    "dusk-alert-delivery-failing",
+}
+RECEIVERS = {
+    "on-call": "pagerduty",
+    "chat": "slack",
+    "noc": "teams",
+    "siem": "webhook",
+    "mail": "email",
 }
 
 
@@ -114,6 +122,35 @@ def test_every_panel_query_runs(
 
 def test_every_alert_rule_is_provisioned() -> None:
     assert set(alert_rules()) == ALERT_RULES
+
+
+def test_every_alert_rule_names_its_runbook_kind() -> None:
+    for uid, rule in alert_rules().items():
+        assert rule["labels"].get("kind"), uid
+        assert rule["labels"].get("severity") in {
+            "critical",
+            "high",
+            "medium",
+            "low",
+        }, uid
+
+
+def test_contact_points_follow_twilights_receivers() -> None:
+    points = grafana("/api/v1/provisioning/contact-points")
+    provisioned = {
+        point["name"]: point["type"]
+        for point in points
+        if point["uid"].startswith("dusk-")
+    }
+    assert provisioned == RECEIVERS
+    policy = grafana("/api/v1/provisioning/policies")
+    assert {route["receiver"] for route in policy["routes"]} == set(RECEIVERS)
+    assert all(route.get("continue") for route in policy["routes"])
+    templates = {
+        template["name"]: template["template"]
+        for template in grafana("/api/v1/provisioning/templates")
+    }
+    assert "/stack/runbooks/{{ . }}/" in templates["dusk"]
 
 
 @pytest.mark.parametrize("uid", sorted(ALERT_RULES))
