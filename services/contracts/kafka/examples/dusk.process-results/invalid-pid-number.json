@@ -1,0 +1,22 @@
+{
+  "schema": "dusk.process-results/v1",
+  "id": "01a112fe-d1bc-73b3-8e1a-4377d4930a42",
+  "time": "2026-10-06T09:16:01.512408238Z",
+  "pid": 13792273858822192861,
+  "campaign_id": "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+  "attempt": 1,
+  "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+  "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+  "namespace_id": "5d2e9a1c7b3f8e04",
+  "action_kind": "run_script",
+  "status": "succeeded",
+  "delivered": true,
+  "error": null,
+  "started_at": "2026-10-06T09:15:40.001200400Z",
+  "finished_at": "2026-10-06T09:15:58.774501933Z",
+  "dawn_instance": "dawn-0",
+  "output_digest": "8e0c2a4f6b1d3e5a7c9f0b2d4e6a8c1f3b5d7e9a0c2f4b6d8e1a3c5f7b9d0e2a",
+  "output_count": 3,
+  "output_truncated": false,
+  "reported": null
+}

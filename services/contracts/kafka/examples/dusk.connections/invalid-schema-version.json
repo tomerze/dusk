@@ -1,0 +1,18 @@
+{
+  "schema": "dusk.connections/v2",
+  "id": "01a112fe-d1b8-71a0-a2b0-9ddbd51ddd80",
+  "time": "2026-10-06T09:14:03.512408120Z",
+  "event": "connected",
+  "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+  "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+  "namespace_id": "5d2e9a1c7b3f8e04",
+  "epoch": 1791278043512408,
+  "instance": "nightfall-0",
+  "inner_address": "nightfall-0.nightfall-inner.dusk.svc:8444",
+  "remote_address": "203.0.113.24:51734",
+  "tenant": "retail-eu",
+  "cert_fingerprint": "9b2f4c8e1a7d3b6f0e5c9a2d8b4f1e7c3a6d0b9e2f5c8a1d4b7e0f3c6a9d2b5e",
+  "cert_not_after": "2026-10-12T08:41:17.000000000Z",
+  "connected_at": "2026-10-06T09:14:03.498120554Z",
+  "disconnect_reason": null
+}

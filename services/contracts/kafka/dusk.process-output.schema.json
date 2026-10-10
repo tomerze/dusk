@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "time",
+    "pid",
+    "campaign_id",
+    "device_id",
+    "installation_id",
+    "namespace_id",
+    "index",
+    "value",
+    "truncated"
+  ],
+  "properties": {
+    "schema": { "const": "dusk.process-output/v1" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "time": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "pid": { "$ref": "common.schema.json#/$defs/pid" },
+    "campaign_id": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/uuid" }, { "type": "null" }]
+    },
+    "device_id": { "$ref": "common.schema.json#/$defs/device_id" },
+    "installation_id": { "$ref": "common.schema.json#/$defs/installation_id" },
+    "namespace_id": { "$ref": "common.schema.json#/$defs/namespace_id" },
+    "index": { "type": "integer", "minimum": 0 },
+    "value": { "description": "The dusk Value as JSON, as dusk.gw renders it." },
+    "truncated": {
+      "description": "True only on one final marker message after the last kept value, whose value is null.",
+      "type": "boolean"
+    }
+  },
+  "if": { "required": ["truncated"], "properties": { "truncated": { "const": true } } },
+  "then": { "properties": { "value": { "type": "null" } } }
+}

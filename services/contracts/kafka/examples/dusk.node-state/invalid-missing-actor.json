@@ -1,0 +1,10 @@
+{
+  "schema": "dusk.node-state/v1",
+  "id": "01a112fe-d1bc-73b3-8e1a-4371f3162834",
+  "time": "2026-10-06T09:14:50.512408167Z",
+  "scope": "device",
+  "device_id": "7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f",
+  "installation_id": null,
+  "lifecycle": "revoked",
+  "reason": "stolen hardware"
+}

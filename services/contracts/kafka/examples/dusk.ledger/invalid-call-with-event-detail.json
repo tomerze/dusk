@@ -1,0 +1,55 @@
+{
+  "schema": "dusk.ledger/v1",
+  "id": "01a112fe-d1ba-7684-ae83-5239bd173f3d",
+  "time": "2026-10-06T09:15:40.512408217Z",
+  "kind": "call",
+  "instance": "nightfall-0",
+  "partition": 0,
+  "sequence": 41,
+  "previous_hash": "4c1e9a7f3b5d2e8c0a6f4b1d9e7c3a5f2b8d0e6c4a1f9b7d5e3c2a0f8b6d4e1c",
+  "hash": "a7d3f1c9e5b2084f6a1d3c5e7b9f0a2c4e6d8b1f3a5c7e9d0b2f4a6c8e1d3b5f",
+  "device_id": "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13",
+  "installation_id": "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+  "namespace_id": "5d2e9a1c7b3f8e04",
+  "epoch": 1791278043512408,
+  "principal": "dawn-0",
+  "pid": "13792273858822192861",
+  "intent_campaign_id": null,
+  "intent_principal": null,
+  "intent_subject": null,
+  "session_id": "0192f3a4-9e8d-7c6b-8a59-483726150f1e",
+  "call_id": "0192f3a4-a001-7b2c-9d3e-4f5061728394",
+  "cap_id": 7,
+  "parent_cap_id": 3,
+  "direction": "client_to_node",
+  "action": "ShPortal.sh",
+  "interface_id": "e1c5b0f3a7d29c48",
+  "method_id": 0,
+  "param_fields": [
+    {
+      "name": "script",
+      "redacted": false
+    },
+    {
+      "name": "output",
+      "redacted": false
+    },
+    {
+      "name": "stop",
+      "redacted": false
+    }
+  ],
+  "param_cap_ids": [
+    8,
+    9
+  ],
+  "param_hash": "1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c2b4a6f8e1d3c5b7a9f0e2d4c6b8a1f3e",
+  "result_code": null,
+  "result_cap_ids": [],
+  "event": null,
+  "event_detail": {
+    "reason": "killed"
+  },
+  "key_id": null,
+  "signature": null
+}

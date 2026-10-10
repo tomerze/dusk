@@ -1,0 +1,18 @@
+{
+  "schema": "dusk.files/v1",
+  "id": "01a112fe-d1bd-704c-9bd1-2340974cce83",
+  "time": "2026-10-06T09:16:20.512408257Z",
+  "pid": "4153296812709138211",
+  "campaign_id": null,
+  "device_id": "7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f",
+  "installation_id": "0e8d6c4b2a1f3e5d7c9b8a6f4e2d1c3b",
+  "namespace_id": "c3b1a9f7e5d30816",
+  "node_path": "/etc/os-release",
+  "bucket": "dusk-files",
+  "object_key": "files/7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f/0e8d6c4b2a1f3e5d7c9b8a6f4e2d1c3b/4153296812709138211/0-os-release",
+  "size_bytes": 386,
+  "sha256": "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c",
+  "content_type": "application/octet-stream",
+  "uploaded_at": "2026-10-06T09:16:19.000001000Z",
+  "dawn_instance": "dawn-1"
+}

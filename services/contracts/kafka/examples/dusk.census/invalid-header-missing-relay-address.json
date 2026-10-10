@@ -1,0 +1,15 @@
+{
+  "schema": "dusk.census/v1",
+  "id": "01a112fe-d1b9-70d8-89f8-2854da0efc1f",
+  "time": "2026-10-06T09:14:30.512408147Z",
+  "record": "header",
+  "instance": "nightfall-0",
+  "inner_address": "nightfall-0.nightfall-inner.dusk.svc:8444",
+  "generation": 1791278040000000,
+  "snapshot_epoch": 1791278069912011,
+  "started_at": "2026-10-06T08:02:11.004417300Z",
+  "full": true,
+  "chunk_count": 2,
+  "session_count": 3,
+  "heartbeat_seconds": 15
+}
