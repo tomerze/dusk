@@ -11,8 +11,11 @@ use rustls::pki_types::{CertificateDer, ServerName};
 
 use crate::identity::{self, Identity};
 use crate::node_key::NodeKey;
-use crate::provision_capnp::{RENEW_BEYOND_GRACE, credential, device_report, provisioning};
+use crate::provision_capnp::{
+    RENEW_BEYOND_GRACE, assignment, credential, device_report, provisioning,
+};
 use crate::tls::{self, HostPort};
+use crate::tpm::Endorsement;
 
 pub(crate) const REFUSAL_PREFIX: &str = "denied: ";
 pub(crate) const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -28,6 +31,15 @@ pub(crate) struct DeviceReport {
     pub(crate) target_os: String,
     pub(crate) target_arch: String,
     pub(crate) hostname: String,
+    pub(crate) tpm: Option<TpmAttestation>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TpmAttestation {
+    pub(crate) endorsement_key: Vec<u8>,
+    pub(crate) endorsement_certificate: Vec<u8>,
+    pub(crate) endorsement_certificate_chain: Vec<Vec<u8>>,
+    pub(crate) node_key: Vec<u8>,
 }
 
 pub(crate) enum Token {
@@ -60,6 +72,18 @@ impl DeviceReport {
         builder.set_target_os(&self.target_os);
         builder.set_target_arch(&self.target_arch);
         builder.set_hostname(&self.hostname);
+        if let Some(evidence) = &self.tpm {
+            let mut tpm = builder.init_tpm();
+            tpm.set_endorsement_key(&evidence.endorsement_key);
+            tpm.set_endorsement_certificate(&evidence.endorsement_certificate);
+            tpm.set_node_key(&evidence.node_key);
+            let mut chain = tpm.init_endorsement_certificate_chain(
+                u32::try_from(evidence.endorsement_certificate_chain.len()).unwrap_or(u32::MAX),
+            );
+            for (index, certificate) in (0..).zip(&evidence.endorsement_certificate_chain) {
+                chain.set(index, certificate);
+            }
+        }
     }
 }
 
@@ -152,6 +176,7 @@ impl Provisioner {
         token: &Token,
         report: &DeviceReport,
         key: NodeKey,
+        endorsement: Option<&Endorsement>,
         kvs: &Kvs,
     ) -> Result<Identity, ProvisioningError> {
         identity::stage(kvs, &key).await?;
@@ -172,8 +197,8 @@ impl Provisioner {
                     "nightfall assigned a device id `{device_id}` and installation id `{installation_id}` that are not 32 lowercase hex digits"
                 )));
             }
-            let challenge = assignment.get_challenge().map_err(classify)?.to_vec();
             tracing::info!(device_id, installation_id, "nightfall assigned an identity");
+            let challenge = challenge(assignment, &key, endorsement)?;
             let request = identity::certificate_request(&device_id, &installation_id, &key)?;
             let mut enroll = client.enroll_request();
             {
@@ -202,9 +227,13 @@ impl Provisioner {
         current: &Identity,
         kvs: &Kvs,
     ) -> Result<Identity, ProvisioningError> {
-        let key = current.key.generate_like()?;
-        identity::stage(kvs, &key).await?;
-        let key = Arc::new(key);
+        let key = if current.leaf.identity.tpm_bound {
+            current.key.clone()
+        } else {
+            let key = current.key.generate_like()?;
+            identity::stage(kvs, &key).await?;
+            Arc::new(key)
+        };
         let renewed = self
             .session(
                 Some(current.certified_key()),
@@ -241,6 +270,37 @@ impl Provisioner {
         identity::store(kvs, &renewed).await?;
         Ok(renewed)
     }
+}
+
+fn challenge(
+    assignment: assignment::Reader<'_>,
+    key: &NodeKey,
+    endorsement: Option<&Endorsement>,
+) -> Result<Vec<u8>, ProvisioningError> {
+    let credential_blob = assignment.get_credential_blob().map_err(classify)?;
+    if credential_blob.is_empty() {
+        if endorsement.is_some() {
+            tracing::info!(
+                "nightfall asked for no TPM attestation; enrolling the TPM's key with the token alone"
+            );
+        }
+        return Ok(assignment.get_challenge().map_err(classify)?.to_vec());
+    }
+    let (Some(endorsement), Some(object)) = (endorsement, key.tpm_object()) else {
+        return Err(ProvisioningError::Failed(anyhow::anyhow!(
+            "nightfall sent a TPM credential to a node that sent no TPM evidence"
+        )));
+    };
+    let encrypted_secret = assignment.get_encrypted_secret().map_err(classify)?;
+    let challenge = object
+        .activate_credential(&endorsement.key, credential_blob, encrypted_secret)
+        .map_err(|error| {
+            ProvisioningError::Failed(
+                error.context("the TPM did not release nightfall's challenge"),
+            )
+        })?;
+    tracing::info!("the TPM released nightfall's challenge");
+    Ok(challenge)
 }
 
 async fn call<T>(
@@ -393,6 +453,26 @@ mod tests {
                 "{what}"
             );
         }
+    }
+
+    #[test]
+    fn only_a_node_with_tpm_evidence_answers_a_tpm_credential() {
+        let key = NodeKey::generate().unwrap();
+        let mut message = capnp::message::TypedBuilder::<assignment::Owned>::new_default();
+        message.init_root().set_challenge(&[7; 32]);
+        assert_eq!(
+            challenge(message.get_root_as_reader().unwrap(), &key, None).unwrap(),
+            [7; 32]
+        );
+        {
+            let mut assignment = message.init_root();
+            assignment.set_credential_blob(&[1; 68]);
+            assignment.set_encrypted_secret(&[2; 256]);
+        }
+        assert!(matches!(
+            challenge(message.get_root_as_reader().unwrap(), &key, None),
+            Err(ProvisioningError::Failed(_))
+        ));
     }
 
     #[test]

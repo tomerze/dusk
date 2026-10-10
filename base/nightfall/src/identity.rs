@@ -16,6 +16,7 @@ use crate::tpm::Tpm;
 pub(crate) const DEVICE_URI_PREFIX: &str = "urn:dusk:device:";
 pub(crate) const INSTALLATION_URI_PREFIX: &str = "urn:dusk:installation:";
 const TENANT_URI_PREFIX: &str = "urn:dusk:tenant:";
+pub(crate) const TPM_BOUND_URI: &str = "urn:dusk:attestation:tpm";
 
 const INSTALLATION_ID: u64 = key_id("nightfall.installation_id");
 const PRIVATE_KEY: u64 = key_id("nightfall.private_key");
@@ -45,6 +46,7 @@ pub(crate) struct CertificateIdentity {
     pub(crate) device_id: String,
     pub(crate) installation_id: String,
     pub(crate) tenant: Option<String>,
+    pub(crate) tpm_bound: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +126,7 @@ pub(crate) fn identity_from_names<'name>(
     let mut device_id = None;
     let mut installation_id = None;
     let mut tenant = None;
+    let mut tpm_bound = false;
     for name in names {
         let GeneralName::URI(uri) = name else {
             return Err(format!("unexpected subject alternative name {name}"));
@@ -153,6 +156,11 @@ pub(crate) fn identity_from_names<'name>(
             if tenant.replace(value.to_string()).is_some() {
                 return Err(String::from("more than one tenant"));
             }
+        } else if *uri == TPM_BOUND_URI {
+            if tpm_bound {
+                return Err(format!("`{TPM_BOUND_URI}` more than once"));
+            }
+            tpm_bound = true;
         } else {
             return Err(format!("unexpected subject alternative name URI `{uri}`"));
         }
@@ -161,6 +169,7 @@ pub(crate) fn identity_from_names<'name>(
         device_id: device_id.ok_or_else(|| String::from("no device id"))?,
         installation_id: installation_id.ok_or_else(|| String::from("no installation id"))?,
         tenant,
+        tpm_bound,
     })
 }
 
@@ -605,7 +614,8 @@ mod tests {
             CertificateIdentity {
                 device_id: DEVICE.to_string(),
                 installation_id: INSTALLATION.to_string(),
-                tenant: None
+                tenant: None,
+                tpm_bound: false,
             }
         );
         let identity = identity_from_names(&uris(&[
@@ -615,6 +625,11 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(identity.tenant.as_deref(), Some("acme-1"));
+        assert!(!identity.tpm_bound);
+        let identity =
+            identity_from_names(&uris(&[&device_uri(), TPM_BOUND_URI, &installation_uri()]))
+                .unwrap();
+        assert!(identity.tpm_bound);
     }
 
     #[test]
@@ -660,6 +675,17 @@ mod tests {
                 device.clone(),
                 installation.clone(),
                 "urn:dusk:principal:dawn-0".into(),
+            ],
+            vec![
+                device.clone(),
+                installation.clone(),
+                TPM_BOUND_URI.into(),
+                TPM_BOUND_URI.into(),
+            ],
+            vec![
+                device.clone(),
+                installation.clone(),
+                format!("{TPM_BOUND_URI}:2"),
             ],
             vec![
                 device.clone(),

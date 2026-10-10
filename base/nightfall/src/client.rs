@@ -149,6 +149,8 @@ The `nightfall` program serves the node's Dusk sessions. It keeps running until 
   hosts, and `--heartbeat-timeout <seconds>` (90 by default) closes a link that has gone silent.
   On a machine with a TPM at `--tpm <path>` (`/dev/tpmrm0` by default) the node key is created in
   the TPM and never leaves it; `--no-tpm` keeps the key in the kvs instead.
+  When the TPM keeps a certificate for its endorsement key, the node proves to nightfall, as it
+  enrolls, that its key is in that TPM.
 "#,
             version: VERSION,
         },

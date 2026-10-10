@@ -10,9 +10,18 @@ const RESET_TIMEOUT: Duration = Duration::from_secs(30);
 const UNAVAILABLE: &str = "75";
 const SCRIPT: &str = r#"set -eu
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends swtpm swtpm-tools >/dev/null || exit 75
+apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends swtpm swtpm-tools tpm2-tools >/dev/null || exit 75
 mkdir -p /var/lib/tpm
 swtpm_setup --tpm2 --tpmstate /var/lib/tpm --create-ek-cert --create-platform-cert --lock-nvram >/dev/null
+swtpm socket --tpm2 --tpmstate dir=/var/lib/tpm --server type=tcp,port=2321 --ctrl type=tcp,port=2322 --flags not-need-init,startup-clear &
+export TPM2TOOLS_TCTI=swtpm:host=127.0.0.1,port=2321
+for attempt in $(seq 100); do tpm2_getcap properties-fixed >/dev/null 2>&1 && break; sleep 0.1; done
+sed '/-----/d' /var/lib/swtpm-localca/issuercert.pem | base64 -d > /tpm/issuer.der
+tpm2_nvdefine 0x01c00100 -C o -s "$(stat -c %s /tpm/issuer.der)" -a "ownerread|ownerwrite|authread|authwrite" >/dev/null
+tpm2_nvwrite 0x01c00100 -C o -i /tpm/issuer.der
+swtpm_ioctl -s --tcp 127.0.0.1:2322
+wait
+chown "$SOCKET_OWNER" /tpm/issuer.der
 while :; do
   rm -f /tpm/socket
   swtpm socket --tpm2 --tpmstate dir=/var/lib/tpm --server type=unixio,path=/tpm/socket,mode=0600,uid="${SOCKET_OWNER%:*}",gid="${SOCKET_OWNER#*:}" --ctrl type=unixio,path=/run/swtpm.ctrl --flags not-need-init,startup-clear || exit 1
@@ -134,6 +143,10 @@ impl Swtpm {
 
     pub(crate) fn socket(&self) -> PathBuf {
         self.directory.join("socket")
+    }
+
+    pub(crate) fn issuer_certificate(&self) -> Vec<u8> {
+        std::fs::read(self.directory.join("issuer.der")).unwrap()
     }
 
     pub(crate) fn reset(&self) {
