@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use tracing::warn;
 
 pub const RENEWALS_PER_DAY: usize = 4;
+pub const INSTALL_TOKEN_CALLS_PER_MINUTE: u32 = 6;
 pub const COLLISION_INSTALLATIONS: usize = 20;
 pub const COLLISION_ADDRESSES: usize = 5;
 const DAY: Duration = Duration::from_secs(24 * 3600);
@@ -35,6 +36,16 @@ impl TokenBucket {
         }
     }
 
+    fn per_minute(calls: u32, now: Instant) -> TokenBucket {
+        let capacity = f64::from(calls.max(1));
+        TokenBucket {
+            capacity,
+            rate: capacity / 60.0,
+            tokens: capacity,
+            updated: now,
+        }
+    }
+
     fn refill(&mut self, now: Instant) {
         let elapsed = now.saturating_duration_since(self.updated).as_secs_f64();
         self.tokens = (self.tokens + elapsed * self.rate).min(self.capacity);
@@ -54,6 +65,8 @@ pub enum RateLimited {
     Credential,
     #[error("the enrollment rate of this TPM endorsement key is exhausted")]
     EndorsementKey,
+    #[error("the calls of this install token are used up for now")]
+    InstallToken,
 }
 
 #[derive(Debug)]
@@ -79,16 +92,30 @@ impl EnrollmentBuckets {
         }
     }
 
+    pub fn admit_instance(&mut self, now: Instant) -> Result<(), RateLimited> {
+        self.global.refill(now);
+        if self.global.tokens < 1.0 {
+            return Err(RateLimited::Instance);
+        }
+        self.global.tokens -= 1.0;
+        Ok(())
+    }
+
+    pub fn give_back_instance(&mut self) {
+        self.global.tokens = (self.global.tokens + 1.0).min(self.global.capacity);
+    }
+
     pub fn admit(
         &mut self,
         credential: &str,
         endorsement_key: Option<&str>,
+        install_token: Option<&str>,
         now: Instant,
     ) -> Result<(), RateLimited> {
-        self.global.refill(now);
         let keys = [
             Some((credential, RateLimited::Credential)),
             endorsement_key.map(|key| (key, RateLimited::EndorsementKey)),
+            install_token.map(|key| (key, RateLimited::InstallToken)),
         ];
         let missing = keys
             .iter()
@@ -108,21 +135,22 @@ impl EnrollmentBuckets {
             let bucket = self
                 .per_credential
                 .entry(String::from(*key))
-                .or_insert_with(|| TokenBucket::new(self.credential_rate, now));
+                .or_insert_with(|| match limited {
+                    RateLimited::InstallToken => {
+                        TokenBucket::per_minute(INSTALL_TOKEN_CALLS_PER_MINUTE, now)
+                    }
+                    _ => TokenBucket::new(self.credential_rate, now),
+                });
             bucket.refill(now);
             if bucket.tokens < 1.0 {
                 return Err(*limited);
             }
-        }
-        if self.global.tokens < 1.0 {
-            return Err(RateLimited::Instance);
         }
         for (key, _) in keys.iter().flatten() {
             if let Some(bucket) = self.per_credential.get_mut(*key) {
                 bucket.tokens -= 1.0;
             }
         }
-        self.global.tokens -= 1.0;
         Ok(())
     }
 
@@ -380,28 +408,49 @@ mod tests {
     fn limits_the_instance_and_each_credential() {
         let now = Instant::now();
         let mut buckets = EnrollmentBuckets::new(3, 2, 10, now);
-        assert_eq!(buckets.admit("a", None, now), Ok(()));
-        assert_eq!(buckets.admit("a", None, now), Ok(()));
-        assert_eq!(buckets.admit("a", None, now), Err(RateLimited::Credential));
-        assert_eq!(buckets.admit("b", None, now), Ok(()));
-        assert_eq!(buckets.admit("c", None, now), Err(RateLimited::Instance));
+        assert_eq!(buckets.admit("a", None, None, now), Ok(()));
+        assert_eq!(buckets.admit("a", None, None, now), Ok(()));
+        assert_eq!(
+            buckets.admit("a", None, None, now),
+            Err(RateLimited::Credential)
+        );
         let later = now + Duration::from_millis(500);
-        assert_eq!(buckets.admit("a", None, later), Ok(()));
-        assert_eq!(buckets.admit("c", None, later), Err(RateLimited::Instance));
+        assert_eq!(buckets.admit("a", None, None, later), Ok(()));
+        for _ in 0..3 {
+            assert_eq!(buckets.admit_instance(now), Ok(()));
+        }
+        assert_eq!(buckets.admit_instance(now), Err(RateLimited::Instance));
+        buckets.give_back_instance();
+        assert_eq!(buckets.admit_instance(now), Ok(()));
+        assert_eq!(buckets.admit_instance(now), Err(RateLimited::Instance));
+        for _ in 0..10 {
+            buckets.give_back_instance();
+        }
+        for _ in 0..3 {
+            assert_eq!(buckets.admit_instance(now), Ok(()));
+        }
+        assert_eq!(
+            buckets.admit_instance(now),
+            Err(RateLimited::Instance),
+            "giving back never raises the instance bucket above its capacity"
+        );
     }
 
     #[test]
     fn keeps_the_credential_map_bounded() {
         let now = Instant::now();
         let mut buckets = EnrollmentBuckets::new(1000, 1, 2, now);
-        buckets.admit("a", None, now).unwrap();
-        buckets.admit("b", None, now).unwrap();
-        assert_eq!(buckets.admit("c", None, now), Err(RateLimited::Credential));
+        buckets.admit("a", None, None, now).unwrap();
+        buckets.admit("b", None, None, now).unwrap();
+        assert_eq!(
+            buckets.admit("c", None, None, now),
+            Err(RateLimited::Credential)
+        );
         let later = now + Duration::from_secs(2);
-        assert_eq!(buckets.admit("c", None, later), Ok(()));
+        assert_eq!(buckets.admit("c", None, None, later), Ok(()));
         assert!(buckets.tracked_credentials() <= 2);
         assert_eq!(
-            buckets.admit("d", Some("e"), later),
+            buckets.admit("d", Some("e"), None, later),
             Err(RateLimited::Credential)
         );
     }
@@ -410,18 +459,38 @@ mod tests {
     fn limits_each_endorsement_key_beside_its_credential() {
         let now = Instant::now();
         let mut buckets = EnrollmentBuckets::new(100, 2, 10, now);
-        assert_eq!(buckets.admit("token", Some("tpm:1"), now), Ok(()));
-        assert_eq!(buckets.admit("other", Some("tpm:1"), now), Ok(()));
+        assert_eq!(buckets.admit("token", Some("tpm:1"), None, now), Ok(()));
+        assert_eq!(buckets.admit("other", Some("tpm:1"), None, now), Ok(()));
         assert_eq!(
-            buckets.admit("third", Some("tpm:1"), now),
+            buckets.admit("third", Some("tpm:1"), None, now),
             Err(RateLimited::EndorsementKey)
         );
-        assert_eq!(buckets.admit("token", Some("tpm:2"), now), Ok(()));
+        assert_eq!(buckets.admit("token", Some("tpm:2"), None, now), Ok(()));
         assert_eq!(
-            buckets.admit("token", Some("tpm:3"), now),
+            buckets.admit("token", Some("tpm:3"), None, now),
             Err(RateLimited::Credential)
         );
-        assert_eq!(buckets.admit("third", None, now), Ok(()));
+        assert_eq!(buckets.admit("third", None, None, now), Ok(()));
+    }
+
+    #[test]
+    fn limits_each_install_token_to_a_few_calls_a_minute_beside_its_key() {
+        let now = Instant::now();
+        let mut buckets = EnrollmentBuckets::new(1000, 1000, 10, now);
+        for _ in 0..INSTALL_TOKEN_CALLS_PER_MINUTE {
+            assert_eq!(buckets.admit("key", None, Some("token:1"), now), Ok(()));
+        }
+        assert_eq!(
+            buckets.admit("key", None, Some("token:1"), now),
+            Err(RateLimited::InstallToken)
+        );
+        assert_eq!(buckets.admit("key", None, Some("token:2"), now), Ok(()));
+        let later = now + Duration::from_secs(60 / u64::from(INSTALL_TOKEN_CALLS_PER_MINUTE));
+        assert_eq!(buckets.admit("key", None, Some("token:1"), later), Ok(()));
+        assert_eq!(
+            buckets.admit("key", None, Some("token:1"), later),
+            Err(RateLimited::InstallToken)
+        );
     }
 
     #[test]

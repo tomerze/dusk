@@ -1549,3 +1549,129 @@ async fn takes_added_removed_and_re_tenanted_fleet_tokens_without_a_restart() {
     );
     assert_contract(&harness.events);
 }
+
+#[tokio::test]
+async fn rate_limits_every_install_token_of_one_key_together() {
+    let harness = harness_with(|config, _| {
+        config.enrollments_per_second_per_credential = 2;
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let first = harness.install_token("unit-1", "batch-9-unit-1", None);
+    enroll_new(&client, Credential::Install(&first), [38u8; 32])
+        .await
+        .unwrap();
+    let issued = harness.events.last();
+    assert_eq!(issued.credential_ref.as_deref(), Some("unit-1"));
+    assert_eq!(issued.credential_issuer.as_deref(), Some("factory-2026"));
+    let second = harness.install_token("unit-2", "batch-9-unit-2", None);
+    let limited = assign(&client, Credential::Install(&second), &[39u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(limited.kind, capnp::ErrorKind::Overloaded);
+    assert_eq!(
+        harness.events.last().reason.as_deref(),
+        Some("credential_rate")
+    );
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assign(&client, Credential::Install(&second), &[39u8; 32])
+        .await
+        .unwrap();
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn takes_from_the_instance_bucket_before_it_verifies_a_credential() {
+    let harness = harness_with(|config, _| {
+        config.enrollments_per_second = 2;
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let forger = EdwardsSigner::new("factory-2026");
+    let forged = forger.sign(
+        &json!({ "iss": "factory", "sub": "unit-1", "jti": "forged", "exp": unix_now() + 3600 }),
+    );
+    for _ in 0..2 {
+        denied_with(
+            assign(&client, Credential::Install(&forged), &[40u8; 32]).await,
+            "invalid credential",
+        );
+    }
+    let limited = assign(&client, Credential::Install(&forged), &[40u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(limited.kind, capnp::ErrorKind::Overloaded);
+    assert_eq!(
+        harness.events.last().reason.as_deref(),
+        Some("enrollment_rate")
+    );
+    assert_eq!(
+        harness.penalties.failures.lock().unwrap().len(),
+        2,
+        "the third forged token was not verified"
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn gives_the_instance_bucket_back_when_the_credential_bucket_refuses() {
+    let harness = harness_with(|config, _| {
+        config.enrollments_per_second = 2;
+        config.enrollments_per_second_per_credential = 1;
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    assign(&client, Credential::Fleet("lab secret"), &[41u8; 32])
+        .await
+        .unwrap();
+    assign(&client, Credential::Fleet("lab secret"), &[41u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assign(&client, Credential::Fleet("retail secret"), &[41u8; 32])
+        .await
+        .unwrap();
+    let token = harness.install_token("unit-1", "batch-9-unit-1", None);
+    assign(&client, Credential::Install(&token), &[41u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        harness.events.outcomes(),
+        vec![
+            (Outcome::Assigned, None),
+            (Outcome::RateLimited, Some(String::from("credential_rate"))),
+            (Outcome::Assigned, None),
+            (Outcome::RateLimited, Some(String::from("enrollment_rate"))),
+        ]
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn one_install_token_uses_up_only_its_own_calls_of_its_key() {
+    let harness = harness().await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let replayed = harness.install_token("unit-1", "batch-9-unit-1", None);
+    for _ in 0..crate::limits::INSTALL_TOKEN_CALLS_PER_MINUTE {
+        assign(&client, Credential::Install(&replayed), &[42u8; 32])
+            .await
+            .unwrap();
+    }
+    let limited = assign(&client, Credential::Install(&replayed), &[42u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(limited.kind, capnp::ErrorKind::Overloaded);
+    assert_eq!(
+        harness.events.last().reason.as_deref(),
+        Some("install_token_rate")
+    );
+    let other = harness.install_token("unit-2", "batch-9-unit-2", None);
+    enroll_new(&client, Credential::Install(&other), [43u8; 32])
+        .await
+        .unwrap();
+    assert_contract(&harness.events);
+}
