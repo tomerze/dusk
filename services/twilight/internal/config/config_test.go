@@ -77,6 +77,8 @@ func TestEnvironmentMistakesAreRefused(test *testing.T) {
 		"TWILIGHT__RECONCILE__ENABLED=maybe",
 		"TWILIGHT__ENGINE__NO_SUCH_KEY=1",
 		"TWILIGHT__ENGINE=1",
+		"TWILIGHT__ALERTS__RECEIVERS=pager",
+		"TWILIGHT__ALERTS__ROUTES=pager",
 	} {
 		if _, failure := Load(path, true, []string{entry}); failure == nil {
 			test.Errorf("%s accepted", entry)
@@ -108,6 +110,9 @@ func TestValidation(test *testing.T) {
 		"kafka.topics.ledger":            minimal + "  topics: {ledger: \"\"}\n",
 		"dawn.ca":                        minimal + "dawn: {ca: \"\"}\n",
 		"engine.dispatch_workers":        minimal + "engine: {dispatch_workers: 0}\n",
+		"alerts.public_url must":         minimal + "alerts: {public_url: \"ftp://x\"}\n",
+		"alerts.runbook_url must":        minimal + "alerts: {runbook_url: \"https://docs.example.org/runbooks/\"}\n",
+		"alerts.delivery_horizon":        minimal + "alerts: {delivery_horizon_seconds: 0}\n",
 		"log_level":                      minimal + "log_level: loud\n",
 		"reconcile.ledger_keys":          minimal + "reconcile: {ledger_keys: \"\"}\n",
 		"reconcile.commands_per_session": minimal + "reconcile: {commands_per_session: 0}\n",
@@ -193,5 +198,108 @@ oidc:
 	loopback := writeFile(test, minimal+oidc("http://127.0.0.1:5556/dex", "http://localhost:8080/api/v1/auth/callback"))
 	if _, failure := Load(loopback, true, nil); failure != nil {
 		test.Fatalf("http on a loopback address is refused: %v", failure)
+	}
+}
+
+const alerting = `
+alerts:
+  public_url: https://twilight.example.org
+  runbook_url: https://docs.example.org/stack/runbooks/{kind}/
+  receivers:
+    - name: on-call
+      pagerduty: {routing_key_file: /run/secrets/pagerduty/routing-key}
+    - name: team
+      slack: {webhook_url_file: /run/secrets/slack/url}
+    - name: soc
+      email: {host: smtp.example.org, username: dusk, password_file: /run/secrets/smtp/password, from: dusk@example.org, to: [soc@example.org]}
+    - name: noc
+      teams: {webhook_url_file: /run/secrets/teams/url}
+    - name: siem
+      webhook: {url: "https://siem.example.org/dusk", secret_file: /run/secrets/siem/secret}
+  routes:
+    - {receiver: on-call, severities: [critical]}
+    - {receiver: team, severities: [medium, low]}
+    - {receiver: soc, tenants: [cn]}
+    - {receiver: noc, kinds: [process_without_intent]}
+    - {receiver: siem}
+`
+
+func TestAlertReceiversAndRoutes(test *testing.T) {
+	loaded, failure := Load(writeFile(test, minimal+alerting), true, nil)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	receivers := loaded.Alerts.Receivers
+	if len(receivers) != 5 || receivers[0].PagerDuty == nil || receivers[1].Slack == nil || receivers[2].Email == nil || receivers[3].Teams == nil || receivers[4].Webhook == nil {
+		test.Fatalf("receivers %+v", receivers)
+	}
+	if receivers[0].PagerDuty.EventsURL() != PagerDutyEventsURL || receivers[2].Email.SecurityMode() != EmailStartTLS || receivers[2].Email.PortNumber() != 587 {
+		test.Fatalf("defaults %+v %+v", receivers[0].PagerDuty, receivers[2].Email)
+	}
+	if (EmailReceiver{Security: EmailTLS}).PortNumber() != 465 || (EmailReceiver{Security: EmailPlaintext}).PortNumber() != 25 || (EmailReceiver{Port: 2525}).PortNumber() != 2525 {
+		test.Fatal("email port defaults")
+	}
+	if loaded.Alerts.DeliveryHorizonSeconds != 86400 {
+		test.Fatalf("delivery horizon %d", loaded.Alerts.DeliveryHorizonSeconds)
+	}
+}
+
+func TestAlertRouteMatching(test *testing.T) {
+	tenant := "cn"
+	other := "eu"
+	cases := []struct {
+		route    Route
+		severity string
+		kind     string
+		tenant   *string
+		want     bool
+	}{
+		{Route{}, "low", "anything", nil, true},
+		{Route{Severities: []string{"critical", "high"}}, "high", "pid_reused", nil, true},
+		{Route{Severities: []string{"critical"}}, "high", "pid_reused", nil, false},
+		{Route{Kinds: []string{"pid_reused"}}, "low", "pid_reused", &tenant, true},
+		{Route{Kinds: []string{"pid_reused"}}, "low", "process_shape", &tenant, false},
+		{Route{Tenants: []string{"cn"}}, "critical", "pid_reused", &tenant, true},
+		{Route{Tenants: []string{"cn"}}, "critical", "pid_reused", &other, false},
+		{Route{Tenants: []string{"cn"}}, "critical", "pid_reused", nil, false},
+		{Route{Severities: []string{"critical"}, Kinds: []string{"pid_reused"}, Tenants: []string{"cn"}}, "critical", "pid_reused", &tenant, true},
+	}
+	for index, entry := range cases {
+		if got := entry.route.Matches(entry.severity, entry.kind, entry.tenant); got != entry.want {
+			test.Errorf("case %d: %+v matched %v", index, entry.route, got)
+		}
+	}
+}
+
+func TestAlertConfigurationMistakes(test *testing.T) {
+	base := minimal + "alerts:\n  public_url: https://twilight.example.org\n  runbook_url: https://docs.example.org/{kind}/\n"
+	cases := map[string]string{
+		"alerts.public_url and alerts.runbook_url are required": minimal + "alerts:\n  receivers: [{name: a, webhook: {url: \"https://x.example.org\", secret_file: /s}}]\n  routes: [{receiver: a}]\n",
+		"needs a name":                         base + "  receivers: [{name: A, webhook: {url: \"https://x.example.org\", secret_file: /s}}]\n",
+		"names \"a\" twice":                    base + "  receivers: [{name: a, slack: {webhook_url_file: /s}}, {name: a, slack: {webhook_url_file: /s}}]\n  routes: [{receiver: a}]\n",
+		"needs exactly one of":                 base + "  receivers: [{name: a, slack: {webhook_url_file: /s}, teams: {webhook_url_file: /s}}]\n  routes: [{receiver: a}]\n",
+		"routing_key_file":                     base + "  receivers: [{name: a, pagerduty: {}}]\n  routes: [{receiver: a}]\n",
+		"pagerduty.url":                        base + "  receivers: [{name: a, pagerduty: {routing_key_file: /k, url: \"ftp://x\"}}]\n  routes: [{receiver: a}]\n",
+		"slack.webhook_url_file":               base + "  receivers: [{name: a, slack: {}}]\n  routes: [{receiver: a}]\n",
+		"teams.webhook_url_file":               base + "  receivers: [{name: a, teams: {}}]\n  routes: [{receiver: a}]\n",
+		"webhook.url":                          base + "  receivers: [{name: a, webhook: {secret_file: /s}}]\n  routes: [{receiver: a}]\n",
+		"webhook.secret_file":                  base + "  receivers: [{name: a, webhook: {url: \"https://x.example.org\"}}]\n  routes: [{receiver: a}]\n",
+		"email.host":                           base + "  receivers: [{name: a, email: {from: a@example.org, to: [b@example.org]}}]\n  routes: [{receiver: a}]\n",
+		"email.security must":                  base + "  receivers: [{name: a, email: {host: h, security: ssl, from: a@example.org, to: [b@example.org]}}]\n  routes: [{receiver: a}]\n",
+		"security none sends no":               base + "  receivers: [{name: a, email: {host: h, security: none, username: u, password_file: /p, from: a@example.org, to: [b@example.org]}}]\n  routes: [{receiver: a}]\n",
+		"username and password_file":           base + "  receivers: [{name: a, email: {host: h, username: u, from: a@example.org, to: [b@example.org]}}]\n  routes: [{receiver: a}]\n",
+		"email.from":                           base + "  receivers: [{name: a, email: {host: h, from: \"Dusk <a@example.org>\", to: [b@example.org]}}]\n  routes: [{receiver: a}]\n",
+		"email.to needs":                       base + "  receivers: [{name: a, email: {host: h, from: a@example.org}}]\n  routes: [{receiver: a}]\n",
+		"not a bare email":                     base + "  receivers: [{name: a, email: {host: h, from: a@example.org, to: [nobody]}}]\n  routes: [{receiver: a}]\n",
+		"which alerts.receivers does not hold": base + "  routes: [{receiver: ghost}]\n",
+		"holds severity":                       base + "  receivers: [{name: a, slack: {webhook_url_file: /s}}]\n  routes: [{receiver: a, severities: [urgent]}]\n",
+		"empty kind or tenant":                 base + "  receivers: [{name: a, slack: {webhook_url_file: /s}}]\n  routes: [{receiver: a, kinds: [\"\"]}]\n",
+		"is named by no route":                 base + "  receivers: [{name: a, slack: {webhook_url_file: /s}}]\n",
+	}
+	for want, content := range cases {
+		_, failure := Load(writeFile(test, content), true, nil)
+		if failure == nil || !strings.Contains(failure.Error(), want) {
+			test.Errorf("%q: got %v", want, failure)
+		}
 	}
 }
