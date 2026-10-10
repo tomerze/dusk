@@ -1116,6 +1116,25 @@
     }
   }
 }
+[data-md-color-scheme="default"] .dusk-os {
+  --dusk-gold: #de8a24;
+}
+[data-md-color-scheme="default"]
+  .dusk-os
+  .dusk-os__terminals
+  .dusk-os__dot::before {
+  background-image: url("../landing/rays-light.svg"), var(--dusk-os-glow, none);
+}
+@media screen and (min-width: 76.25em) {
+  [data-md-color-scheme="default"] .dusk-os.is-touring,
+  [data-md-color-scheme="default"] .dusk-os {
+    --dusk-os-glow: radial-gradient(
+      closest-side,
+      rgb(255 246 224 / 0.85) 60%,
+      rgb(255 246 224 / 0)
+    );
+  }
+}
 @keyframes dusk-os-grow {
   from {
     transform: scale(var(--dusk-os-start));
