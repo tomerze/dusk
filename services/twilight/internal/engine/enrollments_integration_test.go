@@ -107,3 +107,31 @@ func TestABulkRevocationRevokesEveryInstallationOneCredentialEnrolledAtItsPace(t
 		test.Fatalf("%d node-state records for 25 revoked installations", len(states))
 	}
 }
+
+func TestAnEnrollmentFloodOpensAnAlertThatNamesItsCredential(test *testing.T) {
+	current := newHarness(test)
+	current.settings.Alerts.Enrollments.IssuedFloors.Credential = 5
+	for index := range 12 {
+		current.enrollWith(identity(300+index), "leaked", fmt.Sprintf("203.0.113.%d:4000", index))
+	}
+	current.start()
+	var detail map[string]any
+	var occurrences int64
+	current.eventually("the enrollment alert opens and is escalated once the count doubles", time.Minute, func() (bool, string) {
+		var encoded []byte
+		failure := current.pool.QueryRow(context.Background(), `select detail, occurrences from alerts where fingerprint = 'enrollment_rate:credential:fleet_token:leaked' and resolved_at is null`).Scan(&encoded, &occurrences)
+		if failure != nil {
+			return false, failure.Error()
+		}
+		_ = json.Unmarshal(encoded, &detail)
+		return occurrences == 2, fmt.Sprintf("%d occurrences, detail %v", occurrences, detail)
+	})
+	if detail["credential"] != "leaked" || detail["credential_kind"] != "fleet_token" || detail["tenant"] != "acme" || detail["count"] != float64(12) || detail["threshold"] != float64(5) {
+		test.Fatalf("the alert detail %v", detail)
+	}
+	current.eventually("the counts reach the baseline table", time.Minute, func() (bool, string) {
+		var counted int64
+		_ = current.pool.QueryRow(context.Background(), `select coalesce(sum(count), 0) from enrollment_counts where signal = 'issued' and scope = 'credential' and name = 'fleet_token:leaked'`).Scan(&counted)
+		return counted == 12, fmt.Sprintf("%d counted", counted)
+	})
+}

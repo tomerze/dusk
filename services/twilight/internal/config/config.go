@@ -101,8 +101,30 @@ type Engine struct {
 }
 
 type Alerts struct {
-	WebhookURL              string `yaml:"webhook_url"`
-	EnrollmentRatePerMinute int    `yaml:"enrollment_rate_per_minute"`
+	WebhookURL  string      `yaml:"webhook_url"`
+	Enrollments Enrollments `yaml:"enrollments"`
+}
+
+type Floors struct {
+	Fleet      int `yaml:"fleet"`
+	Credential int `yaml:"credential"`
+	Network    int `yaml:"network"`
+}
+
+type NewNetworkFloors struct {
+	Fleet      int `yaml:"fleet"`
+	Credential int `yaml:"credential"`
+}
+
+type Enrollments struct {
+	WindowSeconds       int              `yaml:"window_seconds"`
+	BaselineDays        int              `yaml:"baseline_days"`
+	BaselineFactor      int              `yaml:"baseline_factor"`
+	EscalationFactor    int              `yaml:"escalation_factor"`
+	ResolveAfterSeconds int              `yaml:"resolve_after_seconds"`
+	IssuedFloors        Floors           `yaml:"issued_floors"`
+	RefusedFloors       Floors           `yaml:"refused_floors"`
+	NewNetworkFloors    NewNetworkFloors `yaml:"new_network_floors"`
 }
 
 type Reconcile struct {
@@ -253,7 +275,10 @@ func Default() Config {
 			ProcessLifetimeSeconds:       900,
 			IntendedProcessRetentionDays: 31,
 		},
-		Alerts: Alerts{EnrollmentRatePerMinute: 600},
+		Alerts: Alerts{Enrollments: Enrollments{WindowSeconds: 300, BaselineDays: 7, BaselineFactor: 4, EscalationFactor: 2, ResolveAfterSeconds: 900,
+			IssuedFloors:     Floors{Fleet: 100, Credential: 30, Network: 20},
+			RefusedFloors:    Floors{Fleet: 300, Credential: 60, Network: 60},
+			NewNetworkFloors: NewNetworkFloors{Fleet: 50, Credential: 20}}},
 		Reconcile: Reconcile{Enabled: true, LedgerKeys: "/etc/twilight/pki/ledger-keys.json", CheckpointIntervalMS: 1000,
 			CommandsPerSession: 10000, IntendedProcessCacheEntries: 1000000,
 			DefaultShell: DefaultShell{Ps: 1, StateReads: 1, LogsDump: 1, Kill: 1, ReapRounds: 3}},
@@ -475,37 +500,49 @@ func (loaded Config) Validate() error {
 		}
 	}
 	positive := map[string]int{
-		"drain_seconds":                            loaded.DrainSeconds,
-		"max_streams":                              loaded.MaxStreams,
-		"max_requests":                             loaded.MaxRequests,
-		"request_timeout_seconds":                  loaded.RequestTimeoutSeconds,
-		"dawn.port":                                loaded.Dawn.Port,
-		"dawn.request_timeout_seconds":             loaded.Dawn.RequestTimeoutSeconds,
-		"dawn.resolve_interval_seconds":            loaded.Dawn.ResolveIntervalSeconds,
-		"engine.sweep_interval_seconds":            loaded.Engine.SweepIntervalSeconds,
-		"engine.gate_interval_seconds":             loaded.Engine.GateIntervalSeconds,
-		"engine.evaluation_queue":                  loaded.Engine.EvaluationQueue,
-		"engine.dispatch_workers":                  loaded.Engine.DispatchWorkers,
-		"engine.facts_per_second":                  loaded.Engine.FactsPerSecond,
-		"engine.facts_workers":                     loaded.Engine.FactsWorkers,
-		"engine.facts_max_age_seconds":             loaded.Engine.FactsMaxAgeSeconds,
-		"engine.census_interval_seconds":           loaded.Engine.CensusIntervalSeconds,
-		"engine.skip_lag_records":                  loaded.Engine.SkipLagRecords,
-		"engine.skip_age_seconds":                  loaded.Engine.SkipAgeSeconds,
-		"engine.counters_flush_seconds":            loaded.Engine.CountersFlushSeconds,
-		"engine.process_lifetime_seconds":          loaded.Engine.ProcessLifetimeSeconds,
-		"engine.intended_process_retention_days":   loaded.Engine.IntendedProcessRetentionDays,
-		"engine.reaps_per_second":                  loaded.Engine.ReapsPerSecond,
-		"engine.reap_interval_seconds":             loaded.Engine.ReapIntervalSeconds,
-		"engine.reap_retry_seconds":                loaded.Engine.ReapRetrySeconds,
-		"engine.revocations_per_second":            loaded.Engine.RevocationsPerSecond,
-		"engine.presence_flush_millis":             loaded.Engine.PresenceFlushMillis,
-		"engine.last_seen_bucket_seconds":          loaded.Engine.LastSeenBucketSeconds,
-		"engine.dispatch_attempts":                 loaded.Engine.DispatchAttempts,
-		"alerts.enrollment_rate_per_minute":        loaded.Alerts.EnrollmentRatePerMinute,
-		"reconcile.checkpoint_interval_ms":         loaded.Reconcile.CheckpointIntervalMS,
-		"reconcile.commands_per_session":           loaded.Reconcile.CommandsPerSession,
-		"reconcile.intended_process_cache_entries": loaded.Reconcile.IntendedProcessCacheEntries,
+		"drain_seconds":                                    loaded.DrainSeconds,
+		"max_streams":                                      loaded.MaxStreams,
+		"max_requests":                                     loaded.MaxRequests,
+		"request_timeout_seconds":                          loaded.RequestTimeoutSeconds,
+		"dawn.port":                                        loaded.Dawn.Port,
+		"dawn.request_timeout_seconds":                     loaded.Dawn.RequestTimeoutSeconds,
+		"dawn.resolve_interval_seconds":                    loaded.Dawn.ResolveIntervalSeconds,
+		"engine.sweep_interval_seconds":                    loaded.Engine.SweepIntervalSeconds,
+		"engine.gate_interval_seconds":                     loaded.Engine.GateIntervalSeconds,
+		"engine.evaluation_queue":                          loaded.Engine.EvaluationQueue,
+		"engine.dispatch_workers":                          loaded.Engine.DispatchWorkers,
+		"engine.facts_per_second":                          loaded.Engine.FactsPerSecond,
+		"engine.facts_workers":                             loaded.Engine.FactsWorkers,
+		"engine.facts_max_age_seconds":                     loaded.Engine.FactsMaxAgeSeconds,
+		"engine.census_interval_seconds":                   loaded.Engine.CensusIntervalSeconds,
+		"engine.skip_lag_records":                          loaded.Engine.SkipLagRecords,
+		"engine.skip_age_seconds":                          loaded.Engine.SkipAgeSeconds,
+		"engine.counters_flush_seconds":                    loaded.Engine.CountersFlushSeconds,
+		"engine.process_lifetime_seconds":                  loaded.Engine.ProcessLifetimeSeconds,
+		"engine.intended_process_retention_days":           loaded.Engine.IntendedProcessRetentionDays,
+		"engine.reaps_per_second":                          loaded.Engine.ReapsPerSecond,
+		"engine.reap_interval_seconds":                     loaded.Engine.ReapIntervalSeconds,
+		"engine.reap_retry_seconds":                        loaded.Engine.ReapRetrySeconds,
+		"engine.revocations_per_second":                    loaded.Engine.RevocationsPerSecond,
+		"engine.presence_flush_millis":                     loaded.Engine.PresenceFlushMillis,
+		"engine.last_seen_bucket_seconds":                  loaded.Engine.LastSeenBucketSeconds,
+		"engine.dispatch_attempts":                         loaded.Engine.DispatchAttempts,
+		"alerts.enrollments.window_seconds":                loaded.Alerts.Enrollments.WindowSeconds,
+		"alerts.enrollments.baseline_days":                 loaded.Alerts.Enrollments.BaselineDays,
+		"alerts.enrollments.baseline_factor":               loaded.Alerts.Enrollments.BaselineFactor,
+		"alerts.enrollments.escalation_factor":             loaded.Alerts.Enrollments.EscalationFactor,
+		"alerts.enrollments.resolve_after_seconds":         loaded.Alerts.Enrollments.ResolveAfterSeconds,
+		"alerts.enrollments.issued_floors.fleet":           loaded.Alerts.Enrollments.IssuedFloors.Fleet,
+		"alerts.enrollments.issued_floors.credential":      loaded.Alerts.Enrollments.IssuedFloors.Credential,
+		"alerts.enrollments.issued_floors.network":         loaded.Alerts.Enrollments.IssuedFloors.Network,
+		"alerts.enrollments.refused_floors.fleet":          loaded.Alerts.Enrollments.RefusedFloors.Fleet,
+		"alerts.enrollments.refused_floors.credential":     loaded.Alerts.Enrollments.RefusedFloors.Credential,
+		"alerts.enrollments.refused_floors.network":        loaded.Alerts.Enrollments.RefusedFloors.Network,
+		"alerts.enrollments.new_network_floors.fleet":      loaded.Alerts.Enrollments.NewNetworkFloors.Fleet,
+		"alerts.enrollments.new_network_floors.credential": loaded.Alerts.Enrollments.NewNetworkFloors.Credential,
+		"reconcile.checkpoint_interval_ms":                 loaded.Reconcile.CheckpointIntervalMS,
+		"reconcile.commands_per_session":                   loaded.Reconcile.CommandsPerSession,
+		"reconcile.intended_process_cache_entries":         loaded.Reconcile.IntendedProcessCacheEntries,
 	}
 	names := make([]string, 0, len(positive))
 	for name := range positive {
@@ -516,6 +553,9 @@ func (loaded Config) Validate() error {
 		if positive[name] < 1 {
 			problem("%s must be at least 1", name)
 		}
+	}
+	if loaded.Alerts.Enrollments.EscalationFactor < 2 {
+		problem("alerts.enrollments.escalation_factor must be at least 2")
 	}
 	shell := loaded.Reconcile.DefaultShell
 	if min(shell.Ps, shell.StateReads, shell.LogsDump, shell.Kill, shell.ReapRounds, shell.ReapedPid) < 0 {

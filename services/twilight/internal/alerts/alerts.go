@@ -32,6 +32,9 @@ const (
 
 const (
 	KindEnrollmentRate            = "enrollment_rate"
+	KindDeniedEnrollmentsSpike    = "denied_enrollments_spike"
+	KindNewNetworkBurst           = "enrollment_from_new_network_burst"
+	KindCredentialQuotaReached    = "credential_quota_reached"
 	KindRevocationNotEnforced     = "revocation_not_enforced"
 	KindCampaignConflict          = "campaign_conflict"
 	KindProcessWithoutIntent      = "process_without_intent"
@@ -147,8 +150,56 @@ func (store *Store) Raise(operation context.Context, raised Raised) (Alert, erro
 	return alert, nil
 }
 
+func (store *Store) Open(operation context.Context, raised Raised) (Alert, bool, error) {
+	alert, inserted, failure := RaiseIn(operation, store.pool, raised)
+	if failure != nil {
+		return alert, false, fmt.Errorf("raise %s alert: %w", raised.Kind, failure)
+	}
+	if inserted {
+		store.Announce(alert)
+	}
+	return alert, inserted, nil
+}
+
+func (store *Store) OpenOfKinds(operation context.Context, kinds []string) ([]Alert, error) {
+	rows, failure := store.pool.Query(operation, `select `+alertColumns+` from alerts where resolved_at is null and kind = any($1)`, kinds)
+	if failure != nil {
+		return nil, failure
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Alert, error) { return scanAlert(row) })
+}
+
+func (store *Store) Escalate(operation context.Context, fingerprint string, detail map[string]any, at time.Time) (Alert, error) {
+	encoded, failure := json.Marshal(detail)
+	if failure != nil {
+		return Alert{}, failure
+	}
+	alert, failure := scanAlert(store.pool.QueryRow(operation, `update alerts set detail = $2::jsonb, occurrences = occurrences + 1,
+			last_seen_at = greatest(last_seen_at, $3)
+		where fingerprint = $1 and resolved_at is null returning `+alertColumns, fingerprint, encoded, at))
+	if failure != nil {
+		return alert, fmt.Errorf("escalate the alert %s: %w", fingerprint, failure)
+	}
+	store.logger.Error("alert escalated", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "detail", alert.Detail)
+	store.notify(alert)
+	return alert, nil
+}
+
+func (store *Store) ResolveOpen(operation context.Context, fingerprint, actor string, at time.Time) (Alert, error) {
+	alert, failure := scanAlert(store.pool.QueryRow(operation, `update alerts set resolved_by = $2, resolved_at = $3
+		where fingerprint = $1 and resolved_at is null returning `+alertColumns, fingerprint, actor, at))
+	if failure == nil {
+		store.logger.Info("alert resolved", "alert_id", alert.ID, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "principal", actor)
+	}
+	return alert, failure
+}
+
 func (store *Store) Announce(alert Alert) {
 	store.logger.Error("alert raised", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "detail", alert.Detail)
+	store.notify(alert)
+}
+
+func (store *Store) notify(alert Alert) {
 	if store.webhookURL == "" || (alert.Severity != Critical && alert.Severity != High) {
 		return
 	}
