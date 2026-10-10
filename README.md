@@ -4,7 +4,7 @@
 
 [Click here](https://tomerze.github.io/dusk)
 
-## Quick start
+## Take it for a spin
 
 Configure, build, and run a standalone Dusk node for linux.
 
