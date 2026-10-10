@@ -416,6 +416,55 @@ services:
       timeout: 5s
       retries: 12
 
+  mailpit:
+    <<: [*restart, *logging]
+    image: axllent/mailpit:v1.31.2
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_MAILPIT_PORT-8025}:8025"
+    environment:
+      MP_MAX_MESSAGES: "5000"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  alert-sink:
+    <<: [*restart, *logging]
+    image: wiremock/wiremock:3.13.2-alpine
+    command: ["--disable-banner", "--max-request-journal-entries", "1000"]
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_ALERT_SINK_PORT-8089}:8080"
+    volumes:
+      - ./alert-sink/mappings:/home/wiremock/mappings:ro
+
+  alert-receivers-init:
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    network_mode: none
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        if [ -e /secrets/alert-receivers ]; then echo "secret alert-receivers exists, kept"; exit 0; fi
+        umask 077
+        partial=/secrets/.alert-receivers.partial
+        rm -rf "$$partial"
+        mkdir "$$partial"
+        step crypto rand --format hex 32 > "$$partial/pagerduty-routing-key"
+        printf '%s' http://alert-sink:8080/slack > "$$partial/slack-webhook-url"
+        printf '%s' http://alert-sink:8080/teams > "$$partial/teams-webhook-url"
+        step crypto rand --format hex 64 > "$$partial/webhook-secret"
+        chmod 0444 "$$partial"/*
+        chmod 0555 "$$partial"
+        mv "$$partial" /secrets/alert-receivers
+        echo "secret alert-receivers created"
+    volumes:
+      - secrets:/secrets
+
   nightfall:
     <<: [*restart, *logging]
     image: dusk-nightfall:dev
@@ -532,12 +581,15 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      alert-receivers-init:
+        condition: service_completed_successfully
     volumes: &twilight-volumes
-      - ../k8s/base/twilight/twilight.yaml:/etc/twilight/twilight.yaml:ro
+      - ./twilight.yaml:/etc/twilight/twilight.yaml:ro
       - { <<: *pki, target: /etc/twilight/tls, volume: { subpath: twilight-tls } }
       - { <<: *pki, target: /etc/twilight/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
       - { <<: *secret, target: /etc/twilight/pki/ledger-verify-jwks.json, volume: { subpath: nightfall-ledger-verify/ledger-verify-jwks.json } }
       - { <<: *secret, target: /etc/twilight/secrets/postgres, volume: { subpath: postgres-twilight } }
+      - { <<: *secret, target: /run/secrets/alert-receivers, volume: { subpath: alert-receivers } }
 
   twilight:
     <<: [*restart, *logging]
@@ -555,6 +607,8 @@ services:
       kafka-init:
         condition: service_completed_successfully
       twilight-migrate:
+        condition: service_completed_successfully
+      alert-receivers-init:
         condition: service_completed_successfully
       dawn:
         condition: service_started

@@ -1,0 +1,20 @@
+{
+  "mappings": [
+    {
+      "request": {"method": "POST", "urlPath": "/pagerduty"},
+      "response": {"status": 202, "headers": {"Content-Type": "application/json"}, "jsonBody": {"status": "success", "message": "Event processed"}}
+    },
+    {
+      "request": {"method": "POST", "urlPath": "/slack"},
+      "response": {"status": 200, "headers": {"Content-Type": "text/plain"}, "body": "ok"}
+    },
+    {
+      "request": {"method": "POST", "urlPath": "/teams"},
+      "response": {"status": 202}
+    },
+    {
+      "request": {"method": "POST", "urlPath": "/webhook"},
+      "response": {"status": 204}
+    }
+  ]
+}

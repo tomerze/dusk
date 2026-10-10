@@ -1,0 +1,55 @@
+listen: 0.0.0.0:8080
+health_listen: 0.0.0.0:9102
+drain_seconds: 30
+log_level: info
+database:
+  url: postgres://twilight@postgres:5432/inventory?sslmode=disable&passfile=/etc/twilight/secrets/postgres/pgpass
+  max_connections: 20
+kafka:
+  brokers:
+    - kafka:9092
+  allow_plaintext: true
+dawn:
+  service: dawn
+  port: 8443
+  server_name: dawn
+  ca: /etc/twilight/pki/internal-ca.crt
+  certificate: /etc/twilight/tls/tls.crt
+  key: /etc/twilight/tls/tls.key
+reconcile:
+  enabled: true
+  ledger_keys: /etc/twilight/pki/ledger-verify-jwks.json
+alerts:
+  public_url: http://127.0.0.1:8080
+  runbook_url: http://127.0.0.1:8000/stack/runbooks/{kind}/
+  receivers:
+    - name: on-call
+      pagerduty:
+        routing_key_file: /run/secrets/alert-receivers/pagerduty-routing-key
+        url: http://alert-sink:8080/pagerduty
+    - name: chat
+      slack:
+        webhook_url_file: /run/secrets/alert-receivers/slack-webhook-url
+    - name: noc
+      teams:
+        webhook_url_file: /run/secrets/alert-receivers/teams-webhook-url
+    - name: siem
+      webhook:
+        url: http://alert-sink:8080/webhook
+        secret_file: /run/secrets/alert-receivers/webhook-secret
+    - name: mail
+      email:
+        host: mailpit
+        port: 1025
+        security: none
+        from: twilight@example.org
+        to: [on-call@example.org]
+  routes:
+    - receiver: on-call
+      severities: [critical, high]
+    - receiver: noc
+      severities: [critical]
+    - receiver: chat
+      severities: [medium, low]
+    - receiver: siem
+    - receiver: mail
