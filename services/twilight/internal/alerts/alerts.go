@@ -274,6 +274,11 @@ func (store *Store) withDeliveries(operation context.Context, alert Alert, failu
 	return listed[0], nil
 }
 
+func (store *Store) Get(operation context.Context, identifier int64) (Alert, error) {
+	alert, failure := scanAlert(store.pool.QueryRow(operation, `select `+alertColumns+` from alerts where id = $1`, identifier))
+	return store.withDeliveries(operation, alert, failure)
+}
+
 func (store *Store) Acknowledge(operation context.Context, identifier int64, actor string, now time.Time) (Alert, error) {
 	alert, failure := scanAlert(store.pool.QueryRow(operation, `update alerts set acknowledged_by = coalesce(acknowledged_by, $2), acknowledged_at = coalesce(acknowledged_at, $3)
 		where id = $1 returning `+alertColumns, identifier, actor, now))

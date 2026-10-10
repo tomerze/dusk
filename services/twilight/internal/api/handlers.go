@@ -48,6 +48,7 @@ func routeTable() []route {
 		{http.MethodGet, "/api/v1/campaigns/{id}/events", RoleViewer, (*Server).campaignEvents},
 		{http.MethodGet, "/api/v1/campaigns/{id}/gates", RoleViewer, (*Server).campaignGates},
 		{http.MethodGet, "/api/v1/alerts", RoleViewer, (*Server).alerts},
+		{http.MethodGet, "/api/v1/alerts/{id}", RoleViewer, (*Server).alert},
 		{http.MethodPost, "/api/v1/alerts/{id}/acknowledge", RoleOperator, (*Server).acknowledgeAlert},
 		{http.MethodPost, "/api/v1/alerts/{id}/resolve", RoleOperator, (*Server).resolveAlert},
 		{http.MethodGet, streamPath, RoleViewer, (*Server).stream},
@@ -541,6 +542,19 @@ func (server *Server) alerts(call *exchange) error {
 		return failure
 	}
 	writeJSON(call, http.StatusOK, newPage(listed.Alerts, listed.Next))
+	return nil
+}
+
+func (server *Server) alert(call *exchange) error {
+	identifier, failure := alertID(call)
+	if failure != nil {
+		return failure
+	}
+	found, failure := server.Backend.Alert(call.request.Context(), identifier)
+	if failure != nil {
+		return failure
+	}
+	writeJSON(call, http.StatusOK, found)
 	return nil
 }
 

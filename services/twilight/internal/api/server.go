@@ -56,6 +56,7 @@ type Backend interface {
 	CampaignEvents(operation context.Context, identifier uuid.UUID, after int64, limit int) ([]campaign.Event, error)
 	CampaignGates(operation context.Context, identifier uuid.UUID) (engine.GateStatus, error)
 	Alerts(operation context.Context, open bool, cursor string, limit int) (alerts.Page, error)
+	Alert(operation context.Context, identifier int64) (alerts.Alert, error)
 	AcknowledgeAlert(operation context.Context, identifier int64, actor string) (alerts.Alert, error)
 	ResolveAlert(operation context.Context, identifier int64, actor string) (alerts.Alert, error)
 	Subscribe(operation context.Context) <-chan engine.FeedEvent

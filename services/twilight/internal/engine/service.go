@@ -666,6 +666,10 @@ func (service *Service) Alerts(operation context.Context, open bool, cursor stri
 	return page, failure
 }
 
+func (service *Service) Alert(operation context.Context, identifier int64) (alerts.Alert, error) {
+	return service.engine.Alerts.Get(operation, identifier)
+}
+
 func (service *Service) AcknowledgeAlert(operation context.Context, identifier int64, actor string) (alerts.Alert, error) {
 	return service.engine.Alerts.Acknowledge(operation, identifier, actor, time.Now())
 }
