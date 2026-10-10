@@ -1,0 +1,34 @@
+valid, failure = validate_json_schema(message, "/etc/vector/contracts/dusk.process-results.schema.json")
+if !valid {
+  log({"message": "dropped a message that fails its contract schema", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset, "error": failure}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+message = object!(parse_json!(message))
+time = parse_timestamp!(message.time, "%+")
+finished_at = if is_null(message.finished_at) { null } else { parse_timestamp!(message.finished_at, "%+") }
+reported = if is_null(message.reported) { null } else { encode_json(message.reported) }
+. = {
+  "time": time,
+  "id": message.id,
+  "schema": message.schema,
+  "pid": message.pid,
+  "campaign_id": string(message.campaign_id) ?? "",
+  "attempt": message.attempt,
+  "device_id": message.device_id,
+  "installation_id": message.installation_id,
+  "namespace_id": message.namespace_id,
+  "action_kind": message.action_kind,
+  "status": message.status,
+  "delivered": message.delivered,
+  "error": message.error,
+  "started_at": parse_timestamp!(message.started_at, "%+"),
+  "finished_at": finished_at,
+  "dawn_instance": message.dawn_instance,
+  "output_digest": message.output_digest,
+  "output_count": message.output_count,
+  "output_truncated": message.output_truncated,
+  "reported": reported,
+  "kafka_partition": coordinates.partition,
+  "kafka_offset": coordinates.offset,
+  "dt": format_timestamp!(time, "%F")
+}

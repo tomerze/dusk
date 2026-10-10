@@ -1,0 +1,175 @@
+tests:
+  - name: ledger checkpoint keeps its signature and turns the null identity into empty strings
+    inputs:
+      - insert_at: ledger
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.ledger/v1","id":"01a112fe-d1bb-72ae-b6bf-fee09a291aee","time":"2026-10-06T09:15:41.512408218Z","kind":"checkpoint","instance":"nightfall-0","partition":0,"sequence":42,"previous_hash":"4c1e9a7f3b5d2e8c0a6f4b1d9e7c3a5f2b8d0e6c4a1f9b7d5e3c2a0f8b6d4e1c","hash":"a7d3f1c9e5b2084f6a1d3c5e7b9f0a2c4e6d8b1f3a5c7e9d0b2f4a6c8e1d3b5f","device_id":null,"installation_id":null,"namespace_id":null,"epoch":null,"principal":"nightfall","pid":"0","intent_campaign_id":null,"intent_principal":null,"intent_subject":null,"session_id":null,"call_id":null,"cap_id":null,"parent_cap_id":null,"direction":null,"action":null,"interface_id":null,"method_id":null,"param_fields":[],"param_cap_ids":[],"param_hash":"","result_code":null,"result_cap_ids":[],"event":null,"event_detail":null,"key_id":"nightfall-ledger-2026-10","signature":"g55ZZRZD/YxRYBheTFik7dq86GTe/OhQO9kRCU+dwms0HKxuKAue+Bummf/V6/cSB60+Skn531tKBGplLGcTkQ=="}', "topic": "dusk.ledger", "partition": 0, "offset": 42}
+    outputs:
+      - extract_from: ledger
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.kind, "checkpoint")
+              assert_eq!(.pid, "0")
+              assert_eq!(.sequence, 42)
+              assert_eq!(.device_id, "")
+              assert_eq!(.installation_id, "")
+              assert_eq!(.namespace_id, null)
+              assert_eq!(.epoch, null)
+              assert_eq!(.param_fields, [])
+              assert_eq!(.event_detail, null)
+              assert_eq!(.intent_principal, null)
+              assert_eq!(.key_id, "nightfall-ledger-2026-10")
+              assert_eq!(.signature, "g55ZZRZD/YxRYBheTFik7dq86GTe/OhQO9kRCU+dwms0HKxuKAue+Bummf/V6/cSB60+Skn531tKBGplLGcTkQ==")
+              assert_eq!(.time, t'2026-10-06T09:15:41.512408218Z')
+              assert_eq!(.kafka_offset, 42)
+
+  - name: ledger call keeps its parameter fields and capability ids
+    inputs:
+      - insert_at: ledger
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.ledger/v1","id":"01a112fe-d1ba-7684-ae83-5239bd173f3d","time":"2026-10-06T09:15:40.512408217Z","kind":"call","instance":"nightfall-0","partition":0,"sequence":41,"previous_hash":"4c1e9a7f3b5d2e8c0a6f4b1d9e7c3a5f2b8d0e6c4a1f9b7d5e3c2a0f8b6d4e1c","hash":"a7d3f1c9e5b2084f6a1d3c5e7b9f0a2c4e6d8b1f3a5c7e9d0b2f4a6c8e1d3b5f","device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","namespace_id":"5d2e9a1c7b3f8e04","epoch":1791278043512408,"principal":"dawn-0","pid":"13792273858822192861","intent_campaign_id":"0192f3a4-5b6c-7d8e-9f01-23456789abcd","intent_principal":"token:0192f3a4-1111-7d8e-9f01-23456789abcd","intent_subject":"campaign:0192f3a4-5b6c-7d8e-9f01-23456789abcd","session_id":"0192f3a4-9e8d-7c6b-8a59-483726150f1e","call_id":"0192f3a4-a001-7b2c-9d3e-4f5061728394","cap_id":7,"parent_cap_id":3,"direction":"client_to_node","action":"ShPortal.sh","interface_id":"e1c5b0f3a7d29c48","method_id":0,"param_fields":[{"name":"script","redacted":false},{"name":"output","redacted":false},{"name":"stop","redacted":false}],"param_cap_ids":[8,9],"param_hash":"1f3e5d7c9b0a2f4e6d8c1b3a5f7e9d0c2b4a6f8e1d3c5b7a9f0e2d4c6b8a1f3e","result_code":null,"result_cap_ids":[],"event":null,"event_detail":null,"key_id":null,"signature":null}', "topic": "dusk.ledger", "partition": 0, "offset": 41}
+    outputs:
+      - extract_from: ledger
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.action, "ShPortal.sh")
+              assert_eq!(.pid, "13792273858822192861")
+              assert_eq!(.principal, "dawn-0")
+              assert_eq!(.epoch, 1791278043512408)
+              assert_eq!(.param_fields, [{"name": "script", "redacted": false}, {"name": "output", "redacted": false}, {"name": "stop", "redacted": false}])
+              assert_eq!(.param_cap_ids, [8, 9])
+              assert_eq!(.cap_id, 7)
+              assert_eq!(.parent_cap_id, 3)
+              assert_eq!(.session_id, "0192f3a4-9e8d-7c6b-8a59-483726150f1e")
+              assert_eq!(.intent_campaign_id, "0192f3a4-5b6c-7d8e-9f01-23456789abcd")
+              assert_eq!(.intent_principal, "token:0192f3a4-1111-7d8e-9f01-23456789abcd")
+              assert_eq!(.intent_subject, "campaign:0192f3a4-5b6c-7d8e-9f01-23456789abcd")
+              assert_eq!(.dt, "2026-10-06")
+
+  - name: ledger event detail becomes a JSON string
+    inputs:
+      - insert_at: ledger
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.ledger/v1","id":"01a112fe-d1bb-72ae-b6bf-fee0a3c15d27","time":"2026-10-06T09:15:29.512408206Z","kind":"event","instance":"nightfall-0","partition":0,"sequence":39,"previous_hash":"4c1e9a7f3b5d2e8c0a6f4b1d9e7c3a5f2b8d0e6c4a1f9b7d5e3c2a0f8b6d4e1c","hash":"a7d3f1c9e5b2084f6a1d3c5e7b9f0a2c4e6d8b1f3a5c7e9d0b2f4a6c8e1d3b5f","device_id":"7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f","installation_id":"0e8d6c4b2a1f3e5d7c9b8a6f4e2d1c3b","namespace_id":null,"epoch":null,"principal":"nightfall","pid":"0","intent_campaign_id":null,"intent_principal":null,"intent_subject":null,"session_id":null,"call_id":null,"cap_id":null,"parent_cap_id":null,"direction":null,"action":null,"interface_id":null,"method_id":null,"param_fields":[],"param_cap_ids":[],"param_hash":"","result_code":null,"result_cap_ids":[],"event":"session_refused","event_detail":{"reason":"revoked"},"key_id":null,"signature":null}', "topic": "dusk.ledger", "partition": 0, "offset": 39}
+    outputs:
+      - extract_from: ledger
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.event, "session_refused")
+              assert_eq!(.event_detail, s'{"reason":"revoked"}')
+              assert_eq!(.device_id, "7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f")
+
+  - name: ledger message with a field its schema does not name is dropped
+    inputs:
+      - insert_at: ledger
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.ledger/v1","id":"01a112fe-d1bb-72ae-b6bf-fee0a3c15d27","time":"2026-10-06T09:15:29.512408206Z","kind":"event","instance":"nightfall-0","partition":0,"sequence":39,"previous_hash":"4c1e9a7f3b5d2e8c0a6f4b1d9e7c3a5f2b8d0e6c4a1f9b7d5e3c2a0f8b6d4e1c","hash":"a7d3f1c9e5b2084f6a1d3c5e7b9f0a2c4e6d8b1f3a5c7e9d0b2f4a6c8e1d3b5f","device_id":"7c1a5e9f3b2d4a6e8f0c1b3d5e7a9c2f","installation_id":"0e8d6c4b2a1f3e5d7c9b8a6f4e2d1c3b","namespace_id":null,"epoch":null,"principal":"nightfall","pid":"0","intent_campaign_id":null,"intent_principal":null,"intent_subject":null,"session_id":null,"call_id":null,"cap_id":null,"parent_cap_id":null,"direction":null,"action":null,"interface_id":null,"method_id":null,"param_fields":[],"param_cap_ids":[],"param_hash":"","result_code":null,"result_cap_ids":[],"event":"session_refused","event_detail":{"reason":"revoked"},"key_id":null,"signature":null,"timestamp":"2026-10-06T09:15:29Z"}', "topic": "dusk.ledger", "partition": 0, "offset": 40}
+    no_outputs_from: [ledger]
+
+  - name: connections times become timestamps
+    inputs:
+      - insert_at: connections
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.connections/v1","id":"01a112fe-d1b9-70d8-89f8-284ccf95614a","time":"2026-10-06T09:19:02.512408419Z","event":"disconnected","device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","namespace_id":"5d2e9a1c7b3f8e04","epoch":1791278043512408,"instance":"nightfall-0","inner_address":"nightfall-0.nightfall-inner.dusk.svc:8444","remote_address":"203.0.113.24:51734","tenant":"retail-eu","cert_fingerprint":"9b2f4c8e1a7d3b6f0e5c9a2d8b4f1e7c3a6d0b9e2f5c8a1d4b7e0f3c6a9d2b5e","cert_not_after":"2026-10-12T08:41:17.000000000Z","connected_at":"2026-10-06T09:14:03.498120554Z","disconnect_reason":"replaced"}', "topic": "dusk.connections", "partition": 1, "offset": 7}
+    outputs:
+      - extract_from: connections
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.cert_not_after, t'2026-10-12T08:41:17Z')
+              assert_eq!(.connected_at, t'2026-10-06T09:14:03.498120554Z')
+              assert_eq!(.disconnect_reason, "replaced")
+              assert_eq!(.tenant, "retail-eu")
+              assert_eq!(.kafka_partition, 1)
+
+  - name: enrollment without an identity keeps empty identity strings and a null certificate expiry
+    inputs:
+      - insert_at: enrollments
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.enrollments/v1","id":"01a112fe-d1bb-72ae-b6bf-fee79c1a0610","time":"2026-10-06T09:14:12.512408129Z","operation":"assign","outcome":"error","reason":"unimplemented: tpm attestation","device_id":null,"installation_id":null,"tenant":null,"credential_kind":"tpm_attestation","credential_ref":null,"hardware_fingerprint_hash":"c2e4a6b8d0f1e3c5a7b9d1f3e5c7a9b0d2f4e6c8a1b3d5f7e9c0a2b4d6f8e1c3","remote_address":"203.0.113.24:51730","cert_serial":null,"cert_fingerprint":null,"cert_not_after":null,"dusk_version":"0.1.0","impl":"nix","target_os":"linux","target_arch":"x86_64","hostname":"kiosk-0042","instance":"nightfall-0"}', "topic": "dusk.enrollments", "partition": 0, "offset": 3}
+    outputs:
+      - extract_from: enrollments
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.device_id, "")
+              assert_eq!(.installation_id, "")
+              assert_eq!(.cert_not_after, null)
+              assert_eq!(.reason, "unimplemented: tpm attestation")
+              assert_eq!(.credential_kind, "tpm_attestation")
+
+  - name: process result keeps its pid and attempt, its reported state becomes a JSON string and its times timestamps
+    inputs:
+      - insert_at: process_results
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.process-results/v1","id":"01a112fe-d1bc-73b3-8e1a-437ce7f54ba4","time":"2026-10-06T09:16:06.512408243Z","pid":"13792273858822192861","campaign_id":"0192f3a4-5b6c-7d8e-9f01-23456789abcd","attempt":1,"device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","namespace_id":"5d2e9a1c7b3f8e04","action_kind":"ensure_version","status":"succeeded","delivered":true,"error":null,"started_at":"2026-10-06T09:15:40.001200400Z","finished_at":"2026-10-06T09:15:58.774501933Z","dawn_instance":"dawn-0","output_digest":"8e0c2a4f6b1d3e5a7c9f0b2d4e6a8c1f3b5d7e9a0c2f4b6d8e1a3c5f7b9d0e2a","output_count":3,"output_truncated":false,"reported":{"version_key":"dusk.version","version":"0.2.0","config_hash":null,"services":null,"facts":null}}', "topic": "dusk.process-results", "partition": 2, "offset": 11}
+    outputs:
+      - extract_from: process_results
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(parse_json!(.reported), {"version_key": "dusk.version", "version": "0.2.0", "config_hash": null, "services": null, "facts": null})
+              assert_eq!(.finished_at, t'2026-10-06T09:15:58.774501933Z')
+              assert_eq!(.started_at, t'2026-10-06T09:15:40.001200400Z')
+              assert_eq!(.pid, "13792273858822192861")
+              assert_eq!(.attempt, 1)
+              assert_eq!(.campaign_id, "0192f3a4-5b6c-7d8e-9f01-23456789abcd")
+              assert_eq!(.output_count, 3)
+              assert_eq!(.delivered, true)
+
+  - name: operator process output keeps the largest pid and has an empty campaign and its value as JSON text
+    inputs:
+      - insert_at: process_output
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.process-output/v1","id":"01a112fe-d1bd-704c-9bd1-233d2521d48a","time":"2026-10-06T09:15:53.512408230Z","pid":"18446744073709551615","campaign_id":null,"device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","namespace_id":"5d2e9a1c7b3f8e04","index":0,"value":["syslog","kern.log"],"truncated":false}', "topic": "dusk.process-output", "partition": 0, "offset": 0}
+    outputs:
+      - extract_from: process_output
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.pid, "18446744073709551615")
+              assert_eq!(.campaign_id, "")
+              assert_eq!(.value, s'["syslog","kern.log"]')
+              assert_eq!(.index, 0)
+
+  - name: truncation marker keeps a null value as JSON text
+    inputs:
+      - insert_at: process_output
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.process-output/v1","id":"01a112fe-d1bd-704c-9bd1-233e2a09f71a","time":"2026-10-06T09:15:54.512408231Z","pid":"13792273858822192861","campaign_id":"0192f3a4-5b6c-7d8e-9f01-23456789abcd","device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","namespace_id":"5d2e9a1c7b3f8e04","index":4096,"value":null,"truncated":true}', "topic": "dusk.process-output", "partition": 0, "offset": 1}
+    outputs:
+      - extract_from: process_output
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.value, "null")
+              assert_eq!(.truncated, true)
+              assert_eq!(.index, 4096)
+
+  - name: file upload keeps its object and upload time
+    inputs:
+      - insert_at: files
+        type: vrl
+        source: |
+          . = {"message": s'{"schema":"dusk.files/v1","id":"01a112fe-d1bd-704c-9bd1-233faa6ded5e","time":"2026-10-06T09:16:10.512408247Z","pid":"13792273858822192861","campaign_id":"0192f3a4-5b6c-7d8e-9f01-23456789abcd","device_id":"3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13","installation_id":"a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70","namespace_id":"5d2e9a1c7b3f8e04","node_path":"/var/log/syslog","bucket":"dusk-files","object_key":"files/3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13/a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70/13792273858822192861/0-syslog","size_bytes":1048576,"sha256":"2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae","content_type":"text/plain","uploaded_at":"2026-10-06T09:16:09.811002004Z","dawn_instance":"dawn-0"}', "topic": "dusk.files", "partition": 0, "offset": 5}
+    outputs:
+      - extract_from: files
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.uploaded_at, t'2026-10-06T09:16:09.811002004Z')
+              assert_eq!(.size_bytes, 1048576)
+              assert_eq!(.object_key, "files/3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13/a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70/13792273858822192861/0-syslog")
+              assert_eq!(.pid, "13792273858822192861")

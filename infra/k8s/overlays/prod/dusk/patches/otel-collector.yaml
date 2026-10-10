@@ -1,0 +1,34 @@
+- op: test
+  path: /spec/template/spec/containers/0/env/0/name
+  value: KAFKA_BROKERS
+- op: replace
+  path: /spec/template/spec/containers/0/env/0/value
+  value: dusk-kafka-bootstrap:9093
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: kafka
+    projected:
+      defaultMode: 0440
+      sources:
+        - secret:
+            name: otel-collector
+            items:
+              - key: user.crt
+                path: user.crt
+              - key: user.key
+                path: user.key
+        - secret:
+            name: dusk-cluster-ca-cert
+            items:
+              - key: ca.crt
+                path: ca.crt
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: kafka
+    mountPath: /var/run/kafka
+    readOnly: true
+- op: add
+  path: /spec/template/spec/securityContext/fsGroup
+  value: 10001

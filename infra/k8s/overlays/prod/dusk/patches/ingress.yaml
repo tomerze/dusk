@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: twilight
+spec:
+  tls:
+    - hosts: [twilight.dusk.example]
+      secretName: twilight-ingress-tls
+  rules:
+    - host: twilight.dusk.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: twilight
+                port:
+                  name: http

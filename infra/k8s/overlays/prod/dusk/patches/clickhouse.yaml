@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+spec:
+  template:
+    spec:
+      containers:
+        - name: clickhouse
+          ports:
+            - name: https
+              containerPort: 8443
+            - name: native-secure
+              containerPort: 9440
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/clickhouse-server/tls
+              readOnly: true
+      volumes:
+        - name: tls
+          secret:
+            secretName: clickhouse-tls
+            defaultMode: 0440
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-schema
+spec:
+  template:
+    spec:
+      containers:
+        - name: clickhouse-schema
+          env:
+            - name: CLICKHOUSE_CLIENT_CONFIG
+              value: /etc/clickhouse-client/dusk/client.yaml
+          volumeMounts:
+            - name: client
+              mountPath: /etc/clickhouse-client/dusk
+              readOnly: true
+      volumes:
+        - name: client
+          projected:
+            defaultMode: 0444
+            sources:
+              - configMap:
+                  name: clickhouse-client
+                  items:
+                    - key: client.yaml
+                      path: client.yaml
+              - configMap:
+                  name: dusk-trust-anchors
+                  items:
+                    - key: internal-ca.crt
+                      path: internal-ca.crt

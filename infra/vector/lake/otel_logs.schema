@@ -1,0 +1,34 @@
+message otel_logs {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required int64 observed_time (TIMESTAMP(NANOS,true));
+  required binary service_name (STRING);
+  required int32 severity_number (INTEGER(32,false));
+  required binary severity_text (STRING);
+  required binary body (STRING);
+  required binary trace_id (STRING);
+  required binary span_id (STRING);
+  required int32 flags (INTEGER(32,false));
+  required binary event_name (STRING);
+  required group attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required group resource_attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required binary scope_name (STRING);
+  required binary scope_version (STRING);
+  required group scope_attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

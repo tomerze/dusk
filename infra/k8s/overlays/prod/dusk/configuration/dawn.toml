@@ -1,0 +1,46 @@
+listen = "0.0.0.0:8443"
+metrics_listen = "0.0.0.0:9101"
+drain_seconds = 300
+log_level = "info"
+output_key_file = "/etc/dawn/secrets/output.key"
+
+[principals]
+"twilight-*" = "dispatcher"
+
+[tls]
+certificate = "/var/run/dawn/tls/tls.crt"
+key = "/var/run/dawn/tls/tls.key"
+client_ca = "/etc/dawn/pki/internal-ca.crt"
+
+[nightfall]
+default_inner_address = "nightfall-inner:8444"
+allowed_inner_addresses = ["nightfall-*.nightfall-inner.dusk.svc:8444"]
+server_name_suffix = "fleet.dusk.example"
+ca = "/etc/dawn/pki/internal-ca.crt"
+certificate = "/var/run/dawn/tls/tls.crt"
+key = "/var/run/dawn/tls/tls.key"
+connect_timeout_seconds = 10.0
+
+[kafka]
+brokers = "dusk-kafka-bootstrap:9093"
+allow_plaintext = false
+
+[kafka.properties]
+security_protocol = "SSL"
+ssl_cafile = "/etc/dawn/kafka/ca.crt"
+ssl_certfile = "/etc/dawn/kafka/user.crt"
+ssl_keyfile = "/etc/dawn/kafka/user.key"
+
+[s3]
+endpoint = "http://rook-ceph-rgw-dusk.rook-ceph.svc"
+region = "us-east-1"
+bucket = "dusk-files"
+access_key_file = "/etc/dawn/secrets/s3/access-key"
+secret_key_file = "/etc/dawn/secrets/s3/secret-key"
+
+[otlp]
+endpoint = "http://otel-collector:4318"
+
+[collector]
+endpoint = "otel-collector:4317"
+allowed_endpoints = ["otel-collector:4317"]

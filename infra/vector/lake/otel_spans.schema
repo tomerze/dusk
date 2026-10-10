@@ -1,0 +1,33 @@
+message otel_spans {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required int64 end_time (TIMESTAMP(NANOS,true));
+  required int64 duration_nanoseconds (INTEGER(64,false));
+  required binary service_name (STRING);
+  required binary name (STRING);
+  required binary kind (STRING);
+  required binary trace_id (STRING);
+  required binary span_id (STRING);
+  required binary parent_span_id (STRING);
+  required binary trace_state (STRING);
+  required int32 flags (INTEGER(32,false));
+  required binary status_code (STRING);
+  required binary status_message (STRING);
+  required group attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required group resource_attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required binary scope_name (STRING);
+  required binary scope_version (STRING);
+  required binary events (STRING);
+  required binary links (STRING);
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

@@ -1,0 +1,20 @@
+message connections {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required binary id (STRING);
+  required binary schema (STRING);
+  required binary event (STRING);
+  required binary device_id (STRING);
+  required binary installation_id (STRING);
+  required binary namespace_id (STRING);
+  required int64 epoch (INTEGER(64,false));
+  required binary instance (STRING);
+  required binary inner_address (STRING);
+  required binary remote_address (STRING);
+  optional binary tenant (STRING);
+  required binary cert_fingerprint (STRING);
+  required int64 cert_not_after (TIMESTAMP(NANOS,true));
+  required int64 connected_at (TIMESTAMP(NANOS,true));
+  optional binary disconnect_reason (STRING);
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

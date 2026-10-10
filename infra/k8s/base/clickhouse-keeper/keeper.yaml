@@ -1,0 +1,31 @@
+logger:
+  level: information
+  console: 1
+  formatting:
+    type: json
+listen_host:
+  - "::"
+  - 0.0.0.0
+listen_try: 1
+max_connections: 4096
+keeper_server:
+  tcp_port: 9181
+  server_id:
+    "@from_env": KEEPER_SERVER_ID
+  log_storage_path: /var/lib/clickhouse/coordination/log
+  snapshot_storage_path: /var/lib/clickhouse/coordination/snapshots
+  coordination_settings:
+    operation_timeout_ms: 10000
+    min_session_timeout_ms: 10000
+    session_timeout_ms: 30000
+    raft_logs_level: warning
+  http_control:
+    port: 9182
+    readiness:
+      endpoint: /ready
+  raft_configuration:
+    server:
+      id: 1
+      hostname:
+        "@from_env": KEEPER_RAFT_HOST
+      port: 9234

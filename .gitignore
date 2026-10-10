@@ -2,7 +2,6 @@
 /src/dusk_linux/target
 /src/dusk_cli/target
 /target
-/Cargo.lock
 /src/dusk/Cargo.lock
 /history.sqlite3
 /history.sqlite3-shm

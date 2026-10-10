@@ -1,0 +1,25 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: nightfall
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["nightfall:9100"]
+        - job_name: dawn
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["dawn:9101"]
+        - job_name: twilight
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["twilight:9102"]
+        - job_name: vector
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["vector:9598"]
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp, prometheus]

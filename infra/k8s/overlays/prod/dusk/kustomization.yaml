@@ -1,0 +1,255 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dusk
+resources:
+  - namespace.yaml
+  - ../../../base/network-policies
+  - ../../../base/secrets-init
+  - ../../../base/pki-init
+  - ../../../base/step-ca
+  - ../../../base/clickhouse-keeper
+  - ../../../base/clickhouse
+  - ../../../base/ceph-init
+  - ../../../base/otel-collector
+  - ../../../base/vector
+  - ../../../base/grafana
+  - ../../../base/signoz
+  - ../../../base/nightfall
+  - ../../../base/dawn
+  - ../../../base/twilight
+  - certificates.yaml
+  - certificate-policies.yaml
+  - kafka.yaml
+  - topics.yaml
+  - kafka-users.yaml
+  - postgres.yaml
+  - object-store-users.yaml
+  - network-policies.yaml
+  - dawn-ingress.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: dusk-stack
+configMapGenerator:
+  - name: nightfall
+    behavior: merge
+    files:
+      - configuration/nightfall.toml
+  - name: dawn
+    behavior: merge
+    files:
+      - configuration/dawn.toml
+  - name: twilight
+    behavior: merge
+    files:
+      - configuration/twilight.yaml
+  - name: otel-collector
+    behavior: merge
+    files:
+      - configuration/config.yaml
+  - name: clickhouse-keeper
+    behavior: merge
+    files:
+      - configuration/keeper.yaml
+  - name: clickhouse-client
+    files:
+      - client.yaml=configuration/clickhouse-client.yaml
+  - name: clickhouse
+    behavior: merge
+    files:
+      - config.yaml=configuration/clickhouse.yaml
+  - name: signoz-otel-collector
+    behavior: merge
+    files:
+      - otel-collector-config.yaml=configuration/signoz-collector.yaml
+images:
+  - name: dusk-nightfall
+    newName: registry.dusk.example/dusk-nightfall
+    newTag: 0.1.0
+  - name: dusk-dawn
+    newName: registry.dusk.example/dusk-dawn
+    newTag: 0.1.0
+  - name: dusk-twilight
+    newName: registry.dusk.example/dusk-twilight
+    newTag: 0.1.0
+  - name: dusk-vector
+    newName: registry.dusk.example/dusk-vector
+    newTag: 0.1.0
+  - name: dusk-grafana
+    newName: registry.dusk.example/dusk-grafana
+    newTag: 0.1.0
+patches:
+  - path: patches/replicas.yaml
+  - path: patches/environment.yaml
+  - path: patches/ingress.yaml
+  - path: patches/clickhouse.yaml
+  - patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: pki-renew
+      $patch: delete
+  - target:
+      kind: NetworkPolicy
+      name: clickhouse
+    patch: |-
+      - op: test
+        path: /spec/ingress/0/ports/0/port
+        value: 8123
+      - op: replace
+        path: /spec/ingress/0/ports/0/port
+        value: 8443
+      - op: test
+        path: /spec/ingress/1/ports/0/port
+        value: 9000
+      - op: replace
+        path: /spec/ingress/1/ports/0/port
+        value: 9440
+  - target:
+      kind: NetworkPolicy
+      name: vector
+    patch: |-
+      - op: test
+        path: /spec/egress/1/ports/0/port
+        value: 8123
+      - op: replace
+        path: /spec/egress/1/ports/0/port
+        value: 8443
+  - target:
+      kind: NetworkPolicy
+      name: grafana
+    patch: |-
+      - op: test
+        path: /spec/egress/1/ports/0/port
+        value: 9000
+      - op: replace
+        path: /spec/egress/1/ports/0/port
+        value: 9440
+  - target:
+      kind: NetworkPolicy
+      name: clickhouse-schema
+    patch: |-
+      - op: test
+        path: /spec/egress/0/ports/0/port
+        value: 9000
+      - op: replace
+        path: /spec/egress/0/ports/0/port
+        value: 9440
+  - target:
+      kind: StatefulSet
+      name: nightfall
+    path: patches/nightfall.yaml
+  - target:
+      kind: StatefulSet
+      name: dawn
+    path: patches/dawn.yaml
+  - target:
+      kind: Deployment
+      name: twilight
+    path: patches/twilight.yaml
+  - target:
+      kind: NetworkPolicy
+      name: dawn
+    patch: |-
+      - op: add
+        path: /spec/ingress/-
+        value:
+          from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: ingress-controller-namespace
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: ingress-controller-name
+          ports:
+            - protocol: TCP
+              port: 8443
+  - target:
+      kind: Role
+      name: dusk-certificates
+    patch: |-
+      - op: add
+        path: /rules/0/resourceNames/-
+        value: dusk-dawn-ingress
+  - target:
+      kind: Deployment
+      name: vector
+    path: patches/vector.yaml
+  - target:
+      kind: Deployment
+      name: grafana
+    path: patches/grafana.yaml
+  - target:
+      kind: Deployment
+      name: otel-collector|otel-collector-scraper
+    path: patches/otel-collector.yaml
+  - path: patches/signoz.yaml
+  - target:
+      kind: StatefulSet
+      name: signoz
+    path: patches/signoz-postgres.yaml
+  - target:
+      kind: Deployment
+      name: signoz-otel-collector
+    path: patches/signoz-clickhouse-collector.yaml
+  - target:
+      kind: StatefulSet
+      name: signoz
+    path: patches/signoz-clickhouse-query.yaml
+  - target:
+      kind: Job
+      name: signoz-telemetrystore-migrator
+    path: patches/signoz-clickhouse-migrator.yaml
+  - target:
+      kind: NetworkPolicy
+      name: signoz
+    patch: |-
+      - op: test
+        path: /spec/egress/0/ports/0/port
+        value: 9000
+      - op: replace
+        path: /spec/egress/0/ports/0/port
+        value: 9440
+replacements:
+  - source:
+      kind: ConfigMap
+      name: dawn-ingress-settings
+      fieldPath: data.host
+    targets:
+      - select:
+          kind: Ingress
+          name: dawn
+        fieldPaths:
+          - spec.tls.0.hosts.0
+          - spec.rules.0.host
+      - select:
+          kind: Certificate
+          name: dawn-ingress
+        fieldPaths:
+          - spec.commonName
+          - spec.dnsNames.0
+      - select:
+          kind: CertificateRequestPolicy
+          name: dusk-dawn-ingress
+        fieldPaths:
+          - spec.allowed.commonName.value
+          - spec.allowed.dnsNames.values.0
+  - source:
+      kind: ConfigMap
+      name: dawn-ingress-settings
+      fieldPath: data.controllerNamespace
+    targets:
+      - select:
+          kind: NetworkPolicy
+          name: dawn
+        fieldPaths:
+          - spec.ingress.2.from.0.namespaceSelector.matchLabels.[kubernetes.io/metadata.name]
+  - source:
+      kind: ConfigMap
+      name: dawn-ingress-settings
+      fieldPath: data.controllerName
+    targets:
+      - select:
+          kind: NetworkPolicy
+          name: dawn
+        fieldPaths:
+          - spec.ingress.2.from.0.podSelector.matchLabels.[app.kubernetes.io/name]

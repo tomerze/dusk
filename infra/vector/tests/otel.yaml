@@ -1,0 +1,159 @@
+tests:
+  - name: otel logs export becomes one row per log record with its resource and scope
+    inputs:
+      - insert_at: otel_logs
+        type: vrl
+        source: |
+          . = parse_json!(s'{"resourceLogs":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"dawn"}},{"key":"service.instance.id","value":{"stringValue":"dawn-0"}}]},"scopeLogs":[{"scope":{"name":"dawn.dispatch","version":"0.1.0","attributes":[{"key":"component","value":{"stringValue":"dispatcher"}}]},"logRecords":[{"timeUnixNano":"1791278043512408217","observedTimeUnixNano":"1791278043600000000","severityNumber":9,"severityText":"INFO","body":{"stringValue":"process started"},"attributes":[{"key":"pid","value":{"stringValue":"13792273858822192861"}},{"key":"attempt","value":{"intValue":"2"}},{"key":"delivered","value":{"boolValue":true}},{"key":"ratio","value":{"doubleValue":0.5}},{"key":"labels","value":{"kvlistValue":{"values":[{"key":"a","value":{"stringValue":"b"}}]}}}],"traceId":"5b8efff798038103d269b633813fc60c","spanId":"eee19b7ec3c1b174","flags":1},{"timeUnixNano":"0","observedTimeUnixNano":"1791278044000000000","severityNumber":17,"severityText":"ERROR","body":{"stringValue":"process failed"},"attributes":[],"eventName":"process.failed"}]}]},{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"twilight"}}]},"scopeLogs":[{"scope":{"name":"twilight.engine"},"logRecords":[{"timeUnixNano":"1791278045000000000","observedTimeUnixNano":"1791278045000000000","severityNumber":13,"severityText":"WARN","body":{"kvlistValue":{"values":[{"key":"campaign","value":{"stringValue":"c-1"}}]}}}]}]}]}')
+          %kafka = {"topic": "dusk.otel-logs", "partition": 1, "offset": 100}
+    outputs:
+      - extract_from: otel_logs
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.body, "process started")
+              assert_eq!(.service_name, "dawn")
+              assert_eq!(.time, t'2026-10-06T09:14:03.512408217Z')
+              assert_eq!(.observed_time, t'2026-10-06T09:14:03.6Z')
+              assert_eq!(.severity_number, 9)
+              assert_eq!(.severity_text, "INFO")
+              assert_eq!(.trace_id, "5b8efff798038103d269b633813fc60c")
+              assert_eq!(.span_id, "eee19b7ec3c1b174")
+              assert_eq!(.flags, 1)
+              assert_eq!(.attributes.pid, "13792273858822192861")
+              assert_eq!(.attributes.attempt, "2")
+              assert_eq!(.attributes.delivered, "true")
+              assert_eq!(.attributes.ratio, "0.5")
+              assert_eq!(parse_json!(.attributes.labels), {"kvlistValue": {"values": [{"key": "a", "value": {"stringValue": "b"}}]}})
+              assert_eq!(.resource_attributes, {"service.name": "dawn", "service.instance.id": "dawn-0"})
+              assert_eq!(.scope_name, "dawn.dispatch")
+              assert_eq!(.scope_version, "0.1.0")
+              assert_eq!(.scope_attributes, {"component": "dispatcher"})
+              assert_eq!(.kafka_partition, 1)
+              assert_eq!(.kafka_offset, 100)
+              assert_eq!(.dt, "2026-10-06")
+          - type: vrl
+            source: |
+              assert_eq!(.body, "process failed")
+              assert_eq!(.time, t'2026-10-06T09:14:04Z')
+              assert_eq!(.event_name, "process.failed")
+              assert_eq!(.trace_id, "")
+              assert_eq!(.attributes, {})
+          - type: vrl
+            source: |
+              assert_eq!(.service_name, "twilight")
+              assert_eq!(parse_json!(.body), {"kvlistValue": {"values": [{"key": "campaign", "value": {"stringValue": "c-1"}}]}})
+              assert_eq!(.scope_version, "")
+              assert_eq!(.scope_attributes, {})
+
+  - name: otel traces export becomes one row per span with named kind and status
+    inputs:
+      - insert_at: otel_spans
+        type: vrl
+        source: |
+          . = parse_json!(s'{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"dawn"}}]},"scopeSpans":[{"scope":{"name":"dawn.http","version":"0.1.0"},"spans":[{"traceId":"5b8efff798038103d269b633813fc60c","spanId":"eee19b7ec3c1b174","parentSpanId":"eee19b7ec3c1b173","traceState":"vendor=x","name":"POST /v1/dispatch","kind":2,"startTimeUnixNano":"1791278043000000000","endTimeUnixNano":"1791278043250000000","attributes":[{"key":"http.response.status_code","value":{"intValue":"202"}}],"events":[{"timeUnixNano":"1791278043100000000","name":"accepted"}],"status":{"code":2,"message":"node unreachable"},"flags":257}]}]}]}')
+          %kafka = {"topic": "dusk.otel-spans", "partition": 0, "offset": 9}
+    outputs:
+      - extract_from: otel_spans
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.name, "POST /v1/dispatch")
+              assert_eq!(.kind, "SPAN_KIND_SERVER")
+              assert_eq!(.status_code, "STATUS_CODE_ERROR")
+              assert_eq!(.status_message, "node unreachable")
+              assert_eq!(.duration_nanoseconds, 250000000)
+              assert_eq!(.time, t'2026-10-06T09:14:03Z')
+              assert_eq!(.end_time, t'2026-10-06T09:14:03.25Z')
+              assert_eq!(.parent_span_id, "eee19b7ec3c1b173")
+              assert_eq!(.trace_state, "vendor=x")
+              assert_eq!(.flags, 257)
+              assert_eq!(.attributes, {"http.response.status_code": "202"})
+              assert_eq!(parse_json!(.events), [{"timeUnixNano": "1791278043100000000", "name": "accepted"}])
+              assert_eq!(.links, "[]")
+              assert_eq!(.service_name, "dawn")
+
+  - name: otel metrics export becomes one row per data point of every metric type
+    inputs:
+      - insert_at: otel_metrics
+        type: vrl
+        source: |
+          . = parse_json!(s'{"resourceMetrics":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"nightfall"}}]},"scopeMetrics":[{"scope":{"name":"prometheus","version":"0.162.0"},"metrics":[{"name":"nightfall_sessions","description":"live node sessions","unit":"1","gauge":{"dataPoints":[{"attributes":[{"key":"shard","value":{"stringValue":"0"}}],"timeUnixNano":"1791278043000000000","asInt":"42"}]}},{"name":"nightfall_calls_total","sum":{"aggregationTemporality":2,"isMonotonic":true,"dataPoints":[{"startTimeUnixNano":"1791270000000000000","timeUnixNano":"1791278043000000000","asDouble":1234.5}]}},{"name":"nightfall_call_duration_seconds","unit":"s","histogram":{"aggregationTemporality":2,"dataPoints":[{"timeUnixNano":"1791278043000000000","count":"6","sum":0.75,"min":0.01,"max":0.4,"bucketCounts":["1","2","3"],"explicitBounds":[0.05,0.1]}]}},{"name":"dawn_upload_bytes","exponentialHistogram":{"aggregationTemporality":1,"dataPoints":[{"timeUnixNano":"1791278043000000000","count":"4","sum":10,"scale":2,"zeroCount":"1","positive":{"offset":-1,"bucketCounts":["1","2"]},"negative":{"bucketCounts":[]}}]}},{"name":"twilight_dispatch_seconds","summary":{"dataPoints":[{"timeUnixNano":"1791278043000000000","count":"10","sum":5,"quantileValues":[{"quantile":0.5,"value":0.4},{"quantile":0.99,"value":1.5}]}]}}]}]}]}')
+          %kafka = {"topic": "dusk.otel-metrics", "partition": 2, "offset": 77}
+    outputs:
+      - extract_from: otel_metrics
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.metric_name, "nightfall_sessions")
+              assert_eq!(.metric_type, "gauge")
+              assert_eq!(.value, 42.0)
+              assert_eq!(.attributes, {"shard": "0"})
+              assert_eq!(.metric_description, "live node sessions")
+              assert_eq!(.start_time, .time)
+              assert_eq!(.min, null)
+              assert_eq!(.service_name, "nightfall")
+              assert_eq!(.scope_version, "0.162.0")
+          - type: vrl
+            source: |
+              assert_eq!(.metric_name, "nightfall_calls_total")
+              assert_eq!(.metric_type, "sum")
+              assert_eq!(.value, 1234.5)
+              assert_eq!(.aggregation_temporality, "AGGREGATION_TEMPORALITY_CUMULATIVE")
+              assert_eq!(.is_monotonic, true)
+              assert_eq!(.start_time, t'2026-10-06T07:00:00Z')
+          - type: vrl
+            source: |
+              assert_eq!(.metric_name, "nightfall_call_duration_seconds")
+              assert_eq!(.metric_type, "histogram")
+              assert_eq!(.count, 6)
+              assert_eq!(.sum, 0.75)
+              assert_eq!(.min, 0.01)
+              assert_eq!(.max, 0.4)
+              assert_eq!(.bucket_counts, [1, 2, 3])
+              assert_eq!(.explicit_bounds, [0.05, 0.1])
+              assert_eq!(.metric_unit, "s")
+          - type: vrl
+            source: |
+              assert_eq!(.metric_name, "dawn_upload_bytes")
+              assert_eq!(.metric_type, "exponentialHistogram")
+              assert_eq!(.aggregation_temporality, "AGGREGATION_TEMPORALITY_DELTA")
+              assert_eq!(.exponential_scale, 2)
+              assert_eq!(.exponential_zero_count, 1)
+              assert_eq!(.exponential_positive_offset, -1)
+              assert_eq!(.exponential_positive_bucket_counts, [1, 2])
+              assert_eq!(.exponential_negative_bucket_counts, [])
+          - type: vrl
+            source: |
+              assert_eq!(.metric_name, "twilight_dispatch_seconds")
+              assert_eq!(.metric_type, "summary")
+              assert_eq!(.count, 10)
+              assert_eq!(.sum, 5.0)
+              assert_eq!(.quantiles, [{"quantile": 0.5, "value": 0.4}, {"quantile": 0.99, "value": 1.5}])
+
+  - name: a record that is not an OTLP logs export is dropped
+    inputs:
+      - insert_at: otel_logs
+        type: vrl
+        source: |
+          . = {"resourceSpans": []}
+          %kafka = {"topic": "dusk.otel-logs", "partition": 0, "offset": 1}
+    no_outputs_from: [otel_logs]
+
+  - name: a record that is not an OTLP traces export is dropped
+    inputs:
+      - insert_at: otel_spans
+        type: vrl
+        source: |
+          . = {"resourceLogs": []}
+          %kafka = {"topic": "dusk.otel-spans", "partition": 0, "offset": 1}
+    no_outputs_from: [otel_spans]
+
+  - name: a record that is not an OTLP metrics export is dropped
+    inputs:
+      - insert_at: otel_metrics
+        type: vrl
+        source: |
+          . = {"text": "not json"}
+          %kafka = {"topic": "dusk.otel-metrics", "partition": 0, "offset": 1}
+    no_outputs_from: [otel_metrics]

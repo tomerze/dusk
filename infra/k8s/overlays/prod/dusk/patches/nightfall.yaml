@@ -1,0 +1,18 @@
+- op: add
+  path: /spec/template/spec/volumes/0/projected/sources/-
+  value:
+    secret:
+      name: nightfall
+      items:
+        - key: user.crt
+          path: kafka/user.crt
+        - key: user.key
+          path: kafka/user.key
+- op: add
+  path: /spec/template/spec/volumes/0/projected/sources/-
+  value:
+    secret:
+      name: dusk-cluster-ca-cert
+      items:
+        - key: ca.crt
+          path: kafka/ca.crt

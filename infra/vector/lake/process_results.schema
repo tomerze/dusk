@@ -1,0 +1,24 @@
+message process_results {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required binary id (STRING);
+  required binary schema (STRING);
+  required binary pid (STRING);
+  required binary campaign_id (STRING);
+  optional int32 attempt (INTEGER(32,false));
+  required binary device_id (STRING);
+  required binary installation_id (STRING);
+  required binary namespace_id (STRING);
+  required binary action_kind (STRING);
+  required binary status (STRING);
+  required boolean delivered;
+  optional binary error (STRING);
+  required int64 started_at (TIMESTAMP(NANOS,true));
+  optional int64 finished_at (TIMESTAMP(NANOS,true));
+  required binary dawn_instance (STRING);
+  required binary output_digest (STRING);
+  required int64 output_count (INTEGER(64,false));
+  required boolean output_truncated;
+  optional binary reported (STRING);
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

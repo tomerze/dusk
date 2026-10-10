@@ -1,0 +1,257 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: nightfall
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: dusk.ledger
+          patternType: literal
+        operations: [Read, Write, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.connections
+          patternType: literal
+        operations: [Read, Write, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.census
+          patternType: literal
+        operations: [Read, Write, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.enrollments
+          patternType: literal
+        operations: [Write, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.node-state
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.intended-processes
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: transactionalId
+          name: nightfall-ledger-
+          patternType: prefix
+        operations: [Write, Describe]
+      - resource:
+          type: group
+          name: nightfall-
+          patternType: prefix
+        operations: [Read, Describe]
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: twilight
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: dusk.node-state
+          patternType: literal
+        operations: [Read, Write, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.intended-processes
+          patternType: literal
+        operations: [Write, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.connections
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.census
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.ledger
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.enrollments
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: topic
+          name: dusk.process-results
+          patternType: literal
+        operations: [Read, Describe, DescribeConfigs]
+      - resource:
+          type: group
+          name: twilight-
+          patternType: prefix
+        operations: [Read, Describe]
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: dawn
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: dusk.process-results
+          patternType: literal
+        operations: [Write, Describe]
+      - resource:
+          type: topic
+          name: dusk.process-output
+          patternType: literal
+        operations: [Write, Describe]
+      - resource:
+          type: topic
+          name: dusk.files
+          patternType: literal
+        operations: [Write, Describe]
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: otel-collector
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: dusk.otel-logs
+          patternType: literal
+        operations: [Write, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-spans
+          patternType: literal
+        operations: [Write, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-metrics
+          patternType: literal
+        operations: [Write, Describe]
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: vector
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: dusk.ledger
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.connections
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.enrollments
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.process-results
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.process-output
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.files
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-logs
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-spans
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-metrics
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: group
+          name: vector-
+          patternType: prefix
+        operations: [Read, Describe]
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: signoz
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: dusk.otel-logs
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-spans
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: dusk.otel-metrics
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: group
+          name: signoz
+          patternType: literal
+        operations: [Read, Describe]

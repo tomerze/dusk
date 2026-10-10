@@ -1,0 +1,745 @@
+name: dusk-stack
+
+x-secret: &secret
+  type: volume
+  source: secrets
+  read_only: true
+
+x-pki: &pki
+  type: volume
+  source: pki
+  read_only: true
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "5"
+
+networks:
+  stack:
+    ipam:
+      config:
+        - subnet: ${DUSK_SUBNET:-10.231.64.0/24}
+
+secrets:
+  fleet-token:
+    environment: DUSK_FLEET_TOKEN
+
+volumes:
+  secrets: {}
+  pki: {}
+  step-ca: {}
+  kafka: {}
+  postgres: {}
+  clickhouse: {}
+  clickhouse-keeper: {}
+  ceph-etc: {}
+  ceph-data: {}
+  ceph-demo: {}
+  vector: {}
+  grafana: {}
+  signoz: {}
+
+services:
+  secrets-init:
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint: ["/scripts/generate.sh", "/secrets"]
+    environment:
+      FLEET_TOKEN_NAME: compose
+      FLEET_TOKEN_TENANT: dev
+    network_mode: none
+    volumes:
+      - secrets:/secrets
+      - ../k8s/base/secrets-init/generate.sh:/scripts/generate.sh:ro
+
+  pki-init:
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint: ["/scripts/pki.sh", "init", "/pki", "/home/step", "/secrets"]
+    environment:
+      DUSK_DOMAIN: ${DUSK_DOMAIN:-dusk.test}
+      STEP_CA_DNS_NAMES: step-ca,localhost
+    network_mode: none
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - pki:/pki
+      - step-ca:/home/step
+      - { <<: *secret, target: /secrets/fleet-provisioner, volume: { subpath: fleet-provisioner } }
+      - { <<: *secret, target: /secrets/step-ca-password, volume: { subpath: step-ca-password } }
+      - ../k8s/base/pki-init:/scripts:ro
+
+  cert-renewer:
+    <<: [*restart, *logging]
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint: ["/scripts/pki.sh", "renew", "/pki"]
+    environment:
+      DUSK_DOMAIN: ${DUSK_DOMAIN:-dusk.test}
+    network_mode: none
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+    volumes:
+      - pki:/pki
+      - ../k8s/base/pki-init:/scripts:ro
+
+  step-ca:
+    <<: [*restart, *logging]
+    image: smallstep/step-ca:0.30.2
+    entrypoint: ["step-ca", "--password-file", "/run/secrets/step-ca-password/password", "/home/step/config/ca.json"]
+    networks: [stack]
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+    volumes:
+      - step-ca:/home/step
+      - { <<: *secret, target: /run/secrets/step-ca-password, volume: { subpath: step-ca-password } }
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://localhost:9000", "--root", "/home/step/certs/root_ca.crt"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  kafka:
+    <<: [*restart, *logging]
+    image: apache/kafka:4.2.2
+    networks: [stack]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      CLUSTER_ID: _K0rJMXsQlKs0rwJynjxcw
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  kafka-init:
+    image: apache/kafka:4.2.2
+    entrypoint: ["/scripts/create-topics.sh"]
+    networks: [stack]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TOPIC_PROFILE: dev
+      REPLICATION_FACTOR: 1
+      MIN_INSYNC_REPLICAS: 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ../k8s/base/kafka-init:/scripts:ro
+
+  postgres:
+    <<: [*restart, *logging]
+    image: postgres:17.11-trixie
+    command:
+      - postgres
+      - -c
+      - tcp_keepalives_idle=10
+      - -c
+      - tcp_keepalives_interval=5
+      - -c
+      - tcp_keepalives_count=3
+      - -c
+      - tcp_user_timeout=15000
+    networks: [stack]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-superuser/password
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ../k8s/base/postgres/init.sh:/docker-entrypoint-initdb.d/10-dusk.sh:ro
+      - { <<: *secret, target: /run/secrets/postgres-superuser, volume: { subpath: postgres-superuser } }
+      - { <<: *secret, target: /run/secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
+      - { <<: *secret, target: /run/secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
+      - { <<: *secret, target: /run/secrets/postgres-signoz, volume: { subpath: postgres-signoz } }
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host", "127.0.0.1", "--username", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  clickhouse-keeper:
+    <<: [*restart, *logging]
+    image: clickhouse/clickhouse-keeper:26.8.19.9
+    networks: [stack]
+    environment:
+      KEEPER_CONFIG: /etc/clickhouse-keeper/keeper.yaml
+      KEEPER_SERVER_ID: 1
+      KEEPER_RAFT_HOST: clickhouse-keeper
+    volumes:
+      - clickhouse-keeper:/var/lib/clickhouse
+      - ../k8s/base/clickhouse-keeper/keeper.yaml:/etc/clickhouse-keeper/keeper.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:9182/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  clickhouse:
+    <<: [*restart, *logging]
+    image: clickhouse/clickhouse-server:26.8.19.9
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        export CLICKHOUSE_PASSWORD="$$(cat /run/secrets/clickhouse-admin/password)"
+        CLICKHOUSE_VECTOR_PASSWORD="$$(cat /run/secrets/clickhouse-vector/password)"
+        CLICKHOUSE_GRAFANA_PASSWORD="$$(cat /run/secrets/clickhouse-grafana/password)"
+        CLICKHOUSE_SIGNOZ_PASSWORD="$$(cat /run/secrets/clickhouse-signoz/password)"
+        LAKE_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-reader/access-key)"
+        LAKE_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-reader/secret-key)"
+        SIGNOZ_COLD_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-signoz/access-key)"
+        SIGNOZ_COLD_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-signoz/secret-key)"
+        && exec /entrypoint.sh
+    networks: [stack]
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_REPLICA_HOST: clickhouse
+      CLICKHOUSE_KEEPER_HOST: clickhouse-keeper
+      LAKE_URL: http://ceph:8080/dusk-lake/
+      SIGNOZ_COLD_URL: http://ceph:8080/signoz-cold/clickhouse/
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+      clickhouse-keeper:
+        condition: service_healthy
+    volumes:
+      - clickhouse:/var/lib/clickhouse
+      - ../k8s/base/clickhouse/config.d/dusk.yaml:/etc/clickhouse-server/config.d/dusk.yaml:ro
+      - ../k8s/base/clickhouse/users.d/dusk.yaml:/etc/clickhouse-server/users.d/dusk.yaml:ro
+      - { <<: *secret, target: /run/secrets/clickhouse-admin, volume: { subpath: clickhouse-admin } }
+      - { <<: *secret, target: /run/secrets/clickhouse-vector, volume: { subpath: clickhouse-vector } }
+      - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
+      - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
+      - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  clickhouse-schema:
+    image: clickhouse/clickhouse-server:26.8.19.9
+    entrypoint: ["/scripts/apply-schema.sh"]
+    networks: [stack]
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse-admin/password
+      SCHEMA_DIRECTORY: /schema
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      ceph-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/clickhouse/apply-schema.sh:/scripts/apply-schema.sh:ro
+      - ../k8s/base/clickhouse/schema:/schema:ro
+      - { <<: *secret, target: /run/secrets/clickhouse-admin, volume: { subpath: clickhouse-admin } }
+
+  ceph:
+    <<: [*restart, *logging]
+    image: quay.io/ceph/demo@sha256:522483cf07cfce6386b8e18a3edfa88a1b32c688dee231d0a6962b1513557723
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        export CEPH_DEMO_ACCESS_KEY="$$(cat /run/secrets/ceph-admin/access-key)"
+        CEPH_DEMO_SECRET_KEY="$$(cat /run/secrets/ceph-admin/secret-key)"
+        && exec /opt/ceph-container/bin/demo
+    networks:
+      stack:
+        ipv4_address: ${DUSK_CEPH_IP:-10.231.64.10}
+    environment:
+      MON_IP: ${DUSK_CEPH_IP:-10.231.64.10}
+      CEPH_PUBLIC_NETWORK: ${DUSK_SUBNET:-10.231.64.0/24}
+      DEMO_DAEMONS: mon,mgr,osd,rgw
+      RGW_FRONTEND_PORT: 8080
+      RGW_NAME: ceph
+      OSD_COUNT: 1
+      CEPH_DEMO_UID: admin
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - ceph-etc:/etc/ceph
+      - ceph-data:/var/lib/ceph
+      - ceph-demo:/opt/ceph-container/tmp
+      - { <<: *secret, target: /run/secrets/ceph-admin, volume: { subpath: ceph-admin } }
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "--fail", "--output", "/dev/null", "http://127.0.0.1:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  ceph-users:
+    image: quay.io/ceph/demo@sha256:522483cf07cfce6386b8e18a3edfa88a1b32c688dee231d0a6962b1513557723
+    entrypoint: ["/scripts/users.sh"]
+    networks: [stack]
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+      ceph:
+        condition: service_healthy
+    volumes:
+      - type: volume
+        source: ceph-etc
+        target: /etc/ceph
+        read_only: true
+      - ../k8s/base/ceph/users.sh:/scripts/users.sh:ro
+      - { <<: *secret, target: /run/secrets/ceph-admin, volume: { subpath: ceph-admin } }
+      - { <<: *secret, target: /run/secrets/ceph-vector, volume: { subpath: ceph-vector } }
+      - { <<: *secret, target: /run/secrets/ceph-ledger-writer, volume: { subpath: ceph-ledger-writer } }
+      - { <<: *secret, target: /run/secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
+      - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+
+  ceph-init:
+    image: amazon/aws-cli:2.37.9
+    entrypoint: ["/scripts/buckets.sh"]
+    networks: [stack]
+    environment:
+      S3_ENDPOINT: http://ceph:8080
+      EVIDENCE_RETENTION_MODE: GOVERNANCE
+      EVIDENCE_RETENTION_DAYS: 1
+    depends_on:
+      ceph-users:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/ceph-init/buckets.sh:/scripts/buckets.sh:ro
+      - { <<: *secret, target: /run/secrets/ceph-admin, volume: { subpath: ceph-admin } }
+
+  otel-collector:
+    <<: [*restart, *logging]
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command: ["--config", "/etc/otelcol-contrib/config.yaml", "--config", "/etc/otelcol-contrib/scrape.yaml"]
+    networks: [stack]
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./otel-collector/scrape.yaml:/etc/otelcol-contrib/scrape.yaml:ro
+
+  vector:
+    <<: [*restart, *logging]
+    image: dusk-vector:dev
+    build:
+      context: ../..
+      dockerfile: infra/vector/Dockerfile
+    networks: [stack]
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      S3_ENDPOINT: http://ceph:8080
+      S3_REGION: us-east-1
+      LAKE_BUCKET: dusk-lake
+      EVIDENCE_BUCKET: dusk-ledger-evidence
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      clickhouse-schema:
+        condition: service_completed_successfully
+      ceph-init:
+        condition: service_completed_successfully
+    volumes:
+      - vector:/var/lib/vector
+      - { <<: *secret, target: /run/secrets/clickhouse, volume: { subpath: clickhouse-vector } }
+      - { <<: *secret, target: /run/secrets/lake, volume: { subpath: ceph-vector } }
+      - { <<: *secret, target: /run/secrets/evidence, volume: { subpath: ceph-ledger-writer } }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8686 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  grafana:
+    <<: [*restart, *logging]
+    image: dusk-grafana:dev
+    build:
+      context: ../..
+      dockerfile: infra/grafana/Dockerfile
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_GRAFANA_PORT-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin/password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse-schema:
+        condition: service_completed_successfully
+    volumes:
+      - grafana:/var/lib/grafana
+      - { <<: *secret, target: /run/secrets/grafana-admin, volume: { subpath: grafana-admin } }
+      - { <<: *secret, target: /run/secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
+      - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  nightfall:
+    <<: [*restart, *logging]
+    image: dusk-nightfall:dev
+    stop_grace_period: 360s
+    build:
+      context: ../..
+      dockerfile: services/nightfall/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    networks:
+      stack:
+        aliases:
+          - fleet.${DUSK_DOMAIN:-dusk.test}
+          - provision.${DUSK_DOMAIN:-dusk.test}
+    ports:
+      - "127.0.0.1:${DUSK_FLEET_PORT-8443}:8443"
+    environment:
+      NIGHTFALL__INSTANCE: nightfall-0
+      NIGHTFALL__INNER__ADVERTISE: nightfall:8444
+      NIGHTFALL__INNER__RELAY_ADVERTISE: nightfall:8445
+      NIGHTFALL__INNER__SERVER_NAME_SUFFIX: fleet.${DUSK_DOMAIN:-dusk.test}
+      NIGHTFALL__FLEET__SERVER_NAMES: '["fleet.${DUSK_DOMAIN:-dusk.test}"]'
+      NIGHTFALL__PROVISION__SERVER_NAMES: '["provision.${DUSK_DOMAIN:-dusk.test}"]'
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      step-ca:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/nightfall/nightfall.toml:/etc/nightfall/nightfall.toml:ro
+      - ../k8s/base/nightfall/permissions.toml:/etc/nightfall/permissions.toml:ro
+      - { <<: *pki, target: /etc/nightfall/tls, volume: { subpath: nightfall-tls } }
+      - { <<: *pki, target: /etc/nightfall/pki/fleet-client-ca.crt, volume: { subpath: trust-anchors/fleet-client-ca.crt } }
+      - { <<: *pki, target: /etc/nightfall/pki/fleet-client-root.crt, volume: { subpath: trust-anchors/fleet-client-ca.crt } }
+      - { <<: *pki, target: /etc/nightfall/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
+      - { <<: *secret, target: /etc/nightfall/secrets/fleet-tokens.toml, volume: { subpath: fleet-token/fleet-tokens.toml } }
+      - { <<: *secret, target: /etc/nightfall/secrets/install-token-jwks.json, volume: { subpath: fleet-install-token-keys/install-token-jwks.json } }
+      - { <<: *secret, target: /etc/nightfall/secrets/device-id.key, volume: { subpath: fleet-device-id/device-id.key } }
+      - { <<: *secret, target: /etc/nightfall/secrets/provisioner.jwk, volume: { subpath: fleet-provisioner/provisioner.jwk } }
+      - { <<: *secret, target: /etc/nightfall/secrets/ledger-signing.key, volume: { subpath: nightfall-ledger/ledger-signing.key } }
+      - { <<: *secret, target: /etc/nightfall/secrets/ledger-param.key, volume: { subpath: nightfall-ledger/ledger-param.key } }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9100 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  dawn:
+    <<: [*restart, *logging]
+    image: dusk-dawn:dev
+    stop_grace_period: 360s
+    build:
+      context: ../..
+      dockerfile: services/dawn/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_DAWN_PORT-9443}:8443"
+    environment:
+      DAWN__INSTANCE: dawn-0
+      DAWN__NIGHTFALL__DEFAULT_INNER_ADDRESS: nightfall:8444
+      DAWN__NIGHTFALL__ALLOWED_INNER_ADDRESSES: '["nightfall:8444"]'
+      DAWN__NIGHTFALL__SERVER_NAME_SUFFIX: fleet.${DUSK_DOMAIN:-dusk.test}
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      ceph-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../k8s/base/dawn/dawn.toml:/etc/dawn/dawn.toml:ro
+      - { <<: *pki, target: /etc/dawn/tls, volume: { subpath: dawn-tls } }
+      - { <<: *pki, target: /etc/dawn/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
+      - { <<: *secret, target: /etc/dawn/secrets/output.key, volume: { subpath: dawn-output-key/output.key } }
+      - { <<: *secret, target: /etc/dawn/secrets/s3, volume: { subpath: ceph-dawn } }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/readyz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  twilight-migrate:
+    image: dusk-twilight:dev
+    build: &twilight-build
+      context: ../..
+      dockerfile: services/twilight/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    command: ["migrate"]
+    networks: [stack]
+    environment:
+      TWILIGHT__INSTANCE: twilight-migrate
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    volumes: &twilight-volumes
+      - ../k8s/base/twilight/twilight.yaml:/etc/twilight/twilight.yaml:ro
+      - { <<: *pki, target: /etc/twilight/tls, volume: { subpath: twilight-tls } }
+      - { <<: *pki, target: /etc/twilight/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
+      - { <<: *secret, target: /etc/twilight/pki/ledger-verify-jwks.json, volume: { subpath: nightfall-ledger-verify/ledger-verify-jwks.json } }
+      - { <<: *secret, target: /etc/twilight/secrets/postgres, volume: { subpath: postgres-twilight } }
+
+  twilight:
+    <<: [*restart, *logging]
+    image: dusk-twilight:dev
+    stop_grace_period: 60s
+    build: *twilight-build
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_TWILIGHT_PORT-8080}:8080"
+    environment:
+      TWILIGHT__INSTANCE: twilight-0
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      twilight-migrate:
+        condition: service_completed_successfully
+      dawn:
+        condition: service_started
+    volumes: *twilight-volumes
+
+  node:
+    <<: [*restart, *logging]
+    image: dusk-node:dev
+    build:
+      context: ../..
+      dockerfile: infra/node/Dockerfile
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+        FLEET: fleet.${DUSK_DOMAIN:-dusk.test}:8443
+        PROVISION: provision.${DUSK_DOMAIN:-dusk.test}:8443
+      secrets: [fleet-token]
+    networks: [stack]
+    deploy:
+      replicas: ${DUSK_NODES:-3}
+    depends_on:
+      nightfall:
+        condition: service_healthy
+    volumes:
+      - /var/lib/dusk
+      - { <<: *pki, target: /etc/dusk/fleet-server-ca.pem, volume: { subpath: trust-anchors/fleet-server-ca.crt } }
+
+  signoz-migrate:
+    profiles: [signoz]
+    image: signoz/signoz-otel-collector:v0.144.12
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN="tcp://signoz:$$(cat /run/secrets/clickhouse-signoz/password)@clickhouse:9000"
+        && /signoz-otel-collector migrate ready
+        && /signoz-otel-collector migrate bootstrap
+        && /signoz-otel-collector migrate sync up
+        && /signoz-otel-collector migrate async up
+    networks: [stack]
+    environment:
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER: dusk
+      SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION: "true"
+      SIGNOZ_OTEL_COLLECTOR_TIMEOUT: 10m
+    depends_on:
+      clickhouse-schema:
+        condition: service_completed_successfully
+    volumes:
+      - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
+
+  signoz:
+    <<: [*restart, *logging]
+    profiles: [signoz]
+    image: signoz/signoz:v0.145.0
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN="tcp://clickhouse:9000/?username=signoz&password=$$(cat /run/secrets/clickhouse-signoz/password)"
+        SIGNOZ_SQLSTORE_POSTGRES_DSN="postgres://signoz:$$(cat /run/secrets/postgres-signoz/password)@postgres:5432/signoz?sslmode=disable"
+        SIGNOZ_USER_ROOT_PASSWORD="$$(cat /run/secrets/signoz-admin/password)"
+        && exec ./signoz server
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_SIGNOZ_PORT-8081}:8080"
+    environment:
+      SIGNOZ_TELEMETRYSTORE_PROVIDER: clickhouse
+      SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_CLUSTER: dusk
+      SIGNOZ_SQLSTORE_PROVIDER: postgres
+      SIGNOZ_ALERTMANAGER_PROVIDER: signoz
+      SIGNOZ_EMAILING_ENABLED: "false"
+      SIGNOZ_PROMETHEUS_ACTIVE__QUERY__TRACKER_ENABLED: "false"
+      SIGNOZ_USER_ROOT_ENABLED: "true"
+      SIGNOZ_USER_ROOT_EMAIL: admin@${DUSK_DOMAIN:-dusk.test}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      signoz-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - signoz:/var/lib/signoz
+      - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
+      - { <<: *secret, target: /run/secrets/postgres-signoz, volume: { subpath: postgres-signoz } }
+      - { <<: *secret, target: /run/secrets/signoz-admin, volume: { subpath: signoz-admin } }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  signoz-dashboards:
+    profiles: [signoz]
+    image: python:3.14.8-slim-trixie
+    entrypoint: ["python", "/scripts/dashboards.py", "/dashboards"]
+    networks: [stack]
+    environment:
+      SIGNOZ_URL: http://signoz:8080
+      SIGNOZ_EMAIL: admin@${DUSK_DOMAIN:-dusk.test}
+      SIGNOZ_PASSWORD_FILE: /run/secrets/signoz-admin/password
+    depends_on:
+      signoz:
+        condition: service_healthy
+    volumes:
+      - ../k8s/base/signoz/dashboards.py:/scripts/dashboards.py:ro
+      - ../k8s/base/signoz/dashboards:/dashboards:ro
+      - { <<: *secret, target: /run/secrets/signoz-admin, volume: { subpath: signoz-admin } }
+
+  signoz-ingester:
+    <<: [*restart, *logging]
+    profiles: [signoz]
+    image: signoz/signoz-otel-collector:v0.144.12
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export CLICKHOUSE_PASSWORD="$$(cat /run/secrets/clickhouse-signoz/password)"
+        && exec /signoz-otel-collector --config=/etc/signoz/collector.yaml --copy-path=/var/tmp/collector-config.yaml
+    networks: [stack]
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "9000"
+      CLICKHOUSE_USER: signoz
+      CLICKHOUSE_DATABASE: signoz_metrics
+      CLICKHOUSE_TRACE_DATABASE: signoz_traces
+      CLICKHOUSE_LOG_DATABASE: signoz_logs
+      CLICKHOUSE_METER_DATABASE: signoz_meter
+      LOW_CARDINAL_EXCEPTION_GROUPING: "false"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      signoz:
+        condition: service_healthy
+    volumes:
+      - ../k8s/base/signoz/collector.yaml:/etc/signoz/collector.yaml:ro
+      - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
+
+  verify:
+    image: python:3.14.8-slim-trixie
+    profiles: [verify]
+    networks: [stack]
+    working_dir: /tests
+    entrypoint:
+      - /bin/sh
+      - -c
+      - pip install --quiet --no-cache-dir --root-user-action ignore --disable-pip-version-check -r requirements.txt && exec python -m pytest -q -p no:cacheprovider "$$@"
+      - verify
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
+      STEP_CA_URL: https://step-ca:9000
+      STEP_CA_ROOT: /pki/trust-anchors/fleet-client-ca.crt
+      PROVISIONER_KEY: /secrets/fleet-provisioner/provisioner.jwk
+      KAFKA_BROKERS: kafka:9092
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_PASSWORD_FILE: /secrets/clickhouse-admin/password
+      S3_ENDPOINT: http://ceph:8080
+      SECRETS_DIRECTORY: /secrets
+      CONTRACTS_DIRECTORY: /contracts
+      OTEL_COLLECTOR_URL: http://otel-collector:4318
+      POSTGRES_HOST: postgres
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_PASSWORD_FILE: /secrets/grafana-admin/password
+      VERIFY_LAKE: ${VERIFY_LAKE:-}
+      REPOSITORY_DIRECTORY: /repository
+    volumes:
+      - ../tests:/tests:ro
+      - ../k8s/base/nightfall/permissions.toml:/repository/infra/k8s/base/nightfall/permissions.toml:ro
+      - ../../base:/repository/base:ro
+      - ../../dusk/src/dusk_capnp/capnp:/repository/dusk/src/dusk_capnp/capnp:ro
+      - ../grafana/dashboards:/grafana/dashboards:ro
+      - ../k8s/base/signoz/dashboards:/k8s/base/signoz/dashboards:ro
+      - ../k8s/base/clickhouse/schema:/k8s/base/clickhouse/schema:ro
+      - ../../services/contracts/kafka:/contracts:ro
+      - { <<: *pki, target: /pki/trust-anchors, volume: { subpath: trust-anchors } }
+      - { <<: *secret, target: /secrets/fleet-provisioner, volume: { subpath: fleet-provisioner } }
+      - { <<: *secret, target: /secrets/clickhouse-admin, volume: { subpath: clickhouse-admin } }
+      - { <<: *secret, target: /secrets/grafana-admin, volume: { subpath: grafana-admin } }
+      - { <<: *secret, target: /secrets/ceph-admin, volume: { subpath: ceph-admin } }
+      - { <<: *secret, target: /secrets/ceph-ledger-writer, volume: { subpath: ceph-ledger-writer } }
+      - { <<: *secret, target: /secrets/ceph-vector, volume: { subpath: ceph-vector } }
+      - { <<: *secret, target: /secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
+      - { <<: *secret, target: /secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+      - { <<: *secret, target: /secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
+      - { <<: *secret, target: /secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
+      - { <<: *secret, target: /secrets/postgres-signoz, volume: { subpath: postgres-signoz } }

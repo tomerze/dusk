@@ -1,0 +1,64 @@
+transforms:
+  ledger:
+    type: remap
+    inputs: [kafka_ledger]
+    files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/ledger.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  connections:
+    type: remap
+    inputs: [kafka_connections]
+    files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/connections.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  enrollments:
+    type: remap
+    inputs: [kafka_enrollments]
+    files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/enrollments.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  process_results:
+    type: remap
+    inputs: [kafka_process_results]
+    files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/process_results.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  process_output:
+    type: remap
+    inputs: [kafka_process_output]
+    files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/process_output.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  files:
+    type: remap
+    inputs: [kafka_files]
+    files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/files.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  otel_logs:
+    type: remap
+    inputs: [kafka_otel_logs]
+    files: [/etc/vector/remaps/message.vrl, /etc/vector/remaps/otel_logs.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  otel_spans:
+    type: remap
+    inputs: [kafka_otel_spans]
+    files: [/etc/vector/remaps/message.vrl, /etc/vector/remaps/otel_spans.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false
+  otel_metrics:
+    type: remap
+    inputs: [kafka_otel_metrics]
+    files: [/etc/vector/remaps/message.vrl, /etc/vector/remaps/otel_metrics.vrl]
+    drop_on_error: true
+    drop_on_abort: true
+    reroute_dropped: false

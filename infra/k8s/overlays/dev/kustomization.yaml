@@ -1,14 +1,49 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
+namespace: dusk
 resources:
-  - ../../base/ceph
-  - ../../base/clickhouse
-  - ../../base/dusk-gateway
-  - ../../base/kafka
-  - ../../base/otel-collector
-  - ../../base/postgres
+  - namespace.yaml
+  - ../../base/network-policies
+  - ../../base/secrets-init
+  - ../../base/pki-init
   - ../../base/step-ca
+  - ../../base/kafka
+  - ../../base/kafka-init
+  - ../../base/postgres
+  - ../../base/clickhouse-keeper
+  - ../../base/clickhouse
+  - ../../base/ceph
+  - ../../base/ceph-init
+  - ../../base/otel-collector
   - ../../base/vector
-
-namespace: dev
+  - ../../base/grafana
+  - ../../base/signoz
+  - ../../base/nightfall
+  - ../../base/dawn
+  - ../../base/twilight
+patches:
+  - path: resources.yaml
+  - target:
+      kind: StatefulSet
+      name: nightfall|dawn
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: vector|grafana
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: twilight
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+      - op: add
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent

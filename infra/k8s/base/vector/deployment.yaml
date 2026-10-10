@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vector
+  labels:
+    app.kubernetes.io/name: vector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vector
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vector
+          image: dusk-vector:dev
+          env:
+            - name: KAFKA_BROKERS
+              value: kafka:9092
+            - name: CLICKHOUSE_ENDPOINT
+              value: http://clickhouse:8123
+            - name: S3_ENDPOINT
+              value: http://ceph:8080
+            - name: S3_REGION
+              value: us-east-1
+            - name: LAKE_BUCKET
+              value: dusk-lake
+            - name: EVIDENCE_BUCKET
+              value: dusk-ledger-evidence
+          ports:
+            - name: api
+              containerPort: 8686
+            - name: metrics
+              containerPort: 9598
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/vector
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: secrets
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: clickhouse-vector
+                  items:
+                    - key: password
+                      path: clickhouse/password
+              - secret:
+                  name: ceph-vector
+                  items:
+                    - key: access-key
+                      path: lake/access-key
+                    - key: secret-key
+                      path: lake/secret-key
+              - secret:
+                  name: ceph-ledger-writer
+                  items:
+                    - key: access-key
+                      path: evidence/access-key
+                    - key: secret-key
+                      path: evidence/secret-key

@@ -1,0 +1,187 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.connections
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.connections
+  partitions: 48
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.census
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.census
+  partitions: 6
+  replicas: 3
+  config:
+    cleanup.policy: compact
+    max.message.bytes: 2097152
+    segment.ms: 600000
+    min.cleanable.dirty.ratio: 0.1
+    delete.retention.ms: 3600000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.ledger
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.ledger
+  partitions: 32
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+    unclean.leader.election.enable: false
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.enrollments
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.enrollments
+  partitions: 12
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.node-state
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.node-state
+  partitions: 6
+  replicas: 3
+  config:
+    cleanup.policy: compact
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.process-results
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.process-results
+  partitions: 48
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.process-output
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.process-output
+  partitions: 24
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.files
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.files
+  partitions: 12
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.intended-processes
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.intended-processes
+  partitions: 12
+  replicas: 3
+  config:
+    cleanup.policy: compact
+    segment.ms: 600000
+    min.cleanable.dirty.ratio: 0.1
+    delete.retention.ms: 3600000
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.otel-logs
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.otel-logs
+  partitions: 24
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 259200000
+    max.message.bytes: 4194304
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.otel-spans
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.otel-spans
+  partitions: 24
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 259200000
+    max.message.bytes: 4194304
+    min.insync.replicas: 2
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: dusk.otel-metrics
+  labels:
+    strimzi.io/cluster: dusk
+spec:
+  topicName: dusk.otel-metrics
+  partitions: 24
+  replicas: 3
+  config:
+    cleanup.policy: delete
+    retention.ms: 259200000
+    max.message.bytes: 4194304
+    min.insync.replicas: 2

@@ -1,0 +1,7 @@
+secure: true
+port: 9440
+openSSL:
+  client:
+    caConfig: /etc/clickhouse-client/dusk/internal-ca.crt
+    loadDefaultCAFile: false
+    verificationMode: strict

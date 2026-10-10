@@ -1,0 +1,54 @@
+if !is_array(message.resourceSpans) {
+  log({"message": "dropped a record that is not an OTLP JSON traces export", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+span_kinds = ["SPAN_KIND_UNSPECIFIED", "SPAN_KIND_INTERNAL", "SPAN_KIND_SERVER", "SPAN_KIND_CLIENT", "SPAN_KIND_PRODUCER", "SPAN_KIND_CONSUMER"]
+status_codes = ["STATUS_CODE_UNSET", "STATUS_CODE_OK", "STATUS_CODE_ERROR"]
+rows = []
+for_each(array!(message.resourceSpans)) -> |_resource_position, resource_spans| {
+  for_each(array(resource_spans.scopeSpans) ?? []) -> |_scope_position, scope_spans| {
+    for_each(array(scope_spans.spans) ?? []) -> |_span_position, span| {
+      maps = {}
+      for_each({"attributes": span.attributes, "resource_attributes": resource_spans.resource.attributes}) -> |name, list| {
+        converted = {}
+        for_each(array(list) ?? []) -> |_attribute_position, attribute| {
+          value = object(attribute.value) ?? {}
+          text = if length(value) == 0 { "" } else if value.stringValue != null { to_string(value.stringValue) ?? "" } else if value.boolValue != null { to_string(value.boolValue) ?? "" } else if value.intValue != null { to_string(value.intValue) ?? "" } else if value.doubleValue != null { to_string(value.doubleValue) ?? "" } else if value.bytesValue != null { to_string(value.bytesValue) ?? "" } else { encode_json(value) }
+          converted = set!(converted, [to_string(attribute.key) ?? ""], text)
+        }
+        maps = set!(maps, [name], converted)
+      }
+      start_nanoseconds = to_int(span.startTimeUnixNano) ?? 0
+      end_nanoseconds = to_int(span.endTimeUnixNano) ?? start_nanoseconds
+      time = from_unix_timestamp(start_nanoseconds, unit: "nanoseconds") ?? now()
+      kind = if is_integer(span.kind) { get(span_kinds, [int!(span.kind)]) ?? to_string!(span.kind) } else { to_string(span.kind) ?? "SPAN_KIND_UNSPECIFIED" }
+      status_code = if is_integer(span.status.code) { get(status_codes, [int!(span.status.code)]) ?? to_string!(span.status.code) } else { to_string(span.status.code) ?? "STATUS_CODE_UNSET" }
+      duration_nanoseconds = if end_nanoseconds > start_nanoseconds { end_nanoseconds - start_nanoseconds } else { 0 }
+      rows = push(rows, {
+        "time": time,
+        "end_time": from_unix_timestamp(end_nanoseconds, unit: "nanoseconds") ?? time,
+        "duration_nanoseconds": duration_nanoseconds,
+        "service_name": get(maps, ["resource_attributes", "service.name"]) ?? "",
+        "name": to_string(span.name) ?? "",
+        "kind": kind,
+        "trace_id": to_string(span.traceId) ?? "",
+        "span_id": to_string(span.spanId) ?? "",
+        "parent_span_id": to_string(span.parentSpanId) ?? "",
+        "trace_state": to_string(span.traceState) ?? "",
+        "flags": to_int(span.flags) ?? 0,
+        "status_code": status_code,
+        "status_message": to_string(span.status.message) ?? "",
+        "attributes": maps.attributes,
+        "resource_attributes": maps.resource_attributes,
+        "scope_name": to_string(scope_spans.scope.name) ?? "",
+        "scope_version": to_string(scope_spans.scope.version) ?? "",
+        "events": encode_json(array(span.events) ?? []),
+        "links": encode_json(array(span.links) ?? []),
+        "kafka_partition": coordinates.partition,
+        "kafka_offset": coordinates.offset,
+        "dt": format_timestamp!(time, "%F")
+      })
+    }
+  }
+}
+. = rows

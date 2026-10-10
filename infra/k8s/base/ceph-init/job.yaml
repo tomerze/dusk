@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ceph-init
+  labels:
+    app.kubernetes.io/name: ceph-init
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ceph-init
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ceph-init
+          image: amazon/aws-cli:2.37.9
+          command: ["/scripts/buckets.sh"]
+          env:
+            - name: S3_ENDPOINT
+              value: http://ceph:8080
+            - name: EVIDENCE_RETENTION_MODE
+              value: GOVERNANCE
+            - name: EVIDENCE_RETENTION_DAYS
+              value: "1"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: admin
+              mountPath: /run/secrets/ceph-admin
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: ceph-init
+            defaultMode: 0555
+        - name: admin
+          secret:
+            secretName: ceph-admin
+            defaultMode: 0400

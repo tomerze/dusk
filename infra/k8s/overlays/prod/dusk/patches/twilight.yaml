@@ -1,0 +1,62 @@
+- op: test
+  path: /spec/template/spec/volumes/0/projected/sources/1/secret/name
+  value: twilight-tls
+- op: remove
+  path: /spec/template/spec/volumes/0/projected/sources/1
+- op: add
+  path: /spec/template/spec/volumes/0/projected/sources/-
+  value:
+    secret:
+      name: postgres-ca
+      items:
+        - key: ca.crt
+          path: pki/postgres-ca.crt
+- op: add
+  path: /spec/template/spec/volumes/0/projected/sources/-
+  value:
+    secret:
+      name: twilight
+      items:
+        - key: user.crt
+          path: kafka/user.crt
+        - key: user.key
+          path: kafka/user.key
+- op: add
+  path: /spec/template/spec/volumes/0/projected/sources/-
+  value:
+    secret:
+      name: dusk-cluster-ca-cert
+      items:
+        - key: ca.crt
+          path: kafka/ca.crt
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: tls
+    csi:
+      driver: csi.cert-manager.io
+      readOnly: true
+      volumeAttributes:
+        csi.cert-manager.io/issuer-name: internal
+        csi.cert-manager.io/issuer-kind: Issuer
+        csi.cert-manager.io/common-name: ${POD_NAME}
+        csi.cert-manager.io/dns-names: ${POD_NAME}
+        csi.cert-manager.io/uri-sans: urn:dusk:principal:${POD_NAME}
+        csi.cert-manager.io/duration: 24h
+        csi.cert-manager.io/renew-before: 8h
+        csi.cert-manager.io/key-algorithm: ECDSA
+        csi.cert-manager.io/key-size: "256"
+        csi.cert-manager.io/key-usages: digital signature,client auth
+        csi.cert-manager.io/fs-group: "65532"
+- op: add
+  path: /spec/template/spec/initContainers/0/volumeMounts/-
+  value:
+    name: tls
+    mountPath: /var/run/twilight/tls
+    readOnly: true
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: tls
+    mountPath: /var/run/twilight/tls
+    readOnly: true

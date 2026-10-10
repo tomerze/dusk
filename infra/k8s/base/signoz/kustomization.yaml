@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: dusk-stack
+resources:
+  - signoz.yaml
+  - network-policy.yaml
+  - dashboards-job.yaml
+configMapGenerator:
+  - name: signoz-otel-collector
+    behavior: merge
+    files:
+      - otel-collector-config.yaml=collector.yaml
+  - name: signoz-dashboards
+    files:
+      - dashboards.py
+      - dashboards/connections.json
+      - dashboards/enrollments.json
+      - dashboards/ledger.json
+      - dashboards/process-results.json
+patches:
+  - target:
+      kind: Deployment
+      name: signoz-otel-collector
+    patch: |-
+      - op: test
+        path: /spec/template/spec/containers/0/args/1
+        value: --manager-config=/conf/otel-collector-opamp-config.yaml
+      - op: remove
+        path: /spec/template/spec/containers/0/args/1
+      - op: add
+        path: /spec/template/spec/automountServiceAccountToken
+        value: false
+  - target:
+      kind: StatefulSet
+      name: signoz
+    patch: |-
+      - op: add
+        path: /spec/template/spec/automountServiceAccountToken
+        value: false
+  - target:
+      kind: Job
+      name: signoz-telemetrystore-migrator
+    patch: |-
+      - op: add
+        path: /spec/template/spec/automountServiceAccountToken
+        value: false

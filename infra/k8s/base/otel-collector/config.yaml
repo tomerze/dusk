@@ -1,0 +1,72 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 16
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+exporters:
+  kafka:
+    brokers:
+      - ${env:KAFKA_BROKERS}
+    client_id: otel-collector
+    logs:
+      topic: dusk.otel-logs
+      encoding: otlp_json
+    metrics:
+      topic: dusk.otel-metrics
+      encoding: otlp_json
+    traces:
+      topic: dusk.otel-spans
+      encoding: otlp_json
+    producer:
+      max_message_bytes: 4194304
+      required_acks: -1
+      compression: zstd
+      allow_auto_topic_creation: false
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 1000
+      batch:
+        flush_timeout: 1s
+        sizer: items
+        min_size: 1000
+        max_size: 2000
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      encoding: json
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [kafka]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [kafka]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [kafka]

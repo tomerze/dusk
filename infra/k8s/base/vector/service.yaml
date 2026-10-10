@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-pods
+  labels:
+    app.kubernetes.io/name: vector
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: vector
+  ports:
+    - name: metrics
+      port: 9598
+      targetPort: metrics

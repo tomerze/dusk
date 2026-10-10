@@ -1,0 +1,25 @@
+listen: 0.0.0.0:8080
+health_listen: 0.0.0.0:9102
+drain_seconds: 30
+log_level: info
+database:
+  url: postgres://twilight@postgres-rw:5432/inventory?sslmode=verify-full&sslrootcert=/etc/twilight/pki/postgres-ca.crt&passfile=/etc/twilight/secrets/postgres/pgpass
+  max_connections: 20
+kafka:
+  brokers:
+    - dusk-kafka-bootstrap:9093
+  allow_plaintext: false
+  tls:
+    ca: /etc/twilight/kafka/ca.crt
+    certificate: /etc/twilight/kafka/user.crt
+    key: /etc/twilight/kafka/user.key
+dawn:
+  service: dawn
+  port: 8443
+  server_name: dawn
+  ca: /etc/twilight/pki/internal-ca.crt
+  certificate: /var/run/twilight/tls/tls.crt
+  key: /var/run/twilight/tls/tls.key
+reconcile:
+  enabled: true
+  ledger_keys: /etc/twilight/pki/ledger-verify-jwks.json

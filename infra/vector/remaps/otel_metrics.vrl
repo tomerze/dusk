@@ -1,0 +1,84 @@
+if !is_array(message.resourceMetrics) {
+  log({"message": "dropped a record that is not an OTLP JSON metrics export", "topic": coordinates.topic, "partition": coordinates.partition, "offset": coordinates.offset}, level: "warn", rate_limit_secs: 0)
+  abort
+}
+temporalities = ["AGGREGATION_TEMPORALITY_UNSPECIFIED", "AGGREGATION_TEMPORALITY_DELTA", "AGGREGATION_TEMPORALITY_CUMULATIVE"]
+rows = []
+for_each(array!(message.resourceMetrics)) -> |_resource_position, resource_metrics| {
+  for_each(array(resource_metrics.scopeMetrics) ?? []) -> |_scope_position, scope_metrics| {
+    for_each(array(scope_metrics.metrics) ?? []) -> |_metric_position, metric| {
+      metric_type = ""
+      for_each(["gauge", "sum", "histogram", "exponentialHistogram", "summary"]) -> |_type_position, candidate| {
+        if metric_type == "" && is_object(get(metric, [candidate]) ?? null) {
+          metric_type = candidate
+        }
+      }
+      data = object(get(metric, [metric_type]) ?? {}) ?? {}
+      temporality = data.aggregationTemporality
+      aggregation_temporality = if is_integer(temporality) { get(temporalities, [int!(temporality)]) ?? to_string!(temporality) } else { to_string(temporality) ?? "" }
+      for_each(array(data.dataPoints) ?? []) -> |_point_position, point| {
+        maps = {}
+        for_each({"attributes": point.attributes, "resource_attributes": resource_metrics.resource.attributes}) -> |name, list| {
+          converted = {}
+          for_each(array(list) ?? []) -> |_attribute_position, attribute| {
+            value = object(attribute.value) ?? {}
+            text = if length(value) == 0 { "" } else if value.stringValue != null { to_string(value.stringValue) ?? "" } else if value.boolValue != null { to_string(value.boolValue) ?? "" } else if value.intValue != null { to_string(value.intValue) ?? "" } else if value.doubleValue != null { to_string(value.doubleValue) ?? "" } else if value.bytesValue != null { to_string(value.bytesValue) ?? "" } else { encode_json(value) }
+            converted = set!(converted, [to_string(attribute.key) ?? ""], text)
+          }
+          maps = set!(maps, [name], converted)
+        }
+        bucket_counts = []
+        for_each(array(point.bucketCounts) ?? []) -> |_bucket_position, bucket| { bucket_counts = push(bucket_counts, to_int(bucket) ?? 0) }
+        positive_bucket_counts = []
+        for_each(array(point.positive.bucketCounts) ?? []) -> |_bucket_position, bucket| { positive_bucket_counts = push(positive_bucket_counts, to_int(bucket) ?? 0) }
+        negative_bucket_counts = []
+        for_each(array(point.negative.bucketCounts) ?? []) -> |_bucket_position, bucket| { negative_bucket_counts = push(negative_bucket_counts, to_int(bucket) ?? 0) }
+        explicit_bounds = []
+        for_each(array(point.explicitBounds) ?? []) -> |_bound_position, bound| { explicit_bounds = push(explicit_bounds, to_float(bound) ?? 0.0) }
+        quantiles = []
+        for_each(array(point.quantileValues) ?? []) -> |_quantile_position, quantile| { quantiles = push(quantiles, {"quantile": to_float(quantile.quantile) ?? 0.0, "value": to_float(quantile.value) ?? 0.0}) }
+        point_nanoseconds = to_int(point.timeUnixNano) ?? 0
+        time = if point_nanoseconds == 0 { now() } else { from_unix_timestamp(point_nanoseconds, unit: "nanoseconds") ?? now() }
+        start_nanoseconds = to_int(point.startTimeUnixNano) ?? 0
+        start_time = if start_nanoseconds == 0 { time } else { from_unix_timestamp(start_nanoseconds, unit: "nanoseconds") ?? time }
+        value = if point.asDouble != null { to_float(point.asDouble) ?? 0.0 } else if point.asInt != null { to_float(to_int(point.asInt) ?? 0) } else { 0.0 }
+        min = if point.min == null { null } else { to_float(point.min) ?? null }
+        max = if point.max == null { null } else { to_float(point.max) ?? null }
+        rows = push(rows, {
+          "time": time,
+          "start_time": start_time,
+          "service_name": get(maps, ["resource_attributes", "service.name"]) ?? "",
+          "metric_name": to_string(metric.name) ?? "",
+          "metric_description": to_string(metric.description) ?? "",
+          "metric_unit": to_string(metric.unit) ?? "",
+          "metric_type": metric_type,
+          "aggregation_temporality": aggregation_temporality,
+          "is_monotonic": to_bool(data.isMonotonic) ?? false,
+          "value": value,
+          "count": to_int(point.count) ?? 0,
+          "sum": to_float(point.sum) ?? 0.0,
+          "min": min,
+          "max": max,
+          "bucket_counts": bucket_counts,
+          "explicit_bounds": explicit_bounds,
+          "exponential_scale": to_int(point.scale) ?? 0,
+          "exponential_zero_count": to_int(point.zeroCount) ?? 0,
+          "exponential_positive_offset": to_int(point.positive.offset) ?? 0,
+          "exponential_positive_bucket_counts": positive_bucket_counts,
+          "exponential_negative_offset": to_int(point.negative.offset) ?? 0,
+          "exponential_negative_bucket_counts": negative_bucket_counts,
+          "quantiles": quantiles,
+          "flags": to_int(point.flags) ?? 0,
+          "attributes": maps.attributes,
+          "resource_attributes": maps.resource_attributes,
+          "scope_name": to_string(scope_metrics.scope.name) ?? "",
+          "scope_version": to_string(scope_metrics.scope.version) ?? "",
+          "kafka_partition": coordinates.partition,
+          "kafka_offset": coordinates.offset,
+          "dt": format_timestamp!(time, "%F")
+        })
+      }
+    }
+  }
+}
+. = rows

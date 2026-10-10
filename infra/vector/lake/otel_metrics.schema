@@ -1,0 +1,65 @@
+message otel_metrics {
+  required int64 time (TIMESTAMP(NANOS,true));
+  required int64 start_time (TIMESTAMP(NANOS,true));
+  required binary service_name (STRING);
+  required binary metric_name (STRING);
+  required binary metric_description (STRING);
+  required binary metric_unit (STRING);
+  required binary metric_type (STRING);
+  required binary aggregation_temporality (STRING);
+  required boolean is_monotonic;
+  required double value;
+  required int64 count (INTEGER(64,false));
+  required double sum;
+  optional double min;
+  optional double max;
+  required group bucket_counts (LIST) {
+    repeated group list {
+      required int64 element (INTEGER(64,false));
+    }
+  }
+  required group explicit_bounds (LIST) {
+    repeated group list {
+      required double element;
+    }
+  }
+  required int32 exponential_scale;
+  required int64 exponential_zero_count (INTEGER(64,false));
+  required int32 exponential_positive_offset;
+  required group exponential_positive_bucket_counts (LIST) {
+    repeated group list {
+      required int64 element (INTEGER(64,false));
+    }
+  }
+  required int32 exponential_negative_offset;
+  required group exponential_negative_bucket_counts (LIST) {
+    repeated group list {
+      required int64 element (INTEGER(64,false));
+    }
+  }
+  required group quantiles (LIST) {
+    repeated group list {
+      required group element {
+        required double quantile;
+        required double value;
+      }
+    }
+  }
+  required int32 flags (INTEGER(32,false));
+  required group attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required group resource_attributes (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      required binary value (STRING);
+    }
+  }
+  required binary scope_name (STRING);
+  required binary scope_version (STRING);
+  required int32 kafka_partition (INTEGER(32,false));
+  required int64 kafka_offset (INTEGER(64,false));
+}

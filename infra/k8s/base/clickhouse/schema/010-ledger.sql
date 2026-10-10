@@ -1,0 +1,46 @@
+CREATE TABLE IF NOT EXISTS dusk.ledger ON CLUSTER dusk
+(
+    time DateTime64(9, 'UTC'),
+    id UUID,
+    schema LowCardinality(String),
+    kind LowCardinality(String),
+    instance LowCardinality(String),
+    `partition` UInt32,
+    sequence UInt64,
+    previous_hash String,
+    hash String,
+    device_id String,
+    installation_id String,
+    namespace_id Nullable(String),
+    epoch Nullable(UInt64),
+    principal LowCardinality(String),
+    pid UInt64,
+    intent_campaign_id Nullable(UUID),
+    intent_principal LowCardinality(Nullable(String)),
+    intent_subject Nullable(String),
+    session_id Nullable(UUID),
+    call_id Nullable(UUID),
+    cap_id Nullable(UInt64),
+    parent_cap_id Nullable(UInt64),
+    direction LowCardinality(Nullable(String)),
+    action LowCardinality(Nullable(String)),
+    interface_id Nullable(String),
+    method_id Nullable(UInt16),
+    param_fields Array(Tuple(name String, redacted Bool)),
+    param_cap_ids Array(UInt64),
+    param_hash String,
+    result_code LowCardinality(Nullable(String)),
+    result_cap_ids Array(UInt64),
+    event LowCardinality(Nullable(String)),
+    event_detail Nullable(String),
+    key_id Nullable(String),
+    signature Nullable(String),
+    kafka_partition UInt32,
+    kafka_offset UInt64,
+    INDEX pid_index pid TYPE bloom_filter(0.01) GRANULARITY 4,
+    INDEX sequence_index sequence TYPE minmax GRANULARITY 4
+)
+ENGINE = ReplicatedReplacingMergeTree
+PARTITION BY toYYYYMM(time)
+ORDER BY (device_id, installation_id, time, id)
+TTL time + INTERVAL 30 DAY DELETE;

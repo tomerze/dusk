@@ -1,0 +1,235 @@
+{
+  "uid": "dusk-twilight",
+  "title": "twilight",
+  "description": "twilight's own metrics, scraped by the OTel collector into dusk.otel_metrics.",
+  "tags": [
+    "dusk",
+    "twilight"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "metric",
+        "label": "Metric",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "dusk-clickhouse"
+        },
+        "query": {
+          "rawSql": "SELECT DISTINCT metric_name FROM dusk.otel_metrics WHERE service_name = 'twilight' AND time > now() - INTERVAL 1 DAY ORDER BY metric_name",
+          "refId": "variable"
+        },
+        "definition": "SELECT DISTINCT metric_name FROM dusk.otel_metrics WHERE service_name = 'twilight' AND time > now() - INTERVAL 1 DAY ORDER BY metric_name",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "dusk"
+      ],
+      "asDropdown": true,
+      "title": "Dusk dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Health",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Instances reporting",
+      "description": "Distinct instances with metrics in the last five minutes.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT uniqExact(resource_attributes['service.instance.id']) AS instances FROM dusk.otel_metrics WHERE service_name = 'twilight' AND time > now() - INTERVAL 5 MINUTE",
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Up",
+      "description": "Scrape targets that answered the last scrape.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT sum(latest) AS up FROM (SELECT resource_attributes['service.instance.id'] AS instance, argMax(value, time) AS latest FROM dusk.otel_metrics WHERE service_name = 'twilight' AND metric_name = 'up' AND time > now() - INTERVAL 5 MINUTE GROUP BY instance)",
+          "editorType": "sql",
+          "format": 1,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Metrics",
+      "collapsed": false,
+      "id": 4,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "$metric",
+      "description": "Counters as a per-second rate, gauges as their latest value, per instance and attribute set.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "dusk-clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "dusk-clickhouse"
+          },
+          "rawSql": "SELECT t, series, if(any(kind) = 'sum', greatest(highest - lagInFrame(highest, 1, highest) OVER (PARTITION BY series ORDER BY t), 0) / $__interval_s, highest) AS value FROM (\n  SELECT $__timeInterval(time) AS t, concat(resource_attributes['service.instance.id'], ' ', toString(attributes)) AS series, any(metric_type) AS kind, if(any(metric_type) = 'sum', max(value), argMax(value, time)) AS highest\n  FROM dusk.otel_metrics\n  WHERE $__timeFilter(time) AND service_name = 'twilight' AND metric_name = '${metric}' AND metric_type IN ('gauge', 'sum')\n  GROUP BY t, series)\nGROUP BY t, series, highest ORDER BY t",
+          "editorType": "sql",
+          "format": 0,
+          "pluginVersion": "4.22.1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "repeat": "metric",
+      "repeatDirection": "h",
+      "maxPerRow": 2
+    }
+  ]
+}

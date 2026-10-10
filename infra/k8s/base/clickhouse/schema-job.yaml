@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-schema
+  labels:
+    app.kubernetes.io/name: clickhouse-schema
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse-schema
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: clickhouse-schema
+          image: clickhouse/clickhouse-server:26.8.19.9
+          command: ["/schema/apply-schema.sh"]
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse
+            - name: CLICKHOUSE_PASSWORD_FILE
+              value: /run/secrets/clickhouse-admin/password
+            - name: SCHEMA_DIRECTORY
+              value: /schema
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+            - name: password
+              mountPath: /run/secrets/clickhouse-admin
+              readOnly: true
+      volumes:
+        - name: schema
+          configMap:
+            name: clickhouse-schema
+            defaultMode: 0555
+        - name: password
+          secret:
+            secretName: clickhouse-admin
+            defaultMode: 0444

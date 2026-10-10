@@ -1,0 +1,43 @@
+apiVersion: 1
+
+datasources:
+  - name: Inventory
+    uid: dusk-inventory
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: ${DUSK_POSTGRES_ADDRESS}
+    user: ${DUSK_POSTGRES_USER}
+    isDefault: false
+    editable: false
+    jsonData:
+      database: inventory
+      sslmode: ${DUSK_POSTGRES_SSLMODE}
+      tlsConfigurationMethod: file-path
+      sslRootCertFile: ${DUSK_POSTGRES_ROOT_CERTIFICATE}
+      postgresVersion: 1700
+      timescaledb: false
+      maxOpenConns: 10
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: $__file{/run/secrets/postgres-grafana/password}
+
+  - name: ClickHouse
+    uid: dusk-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      host: ${DUSK_CLICKHOUSE_HOST}
+      port: ${DUSK_CLICKHOUSE_PORT}
+      protocol: native
+      secure: ${DUSK_CLICKHOUSE_SECURE}
+      tlsAuthWithCACert: ${DUSK_CLICKHOUSE_SECURE}
+      username: ${DUSK_CLICKHOUSE_USER}
+      defaultDatabase: dusk
+      dialTimeout: "10"
+      queryTimeout: "120"
+    secureJsonData:
+      password: $__file{/run/secrets/clickhouse-grafana/password}
+      tlsCACert: ${DUSK_CLICKHOUSE_CA}

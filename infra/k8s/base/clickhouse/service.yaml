@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  labels:
+    app.kubernetes.io/name: clickhouse
+spec:
+  selector:
+    app.kubernetes.io/name: clickhouse
+  ports:
+    - name: http
+      port: 8123
+      targetPort: http
+    - name: native
+      port: 9000
+      targetPort: native
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-headless
+  labels:
+    app.kubernetes.io/name: clickhouse
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: clickhouse
+  ports:
+    - name: native
+      port: 9000
+      targetPort: native
+    - name: interserver
+      port: 9009
+      targetPort: interserver

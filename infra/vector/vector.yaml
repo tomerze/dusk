@@ -1,0 +1,808 @@
+data_dir: /var/lib/vector
+expire_metrics_secs: 300
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+secret:
+  clickhouse:
+    type: directory
+    path: /run/secrets/clickhouse
+    remove_trailing_whitespace: true
+  lake:
+    type: directory
+    path: /run/secrets/lake
+    remove_trailing_whitespace: true
+  evidence:
+    type: directory
+    path: /run/secrets/evidence
+    remove_trailing_whitespace: true
+
+sources:
+  kafka_ledger:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-ledger
+    topics: [dusk.ledger]
+    auto_offset_reset: earliest
+    log_namespace: false
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_connections:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-connections
+    topics: [dusk.connections]
+    auto_offset_reset: earliest
+    log_namespace: false
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_enrollments:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-enrollments
+    topics: [dusk.enrollments]
+    auto_offset_reset: earliest
+    log_namespace: false
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_process_results:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-process-results
+    topics: [dusk.process-results]
+    auto_offset_reset: earliest
+    log_namespace: false
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_process_output:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-process-output
+    topics: [dusk.process-output]
+    auto_offset_reset: earliest
+    log_namespace: false
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_files:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-files
+    topics: [dusk.files]
+    auto_offset_reset: earliest
+    log_namespace: false
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_otel_logs:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-otel-logs
+    topics: [dusk.otel-logs]
+    auto_offset_reset: earliest
+    log_namespace: true
+    decoding:
+      codec: json
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_otel_spans:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-otel-spans
+    topics: [dusk.otel-spans]
+    auto_offset_reset: earliest
+    log_namespace: true
+    decoding:
+      codec: json
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_otel_metrics:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-otel-metrics
+    topics: [dusk.otel-metrics]
+    auto_offset_reset: earliest
+    log_namespace: true
+    decoding:
+      codec: json
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  kafka_ledger_evidence:
+    type: kafka
+    bootstrap_servers: "${KAFKA_BROKERS:-kafka:9092}"
+    group_id: vector-ledger-evidence
+    topics: [dusk.ledger]
+    auto_offset_reset: earliest
+    log_namespace: true
+    decoding:
+      codec: bytes
+    librdkafka_options:
+      client.id: vector
+      queued.max.messages.kbytes: "16384"
+      allow.auto.create.topics: "false"
+      isolation.level: read_committed
+      security.protocol: "${KAFKA_SECURITY_PROTOCOL:-plaintext}"
+      ssl.ca.location: "${KAFKA_TLS_CA:-/etc/vector/kafka/ca.crt}"
+      ssl.certificate.location: "${KAFKA_TLS_CERTIFICATE:-/etc/vector/kafka/user.crt}"
+      ssl.key.location: "${KAFKA_TLS_KEY:-/etc/vector/kafka/user.key}"
+  vector_metrics:
+    type: internal_metrics
+    scrape_interval_secs: 15
+
+sinks:
+  clickhouse_ledger:
+    type: clickhouse
+    inputs: [ledger]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: ledger
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_connections:
+    type: clickhouse
+    inputs: [connections]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: connections
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_enrollments:
+    type: clickhouse
+    inputs: [enrollments]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: enrollments
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_process_results:
+    type: clickhouse
+    inputs: [process_results]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: process_results
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_process_output:
+    type: clickhouse
+    inputs: [process_output]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: process_output
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_files:
+    type: clickhouse
+    inputs: [files]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: files
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_otel_logs:
+    type: clickhouse
+    inputs: [otel_logs]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: otel_logs
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_otel_spans:
+    type: clickhouse
+    inputs: [otel_spans]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: otel_spans
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  clickhouse_otel_metrics:
+    type: clickhouse
+    inputs: [otel_metrics]
+    endpoint: "${CLICKHOUSE_ENDPOINT:-http://clickhouse:8123}"
+    tls:
+      ca_file: "${CLICKHOUSE_TLS_CA:-/etc/ssl/certs/ca-certificates.crt}"
+    database: dusk
+    table: otel_metrics
+    date_time_best_effort: true
+    skip_unknown_fields: false
+    auth:
+      strategy: basic
+      user: "${CLICKHOUSE_USER:-vector}"
+      password: "SECRET[clickhouse.password]"
+    encoding:
+      except_fields: [dt]
+    batch:
+      max_events: 20000
+      max_bytes: 16777216
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    request:
+      timeout_secs: 60
+    acknowledgements:
+      enabled: true
+  lake_ledger:
+    type: aws_s3
+    inputs: [ledger]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "ledger/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/ledger.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_connections:
+    type: aws_s3
+    inputs: [connections]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "connections/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/connections.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_enrollments:
+    type: aws_s3
+    inputs: [enrollments]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "enrollments/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/enrollments.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_process_results:
+    type: aws_s3
+    inputs: [process_results]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "process_results/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/process_results.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_process_output:
+    type: aws_s3
+    inputs: [process_output]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "process_output/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/process_output.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_files:
+    type: aws_s3
+    inputs: [files]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "files/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/files.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_otel_logs:
+    type: aws_s3
+    inputs: [otel_logs]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "otel_logs/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/otel_logs.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_otel_spans:
+    type: aws_s3
+    inputs: [otel_spans]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "otel_spans/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/otel_spans.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  lake_otel_metrics:
+    type: aws_s3
+    inputs: [otel_metrics]
+    bucket: "${LAKE_BUCKET:-dusk-lake}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "otel_metrics/dt={{ dt }}/"
+    filename_extension: parquet
+    filename_append_uuid: true
+    compression: none
+    content_type: application/vnd.apache.parquet
+    auth:
+      access_key_id: "SECRET[lake.access-key]"
+      secret_access_key: "SECRET[lake.secret-key]"
+    encoding:
+      codec: json
+      except_fields: [dt]
+    batch_encoding:
+      codec: parquet
+      schema_file: /etc/vector/lake/otel_metrics.schema
+      schema_mode: strict
+      compression:
+        algorithm: zstd
+        level: 3
+    batch:
+      max_events: 500000
+      max_bytes: 33554432
+      timeout_secs: 300
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  evidence_ledger:
+    type: aws_s3
+    inputs: [kafka_ledger_evidence]
+    bucket: "${EVIDENCE_BUCKET:-dusk-ledger-evidence}"
+    endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
+    region: "${S3_REGION:-us-east-1}"
+    force_path_style: true
+    key_prefix: "ledger/dt=%F/"
+    filename_extension: jsonl.zst
+    filename_append_uuid: true
+    compression: zstd
+    content_type: application/x-ndjson
+    auth:
+      access_key_id: "SECRET[evidence.access-key]"
+      secret_access_key: "SECRET[evidence.secret-key]"
+    encoding:
+      codec: text
+    framing:
+      method: newline_delimited
+    healthcheck:
+      enabled: false
+    batch:
+      max_bytes: 16777216
+      timeout_secs: 60
+    buffer:
+      type: memory
+      max_size: 16777216
+      when_full: block
+    acknowledgements:
+      enabled: true
+  prometheus:
+    type: prometheus_exporter
+    inputs: [vector_metrics]
+    address: 0.0.0.0:9598

@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse-keeper
+  labels:
+    app.kubernetes.io/name: clickhouse-keeper
+spec:
+  serviceName: clickhouse-keeper-headless
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse-keeper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse-keeper
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: clickhouse-keeper
+          image: clickhouse/clickhouse-keeper:26.8.19.9
+          command: ["/bin/bash", "-c", "export KEEPER_SERVER_ID=$(( ${HOSTNAME##*-} + 1 )) && exec /entrypoint.sh"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: KEEPER_CONFIG
+              value: /etc/clickhouse-keeper/keeper.yaml
+            - name: KEEPER_RAFT_HOST
+              value: $(POD_NAME).clickhouse-keeper-headless.$(POD_NAMESPACE).svc
+          ports:
+            - name: client
+              containerPort: 9181
+            - name: raft
+              containerPort: 9234
+            - name: control
+              containerPort: 9182
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: control
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: configuration
+              mountPath: /etc/clickhouse-keeper/keeper.yaml
+              subPath: keeper.yaml
+      volumes:
+        - name: configuration
+          configMap:
+            name: clickhouse-keeper
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
