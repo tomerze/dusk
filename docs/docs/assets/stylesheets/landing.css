@@ -160,7 +160,7 @@
 .dusk-landing .dusk-float {
   --md-icon-size: 2.2rem;
   position: absolute;
-  color: var(--dusk-ink, var(--dusk-gold));
+  color: var(--dusk-ink, var(--dusk-ink-gold));
   opacity: 0.9;
   animation: dusk-orbit 10s linear infinite;
 }
@@ -325,6 +325,9 @@
   line-height: 1.6;
   color: var(--md-default-fg-color--light);
 }
+[data-md-color-scheme="default"] .dusk-landing .dusk-hero__pitch {
+  color: var(--md-default-fg-color);
+}
 .dusk-hero__inner > p:last-child {
   display: flex;
   flex-wrap: wrap;
@@ -345,6 +348,9 @@
 .dusk-landing .dusk-button-ghost {
   color: var(--md-default-fg-color);
   border-color: var(--dusk-gold);
+}
+[data-md-color-scheme="default"] .dusk-landing .dusk-button-ghost {
+  border-color: var(--dusk-ink-gold);
 }
 .dusk-landing .dusk-button-ghost:hover,
 .dusk-landing .dusk-button-ghost:focus {
@@ -371,6 +377,10 @@
   width: min(22rem, 86vw);
   height: auto;
   transform: translate(-50%, calc(var(--dusk-sunk, 0) * 30%));
+}
+[data-md-color-scheme="default"] .dusk-hero__rays {
+  fill: #cf7424;
+  fill-opacity: 0.8;
 }
 .dusk-hero__horizon::after {
   content: "";
@@ -420,6 +430,9 @@
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+[data-md-color-scheme="default"] .dusk-landing .dusk-platforms__grid ul li {
+  color: var(--md-default-fg-color);
+}
 .dusk-landing .dusk-platforms__grid .twemoji {
   flex: none;
 }
@@ -436,6 +449,9 @@
   text-decoration: underline;
   text-decoration-thickness: 0.09em;
   text-underline-offset: 0.22em;
+}
+[data-md-color-scheme="default"] .dusk-landing .dusk-platforms > p a {
+  color: #74500a;
 }
 @media screen and (max-width: 44.9375em) {
   .dusk-landing .dusk-platforms__grid ul li {
