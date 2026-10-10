@@ -260,7 +260,7 @@ Feels like an OS inside. Somehow you already know how to drive one.
 
 -   :material-web:{ .dusk-card-icon }
 
-    **Drive it over HTTP**
+    **Drive Dusk**
 
     Run the API gateway and reach any node from curl, a script, a dashboard or a
     browser. AI agents get an MCP server on the same port.
