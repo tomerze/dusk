@@ -110,8 +110,8 @@ func TestEveryRouteIsDocumentedAndEveryOperationIsRouted(test *testing.T) {
 	if len(missing) > 0 {
 		test.Errorf("routed but not documented: %s", strings.Join(missing, ", "))
 	}
-	if len(routed) != 34 {
-		test.Errorf("%d routes; spec 7.5, the device lifecycle and the auth routes make 34", len(routed))
+	if len(routed) != 37 {
+		test.Errorf("%d routes; spec 7.5, the device lifecycle, the revocations and the auth routes make 37", len(routed))
 	}
 	references := map[string]bool{}
 	var collect func(value any)

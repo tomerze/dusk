@@ -143,6 +143,28 @@ func (fake *fakeBackend) SetDeviceLifecycle(operation context.Context, device, l
 	return inventory.DeviceLifecycle{DeviceID: device, Lifecycle: lifecycle, Reason: reason, ChangedAt: sampleTime(), Actor: actor}, fake.record("SetDeviceLifecycle", device, lifecycle, reason, actor)
 }
 
+func sampleRevocation() inventory.Revocation {
+	return inventory.Revocation{ID: uuid.MustParse("0192f0c4-4c1a-7b8e-9d2f-3a4b5c6d7e90"),
+		RevocationScope: inventory.RevocationScope{CredentialKind: "fleet_token", Credential: "retail-eu-2026"},
+		Reason:          "leaked token", Actor: "token:admin", CreatedAt: sampleTime(), Matched: 41, Revoked: 0}
+}
+
+func (fake *fakeBackend) StartRevocation(operation context.Context, request engine.RevocationRequest, actor string) (engine.RevocationStarted, error) {
+	if request.DryRun {
+		return engine.RevocationStarted{Matched: 41}, fake.record("StartRevocation", request, actor)
+	}
+	revocation := sampleRevocation()
+	return engine.RevocationStarted{Matched: revocation.Matched, Revocation: &revocation}, fake.record("StartRevocation", request, actor)
+}
+
+func (fake *fakeBackend) Revocations(operation context.Context, cursor string, limit int) (inventory.RevocationPage, error) {
+	return inventory.RevocationPage{Revocations: []inventory.Revocation{sampleRevocation()}}, fake.record("Revocations", cursor, limit)
+}
+
+func (fake *fakeBackend) Revocation(operation context.Context, identifier uuid.UUID) (inventory.Revocation, error) {
+	return sampleRevocation(), fake.record("Revocation", identifier)
+}
+
 func (fake *fakeBackend) OpenSession(operation context.Context, key inventory.Key, reason string, lifetimeSeconds int, actor string) (engine.OperatorProcess, error) {
 	nightfall := "nightfall-0:8444"
 	return engine.OperatorProcess{Pid: 17352987455937552665,

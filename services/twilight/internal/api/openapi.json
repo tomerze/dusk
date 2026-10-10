@@ -1892,6 +1892,160 @@
           }
         }
       }
+    },
+    "/api/v1/revocations": {
+      "get": {
+        "operationId": "listRevocations",
+        "summary": "List revocations",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of revocations, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      },
+      "post": {
+        "operationId": "startRevocation",
+        "summary": "Revoke every installation one credential enrolled",
+        "x-required-role": "admin",
+        "description": "Revokes every installation the fleet token entry or the install token key enrolled, optionally only those enrolled in a time window, at engine.revocations_per_second. Each one gets a dusk.node-state record, which nightfall enforces, and then its inventory row. With dry_run it only counts them.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevocationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The dry run's count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocationStarted"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The revocation started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocationStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/revocations/{id}": {
+      "get": {
+        "operationId": "getRevocation",
+        "summary": "Read a revocation and its progress",
+        "x-required-role": "viewer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The revocation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revocation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4310,6 +4464,174 @@
         "required": [
           "count",
           "campaigns"
+        ]
+      },
+      "RevocationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "credential_kind": {
+            "type": "string",
+            "enum": [
+              "fleet_token",
+              "install_token"
+            ]
+          },
+          "credential": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The fleet token entry's name, or the id of the key that signed the install tokens."
+          },
+          "enrolled_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Only installations enrolled at or after this time."
+          },
+          "enrolled_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Only installations enrolled before this time."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the installations are revoked; required unless dry_run is true. It goes on every dusk.node-state record."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Count the installations that would be revoked and change nothing."
+          }
+        },
+        "required": [
+          "credential_kind",
+          "credential"
+        ]
+      },
+      "Revocation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "credential_kind": {
+            "type": "string",
+            "enum": [
+              "fleet_token",
+              "install_token"
+            ]
+          },
+          "credential": {
+            "type": "string"
+          },
+          "enrolled_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "enrolled_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "matched": {
+            "type": "integer",
+            "description": "Installations that matched when the revocation started and were not revoked yet."
+          },
+          "revoked": {
+            "type": "integer",
+            "description": "Installations revoked so far."
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the last matching installation was revoked; null while it runs."
+          }
+        },
+        "required": [
+          "id",
+          "credential_kind",
+          "credential",
+          "enrolled_after",
+          "enrolled_before",
+          "reason",
+          "actor",
+          "created_at",
+          "matched",
+          "revoked",
+          "finished_at"
+        ]
+      },
+      "RevocationStarted": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "matched": {
+            "type": "integer",
+            "description": "Installations the request matches that are not revoked yet."
+          },
+          "revocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Revocation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The revocation that started; null for a dry run."
+          }
+        },
+        "required": [
+          "matched",
+          "revocation"
+        ]
+      },
+      "RevocationPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Revocation"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as cursor to read the next page; null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
         ]
       }
     },

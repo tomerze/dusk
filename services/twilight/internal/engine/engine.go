@@ -31,6 +31,7 @@ type Dawn interface {
 
 type NodeStateProducer interface {
 	ProduceNodeState(operation context.Context, state kafka.NodeState) error
+	ProduceNodeStates(operation context.Context, states []kafka.NodeState) error
 	ClearNodeState(operation context.Context, key string) error
 }
 
@@ -226,6 +227,7 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	start("quarantine", engine.runQuarantineFlips)
 	start("enrollments", engine.runEnrollments)
 	start("revocations", engine.runRevocationCheck)
+	start("bulk revocations", engine.runRevocations)
 	start("partitions", engine.runPartitionMaintenance)
 	start("intents", engine.runIntentPublication)
 	engine.requestSweep(sweepRequest{all: true})

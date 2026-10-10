@@ -97,6 +97,7 @@ type Engine struct {
 	ReapsPerSecond               int `yaml:"reaps_per_second"`
 	ReapIntervalSeconds          int `yaml:"reap_interval_seconds"`
 	ReapRetrySeconds             int `yaml:"reap_retry_seconds"`
+	RevocationsPerSecond         int `yaml:"revocations_per_second"`
 }
 
 type Alerts struct {
@@ -248,6 +249,7 @@ func Default() Config {
 			ReapsPerSecond:               20,
 			ReapIntervalSeconds:          300,
 			ReapRetrySeconds:             600,
+			RevocationsPerSecond:         1000,
 			ProcessLifetimeSeconds:       900,
 			IntendedProcessRetentionDays: 31,
 		},
@@ -496,6 +498,7 @@ func (loaded Config) Validate() error {
 		"engine.reaps_per_second":                  loaded.Engine.ReapsPerSecond,
 		"engine.reap_interval_seconds":             loaded.Engine.ReapIntervalSeconds,
 		"engine.reap_retry_seconds":                loaded.Engine.ReapRetrySeconds,
+		"engine.revocations_per_second":            loaded.Engine.RevocationsPerSecond,
 		"engine.presence_flush_millis":             loaded.Engine.PresenceFlushMillis,
 		"engine.last_seen_bucket_seconds":          loaded.Engine.LastSeenBucketSeconds,
 		"engine.dispatch_attempts":                 loaded.Engine.DispatchAttempts,

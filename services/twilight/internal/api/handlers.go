@@ -30,6 +30,9 @@ func routeTable() []route {
 		{http.MethodPost, "/api/v1/nodes/{device}/{installation}/logs", RoleOperator, (*Server).streamLogs},
 		{http.MethodPost, "/api/v1/nodes/{device}/{installation}/files", RoleOperator, (*Server).collectFile},
 		{http.MethodPost, "/api/v1/devices/{device}/lifecycle", RoleAdmin, (*Server).deviceLifecycle},
+		{http.MethodGet, "/api/v1/revocations", RoleViewer, (*Server).revocations},
+		{http.MethodPost, "/api/v1/revocations", RoleAdmin, (*Server).startRevocation},
+		{http.MethodGet, "/api/v1/revocations/{id}", RoleViewer, (*Server).revocation},
 		{http.MethodPost, "/api/v1/selectors/validate", RoleViewer, (*Server).validateSelector},
 		{http.MethodGet, "/api/v1/campaigns", RoleViewer, (*Server).campaigns},
 		{http.MethodPost, "/api/v1/campaigns", RoleOperator, (*Server).createCampaign},
@@ -172,6 +175,49 @@ func (server *Server) deviceLifecycle(call *exchange) error {
 		return failure
 	}
 	writeJSON(call, http.StatusOK, changed)
+	return nil
+}
+
+func (server *Server) startRevocation(call *exchange) error {
+	var body engine.RevocationRequest
+	if failure := decodeBody(call, &body, true); failure != nil {
+		return failure
+	}
+	started, failure := server.Backend.StartRevocation(call.request.Context(), body, call.actor())
+	if failure != nil {
+		return failure
+	}
+	status := http.StatusAccepted
+	if body.DryRun {
+		status = http.StatusOK
+	}
+	writeJSON(call, status, started)
+	return nil
+}
+
+func (server *Server) revocations(call *exchange) error {
+	limit, failure := queryLimit(call)
+	if failure != nil {
+		return failure
+	}
+	listed, failure := server.Backend.Revocations(call.request.Context(), call.request.URL.Query().Get("cursor"), limit)
+	if failure != nil {
+		return failure
+	}
+	writeJSON(call, http.StatusOK, newPage(listed.Revocations, listed.Next))
+	return nil
+}
+
+func (server *Server) revocation(call *exchange) error {
+	identifier, failure := uuid.Parse(call.request.PathValue("id"))
+	if failure != nil {
+		return invalid("a revocation id is a UUID")
+	}
+	found, failure := server.Backend.Revocation(call.request.Context(), identifier)
+	if failure != nil {
+		return failure
+	}
+	writeJSON(call, http.StatusOK, found)
 	return nil
 }
 

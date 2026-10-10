@@ -59,7 +59,8 @@ func classify(failure error) *Problem {
 		return newProblem(http.StatusBadRequest, "invalid_selector", selectorError.Message).with("position", selectorError.Position).with("end", selectorError.End)
 	case errors.Is(failure, engine.ErrInvalidArgument):
 		return newProblem(http.StatusBadRequest, "invalid_argument", strings.TrimPrefix(failure.Error(), engine.ErrInvalidArgument.Error()+": "))
-	case errors.Is(failure, campaign.ErrNotFound), errors.Is(failure, campaign.ErrRowNotFound), errors.Is(failure, inventory.ErrNotFound), errors.Is(failure, alerts.ErrNotFound):
+	case errors.Is(failure, campaign.ErrNotFound), errors.Is(failure, campaign.ErrRowNotFound), errors.Is(failure, inventory.ErrNotFound), errors.Is(failure, alerts.ErrNotFound),
+		errors.Is(failure, inventory.ErrRevocationNotFound):
 		return newProblem(http.StatusNotFound, "not_found", failure.Error())
 	case errors.As(failure, &overlap):
 		campaigns := make([]string, len(overlap.Campaigns))

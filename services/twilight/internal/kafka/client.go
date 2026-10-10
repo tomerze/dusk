@@ -159,6 +159,21 @@ func (producer *Producer) ProduceNodeState(operation context.Context, state Node
 	return producer.client.ProduceSync(operation, record).FirstErr()
 }
 
+func (producer *Producer) ProduceNodeStates(operation context.Context, states []NodeState) error {
+	records := make([]*kgo.Record, len(states))
+	for index, state := range states {
+		value, failure := json.Marshal(state)
+		if failure != nil {
+			return failure
+		}
+		if failure := producer.validator.Validate(ContractNodeState, value); failure != nil {
+			return fmt.Errorf("node-state message fails its contract: %w", failure)
+		}
+		records[index] = &kgo.Record{Topic: producer.topic, Key: []byte(state.Key()), Value: value}
+	}
+	return producer.client.ProduceSync(operation, records...).FirstErr()
+}
+
 func (producer *Producer) ClearNodeState(operation context.Context, key string) error {
 	return producer.client.ProduceSync(operation, &kgo.Record{Topic: producer.topic, Key: []byte(key)}).FirstErr()
 }
