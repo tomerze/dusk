@@ -13,6 +13,7 @@ over Kafka. Each topic has one JSON Schema (draft 2020-12) in
 | `dusk.ledger` | `<instance>` | nightfall | vector, twilight | delete, 30 d | 3 / 32 |
 | `dusk.enrollments` | `<device_id>/<installation_id>` | nightfall | twilight, vector | delete, 30 d | 3 / 12 |
 | `dusk.node-state` | `device/<device_id>`, `installation/<device_id>/<installation_id>` | twilight | nightfall | compact | 1 / 6 |
+| `dusk.credential-quota` | `<credential_kind>/<credential>/<installation_id>`, the same with `/release` | nightfall | nightfall | compact | 1 / 1 |
 | `dusk.process-results` | `<device_id>/<installation_id>` | dawn | twilight, vector | delete, 7 d | 3 / 48 |
 | `dusk.process-output` | `<device_id>/<installation_id>` | dawn | vector | delete, 7 d | 3 / 24 |
 | `dusk.files` | `<device_id>/<installation_id>` | dawn | vector | delete, 30 d | 3 / 12 |
@@ -26,6 +27,15 @@ In prod every topic has replication factor 3 and `min.insync.replicas` 2.
   every record of one instance to partition `murmur2(instance) mod partition_count`
   (the hash of Kafka's Java default partitioner). A chunk holds at most 2000 sessions
   and 512 KiB of JSON; the schema enforces the 2000, the producer the bytes.
+* `dusk.credential-quota` holds one `reserve` record for every installation a credential
+  enrolled and one `release` record for each reservation given back, and is read from
+  the beginning by every nightfall instance. nightfall writes every record to partition
+  0, so every instance reads them in one order whatever the topic's partition count;
+  the topic has one partition, and adding partitions changes nothing. Every key is
+  written once, so compaction removes nothing: the topic grows by one record per
+  installation for as long as the fleet exists, and every nightfall instance reads all
+  of it, validating each record, before it accepts an enrollment with a capped
+  credential.
 * `dusk.ledger` sets `unclean.leader.election.enable` false. Each nightfall instance
   writes to its own partition, by default the one numbered by its StatefulSet ordinal,
   in transactions, so consumers read it with `isolation.level=read_committed`. The prod
