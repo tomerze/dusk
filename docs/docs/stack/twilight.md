@@ -214,19 +214,67 @@ is skipped for 30 seconds.
 | `reap_interval_seconds` | `300` | How long the reap sweep takes to look at every online node once, one of 30 groups at a time. |
 | `reaps_per_second` | `20` | Reap requests sent to dawn per second, across the fleet. |
 | `reap_retry_seconds` | `600` | How long a pid dawn was asked to reap waits before it is asked again, when dawn never reported it reaped. |
+| `revocations_per_second` | `1000` | Installations a [revocation](#revocations) revokes per second, across every running revocation. |
 
 ### `alerts`
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `webhook_url` | | An `http` or `https` URL every new critical or high alert is posted to. |
-| `enrollment_rate_per_minute` | `600` | More enrollments than this in one minute raise a high `enrollment_rate` alert. |
+| `webhook_url` | | An `http` or `https` URL every new critical or high alert is posted to, and every escalated one again. |
+| `enrollments.window_seconds` | `300` | The window the [enrollment alerts](#enrollment-alerts) count in. |
+| `enrollments.baseline_days` | `7` | How many earlier days the baseline averages the same hour of. |
+| `enrollments.baseline_factor` | `4` | How many times its baseline a count must pass, besides its floor, to raise an alert. |
+| `enrollments.escalation_factor` | `2` | How many times the count it last notified an open alert's count must reach to notify again. At least 2. |
+| `enrollments.resolve_after_seconds` | `900` | How long a count must stay at or below its threshold before its alert resolves itself. |
+| `enrollments.issued_floors.fleet`, `.credential`, `.network` | `100`, `30`, `20` | The least count of new installations in a window that raises `enrollment_rate`, across the fleet, for one credential and for one network. |
+| `enrollments.refused_floors.fleet`, `.credential`, `.network` | `300`, `60`, `60` | The same for refused enrollments and `denied_enrollments_spike`. |
+| `enrollments.new_network_floors.fleet`, `.credential` | `50`, `20` | The same for installations from networks new to the baseline period and `enrollment_from_new_network_burst`, across the fleet and for one credential. |
 
 The webhook receives the alert as JSON - `id`, `time`, `severity`, `kind`,
 `fingerprint`, `detail` and the rest of the alert's columns - with up to five
 attempts per alert. A delivery that gives up is counted in
 `twilight_alert_webhook_failures_total`; the alert itself is in the `alerts`
 table either way.
+
+### Enrollment alerts
+
+The leader reads `dusk.enrollments` and counts new enrollments only: an
+`enroll` that was `issued` is a new installation, and an `assign` or `enroll`
+that was `denied` or `rate_limited` is a refusal. Renewals and errors are never
+counted. Each is counted for the whole fleet, for its credential - a fleet token
+entry by `credential_ref`, an install token key by `credential_issuer` - and for
+its network, the /24 of an IPv4 address or the /48 of an IPv6 one. An
+installation from a network no installation came from in the `baseline_days`
+before also counts as one from a new network, while that network is no older
+than one window.
+
+For every one of those, over the last `window_seconds`, twilight compares the
+count with its threshold: the larger of its floor and `baseline_factor` times
+its baseline, the average count of a window in the same UTC hour of each of the
+last `baseline_days` days. twilight writes the counts by hour to the
+`enrollment_counts` table for that, and deletes them after `baseline_days` and
+one more day. A count above its threshold raises a high alert:
+
+| Kind | Counts | Fingerprint |
+|------|--------|-------------|
+| `enrollment_rate` | New installations | `enrollment_rate:fleet`, `enrollment_rate:credential:<kind>:<name>`, `enrollment_rate:network:<network>` |
+| `denied_enrollments_spike` | Refusals | `denied_enrollments_spike:fleet`, `...:credential:<kind>:<name>`, `...:network:<network>` |
+| `enrollment_from_new_network_burst` | New installations from new networks | `enrollment_from_new_network_burst:fleet`, `...:credential:<kind>:<name>` |
+| `credential_quota_reached` | Refusals for `credential_quota_reached`; any one raises it | `credential_quota_reached:credential:<kind>:<name>` |
+
+The detail holds the `scope`, the `credential_kind` and `credential` (and the
+`tenant`) or the `network`, the `count`, the `window_seconds`, the `baseline`,
+the `threshold`, and the networks and credentials the count came from with
+their counts. While an alert is open, a count that reaches `escalation_factor`
+times the count it last notified updates the detail and notifies again; once
+the count stays at or below its threshold for `resolve_after_seconds`, twilight
+resolves the alert as `twilight`, and the next rise opens a new one. A new
+leader goes on with the open alerts. The counts are those of the leader since it
+was elected, so a leader that took over in the middle of a burst counts the
+burst from then on.
+
+`twilight_enrollment_observations_total{signal}` counts what was counted:
+`issued`, `refused` and `quota`.
 
 ### `reconcile`
 
@@ -552,6 +600,9 @@ to the query that made it: a node cursor made for one `sort` is refused with
 | `POST /api/v1/nodes/{device}/{installation}/sessions` | operator | `{"reason", "ttl_seconds"}` (60 to 28800) opens an interactive session: twilight records a random pid as the node's intended interactive process for `ttl_seconds` and answers 201 `{"pid", "node"}`, the pid to connect a shell at through dawn's `/v1/connect` and the node's live session. The session's process is reaped once it expires. |
 | `POST /api/v1/nodes/{device}/{installation}/logs` | operator | `{"level", "duration_seconds"}` streams the node's logs to the collector through dawn: 202 `{"stream_id"}`. |
 | `POST /api/v1/nodes/{device}/{installation}/files` | operator | `{"path"}` collects a file from the node into object storage through dawn: 202 `{"upload_id"}`. |
+| `GET /api/v1/revocations?limit=&cursor=` | viewer | [Revocations](#revocations), newest first. |
+| `POST /api/v1/revocations` | admin | `{"credential_kind", "credential", "enrolled_after", "enrolled_before", "reason", "dry_run"}` revokes every installation one credential enrolled: 202 `{"matched", "revocation"}`, or 200 with `revocation` `null` for a `dry_run`, which only counts. |
+| `GET /api/v1/revocations/{id}` | viewer | A revocation and how far it got. |
 | `POST /api/v1/devices/{device}/lifecycle` | admin | `{"lifecycle", "reason"}` with `retired` or `revoked` blocks every installation of the device, those enrolled now and any it enrolls later, through a device-scope `dusk.node-state` record; `active` lifts the block, and each installation keeps its own lifecycle. Answers `{"device_id", "lifecycle", "reason", "changed_at", "actor"}`. |
 | `POST /api/v1/selectors/validate` | viewer | `{"selector"}` answers `ok`, the `error` with its position, how many nodes it `matched`, and a `sample` of them. |
 | `GET /api/v1/campaigns?status=&limit=&cursor=` | viewer | Campaigns, newest first, each with its counters; `status` takes one status or several, comma-separated. |
@@ -756,3 +807,24 @@ heads and the alerts of one batch are written in one transaction, so a restart
 neither skips nor repeats an entry. Watch `twilight_reconcile_lag_seconds`:
 `result_without_ledger` is only judged once every partition has been reconciled
 ten minutes past a result.
+
+### Revocations
+
+A revocation revokes every installation one credential enrolled, as twilight's
+inventory recorded it: for a fleet token entry the nodes whose
+`credential_kind` is `fleet_token` and whose `credential_ref` is the entry's
+name, for an install token key those whose `credential_issuer` is the key id,
+optionally only those whose `enrolled_at` is at or after `enrolled_after` and
+before `enrolled_before`, and never one that is already `revoked`. `matched` is
+how many matched when it started. The leader revokes them in the order of their
+device and installation ids, in batches, at `engine.revocations_per_second`
+across all running revocations: for each batch it produces one
+`dusk.node-state` record per installation, with the revocation's reason and
+actor, waits until Kafka has them all, then marks the installations `revoked`
+and moves the revocation's place forward in one transaction. A batch Kafka did
+not take, or that a former leader was writing, is sent again from that place, so
+a revocation carries on across restarts and leader changes and no installation
+is skipped. It finishes when no matching installation is left; one enrolled
+after it passed its place in the order is not included, which is why the
+credential is retired first ([Provisioning](provisioning.md#revoking-what-a-credential-enrolled)).
+Each revocation is logged when it starts and when it finishes.
