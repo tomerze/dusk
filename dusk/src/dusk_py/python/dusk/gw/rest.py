@@ -13,8 +13,7 @@ node exactly as a Python caller does:
 ===========================  ====================================================
 
 The API describes itself: ``GET /v1/openapi.json`` is the OpenAPI document
-FastAPI generates from the models below, and ``GET /v1/docs`` is the Swagger UI
-that renders it.
+FastAPI generates from the models below.
 
 A descriptor is the handle a node connection is addressed by - eight hexadecimal
 digits; ``connect`` mints one and ``disconnect`` and ``sh`` consume it. Every REST-minted descriptor
@@ -29,7 +28,6 @@ value as it is produced, which is what a program that never finishes needs.
 from __future__ import annotations
 
 import json
-import pathlib
 
 # Any is imported at runtime, not only under TYPE_CHECKING: pydantic resolves a
 # model's field annotations when it builds the schema, so a name it cannot see
@@ -39,11 +37,9 @@ from typing import TYPE_CHECKING, Any
 import anyio.to_thread
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.responses import Response, StreamingResponse
-from starlette.staticfiles import StaticFiles
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -52,27 +48,6 @@ if TYPE_CHECKING:
 
     Owner = Callable[[Request], object]
     ConnectRoute = Callable[[FastAPI, ConnectionRegistry, Owner], None]
-
-STATIC = pathlib.Path(__file__).parent / "static"
-"""The vendored Swagger UI, served at ``/v1/static``. See its README."""
-
-BLANK_FAVICON = "data:,"
-"""What the docs page points its favicon at.
-
-An empty data URI, because the browser must not go and fetch one. FastAPI's
-default favicon is an absolute URL to fastapi.tiangolo.com, which would make an
-otherwise self-contained page reach the internet for an icon.
-"""
-
-SWAGGER_UI_PARAMETERS = {"validatorUrl": None}
-"""Turns off Swagger UI's validator badge.
-
-Left at its default, Swagger UI renders a badge by handing the address of this
-API's document to ``validator.swagger.io``. On a node's network that is a request
-that cannot succeed, and anywhere else it is the URL of an internal API sent to a
-third party unasked. ``None`` becomes a JSON ``null``, which is how Swagger UI is
-told there is no validator.
-"""
 
 TITLE = "Dusk API gateway"
 DESCRIPTION = """
@@ -190,7 +165,7 @@ def build_application(
 
     # docs_url and redoc_url are off because both of FastAPI's built-in pages
     # load their JavaScript and CSS from a CDN, which a node's operator may have
-    # no route to. /docs below is the same Swagger UI served from this process.
+    # no route to.
     api = FastAPI(
         title=TITLE,
         description=DESCRIPTION,
@@ -199,24 +174,6 @@ def build_application(
         docs_url=None,
         redoc_url=None,
     )
-    api.mount("/static", StaticFiles(directory=STATIC), name="static")
-
-    @api.get("/docs", include_in_schema=False)
-    async def docs(request: Request) -> Response:
-        """Swagger UI over this API, served entirely from this gateway."""
-        # Read from the scope rather than from the app, the way FastAPI's own
-        # docs route does: the app is mounted, so the prefix it is reachable
-        # under is only known per request. Getting this wrong renders an empty
-        # page, because every URL on it would be missing the /v1.
-        mounted_at = request.scope.get("root_path", "").rstrip("/")
-        return get_swagger_ui_html(
-            openapi_url=f"{mounted_at}/openapi.json",
-            title=f"{TITLE} - API reference",
-            swagger_js_url=f"{mounted_at}/static/swagger-ui-bundle.js",
-            swagger_css_url=f"{mounted_at}/static/swagger-ui.css",
-            swagger_favicon_url=BLANK_FAVICON,
-            swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
-        )
 
     (connect or add_connect_route)(api, registry, owner_of)
 

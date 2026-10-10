@@ -42,5 +42,4 @@ A PARTICULAR PURPOSE. See the GNU Affero General Public License in
 [LICENSE](LICENSE) for more details.
 
 Third-party material keeps its own license: the Cap'n Proto compiler under
-`vendor/capnproto` (MIT) and the Swagger UI under
-`dusk/src/dusk_py/python/dusk/gw/static` (Apache-2.0).
+`vendor/capnproto` (MIT).
