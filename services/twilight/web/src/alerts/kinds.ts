@@ -69,6 +69,16 @@ export const alertKinds: Record<string, AlertKind> = {
     meaning:
       'Two running campaigns set the same key on the same nodes. Only the earlier one acts there; the other shows those rows as conflicts.',
   },
+  campaign_paused_by_gate: {
+    label: 'Campaign paused by its gate',
+    meaning:
+      "A campaign's health gate failed and the campaign paused. Resuming it needs a gate override; the alert resolves when the campaign is resumed, aborted or completed.",
+  },
+  campaign_failed_by_policy: {
+    label: 'Campaign failed by its policy',
+    meaning:
+      "A campaign's health gate failed and its policy aborts on a gate failure, so the campaign failed. Nothing more is dispatched for it.",
+  },
 }
 
 export function alertKindLabel(kind: string): string {

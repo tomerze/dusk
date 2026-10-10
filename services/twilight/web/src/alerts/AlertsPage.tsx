@@ -434,7 +434,7 @@ export function AlertsPage() {
       <PageHeader
         title="Alerts"
         documentTitle="Alerts"
-        description="What twilight's checks found: processes nobody intended, broken ledger chains, revocations not enforced, enrollment spikes and campaign conflicts."
+        description="What twilight's checks found: processes nobody intended, broken ledger chains, revocations not enforced, enrollment spikes, campaigns their gates stopped and campaign conflicts."
       />
       {focusId !== null ? (
         <FocusedAlert alertId={focusId} canOperate={canOperate} />
