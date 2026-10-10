@@ -1420,7 +1420,7 @@
   }
   .dusk-stack__figure {
     position: sticky;
-    top: max(3.5rem, calc(50vh - 15rem));
+    top: max(3.5rem, calc(50vh - 10.5rem));
     grid-column: 3;
     grid-row: 1;
     max-width: none;
