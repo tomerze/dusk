@@ -427,10 +427,7 @@ for (const head of document.querySelectorAll(".dusk-stack__head")) {
     reading = layer;
     head.classList.toggle("is-reading", Boolean(layer));
     if (layer) {
-      head.style.setProperty(
-        "--dusk-ink",
-        getComputedStyle(layer).getPropertyValue("--dusk-ink"),
-      );
+      head.dataset.layer = layer.dataset.layer;
     }
   };
   window.addEventListener("scroll", read, { passive: true });

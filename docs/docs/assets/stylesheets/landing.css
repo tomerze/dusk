@@ -22,10 +22,10 @@
   --dusk-link-faint: rgba(85, 74, 150, 0.13);
   --dusk-tiny: #aaa1cc;
   --dusk-ink-nightfall: #2c3a9e;
-  --dusk-ink-dawn: #b86f1a;
+  --dusk-ink-dawn: #9a5a0f;
   --dusk-ink-twilight: #8f4a96;
   --dusk-ink-data: #1f6fa8;
-  --dusk-ink-observability: #5b6b85;
+  --dusk-ink-observability: #1c1c22;
   --dusk-ink-gold: #9a6b00;
 }
 [data-md-color-scheme="slate"] .dusk-landing {
@@ -1242,6 +1242,20 @@
   font-size: 18px;
   font-weight: 700;
 }
+[data-md-color-scheme="default"]
+  .dusk-plate[data-layer="observability"]
+  .dusk-plate__top {
+  stroke: #adb8c9;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+[data-md-color-scheme="default"]
+  .dusk-plate[data-layer="dawn"]
+  .dusk-plate__top {
+  stroke: #e7bb84;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
 @media screen and (max-width: 35.9375em) {
   .dusk-stack__figure {
     overflow: hidden;
@@ -1295,6 +1309,9 @@
     transform 0.35s ease,
     background-color 0.35s ease,
     box-shadow 0.35s ease;
+}
+[data-md-color-scheme="default"] .dusk-stack__head::after {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dusk-ink) 20%, transparent);
 }
 .dusk-stack__head.is-reading::after {
   opacity: 1;
@@ -1393,6 +1410,12 @@
   }
   .dusk-stack.is-focused .dusk-plate:not(.is-active) .dusk-plate__veil {
     opacity: 0.78;
+  }
+  [data-md-color-scheme="default"]
+    .dusk-stack.is-focused
+    .dusk-plate:not(.is-active)
+    .dusk-plate__veil {
+    opacity: 0.6;
   }
   .dusk-stack.is-focused .dusk-plate:not(.is-active) text,
   .dusk-stack.is-focused .dusk-plate:not(.is-active) use,
