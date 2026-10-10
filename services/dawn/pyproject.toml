@@ -1,0 +1,60 @@
+[project]
+name = "dawn"
+version = "0.1.0"
+description = "The Dusk stack's client layer: work on dusk nodes through nightfall"
+requires-python = ">=3.14"
+license = "AGPL-3.0-only"
+dependencies = [
+    "dusk",
+    "aiobotocore>=2.22.0",
+    "aiokafka[zstd]>=0.14.0",
+    "anyio>=4.9.0",
+    "cryptography>=44.0.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "mcp>=1.9.0,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.33.0",
+    "opentelemetry-sdk>=1.33.0",
+    "prometheus-client>=0.21.0",
+    "pydantic>=2.11.0",
+    "pydantic-settings>=2.10.0",
+    "pyjwt[crypto]>=2.10.0",
+    "starlette>=0.40.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+dawn = "dawn.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+dusk = { path = "../..", editable = true }
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.23.0",
+    "moto[server]>=5.1.0",
+    "pytest>=8.3.0",
+    "referencing>=0.36.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["../../dusk/src/dusk_py/python"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not load and not integration'"
+markers = [
+    "load: holds thousands of node sessions; run with -m load",
+    "integration: drives a real node through a real nightfall; run with -m integration",
+]
