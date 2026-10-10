@@ -65,3 +65,24 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: twilight-alert-receivers
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: twilight
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 25
+        - protocol: TCP
+          port: 465
+        - protocol: TCP
+          port: 587
