@@ -8,13 +8,16 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use dusk_capnp::capnp;
 use nightfall_provisioning::config::{ProvisioningConfig, load_certificates};
-use nightfall_provisioning::credential::{FleetTokens, InstallTokenKeys, sha256};
+use nightfall_provisioning::credential::{CredentialName, FleetTokens, InstallTokenKeys, sha256};
 use nightfall_provisioning::events::{EnrollmentEvent, EnrollmentEvents, Outcome};
 use nightfall_provisioning::identity::{
     DeviceIdKey, TPM_ATTESTATION_URI, device_uri, installation_uri, tenant_uri,
 };
 use nightfall_provisioning::limits::PenaltyBox;
 use nightfall_provisioning::provision_capnp::provisioning;
+use nightfall_provisioning::quota::{
+    InstallationQuota, QuotaUnavailable, Reservation, ReservationOutcome,
+};
 use nightfall_provisioning::server::{ConnectionInfo, Provisioning};
 use nightfall_provisioning::state::{Lifecycle, NodeStateView};
 use nightfall_provisioning::step_ca::{SignRequest, StepCaClient, StepCaConfig, StepCaError};
@@ -72,6 +75,20 @@ impl PenaltyBox for Everyone {
     }
 
     fn credential_failed(&self, _address: IpAddr) {}
+}
+
+impl InstallationQuota for Everyone {
+    fn used(&self, _credential: &CredentialName) -> Result<u64, QuotaUnavailable> {
+        Ok(0)
+    }
+
+    fn reserve(&self, _reservation: Reservation) -> ReservationOutcome {
+        Box::pin(async { Ok(true) })
+    }
+
+    fn release(&self, _reservation: &Reservation) {}
+
+    fn record(&self, _reservation: &Reservation) {}
 }
 
 fn unique() -> String {
@@ -243,6 +260,7 @@ async fn issues_node_certificates_through_a_real_step_ca() {
         config,
         StepCaClient::new(step_ca_config(&settings)).unwrap(),
         events.clone(),
+        Arc::new(Everyone),
         Arc::new(Everyone),
         Arc::new(Everyone),
     )

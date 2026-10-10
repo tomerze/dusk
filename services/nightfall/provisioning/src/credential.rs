@@ -53,6 +53,7 @@ pub struct FleetToken {
     pub name: String,
     pub value_sha256: [u8; 32],
     pub tenant: Option<String>,
+    pub max_installations: Option<u64>,
     pub retired: bool,
 }
 
@@ -74,6 +75,7 @@ struct FleetTokenEntry {
     name: String,
     value_sha256: String,
     tenant: Option<String>,
+    max_installations: Option<u64>,
     #[serde(default)]
     retired: bool,
 }
@@ -127,6 +129,12 @@ impl FleetTokens {
                     entry.name
                 ));
             }
+            if entry.max_installations == Some(0) {
+                return Err(format!(
+                    "token {}: max_installations must be at least 1; retire the token instead",
+                    entry.name
+                ));
+            }
             if !names.insert(entry.name.clone()) {
                 return Err(format!("token {} appears twice", entry.name));
             }
@@ -140,6 +148,7 @@ impl FleetTokens {
                 name: entry.name,
                 value_sha256,
                 tenant: entry.tenant,
+                max_installations: entry.max_installations,
                 retired: entry.retired,
             });
         }
@@ -181,6 +190,7 @@ pub struct InstallTokenKeys {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallToken {
     pub key_id: String,
+    pub max_installations: Option<u64>,
     pub issuer: String,
     pub token_id: String,
     pub subject: String,
@@ -238,6 +248,10 @@ impl InstallTokenKeys {
         self.jwks.is_empty()
     }
 
+    pub fn limits(&self) -> impl Iterator<Item = (&str, u64)> {
+        self.jwks.limits()
+    }
+
     pub fn verify(
         &self,
         token: &str,
@@ -277,6 +291,7 @@ impl InstallTokenKeys {
             Some(_) => return Err(InstallTokenError::Claim("tenant")),
         };
         Ok(InstallToken {
+            max_installations: self.jwks.max_installations(&key_id),
             key_id,
             issuer,
             token_id,
@@ -336,6 +351,12 @@ mod tests {
             ),
             format!("[[token]]\nname = \"\"\nvalue_sha256 = \"{digest}\"\n"),
             format!("[[token]]\nname = \"a\"\nvalue = \"plain\"\nvalue_sha256 = \"{digest}\"\n"),
+            format!(
+                "[[token]]\nname = \"a\"\nvalue_sha256 = \"{digest}\"\nmax_installations = 0\n"
+            ),
+            format!(
+                "[[token]]\nname = \"a\"\nvalue_sha256 = \"{digest}\"\nmax_installations = -3\n"
+            ),
             format!("[[token]]\nname = \"a\"\nvalue_sha256 = \"{digest}\"\nretired = \"yes\"\n"),
         ];
         for text in refused {
@@ -344,15 +365,20 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_retirement_of_a_fleet_token() {
+    fn reads_the_installation_cap_and_retirement_of_a_fleet_token() {
         let tokens = FleetTokens::from_toml(&format!(
-            "[[token]]\nname = \"batch-7\"\nvalue_sha256 = \"{}\"\n\n[[token]]\nname = \"old\"\nvalue_sha256 = \"{}\"\nretired = true\n",
+            "[[token]]\nname = \"batch-7\"\nvalue_sha256 = \"{}\"\nmax_installations = 50000\n\n[[token]]\nname = \"old\"\nvalue_sha256 = \"{}\"\nretired = true\n",
             hex::encode(sha256(b"batch secret")),
             hex::encode(sha256(b"old secret"))
         ))
         .unwrap();
-        assert!(!tokens.find("batch secret").unwrap().retired);
-        assert!(tokens.find("old secret").unwrap().retired);
+        let batch = tokens.find("batch secret").unwrap();
+        assert_eq!(
+            (batch.max_installations, batch.retired),
+            (Some(50000), false)
+        );
+        let old = tokens.find("old secret").unwrap();
+        assert_eq!((old.max_installations, old.retired), (None, true));
         assert_eq!(tokens.retired(), 1);
     }
 
@@ -370,6 +396,7 @@ mod tests {
         let verified = keys(&signer).verify(&token, 1_791_278_043).unwrap();
         assert_eq!(verified.subject, SUBJECT);
         assert_eq!(verified.key_id, "factory-2026");
+        assert_eq!(verified.max_installations, None);
         assert_eq!(verified.issuer, "factory");
         assert_eq!(verified.tenant.as_deref(), Some("retail-eu"));
         let mut material = b"\x00\x00\x00\x12dusk-install-token".to_vec();
@@ -381,6 +408,7 @@ mod tests {
     fn gives_every_issuer_and_token_id_pair_its_own_one_time_token_id() {
         let token = |issuer: &str, token_id: &str| InstallToken {
             key_id: String::from("factory-2026"),
+            max_installations: None,
             issuer: String::from(issuer),
             token_id: String::from(token_id),
             subject: String::from(SUBJECT),

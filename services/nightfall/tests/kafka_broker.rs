@@ -36,6 +36,7 @@ fn create_topics(brokers: &str, suffix: &str) -> Topics {
         enrollments: format!("dusk.enrollments.{suffix}"),
         node_state: format!("dusk.node-state.{suffix}"),
         intended_processes: format!("dusk.intended-processes.{suffix}"),
+        credential_quota: format!("dusk.credential-quota.{suffix}"),
     };
     let admin: AdminClient<DefaultClientContext> = ClientConfig::new()
         .set("bootstrap.servers", brokers)
@@ -53,6 +54,8 @@ fn create_topics(brokers: &str, suffix: &str) -> Topics {
         NewTopic::new(&topics.node_state, 1, TopicReplication::Fixed(1))
             .set("cleanup.policy", "compact"),
         NewTopic::new(&topics.intended_processes, 3, TopicReplication::Fixed(1))
+            .set("cleanup.policy", "compact"),
+        NewTopic::new(&topics.credential_quota, 1, TopicReplication::Fixed(1))
             .set("cleanup.policy", "compact"),
     ];
     let created = futures::executor::block_on(admin.create_topics(

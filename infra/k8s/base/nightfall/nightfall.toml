@@ -56,7 +56,7 @@ partition = -1
 brokers = "kafka:9092"
 allow_plaintext = true
 properties = {}
-topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes" }
+topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes", credential_quota = "dusk.credential-quota" }
 census_interval_seconds = 300
 census_heartbeat_seconds = 15
 

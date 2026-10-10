@@ -285,6 +285,45 @@ fn intended_processes(
     }
 }
 
+fn credential_quota(
+    shared: Arc<Shared>,
+    broker: Arc<dyn Broker>,
+    validator: ContractValidator,
+    stop: CancellationToken,
+) {
+    let topic = shared.config.kafka.topics.credential_quota.clone();
+    let Some((mut consumer, targets)) = open(
+        broker.as_ref(),
+        "credential-quota",
+        &topic,
+        Start::Beginning,
+        &stop,
+    ) else {
+        return;
+    };
+    shared.quota.set_partitions(targets.len() as u32);
+    let mut ready = false;
+    let mut failures = 0u32;
+    while !stop.is_cancelled() {
+        if let Some(record) = poll(&mut consumer, &topic, POLL, &mut failures, &stop) {
+            let parsed = match &record.payload {
+                Some(payload) => validator
+                    .check(payload)
+                    .and_then(|_| crate::quota::parse(payload)),
+                None => Err("a credential-quota record without a value".to_string()),
+            };
+            match parsed {
+                Ok(parsed) => shared.quota.apply(parsed),
+                Err(reason) => invalid(&record, &reason),
+            }
+        }
+        if !ready && positions_reached(&mut consumer, &targets) {
+            ready = true;
+            shared.quota.set_ready();
+        }
+    }
+}
+
 struct DirectoryConsumer {
     shared: Arc<Shared>,
     census: ContractValidator,
@@ -481,6 +520,7 @@ pub fn start(
 ) -> anyhow::Result<Vec<std::thread::JoinHandle<()>>> {
     let node_state_validator = Contract::NodeState.validator()?;
     let intended_processes_validator = Contract::IntendedProcesses.validator()?;
+    let quota_validator = Contract::CredentialQuota.validator()?;
     let directory_consumer = DirectoryConsumer {
         shared: shared.clone(),
         census: Contract::Census.validator()?,
@@ -502,12 +542,21 @@ pub fn start(
             .name("nightfall-intended".to_string())
             .spawn(move || intended_processes(shared, broker, intended_processes_validator, stop))?
     };
+    let quota_thread = {
+        let shared = shared.clone();
+        let broker = broker.clone();
+        let stop = stop.clone();
+        std::thread::Builder::new()
+            .name("nightfall-credential-quota".to_string())
+            .spawn(move || credential_quota(shared, broker, quota_validator, stop))?
+    };
     let directory_thread = std::thread::Builder::new()
         .name("nightfall-directory".to_string())
         .spawn(move || directory(shared, broker, directory_consumer, stop))?;
     Ok(vec![
         node_state_thread,
         intended_processes_thread,
+        quota_thread,
         directory_thread,
     ])
 }

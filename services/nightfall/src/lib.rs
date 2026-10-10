@@ -15,6 +15,7 @@ pub mod listener;
 pub mod node_state;
 pub mod peer;
 pub mod proxy;
+pub mod quota;
 pub mod rlimit;
 pub mod rpc;
 pub mod server;

@@ -147,6 +147,7 @@ impl Environment {
         broker.create_topic("dusk.enrollments", 3, "delete");
         broker.create_topic("dusk.node-state", 1, "compact");
         broker.create_topic("dusk.intended-processes", 3, "compact");
+        broker.create_topic("dusk.credential-quota", 1, "compact");
         Environment {
             directory,
             pki,

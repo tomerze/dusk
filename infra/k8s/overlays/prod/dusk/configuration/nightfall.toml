@@ -56,7 +56,7 @@ partition = -1
 brokers = "dusk-kafka-bootstrap:9093"
 allow_plaintext = false
 properties = { "security.protocol" = "ssl", "ssl.ca.location" = "/etc/nightfall/kafka/ca.crt", "ssl.certificate.location" = "/etc/nightfall/kafka/user.crt", "ssl.key.location" = "/etc/nightfall/kafka/user.key" }
-topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes" }
+topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes", credential_quota = "dusk.credential-quota" }
 census_interval_seconds = 300
 census_heartbeat_seconds = 15
 

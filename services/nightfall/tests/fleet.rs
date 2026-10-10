@@ -1638,3 +1638,178 @@ fn the_fleet_listener_takes_the_node_address_from_a_proxy_header() {
     let connections = check_connections(&environment);
     assert_eq!(connections[0]["remote_address"], claimed.to_string());
 }
+
+async fn enroll_with_token(
+    provisioning: &nightfall_provisioning::provision_capnp::provisioning::Client,
+    token: &str,
+    fingerprint: [u8; 32],
+) -> Result<(), capnp::Error> {
+    let mut assign = provisioning.assign_request();
+    assign.get().init_credential().set_fleet_token(token);
+    device_report(assign.get().init_device());
+    assign
+        .get()
+        .get_device()
+        .unwrap()
+        .set_hardware_fingerprint(&fingerprint);
+    let assigned = assign.send().promise.await?;
+    let assignment = assigned.get()?.get_assignment()?;
+    let device_id = assignment.get_device_id()?.to_string().unwrap();
+    let installation_id = assignment.get_installation_id()?.to_string().unwrap();
+    let challenge = assignment.get_challenge()?.to_vec();
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    let mut parameters = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    parameters.distinguished_name = rcgen::DistinguishedName::new();
+    parameters.subject_alt_names = vec![
+        rcgen::SanType::URI(format!("urn:dusk:device:{device_id}").try_into().unwrap()),
+        rcgen::SanType::URI(
+            format!("urn:dusk:installation:{installation_id}")
+                .try_into()
+                .unwrap(),
+        ),
+    ];
+    let csr = parameters.serialize_request(&key).unwrap();
+    let mut enroll = provisioning.enroll_request();
+    enroll.get().init_credential().set_fleet_token(token);
+    device_report(enroll.get().init_device());
+    enroll
+        .get()
+        .get_device()
+        .unwrap()
+        .set_hardware_fingerprint(&fingerprint);
+    enroll.get().set_challenge(&challenge);
+    enroll.get().set_csr(csr.der());
+    enroll.send().promise.await.map(|_| ())
+}
+
+#[test]
+fn a_live_reload_retires_and_caps_a_fleet_token_across_instances() {
+    let environment = Environment::new();
+    let step_ca = support::step_ca::FakeStepCa::start(
+        environment.provisioner.public_jwk(),
+        environment.pki.fleet_client.clone(),
+    );
+    std::fs::write(
+        environment.paths().file("step-ca-root.crt"),
+        &step_ca.root_pem,
+    )
+    .unwrap();
+    let mut first_config = environment.config("nightfall-0", 0);
+    first_config.step_ca.url = step_ca.url.clone();
+    let mut second_config = environment.config("nightfall-1", 1);
+    second_config.step_ca.url = step_ca.url.clone();
+    let (first, _first_log) = environment.start(first_config);
+    let (second, _second_log) = environment.start(second_config);
+    let mut first_seen = nightfall::server::credential_files_modified(&first.shared.config);
+    let mut second_seen = first_seen;
+    run(async {
+        let anonymous =
+            support::harness::anonymous_config(&environment.pki.fleet_server.certificate);
+        let on_first =
+            support::harness::connect_provisioning(first.addresses.fleet, anonymous.clone()).await;
+        let on_second =
+            support::harness::connect_provisioning(second.addresses.fleet, anonymous).await;
+        enroll_with_token(&on_first.client, support::harness::FLEET_TOKEN, [42u8; 32])
+            .await
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(
+            environment.paths().file("fleet-tokens.toml"),
+            format!(
+                "[[token]]\nname = \"test\"\nvalue_sha256 = \"{}\"\ntenant = \"acme\"\nmax_installations = 2\n\n[[token]]\nname = \"leaked\"\nvalue_sha256 = \"{}\"\nretired = true\n",
+                nightfall_ledger::entry::sha256_hex(support::harness::FLEET_TOKEN.as_bytes()),
+                nightfall_ledger::entry::sha256_hex(b"leaked fleet token")
+            ),
+        )
+        .unwrap();
+        nightfall::server::reload_credentials_if_changed(&first.shared, &mut first_seen);
+        nightfall::server::reload_credentials_if_changed(&second.shared, &mut second_seen);
+        let retired = error_of(enroll_with_token(
+            &on_first.client,
+            "leaked fleet token",
+            [41u8; 32],
+        ))
+        .await;
+        assert!(
+            retired.extra.contains("denied: credential retired"),
+            "{retired}"
+        );
+        wait_until(
+            "the second instance to count the installation enrolled before the cap",
+            Duration::from_secs(10),
+            || {
+                second
+                    .shared
+                    .quota
+                    .snapshot()
+                    .is_some_and(|used| used.values().copied().sum::<u64>() == 1)
+            },
+        )
+        .await;
+        enroll_with_token(&on_second.client, support::harness::FLEET_TOKEN, [43u8; 32])
+            .await
+            .unwrap();
+        wait_until(
+            "the first instance to count the second instance's installation",
+            Duration::from_secs(10),
+            || {
+                first
+                    .shared
+                    .quota
+                    .snapshot()
+                    .is_some_and(|used| used.values().copied().sum::<u64>() == 2)
+            },
+        )
+        .await;
+        let refused = error_of(enroll_with_token(
+            &on_first.client,
+            support::harness::FLEET_TOKEN,
+            [44u8; 32],
+        ))
+        .await;
+        assert!(
+            refused.extra.contains("denied: credential quota reached"),
+            "{refused}"
+        );
+    });
+    shutdown(second);
+    shutdown(first);
+    let reservations: Vec<Value> = environment
+        .broker
+        .records("dusk.credential-quota")
+        .into_iter()
+        .filter_map(|record| record.payload)
+        .map(|payload| serde_json::from_slice(&payload).unwrap())
+        .collect();
+    let validator = Contract::CredentialQuota.validator().unwrap();
+    for reservation in &reservations {
+        validator.check(reservation.to_string().as_bytes()).unwrap();
+    }
+    assert_eq!(reservations.len(), 2);
+    assert!(reservations.iter().all(|reservation| {
+        reservation["operation"] == "reserve" && reservation["credential"] == "test"
+    }));
+    assert_eq!(
+        reservations
+            .iter()
+            .map(|reservation| reservation["limit"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        [nightfall_provisioning::quota::UNCAPPED, 2]
+    );
+    let reasons: Vec<Value> = environment
+        .broker
+        .records("dusk.enrollments")
+        .into_iter()
+        .filter_map(|record| record.payload)
+        .map(|payload| serde_json::from_slice::<Value>(&payload).unwrap()["reason"].clone())
+        .filter(|reason| !reason.is_null())
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            Value::from("credential_retired"),
+            Value::from("credential_quota_reached")
+        ]
+    );
+    assert_eq!(step_ca.signed.lock().unwrap().len(), 2);
+}

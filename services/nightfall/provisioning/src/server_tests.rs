@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 use x509_parser::extensions::{GeneralName, ParsedExtension};
 
 use crate::config::ProvisioningConfig;
-use crate::credential::{FleetTokens, InstallTokenKeys, sha256};
+use crate::credential::{CredentialKind, CredentialName, FleetTokens, InstallTokenKeys, sha256};
 use crate::csr::fixtures::{csr, p256};
 use crate::events::{EnrollmentEvent, EnrollmentEvents, Outcome};
 use crate::fake_step_ca::FakeStepCa;
@@ -22,6 +22,7 @@ use crate::identity::{
 use crate::jwt::SigningKey;
 use crate::jwt::fixtures::{EdwardsSigner, private_jwk};
 use crate::limits::PenaltyBox;
+use crate::quota::{InstallationQuota, QuotaUnavailable, Reservation, ReservationOutcome};
 use crate::server::{ConnectionInfo, Provisioning};
 use crate::state::{Lifecycle, NodeStateView};
 use crate::step_ca::{StepCaClient, StepCaConfig};
@@ -122,12 +123,67 @@ impl PenaltyBox for Penalties {
     }
 }
 
+#[derive(Default)]
+struct Quota {
+    used: Mutex<HashMap<CredentialName, u64>>,
+    reservations: Mutex<Vec<Reservation>>,
+    released: Mutex<Vec<Reservation>>,
+    recorded: Mutex<Vec<Reservation>>,
+    unavailable: Mutex<bool>,
+    elsewhere: Mutex<u64>,
+}
+
+impl InstallationQuota for Quota {
+    fn used(&self, credential: &CredentialName) -> Result<u64, QuotaUnavailable> {
+        if *self.unavailable.lock().unwrap() {
+            return Err(QuotaUnavailable(String::from("not caught up")));
+        }
+        Ok(self
+            .used
+            .lock()
+            .unwrap()
+            .get(credential)
+            .copied()
+            .unwrap_or(0))
+    }
+
+    fn reserve(&self, reservation: Reservation) -> ReservationOutcome {
+        let mut used = self.used.lock().unwrap();
+        let count = used.entry(reservation.credential.clone()).or_default();
+        *count += std::mem::take(&mut *self.elsewhere.lock().unwrap());
+        let granted = *count < reservation.limit;
+        if granted {
+            *count += 1;
+        }
+        self.reservations.lock().unwrap().push(reservation);
+        Box::pin(async move { Ok(granted) })
+    }
+
+    fn release(&self, reservation: &Reservation) {
+        if let Some(count) = self.used.lock().unwrap().get_mut(&reservation.credential) {
+            *count = count.saturating_sub(1);
+        }
+        self.released.lock().unwrap().push(reservation.clone());
+    }
+
+    fn record(&self, reservation: &Reservation) {
+        *self
+            .used
+            .lock()
+            .unwrap()
+            .entry(reservation.credential.clone())
+            .or_default() += 1;
+        self.recorded.lock().unwrap().push(reservation.clone());
+    }
+}
+
 struct Harness {
     provisioning: Arc<Provisioning>,
     step_ca: FakeStepCa,
     events: Arc<Recorder>,
     states: Arc<States>,
     penalties: Arc<Penalties>,
+    quota: Arc<Quota>,
     installer: EdwardsSigner,
     device_key: DeviceIdKey,
 }
@@ -176,12 +232,14 @@ async fn harness_with(adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaCo
     let events = Arc::new(Recorder::default());
     let states = Arc::new(States::default());
     let penalties = Arc::new(Penalties::default());
+    let quota = Arc::new(Quota::default());
     let provisioning = Provisioning::new(
         config,
         StepCaClient::new(step_ca_config).unwrap(),
         events.clone(),
         states.clone(),
         penalties.clone(),
+        quota.clone(),
     )
     .unwrap();
     Harness {
@@ -190,6 +248,7 @@ async fn harness_with(adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaCo
         events,
         states,
         penalties,
+        quota,
         installer,
         device_key: DeviceIdKey::from_hex(KEY).unwrap(),
     }
@@ -1471,6 +1530,16 @@ async fn enroll_new(
     .await
 }
 
+fn reasons(events: &Recorder) -> Vec<Option<String>> {
+    events
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|event| event.reason.clone())
+        .collect()
+}
+
 #[tokio::test]
 async fn refuses_a_retired_fleet_token_at_once_and_without_a_penalty() {
     let harness = harness().await;
@@ -1551,6 +1620,136 @@ async fn takes_added_removed_and_re_tenanted_fleet_tokens_without_a_restart() {
 }
 
 #[tokio::test]
+async fn counts_what_an_uncapped_token_enrolls_toward_a_cap_set_later() {
+    let harness = harness().await;
+    let client = harness.client(ADDRESS, Vec::new());
+    harness.step_ca.behaviour.lock().unwrap().status = Some(500);
+    denied_with(
+        enroll_new(&client, Credential::Fleet("lab secret"), [26u8; 32]).await,
+        "unavailable",
+    );
+    harness.step_ca.behaviour.lock().unwrap().status = None;
+    enroll_new(&client, Credential::Fleet("lab secret"), [27u8; 32])
+        .await
+        .unwrap();
+    let recorded = harness.quota.recorded.lock().unwrap().clone();
+    assert_eq!(
+        recorded.len(),
+        1,
+        "only the issued installation is recorded"
+    );
+    assert_eq!(recorded[0].limit, crate::quota::UNCAPPED);
+    assert!(harness.quota.reservations.lock().unwrap().is_empty());
+    harness.provisioning.replace_fleet_tokens(tokens_file(&[(
+        "lab",
+        "lab secret",
+        "max_installations = 1",
+    )]));
+    denied_with(
+        assign(&client, Credential::Fleet("lab secret"), &[28u8; 32]).await,
+        "denied: credential quota reached",
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn caps_the_installations_a_fleet_token_enrolls() {
+    let harness = harness().await;
+    harness.provisioning.replace_fleet_tokens(tokens_file(&[
+        ("retail-eu-2026", "retail secret", "tenant = \"retail-eu\""),
+        ("lab", "lab secret", "max_installations = 3"),
+    ]));
+    let client = harness.client(ADDRESS, Vec::new());
+    for number in 0..2u8 {
+        enroll_new(&client, Credential::Fleet("lab secret"), [30 + number; 32])
+            .await
+            .unwrap();
+    }
+    let fingerprint = [33u8; 32];
+    let late = assign(&client, Credential::Fleet("lab secret"), &fingerprint)
+        .await
+        .unwrap();
+    *harness.quota.elsewhere.lock().unwrap() = 1;
+    let request = csr(&p256(), None, &uris(&late.device_id, &late.installation_id));
+    denied_with(
+        enroll(
+            &client,
+            Credential::Fleet("lab secret"),
+            &fingerprint,
+            &late.challenge,
+            &request,
+        )
+        .await,
+        "denied: credential quota reached",
+    );
+    denied_with(
+        assign(&client, Credential::Fleet("lab secret"), &[34u8; 32]).await,
+        "denied: credential quota reached",
+    );
+    enroll_new(&client, Credential::Fleet("retail secret"), [35u8; 32])
+        .await
+        .unwrap();
+    let lab = CredentialName {
+        kind: CredentialKind::FleetToken,
+        name: String::from("lab"),
+    };
+    let reservations = harness.quota.reservations.lock().unwrap().clone();
+    assert_eq!(reservations.len(), 3);
+    assert!(
+        reservations
+            .iter()
+            .all(|reservation| reservation.credential == lab && reservation.limit == 3)
+    );
+    assert_eq!(reservations[2].installation_id, late.installation_id);
+    assert_eq!(harness.quota.used(&lab), Ok(3));
+    let quota_refusals: Vec<EnrollmentEvent> = harness
+        .events
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| event.reason.as_deref() == Some("credential_quota_reached"))
+        .cloned()
+        .collect();
+    assert_eq!(quota_refusals.len(), 2);
+    assert!(quota_refusals.iter().all(|event| {
+        event.outcome == Outcome::Denied && event.credential_ref.as_deref() == Some("lab")
+    }));
+    assert_eq!(
+        harness.provisioning.quota_limits(),
+        vec![(lab, 3)],
+        "only the capped entry has a limit"
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn gives_back_the_reserved_installation_when_signing_fails() {
+    let harness = harness().await;
+    harness.provisioning.replace_fleet_tokens(tokens_file(&[(
+        "lab",
+        "lab secret",
+        "max_installations = 1",
+    )]));
+    let client = harness.client(ADDRESS, Vec::new());
+    harness.step_ca.behaviour.lock().unwrap().status = Some(500);
+    denied_with(
+        enroll_new(&client, Credential::Fleet("lab secret"), [36u8; 32]).await,
+        "unavailable",
+    );
+    assert_eq!(harness.quota.released.lock().unwrap().len(), 1);
+    harness.step_ca.behaviour.lock().unwrap().status = None;
+    enroll_new(&client, Credential::Fleet("lab secret"), [37u8; 32])
+        .await
+        .unwrap();
+    assert_eq!(
+        reasons(&harness.events),
+        vec![None, Some(String::from("step_ca_error")), None, None]
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
 async fn rate_limits_every_install_token_of_one_key_together() {
     let harness = harness_with(|config, _| {
         config.enrollments_per_second_per_credential = 2;
@@ -1576,6 +1775,65 @@ async fn rate_limits_every_install_token_of_one_key_together() {
     );
     tokio::time::sleep(Duration::from_millis(600)).await;
     assign(&client, Credential::Install(&second), &[39u8; 32])
+        .await
+        .unwrap();
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn caps_the_installations_of_an_install_token_key() {
+    let harness = harness().await;
+    let mut key = harness.installer.public_jwk();
+    key["max_installations"] = Value::from(1);
+    harness.provisioning.replace_install_token_keys(
+        InstallTokenKeys::from_json(&json!({ "keys": [key] }).to_string()).unwrap(),
+    );
+    let client = harness.client(ADDRESS, Vec::new());
+    let first = harness.install_token("unit-1", "batch-9-unit-1", None);
+    enroll_new(&client, Credential::Install(&first), [38u8; 32])
+        .await
+        .unwrap();
+    let second = harness.install_token("unit-2", "batch-9-unit-2", None);
+    denied_with(
+        assign(&client, Credential::Install(&second), &[39u8; 32]).await,
+        "denied: credential quota reached",
+    );
+    let refused = harness.events.last();
+    assert_eq!(refused.credential_ref.as_deref(), Some("unit-2"));
+    assert_eq!(refused.credential_issuer.as_deref(), Some("factory-2026"));
+    assert_eq!(
+        harness.provisioning.quota_limits(),
+        vec![(
+            CredentialName {
+                kind: CredentialKind::InstallToken,
+                name: String::from("factory-2026"),
+            },
+            1
+        )]
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn refuses_a_capped_credential_while_its_installations_cannot_be_counted() {
+    let harness = harness().await;
+    harness.provisioning.replace_fleet_tokens(tokens_file(&[
+        ("lab", "lab secret", "max_installations = 5"),
+        ("open", "open secret", ""),
+    ]));
+    *harness.quota.unavailable.lock().unwrap() = true;
+    let client = harness.client(ADDRESS, Vec::new());
+    let refused = assign(&client, Credential::Fleet("lab secret"), &[40u8; 32])
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(refused.kind, capnp::ErrorKind::Overloaded);
+    let event = harness.events.last();
+    assert_eq!(
+        (event.outcome, event.reason.as_deref()),
+        (Outcome::Error, Some("credential_quota_unavailable"))
+    );
+    enroll_new(&client, Credential::Fleet("open secret"), [41u8; 32])
         .await
         .unwrap();
     assert_contract(&harness.events);

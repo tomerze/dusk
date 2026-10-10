@@ -6,6 +6,7 @@ use crate::events::{EnrollmentPublisher, EventPublisher, now};
 use crate::kafka::Broker;
 use crate::limits::{AddressSlots, HandshakeBucket, PenaltyBox, SetupRate};
 use crate::node_state::NodeStates;
+use crate::quota::KafkaQuota;
 use crate::shard::{Control, ShardHandle, ShardListeners};
 use crate::tls::{Reloadable, ReloadingCertificate, ReloadingClientVerifier};
 use anyhow::Context;
@@ -72,6 +73,7 @@ pub struct Shared {
     pub setups: SetupRate,
     pub tls: TlsConfigs,
     pub provisioning: Arc<Provisioning>,
+    pub quota: Arc<KafkaQuota>,
     pub shards: Vec<ShardHandle>,
     pub relays: Arc<tokio::sync::Semaphore>,
     pub readiness: Readiness,
@@ -189,6 +191,7 @@ fn expected_cleanup(config: &Config) -> Vec<(String, &'static str)> {
         (topics.enrollments.clone(), "delete"),
         (topics.node_state.clone(), "compact"),
         (topics.intended_processes.clone(), "compact"),
+        (topics.credential_quota.clone(), "compact"),
     ]
 }
 
@@ -427,6 +430,13 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
     step_ca_config.max_concurrent = config.step_ca.max_concurrent;
     step_ca_config.timeout = Duration::from_millis(config.step_ca.timeout_ms);
     let step_ca = StepCaClient::new(step_ca_config).context("create the step-ca client")?;
+    let quota = Arc::new(KafkaQuota::new(
+        &config.instance,
+        &config.kafka.topics.credential_quota,
+        services.broker.producer("quota")?,
+        runtime.handle().clone(),
+        crate::quota::CONFIRM_TIMEOUT,
+    ));
     let provisioning = Provisioning::new(
         provisioning_config,
         step_ca,
@@ -436,6 +446,7 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
         }),
         node_states.clone(),
         penalty_box.clone(),
+        quota.clone(),
     )
     .map_err(|error| anyhow::anyhow!("start provisioning: {error}"))?;
     let fleet_client_roots = Arc::new(FleetClientRoots {
@@ -517,6 +528,7 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
         penalty_box,
         tls,
         provisioning,
+        quota,
         shards: handles,
         readiness: Readiness {
             topics: AtomicBool::new(topic_problems.is_empty()),
@@ -745,6 +757,21 @@ async fn reload_credentials(
     }
 }
 
+fn export_quota(shared: &Shared) {
+    let Some(used) = shared.quota.snapshot() else {
+        return;
+    };
+    for (credential, limit) in shared.provisioning.quota_limits() {
+        let count = used.get(&credential).copied().unwrap_or(0);
+        metrics::gauge!(
+            "nightfall_credential_installations_remaining",
+            "credential_kind" => credential.kind.name(),
+            "credential" => credential.name.clone()
+        )
+        .set(limit.saturating_sub(count) as f64);
+    }
+}
+
 async fn update_gauges(shared: Arc<Shared>, broker: Arc<dyn Broker>, stop: CancellationToken) {
     let mut last_topic_check = Instant::now();
     let mut first = true;
@@ -762,6 +789,7 @@ async fn update_gauges(shared: Arc<Shared>, broker: Arc<dyn Broker>, stop: Cance
         metrics::gauge!("nightfall_penalty_box_ips")
             .set(shared.penalty_box.penalized_count() as f64);
         shared.provisioning.refresh_rate_alert(Instant::now());
+        export_quota(&shared);
         let remote = shared.directory().remote_count();
         metrics::gauge!("nightfall_directory_remote_nodes").set(remote as f64);
         metrics::gauge!("nightfall_ready").set(if shared.ready().is_ok() { 1.0 } else { 0.0 });
@@ -952,6 +980,7 @@ mod tests {
         broker.create_topic("dusk.enrollments", 3, "delete");
         broker.create_topic("dusk.node-state", 1, "compact, delete");
         broker.create_topic("dusk.intended-processes", 3, "compact");
+        broker.create_topic("dusk.credential-quota", 1, "compact");
         let problems = check_topics(&broker, &config);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].starts_with("dusk.node-state"), "{problems:?}");

@@ -35,9 +35,15 @@ enum PublicKey {
     Ed25519(Vec<u8>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct JwksKey {
+    public_key: PublicKey,
+    max_installations: Option<u64>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Jwks {
-    keys: HashMap<String, PublicKey>,
+    keys: HashMap<String, JwksKey>,
 }
 
 fn member<'a>(key: &'a Value, name: &str) -> Option<&'a str> {
@@ -96,7 +102,21 @@ impl Jwks {
             let (public_key, thumbprint) = public_key_of(key)
                 .map_err(|KeyError(reason)| KeyError(format!("key {position}: {reason}")))?;
             let key_id = member(key, "kid").map(String::from).unwrap_or(thumbprint);
-            if jwks.keys.insert(key_id.clone(), public_key).is_some() {
+            let max_installations = match key.get("max_installations") {
+                None => None,
+                Some(limit) => {
+                    Some(limit.as_u64().filter(|limit| *limit > 0).ok_or_else(|| {
+                        KeyError(format!(
+                            "key {position}: max_installations must be a whole number of at least 1"
+                        ))
+                    })?)
+                }
+            };
+            let entry = JwksKey {
+                public_key,
+                max_installations,
+            };
+            if jwks.keys.insert(key_id.clone(), entry).is_some() {
                 return Err(KeyError(format!(
                     "key {position}: key id {key_id} appears twice"
                 )));
@@ -111,6 +131,16 @@ impl Jwks {
 
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
+    }
+
+    pub fn max_installations(&self, key_id: &str) -> Option<u64> {
+        self.keys.get(key_id).and_then(|key| key.max_installations)
+    }
+
+    pub fn limits(&self) -> impl Iterator<Item = (&str, u64)> {
+        self.keys
+            .iter()
+            .filter_map(|(key_id, key)| key.max_installations.map(|limit| (key_id.as_str(), limit)))
     }
 
     pub fn verify(&self, token: &str) -> Result<Map<String, Value>, JwtError> {
@@ -149,7 +179,7 @@ impl Jwks {
             .ok_or_else(|| JwtError::UnknownKey(String::from(key_id)))?;
         let signed = &token.as_bytes()[..header.len() + 1 + payload.len()];
         let signature = decode(signature)?;
-        let verified = match (algorithm, key) {
+        let verified = match (algorithm, &key.public_key) {
             ("ES256", PublicKey::P256(point)) => {
                 UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, point).verify(signed, &signature)
             }
@@ -395,6 +425,43 @@ mod tests {
             jwks.verify(&unknown),
             Err(JwtError::UnknownKey(String::from("other")))
         );
+    }
+
+    #[test]
+    fn reads_the_installation_cap_of_each_key() {
+        let capped = EdwardsSigner::new("factory-2026");
+        let open = EdwardsSigner::new("factory-2025");
+        let mut capped_public = capped.public_jwk();
+        capped_public["max_installations"] = Value::from(500);
+        let jwks =
+            Jwks::from_json(&json!({ "keys": [capped_public, open.public_jwk()] }).to_string())
+                .unwrap();
+        assert_eq!(jwks.max_installations("factory-2026"), Some(500));
+        assert_eq!(jwks.max_installations("factory-2025"), None);
+        assert_eq!(
+            jwks.limits().collect::<Vec<_>>(),
+            vec![("factory-2026", 500)]
+        );
+        let (key_id, claims) = jwks
+            .verify_with_key_id(&capped.sign(&json!({ "a": 1 })))
+            .unwrap();
+        assert_eq!(
+            (key_id.as_str(), &claims["a"]),
+            ("factory-2026", &Value::from(1))
+        );
+        for refused in [
+            Value::from(0),
+            Value::from(-1),
+            Value::from("500"),
+            Value::from(1.5),
+        ] {
+            let mut public = capped.public_jwk();
+            public["max_installations"] = refused.clone();
+            assert!(
+                Jwks::from_json(&json!({ "keys": [public] }).to_string()).is_err(),
+                "accepted {refused}"
+            );
+        }
     }
 
     #[test]
