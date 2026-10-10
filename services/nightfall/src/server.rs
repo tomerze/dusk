@@ -18,7 +18,7 @@ use nightfall_ledger::writer::{
 use nightfall_membrane::limits::{InstanceLimits, Limits};
 use nightfall_membrane::permissions::Permissions;
 use nightfall_membrane::schema::SchemaRegistry;
-use nightfall_provisioning::config::{ProvisioningConfig, ProvisioningFiles};
+use nightfall_provisioning::config::{ProvisioningConfig, ProvisioningFiles, load_certificates};
 use nightfall_provisioning::renew::{FleetClientTrust, RenewClientVerifier};
 use nightfall_provisioning::server::Provisioning;
 use nightfall_provisioning::step_ca::{StepCaClient, StepCaConfig};
@@ -394,6 +394,15 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
         device_id_key_file: &config.provision.device_id_key_file,
         fleet_client_ca: &config.fleet.client_ca,
     })?;
+    if !config
+        .provision
+        .tpm_endorsement_roots
+        .as_os_str()
+        .is_empty()
+    {
+        provisioning_config.endorsement_roots =
+            load_certificates(&config.provision.tpm_endorsement_roots)?;
+    }
     provisioning_config.challenge_ttl = Duration::from_millis(config.provision.challenge_ttl_ms);
     provisioning_config.renew_grace = config.renew_grace()?;
     provisioning_config.certificate_lifetime = config.certificate_lifetime()?;

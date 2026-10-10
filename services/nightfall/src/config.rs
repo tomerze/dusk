@@ -55,6 +55,7 @@ pub struct ProvisionConfig {
     pub device_id_key_file: PathBuf,
     pub challenge_ttl_ms: u64,
     pub renew_grace: String,
+    pub tpm_endorsement_roots: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -184,6 +185,7 @@ impl Default for ProvisionConfig {
             device_id_key_file: PathBuf::from("/etc/nightfall/secrets/device-id.key"),
             challenge_ttl_ms: 300_000,
             renew_grace: "2160h".to_string(),
+            tpm_endorsement_roots: PathBuf::new(),
         }
     }
 }
@@ -745,6 +747,7 @@ install_token_keys = "/etc/nightfall/secrets/install-token-jwks.json"
 device_id_key_file = "/etc/nightfall/secrets/device-id.key"
 challenge_ttl_ms = 300000
 renew_grace = "2160h"
+tpm_endorsement_roots = ""
 
 [inner]
 listen = "0.0.0.0:8444"
