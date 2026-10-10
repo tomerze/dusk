@@ -19,6 +19,7 @@ struct NightfallArgs {
     trustAnchors @4 :Text;
     installTokenFile @5 :Text;
     heartbeatTimeoutSeconds @6 :UInt32 = 90;
+    tpm @7 :Text;
   }
   interface Server {}
 }

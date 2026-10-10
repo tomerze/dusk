@@ -11,6 +11,7 @@ use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::FromDer as _;
 
 use crate::node_key::{CsrSigningKey, NodeKey, TlsSigningKey};
+use crate::tpm::Tpm;
 
 pub(crate) const DEVICE_URI_PREFIX: &str = "urn:dusk:device:";
 pub(crate) const INSTALLATION_URI_PREFIX: &str = "urn:dusk:installation:";
@@ -258,13 +259,10 @@ pub(crate) async fn installation_id(kvs: &Kvs) -> Option<String> {
     }
 }
 
-async fn private_key(kvs: &Kvs, key: u64, name: &str) -> Option<(NodeKey, Vec<u8>)> {
-    let Value::Bytes(pkcs8) = kvs.get(key).await? else {
-        tracing::error!(name, "the key holds no bytes; ignoring it");
-        return None;
-    };
-    match NodeKey::from_pkcs8(&pkcs8) {
-        Ok(node_key) => Some((node_key, pkcs8)),
+async fn stored_key(kvs: &Kvs, key: u64, name: &str) -> Option<(Vec<u8>, Value)> {
+    let stored = kvs.get(key).await?;
+    match NodeKey::public_key_of(&stored) {
+        Ok(public_key) => Some((public_key, stored)),
         Err(reason) => {
             tracing::error!(
                 name,
@@ -298,7 +296,7 @@ fn certificate_chain(stored: Value) -> Option<Vec<CertificateDer<'static>>> {
     }
 }
 
-pub(crate) async fn load(kvs: &Kvs) -> anyhow::Result<Option<Identity>> {
+pub(crate) async fn load(kvs: &Kvs, tpm: Option<&Arc<Tpm>>) -> anyhow::Result<Option<Identity>> {
     let Some(stored) = kvs.get(CERTIFICATE_CHAIN).await else {
         tracing::info!("the kvs holds no certificate");
         return Ok(None);
@@ -315,11 +313,11 @@ pub(crate) async fn load(kvs: &Kvs) -> anyhow::Result<Option<Identity>> {
     };
     let device_id = leaf.identity.device_id.clone();
     let installation_id = leaf.identity.installation_id.clone();
-    let current = private_key(kvs, PRIVATE_KEY, "nightfall.private_key").await;
-    let staged = private_key(kvs, STAGED_PRIVATE_KEY, "nightfall.staged_private_key").await;
-    let key = match (current, staged) {
-        (_, Some((staged, pkcs8))) if staged.public_key() == leaf.public_key.as_slice() => {
-            kvs.set(PRIVATE_KEY, Value::Bytes(pkcs8), KEPT_SECRET)
+    let current = stored_key(kvs, PRIVATE_KEY, "nightfall.private_key").await;
+    let staged = stored_key(kvs, STAGED_PRIVATE_KEY, "nightfall.staged_private_key").await;
+    let private_key = match (current, staged) {
+        (_, Some((public_key, staged))) if public_key == leaf.public_key => {
+            kvs.set(PRIVATE_KEY, staged.clone(), KEPT_SECRET)
                 .await
                 .context("couldn't store the staged private key as the current one")?;
             kvs.delete(STAGED_PRIVATE_KEY)
@@ -332,7 +330,7 @@ pub(crate) async fn load(kvs: &Kvs) -> anyhow::Result<Option<Identity>> {
             );
             staged
         }
-        (Some((current, _)), staged) if current.public_key() == leaf.public_key.as_slice() => {
+        (Some((public_key, current)), staged) if public_key == leaf.public_key => {
             if staged.is_some() {
                 kvs.delete(STAGED_PRIVATE_KEY)
                     .await
@@ -350,6 +348,18 @@ pub(crate) async fn load(kvs: &Kvs) -> anyhow::Result<Option<Identity>> {
                 device_id,
                 installation_id,
                 "no stored private key matches the stored certificate"
+            );
+            return Ok(None);
+        }
+    };
+    let key = match NodeKey::from_stored(&private_key, tpm) {
+        Ok(key) => key,
+        Err(reason) => {
+            tracing::error!(
+                device_id,
+                installation_id,
+                reason,
+                "the private key of the stored certificate does not load"
             );
             return Ok(None);
         }
@@ -375,17 +385,13 @@ pub(crate) async fn load(kvs: &Kvs) -> anyhow::Result<Option<Identity>> {
     }))
 }
 
-pub(crate) async fn stage(kvs: &Kvs, pkcs8: &[u8]) -> anyhow::Result<()> {
-    kvs.set(
-        STAGED_PRIVATE_KEY,
-        Value::Bytes(pkcs8.to_vec()),
-        KEPT_SECRET,
-    )
-    .await
-    .context("couldn't stage the new private key in the kvs")
+pub(crate) async fn stage(kvs: &Kvs, key: &NodeKey) -> anyhow::Result<()> {
+    kvs.set(STAGED_PRIVATE_KEY, key.stored(), KEPT_SECRET)
+        .await
+        .context("couldn't stage the new private key in the kvs")
 }
 
-pub(crate) async fn store(kvs: &Kvs, identity: &Identity, pkcs8: &[u8]) -> anyhow::Result<()> {
+pub(crate) async fn store(kvs: &Kvs, identity: &Identity) -> anyhow::Result<()> {
     let chain = identity
         .chain
         .iter()
@@ -401,7 +407,7 @@ pub(crate) async fn store(kvs: &Kvs, identity: &Identity, pkcs8: &[u8]) -> anyho
     )
     .await
     .context("couldn't store the installation id")?;
-    kvs.set(PRIVATE_KEY, Value::Bytes(pkcs8.to_vec()), KEPT_SECRET)
+    kvs.set(PRIVATE_KEY, identity.key.stored(), KEPT_SECRET)
         .await
         .context("couldn't store the private key")?;
     kvs.delete(STAGED_PRIVATE_KEY)
@@ -542,8 +548,8 @@ mod tests {
                 .clone()
         }
 
-        fn identity(&self, installation_id: &str) -> (Identity, Vec<u8>) {
-            let (key, pkcs8) = NodeKey::generate().unwrap();
+        fn identity(&self, installation_id: &str) -> Identity {
+            let key = NodeKey::generate().unwrap();
             let now = now_seconds();
             let der = self.issue(
                 &[
@@ -554,12 +560,11 @@ mod tests {
                 &key,
                 (now - 10, now + 3600),
             );
-            let identity = Identity {
+            Identity {
                 leaf: parse_leaf(&der).unwrap(),
                 chain: vec![der],
                 key: Arc::new(key),
-            };
-            (identity, pkcs8)
+            }
         }
     }
 
@@ -676,7 +681,7 @@ mod tests {
 
     #[test]
     fn certificate_request_carries_exactly_the_two_uris_and_an_empty_subject() {
-        let (key, _) = NodeKey::generate().unwrap();
+        let key = NodeKey::generate().unwrap();
         let der = certificate_request(DEVICE, INSTALLATION, &key).unwrap();
         let (remainder, request) =
             x509_parser::certification_request::X509CertificationRequest::from_der(&der).unwrap();
@@ -709,7 +714,7 @@ mod tests {
 
     #[test]
     fn parse_leaf_reads_identity_validity_and_key() {
-        let (key, _) = NodeKey::generate().unwrap();
+        let key = NodeKey::generate().unwrap();
         let authority = Authority::new();
         let now = now_seconds();
         let der = authority.issue(
@@ -742,7 +747,7 @@ mod tests {
 
     #[test]
     fn parse_leaf_rejects_a_wrong_common_name_or_extra_names() {
-        let (key, _) = NodeKey::generate().unwrap();
+        let key = NodeKey::generate().unwrap();
         let authority = Authority::new();
         let now = now_seconds();
         let wrong_common_name = authority.issue(
@@ -773,11 +778,11 @@ mod tests {
     fn a_stored_identity_loads_back_with_its_flags() {
         let store_under_test = PersistentKvs::new("load");
         let kvs = &store_under_test.kvs;
-        assert!(block_on(load(kvs)).unwrap().is_none());
-        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
-        block_on(stage(kvs, &pkcs8)).unwrap();
-        block_on(store(kvs, &identity, &pkcs8)).unwrap();
-        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        assert!(block_on(load(kvs, None)).unwrap().is_none());
+        let identity = Authority::new().identity(INSTALLATION);
+        block_on(stage(kvs, &identity.key)).unwrap();
+        block_on(store(kvs, &identity)).unwrap();
+        let loaded = block_on(load(kvs, None)).unwrap().unwrap();
         assert_eq!(loaded.device_id(), DEVICE);
         assert_eq!(loaded.installation_id(), INSTALLATION);
         assert_eq!(loaded.key.public_key(), identity.key.public_key());
@@ -802,18 +807,18 @@ mod tests {
         let store_under_test = PersistentKvs::new("interrupted");
         let kvs = &store_under_test.kvs;
         let authority = Authority::new();
-        let (first, first_pkcs8) = authority.identity(INSTALLATION);
-        block_on(store(kvs, &first, &first_pkcs8)).unwrap();
-        let (second, second_pkcs8) = authority.identity(INSTALLATION);
-        block_on(stage(kvs, &second_pkcs8)).unwrap();
+        let first = authority.identity(INSTALLATION);
+        block_on(store(kvs, &first)).unwrap();
+        let second = authority.identity(INSTALLATION);
+        block_on(stage(kvs, &second.key)).unwrap();
         let chain = Value::List(vec![Value::Bytes(second.chain[0].to_vec())]);
         block_on(kvs.set(CERTIFICATE_CHAIN, chain, KEPT)).unwrap();
-        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        let loaded = block_on(load(kvs, None)).unwrap().unwrap();
         assert_eq!(loaded.key.public_key(), second.key.public_key());
         assert!(!block_on(kvs.exists(STAGED_PRIVATE_KEY)));
         assert_eq!(
             block_on(kvs.get_with_flags(PRIVATE_KEY)),
-            Some((Value::Bytes(second_pkcs8), KEPT_SECRET))
+            Some((second.key.stored(), KEPT_SECRET))
         );
     }
 
@@ -821,11 +826,10 @@ mod tests {
     fn a_key_left_by_a_failed_attempt_is_discarded() {
         let store_under_test = PersistentKvs::new("leftover");
         let kvs = &store_under_test.kvs;
-        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
-        block_on(store(kvs, &identity, &pkcs8)).unwrap();
-        let (_, leftover) = NodeKey::generate().unwrap();
-        block_on(stage(kvs, &leftover)).unwrap();
-        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        let identity = Authority::new().identity(INSTALLATION);
+        block_on(store(kvs, &identity)).unwrap();
+        block_on(stage(kvs, &NodeKey::generate().unwrap())).unwrap();
+        let loaded = block_on(load(kvs, None)).unwrap().unwrap();
         assert_eq!(loaded.key.public_key(), identity.key.public_key());
         assert!(!block_on(kvs.exists(STAGED_PRIVATE_KEY)));
     }
@@ -834,8 +838,8 @@ mod tests {
     fn the_certificate_decides_the_installation_id() {
         let store_under_test = PersistentKvs::new("installation");
         let kvs = &store_under_test.kvs;
-        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
-        block_on(store(kvs, &identity, &pkcs8)).unwrap();
+        let identity = Authority::new().identity(INSTALLATION);
+        block_on(store(kvs, &identity)).unwrap();
         block_on(kvs.set(
             INSTALLATION_ID,
             Value::String(ANOTHER_INSTALLATION.to_string()),
@@ -846,7 +850,7 @@ mod tests {
             block_on(installation_id(kvs)).as_deref(),
             Some(ANOTHER_INSTALLATION)
         );
-        let loaded = block_on(load(kvs)).unwrap().unwrap();
+        let loaded = block_on(load(kvs, None)).unwrap().unwrap();
         assert_eq!(loaded.installation_id(), INSTALLATION);
         assert_eq!(
             block_on(installation_id(kvs)).as_deref(),
@@ -858,10 +862,9 @@ mod tests {
     fn an_unusable_identity_loads_as_none() {
         let store_under_test = PersistentKvs::new("unusable");
         let kvs = &store_under_test.kvs;
-        let (identity, pkcs8) = Authority::new().identity(INSTALLATION);
-        let (_, other_pkcs8) = NodeKey::generate().unwrap();
+        let identity = Authority::new().identity(INSTALLATION);
         for (key, value) in [
-            (PRIVATE_KEY, Value::Bytes(other_pkcs8)),
+            (PRIVATE_KEY, NodeKey::generate().unwrap().stored()),
             (PRIVATE_KEY, Value::Bytes(b"garbage".to_vec())),
             (PRIVATE_KEY, Value::String(String::from("not bytes"))),
             (CERTIFICATE_CHAIN, Value::List(Vec::new())),
@@ -871,11 +874,31 @@ mod tests {
             ),
             (CERTIFICATE_CHAIN, Value::Bytes(identity.chain[0].to_vec())),
         ] {
-            block_on(store(kvs, &identity, &pkcs8)).unwrap();
-            assert!(block_on(load(kvs)).unwrap().is_some());
+            block_on(store(kvs, &identity)).unwrap();
+            assert!(block_on(load(kvs, None)).unwrap().is_some());
             block_on(kvs.set(key, value.clone(), KEPT)).unwrap();
-            assert!(block_on(load(kvs)).unwrap().is_none(), "{value:?}");
+            assert!(block_on(load(kvs, None)).unwrap().is_none(), "{value:?}");
         }
+    }
+
+    #[test]
+    fn a_key_kept_in_a_tpm_does_not_load_without_the_tpm() {
+        let store_under_test = PersistentKvs::new("tpm-key");
+        let kvs = &store_under_test.kvs;
+        let identity = Authority::new().identity(INSTALLATION);
+        block_on(store(kvs, &identity)).unwrap();
+        let point = identity.key.public_key();
+        let mut public = crate::tpm::node_key_template();
+        public.unique = tpm2_protocol::data::TpmuPublicId::Ecc(tpm2_protocol::data::TpmsEccPoint {
+            x: tpm2_protocol::data::Tpm2bEccParameter::try_from(&point[1..33]).unwrap(),
+            y: tpm2_protocol::data::Tpm2bEccParameter::try_from(&point[33..]).unwrap(),
+        });
+        let in_a_tpm = Value::List(vec![
+            Value::Bytes(vec![0xaa; 126]),
+            Value::Bytes(crate::tpm::marshal(&public).unwrap()),
+        ]);
+        block_on(kvs.set(PRIVATE_KEY, in_a_tpm, KEPT_SECRET)).unwrap();
+        assert!(block_on(load(kvs, None)).unwrap().is_none());
     }
 
     #[test]

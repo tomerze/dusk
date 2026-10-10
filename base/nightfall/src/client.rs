@@ -83,6 +83,21 @@ struct NightfallCli {
         help = "Close the link when nothing arrived on it for this long"
     )]
     heartbeat_timeout: u32,
+    #[arg(
+        long,
+        value_name = "PATH",
+        requires = "connect",
+        default_value = connect::DEFAULT_TPM,
+        help = "The TPM to keep the node key in, when the path exists: a TPM device, or the Unix socket of a software TPM"
+    )]
+    tpm: String,
+    #[arg(
+        long,
+        requires = "connect",
+        conflicts_with = "tpm",
+        help = "Keep the node key in the kvs even on a machine with a TPM"
+    )]
+    no_tpm: bool,
 }
 
 impl NightfallCli {
@@ -99,6 +114,7 @@ impl NightfallCli {
             trust_anchors: self.ca.ok_or_else(|| missing("--ca"))?,
             install_token_file: self.install_token_file,
             heartbeat_timeout_seconds: self.heartbeat_timeout,
+            tpm: (!self.no_tpm).then_some(self.tpm),
         }))
     }
 }
@@ -131,6 +147,8 @@ The `nightfall` program serves the node's Dusk sessions. It keeps running until 
   built with a persistent kvs file, and renews its certificate before it expires.
   `--server-name` and `--provision-server-name` set the TLS server names when they are not the
   hosts, and `--heartbeat-timeout <seconds>` (90 by default) closes a link that has gone silent.
+  On a machine with a TPM at `--tpm <path>` (`/dev/tpmrm0` by default) the node key is created in
+  the TPM and never leaves it; `--no-tpm` keeps the key in the kvs instead.
 "#,
             version: VERSION,
         },
@@ -214,6 +232,9 @@ mod tests {
             "-l 9090 --install-token-file install",
             "-l 9090 --ca ca.pem",
             "-l 9090 --heartbeat-timeout 30",
+            "-l 9090 --tpm /dev/tpm0",
+            "-l 9090 --no-tpm",
+            "-c fleet.example:443 --provision provision.example:443 --ca ca.pem --tpm /dev/tpm0 --no-tpm",
             "-c fleet.example:443 --provision provision.example:443 --ca ca.pem --token t",
             "-c fleet.example:443 --provision provision.example:443 --ca ca.pem --token-file t",
             "-c fleet.example:443 --provision provision.example:443 --ca ca.pem --state /var/lib/dusk",
@@ -221,6 +242,21 @@ mod tests {
             assert!(parse(line).is_err(), "{line}");
         }
         assert!(parse(&format!("{CONNECT} --heartbeat-timeout 0")).is_err());
+    }
+
+    #[test]
+    fn the_tpm_defaults_to_the_kernel_resource_manager_and_can_be_moved_or_refused() {
+        assert_eq!(
+            connect_arguments(CONNECT).tpm.as_deref(),
+            Some("/dev/tpmrm0")
+        );
+        assert_eq!(
+            connect_arguments(&format!("{CONNECT} --tpm /run/swtpm/socket"))
+                .tpm
+                .as_deref(),
+            Some("/run/swtpm/socket")
+        );
+        assert_eq!(connect_arguments(&format!("{CONNECT} --no-tpm")).tpm, None);
     }
 
     #[test]
@@ -235,6 +271,7 @@ mod tests {
                 trust_anchors: String::from("/etc/dusk/fleet-server-ca.pem"),
                 install_token_file: None,
                 heartbeat_timeout_seconds: 90,
+                tpm: Some(String::from("/dev/tpmrm0")),
             }
         );
         assert_eq!(

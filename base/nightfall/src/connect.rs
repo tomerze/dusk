@@ -20,10 +20,13 @@ use rustls::pki_types::ServerName;
 use crate::backoff::{Backoff, uniform_up_to};
 use crate::identity::{self, Identity};
 use crate::link::{self, LinkGuard};
+use crate::node_key::NodeKey;
 use crate::provisioning::{DeviceReport, Provisioner, ProvisioningError, Token};
 use crate::tls::{self, HostPort, embassy_duration};
+use crate::tpm::Tpm;
 
 pub const DEFAULT_HEARTBEAT_TIMEOUT_SECONDS: u32 = 90;
+pub const DEFAULT_TPM: &str = "/dev/tpmrm0";
 const INITIAL_DELAY_CEILING: Duration = Duration::from_secs(5);
 const LINK_BACKOFF_BASE: Duration = Duration::from_secs(1);
 const LINK_BACKOFF_CAP: Duration = Duration::from_secs(300);
@@ -50,6 +53,7 @@ pub struct ConnectArgs {
     pub trust_anchors: String,
     pub install_token_file: Option<String>,
     pub heartbeat_timeout_seconds: u32,
+    pub tpm: Option<String>,
 }
 
 pub(crate) struct Settings {
@@ -59,6 +63,7 @@ pub(crate) struct Settings {
     pub trust_anchors: String,
     pub install_token_file: Option<String>,
     pub heartbeat_timeout: Duration,
+    pub tpm: Option<String>,
 }
 
 impl Settings {
@@ -92,6 +97,9 @@ impl Settings {
                 "the heartbeat timeout must be at least 1 second",
             ));
         }
+        if arguments.tpm.as_deref().is_some_and(str::is_empty) {
+            return Err(String::from("the TPM is an empty path"));
+        }
         Ok(Settings {
             fleet,
             fleet_server_name,
@@ -103,6 +111,7 @@ impl Settings {
             trust_anchors: arguments.trust_anchors.clone(),
             install_token_file: arguments.install_token_file.clone(),
             heartbeat_timeout: Duration::from_secs(u64::from(arguments.heartbeat_timeout_seconds)),
+            tpm: arguments.tpm.clone(),
         })
     }
 }
@@ -147,18 +156,45 @@ fn milliseconds(duration: Duration) -> u64 {
 }
 
 pub(crate) async fn run(settings: Settings, namespace: Rc<Namespace>, kvs: Arc<Kvs>) {
+    let tpm = settings.tpm.as_deref().and_then(open_tpm);
     let connector = Connector {
         settings,
         namespace,
         kvs,
+        tpm,
     };
     connector.supervise().await;
+}
+
+fn open_tpm(path: &str) -> Option<Arc<Tpm>> {
+    match Tpm::open(path) {
+        Ok(tpm) => {
+            tracing::info!(tpm = path, "opened the TPM");
+            Some(tpm)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            tracing::info!(
+                tpm = path,
+                "there is no TPM; the node key is kept in the kvs"
+            );
+            None
+        }
+        Err(error) => {
+            tracing::warn!(
+                tpm = path,
+                error = %error,
+                "couldn't open the TPM; the node key is kept in the kvs"
+            );
+            None
+        }
+    }
 }
 
 struct Connector {
     settings: Settings,
     namespace: Rc<Namespace>,
     kvs: Arc<Kvs>,
+    tpm: Option<Arc<Tpm>>,
 }
 
 type PendingRenewal<'connector> =
@@ -394,7 +430,7 @@ impl Connector {
 
     async fn renew(&self, identity: &Identity) -> Result<Identity, ProvisioningError> {
         let _provisioning = PROVISIONING.lock().await;
-        if let Some(stored) = identity::load(&self.kvs).await?
+        if let Some(stored) = identity::load(&self.kvs, self.tpm.as_ref()).await?
             && stored.leaf.fingerprint != identity.leaf.fingerprint
         {
             tracing::info!(
@@ -489,7 +525,7 @@ impl Connector {
 
     async fn try_identity(&self) -> Result<Identity, ProvisioningError> {
         let _provisioning = PROVISIONING.lock().await;
-        let Some(stored) = identity::load(&self.kvs).await? else {
+        let Some(stored) = identity::load(&self.kvs, self.tpm.as_ref()).await? else {
             return self.enroll().await;
         };
         if !stored.is_expired(now_unix_ms()) {
@@ -527,17 +563,19 @@ impl Connector {
 
     async fn enroll(&self) -> Result<Identity, ProvisioningError> {
         let token = self.token().await?;
+        let key = self.new_key()?;
         let report = self.device_report().await?;
         tracing::info!(
             provision = %self.settings.provisioner.target,
             installation_hint = report.installation_hint.as_str(),
             credential = token.kind(),
+            node_key = if key.tpm_object().is_some() { "tpm" } else { "kvs" },
             "enrolling"
         );
         let identity = self
             .settings
             .provisioner
-            .enroll(&token, &report, &self.kvs)
+            .enroll(&token, &report, key, &self.kvs)
             .await?;
         tracing::info!(
             device_id = identity.device_id(),
@@ -564,6 +602,20 @@ impl Connector {
             "the install token file `{path}` is empty"
         );
         Ok(Token::Install(token.to_string()))
+    }
+
+    fn new_key(&self) -> anyhow::Result<NodeKey> {
+        if let Some(tpm) = &self.tpm {
+            match NodeKey::generate_in(tpm) {
+                Ok(key) => return Ok(key),
+                Err(error) => tracing::warn!(
+                    tpm = tpm.path.as_str(),
+                    error = %format_args!("{error:#}"),
+                    "couldn't create the node key in the TPM; keeping it in the kvs"
+                ),
+            }
+        }
+        NodeKey::generate()
     }
 
     async fn device_report(&self) -> anyhow::Result<DeviceReport> {
@@ -603,6 +655,7 @@ mod tests {
             trust_anchors: String::from("/etc/dusk/fleet-server-ca.pem"),
             install_token_file: None,
             heartbeat_timeout_seconds: DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
+            tpm: Some(String::from(DEFAULT_TPM)),
         }
     }
 
@@ -637,6 +690,7 @@ mod tests {
             |arguments| arguments.trust_anchors = String::new(),
             |arguments| arguments.install_token_file = Some(String::new()),
             |arguments| arguments.heartbeat_timeout_seconds = 0,
+            |arguments| arguments.tpm = Some(String::new()),
         ];
         for mutation in mutations {
             let mut changed = arguments();

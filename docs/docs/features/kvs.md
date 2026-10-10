@@ -323,7 +323,7 @@ These keys are written by Dusk itself, and they are [sticky](#sticky-keys):
 | `logs.write_failures` | `logs`, same | Records that failed to serialize on their way into the buffer. |
 | `logs.overwritten` | `logs`, same | A list with one number per lane: how many stored records that lane has destroyed by overwriting its oldest. |
 | `nightfall.installation_id` | `nightfall -c`, when the node enrolls or renews its certificate | The installation id nightfall assigned the node. [Persistent](#persistent-keys). |
-| `nightfall.private_key` | `nightfall -c`, same | The node's private key, PKCS#8 DER. Persistent and [sensitive](#sensitive-keys). |
+| `nightfall.private_key` | `nightfall -c`, same | The node's private key, PKCS#8 DER, or a list of its TPM private and public areas when the key is in a TPM. Persistent and [sensitive](#sensitive-keys). |
 | `nightfall.certificate_chain` | `nightfall -c`, same | The node's certificate chain, a list of DER certificates. Persistent. |
 | `nightfall.staged_private_key` | `nightfall -c`, while it enrolls or renews | The key a certificate is being requested for. Persistent and sensitive. |
 | `nightfall.hardware_fingerprint` | `nightfall -c`, on a device without a machine id | 32 random bytes that stand in for one. Persistent. |

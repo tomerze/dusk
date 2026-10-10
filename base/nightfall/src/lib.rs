@@ -22,6 +22,7 @@ mod link;
 mod node_key;
 mod provisioning;
 mod tls;
+mod tpm;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -61,6 +62,7 @@ impl Args {
             root.set_trust_anchors(&arguments.trust_anchors);
             root.set_install_token_file(arguments.install_token_file.as_deref().unwrap_or(""));
             root.set_heartbeat_timeout_seconds(arguments.heartbeat_timeout_seconds);
+            root.set_tpm(arguments.tpm.as_deref().unwrap_or(""));
         }
         Args { data }
     }
@@ -78,6 +80,7 @@ fn read_connect(
         trust_anchors: reader.get_trust_anchors()?.to_string()?,
         install_token_file: optional(reader.get_install_token_file()?.to_string()?),
         heartbeat_timeout_seconds: reader.get_heartbeat_timeout_seconds(),
+        tpm: optional(reader.get_tpm()?.to_string()?),
     })
 }
 
