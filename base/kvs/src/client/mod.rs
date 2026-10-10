@@ -6,10 +6,15 @@ use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program::stream::{Stream, StreamMixin};
 use dusk_program_sh::client::cli::parse_pid;
+use dusk_program_sh::client::client_hostname;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::borrow::ToOwned;
 use std::cell::RefCell;
+use std::net::SocketAddr;
 use std::rc::Rc;
+
+mod bind;
+mod resp;
 
 /// How a key id is shown to a user: the name the program that writes it
 /// registered, else `0x…` hex.
@@ -72,6 +77,16 @@ enum KvsAction {
     },
     /// Report whether a key is present
     Exists { key: String },
+    #[command(about = "Serve the store to Redis clients on ADDRESS")]
+    Bind {
+        address: SocketAddr,
+        #[arg(value_name = "PID", value_parser = parse_pid)]
+        pid: Option<u64>,
+        #[arg(long)]
+        sensitive: bool,
+        #[arg(long)]
+        persistent: bool,
+    },
     /// List every key, by name where a program registered one
     Scan,
     #[command(about = "Start the node's kvs server, or one at PID")]
@@ -229,6 +244,29 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
                 program_args.set_pid(Some(pid.unwrap_or(DEFAULT_PID)))?;
                 return Ok(program_args);
             }
+            KvsAction::Bind {
+                address,
+                pid,
+                sensitive,
+                persistent,
+            } => {
+                let mut flags = 0;
+                if sensitive {
+                    flags |= crate::kvs::FLAG_SENSITIVE;
+                }
+                if persistent {
+                    flags |= crate::kvs::FLAG_PERSISTENT;
+                }
+                Args::bind(
+                    &client_hostname(),
+                    dusk_capnp::capnp_rpc::new_client(bind::Bound {
+                        client,
+                        address,
+                        server_pid: pid.unwrap_or(DEFAULT_PID),
+                        flags,
+                    }),
+                )
+            }
         };
         Ok(args.as_program_args()?)
     }
@@ -274,6 +312,16 @@ memory unless a key is persistent.
 * `kvs server [<pid>]` starts the node's default kvs server, or a kvs server
   at `<pid>`, and leaves it running, so a client can drive `get`, `set`,
   `delete`, `exists` and `scan` over its portal. Stop it with `kill <pid>`.
+* `kvs bind <address> [<pid>]` listens on `<address>` (for example
+  `127.0.0.1:6379`) on the client machine, speaking the Redis protocol, so
+  `redis-cli -p 6379` reads and writes the store. Each Redis connection is
+  served by the node's default kvs server, or by the one at `<pid>`, which the
+  first connection starts if it is not running. Anything that reaches
+  `<address>` can read and write every key: there is no password. A Redis
+  write overrides a sticky key. `--sensitive` and `--persistent` mark every key
+  the binding writes, as they do for `kvs set`. The command stays in the
+  foreground until the process is terminated; `kill <pid>` from another client
+  stops it, and so does Ctrl-C.
 "#,
             version: VERSION,
         },

@@ -23,6 +23,7 @@ struct KvsArgs {
       exists @4 :UInt64;
       server @5 :Void;
       scan @6 :Void;
+      bind @9 :Text;
     }
     forbiddenUnstick @7 :Bool;
   }

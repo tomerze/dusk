@@ -10,6 +10,7 @@
 use alloc::rc::Rc;
 use core::cell::{Cell, RefCell};
 
+use dusk_capnp::dusk_capnp::created;
 use dusk_program::{IntoCapnp, ready::Ready, signal::SignalReceiver};
 
 extern crate alloc;
@@ -57,6 +58,8 @@ fn client_flags_refusal(flags: u8) -> Option<alloc::string::String> {
 pub struct Args {
     #[data]
     pub data: ArgsDataBuilder,
+    #[created]
+    pub created: Option<created::Client>,
 }
 
 impl Args {
@@ -68,7 +71,10 @@ impl Args {
                 list.set(index as u32, *key);
             }
         }
-        Args { data }
+        Args {
+            data,
+            created: None,
+        }
     }
 
     pub fn set(key: u64, value: &Value, flags: u8, forbidden_unstick: bool) -> capnp::Result<Self> {
@@ -81,7 +87,10 @@ impl Args {
             set.set_flags(flags);
             value.write_to_builder(set.init_value())?;
         }
-        Ok(Args { data })
+        Ok(Args {
+            data,
+            created: None,
+        })
     }
 
     pub fn delete(key: u64, forbidden_unstick: bool) -> Self {
@@ -91,25 +100,46 @@ impl Args {
             root.set_forbidden_unstick(forbidden_unstick);
             root.set_delete(key);
         }
-        Args { data }
+        Args {
+            data,
+            created: None,
+        }
     }
 
     pub fn exists(key: u64) -> Self {
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_exists(key);
-        Args { data }
+        Args {
+            data,
+            created: None,
+        }
     }
 
     pub fn server() -> Self {
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_server(());
-        Args { data }
+        Args {
+            data,
+            created: None,
+        }
+    }
+
+    pub fn bind(client_hostname: &str, created: created::Client) -> Self {
+        let mut data = ArgsDataBuilder::new_default();
+        data.init_root().set_bind(client_hostname);
+        Args {
+            data,
+            created: Some(created),
+        }
     }
 
     pub fn scan() -> Self {
         let mut data = ArgsDataBuilder::new_default();
         data.init_root().set_scan(());
-        Args { data }
+        Args {
+            data,
+            created: None,
+        }
     }
 }
 
@@ -213,6 +243,7 @@ pub struct Process {
     result: Rc<RefCell<Option<Value>>>,
     found: Rc<RefCell<alloc::vec::Vec<(u64, Value)>>>,
     serving: Rc<Cell<bool>>,
+    binding: Rc<Cell<bool>>,
     scanning: Rc<Cell<bool>>,
     kvs: alloc::sync::Arc<kvs::Kvs>,
     #[process_context]
@@ -226,6 +257,7 @@ impl Process {
             result: Rc::new(RefCell::new(None)),
             found: Rc::new(RefCell::new(alloc::vec::Vec::new())),
             serving: Rc::new(Cell::new(false)),
+            binding: Rc::new(Cell::new(false)),
             scanning: Rc::new(Cell::new(false)),
             kvs,
             ctx,
@@ -263,6 +295,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     Which::Exists(key) => Which::Exists(key),
                     Which::Server(()) => Which::Server(()),
                     Which::Scan(()) => Which::Scan(()),
+                    Which::Bind(client_hostname) => Which::Bind(client_hostname?.to_string()?),
                 };
                 Ok((action, data.get_forbidden_unstick()))
             })?;
@@ -314,6 +347,13 @@ impl dusk_program::process::ProcessMixin for Process {
                 });
             }
             kvs_capnp::kvs_args::data::Which::Scan(()) => self.scanning.set(true),
+            kvs_capnp::kvs_args::data::Which::Bind(client_hostname) => {
+                self.binding.set(true);
+                self.ctx.name.lock(|name| {
+                    *name.borrow_mut() =
+                        Some(alloc::format!("kvs[bind \u{27f7} {client_hostname}]"));
+                });
+            }
         }
 
         ready.sender().send(true);
@@ -478,6 +518,24 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
                     .write_to_builder(send_request.get().init_value())?;
                 send_request.send().await?;
                 results.get().set_daemonize(true);
+                Ok(())
+            });
+        }
+        if self.process.binding.get() {
+            let namespace = self.process.ctx.namespace.clone();
+            let pid = self.process.ctx.pid;
+            return Promise::from_future(async move {
+                if let Some(entry) = namespace.entry(pid).await {
+                    let mut exit = entry.exit.receiver().ok_or_else(|| {
+                        ::capnp::Error::failed(alloc::string::String::from(
+                            "couldn't acquire receiver for process exit watch",
+                        ))
+                    })?;
+                    while exit.get().await.is_none() {
+                        exit.changed().await;
+                    }
+                }
+                results.get().set_daemonize(false);
                 Ok(())
             });
         }
