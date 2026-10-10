@@ -4,6 +4,7 @@ using Dusk = import "/capnp/dusk.capnp";
 using Sh = import "/capnp/sh.capnp";
 
 const programId :UInt64 = 0xa491d262995861be;
+const defaultPid :UInt64 = 0x88f2d85773361325;
 
 const scanTypeId :UInt64 = 0x84e09148e9d394f3;
 
@@ -20,7 +21,7 @@ struct KvsArgs {
       }
       delete @3 :UInt64;
       exists @4 :UInt64;
-      bind @5 :Void;
+      server @5 :Void;
       scan @6 :Void;
     }
     forbiddenUnstick @7 :Bool;

@@ -100,9 +100,9 @@ impl Args {
         Args { data }
     }
 
-    pub fn bind() -> Self {
+    pub fn server() -> Self {
         let mut data = ArgsDataBuilder::new_default();
-        data.init_root().set_bind(());
+        data.init_root().set_server(());
         Args { data }
     }
 
@@ -212,7 +212,7 @@ pub struct Process {
     /// What `output` streams; `None` streams nothing.
     result: Rc<RefCell<Option<Value>>>,
     found: Rc<RefCell<alloc::vec::Vec<(u64, Value)>>>,
-    bound: Rc<Cell<bool>>,
+    serving: Rc<Cell<bool>>,
     scanning: Rc<Cell<bool>>,
     kvs: alloc::sync::Arc<kvs::Kvs>,
     #[process_context]
@@ -225,7 +225,7 @@ impl Process {
         Ok(Process {
             result: Rc::new(RefCell::new(None)),
             found: Rc::new(RefCell::new(alloc::vec::Vec::new())),
-            bound: Rc::new(Cell::new(false)),
+            serving: Rc::new(Cell::new(false)),
             scanning: Rc::new(Cell::new(false)),
             kvs,
             ctx,
@@ -261,7 +261,7 @@ impl dusk_program::process::ProcessMixin for Process {
                     )),
                     Which::Delete(key) => Which::Delete(key),
                     Which::Exists(key) => Which::Exists(key),
-                    Which::Bind(()) => Which::Bind(()),
+                    Which::Server(()) => Which::Server(()),
                     Which::Scan(()) => Which::Scan(()),
                 };
                 Ok((action, data.get_forbidden_unstick()))
@@ -307,7 +307,12 @@ impl dusk_program::process::ProcessMixin for Process {
                 let exists = self.kvs.exists(key).await;
                 *self.result.borrow_mut() = Some(Value::Bool(exists));
             }
-            kvs_capnp::kvs_args::data::Which::Bind(()) => self.bound.set(true),
+            kvs_capnp::kvs_args::data::Which::Server(()) => {
+                self.serving.set(true);
+                self.ctx.name.lock(|name| {
+                    *name.borrow_mut() = Some(alloc::string::String::from("kvs[server]"))
+                });
+            }
             kvs_capnp::kvs_args::data::Which::Scan(()) => self.scanning.set(true),
         }
 
@@ -466,9 +471,15 @@ impl dusk_program_sh::sh_capnp::output_portal::Server for Portal {
     ) -> Promise<(), ::capnp::Error> {
         dusk_capnp::pry!(results.set_pipeline());
         let stream = dusk_capnp::pry!(dusk_capnp::pry!(params.get()).get_stream());
-        if self.process.bound.get() {
-            results.get().set_daemonize(true);
-            return Promise::ok(());
+        if self.process.serving.get() {
+            return Promise::from_future(async move {
+                let mut send_request = stream.send_request();
+                Value::Text(alloc::string::String::from("running in server mode"))
+                    .write_to_builder(send_request.get().init_value())?;
+                send_request.send().await?;
+                results.get().set_daemonize(true);
+                Ok(())
+            });
         }
         let result = self.process.result.borrow_mut().take();
         let found = core::mem::take(&mut *self.process.found.borrow_mut());

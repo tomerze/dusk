@@ -22,7 +22,7 @@ struct ShCli {
     command: Option<String>,
 }
 
-fn parse_pid(pid: &str) -> Result<u64, String> {
+pub fn parse_pid(pid: &str) -> Result<u64, String> {
     let parsed = match pid.strip_prefix("0x").or_else(|| pid.strip_prefix("0X")) {
         Some(digits) => u64::from_str_radix(digits, 16),
         None => pid.parse(),

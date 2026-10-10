@@ -1,9 +1,11 @@
 use super::*;
 use crate::kvs::key_id;
+use crate::kvs_capnp::DEFAULT_PID;
 use clap::Parser as _;
 use dusk_program::dusk_capnp::dusk_capnp::dusk;
 use dusk_program::program_args::ProgramArgs;
 use dusk_program::stream::{Stream, StreamMixin};
+use dusk_program_sh::client::cli::parse_pid;
 use dusk_program_sh::entry::{EntryInfo, ProgramArgsBuilder, ShEntry};
 use std::borrow::ToOwned;
 use std::cell::RefCell;
@@ -50,9 +52,7 @@ struct KvsCli {
 #[derive(clap::Subcommand)]
 enum KvsAction {
     /// Read the value stored under a key
-    Get {
-        key: String,
-    },
+    Get { key: String },
     /// Store a value under a key
     Set {
         key: String,
@@ -71,13 +71,14 @@ enum KvsAction {
         forbidden_unstick: bool,
     },
     /// Report whether a key is present
-    Exists {
-        key: String,
-    },
-    // Bind kvs on the client as a redis-compatible server
-    Bind,
+    Exists { key: String },
     /// List every key, by name where a program registered one
     Scan,
+    #[command(about = "Start the node's kvs server, or one at PID")]
+    Server {
+        #[arg(value_name = "PID", value_parser = parse_pid)]
+        pid: Option<u64>,
+    },
 }
 
 struct ScannedKeys {
@@ -106,7 +107,7 @@ impl StreamMixin for ScannedKeys {
 }
 
 async fn scan(client: &dusk::Client) -> capnp::Result<Vec<u64>> {
-    let program_args = Args::bind().as_program_args()?;
+    let program_args = Args::server().as_program_args()?;
     let mut process_request = client.process_request();
     program_args.with_reader(|reader| process_request.get().set_program_args(reader))?;
     let process = process_request.send().promise.await?.get()?.get_result()?;
@@ -223,7 +224,11 @@ impl ProgramArgsBuilder for KvsProgramArgsBuilder {
             } => Args::delete(key_parse(&key), forbidden_unstick),
             KvsAction::Exists { key } => Args::exists(key_parse(&key)),
             KvsAction::Scan => Args::scan(),
-            KvsAction::Bind => Args::bind(),
+            KvsAction::Server { pid } => {
+                let program_args = Args::server().as_program_args()?;
+                program_args.set_pid(Some(pid.unwrap_or(DEFAULT_PID)))?;
+                return Ok(program_args);
+            }
         };
         Ok(args.as_program_args()?)
     }
@@ -266,9 +271,9 @@ memory unless a key is persistent.
   only Dusk sets, `sensitive` for a secret, `persistent` for a key the node
   keeps in its file. A `<key>` anywhere above may be that id, as `0x…`,
   instead of a name.
-* `kvs bind` runs no operation and leaves the process running, so a client can
-  drive `get`, `set`, `delete` and `exists` over its portal instead. Stop it
-  with `kill <pid>`.
+* `kvs server [<pid>]` starts the node's default kvs server, or a kvs server
+  at `<pid>`, and leaves it running, so a client can drive `get`, `set`,
+  `delete`, `exists` and `scan` over its portal. Stop it with `kill <pid>`.
 "#,
             version: VERSION,
         },

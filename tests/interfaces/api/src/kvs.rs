@@ -190,14 +190,21 @@ async fn test_kvs_args_interface() {
             // would exit `main` before the portal `run_action` needs exists.
 
             let (pid, values, daemonize) =
-                run_action(&client, KvsArgs::bind().as_program_args().unwrap()).await;
-            assert!(values.is_empty(), "bind streamed {values:?}");
-            assert!(daemonize, "bind must daemonize");
+                run_action(&client, KvsArgs::server().as_program_args().unwrap()).await;
+            assert_eq!(
+                values,
+                vec![Value::Text("running in server mode".to_string())],
+                "server streamed {values:?}"
+            );
+            assert!(daemonize, "server must daemonize");
 
             let ps_reply = client.ps_request().send().promise.await.unwrap();
             let entries = ps_reply.get().unwrap().get_process_entries().unwrap();
             let pids: Vec<u64> = entries.iter().map(|entry| entry.get_pid()).collect();
-            assert!(pids.contains(&pid), "bound kvs {pid} must still be running");
+            assert!(
+                pids.contains(&pid),
+                "kvs server {pid} must still be running"
+            );
 
             stop(&client, pid).await;
             connection.disconnect().await.unwrap();
@@ -219,7 +226,7 @@ async fn test_kvs_portal_interface() {
             let connection = Connection::connect(address).await.unwrap();
             let client = connection.client().await;
 
-            let (pid, portal) = start(&client, KvsArgs::bind().as_program_args().unwrap()).await;
+            let (pid, portal) = start(&client, KvsArgs::server().as_program_args().unwrap()).await;
             let kvs = portal.cast_to::<kvs_capnp::kvs_portal::Client>();
 
             let key = key_id("portal.interface.key");
@@ -547,7 +554,8 @@ async fn test_kvs_sticky_keys() {
             assert_eq!(values, vec![Value::Bool(false)], "the sticky key is gone");
             stop(&client, pid).await;
 
-            let (bound, portal) = start(&client, KvsArgs::bind().as_program_args().unwrap()).await;
+            let (server, portal) =
+                start(&client, KvsArgs::server().as_program_args().unwrap()).await;
             let kvs = portal.cast_to::<kvs_capnp::kvs_portal::Client>();
             let os = key_id("dusk.target.os");
             let mut set_request = kvs.set_request();
@@ -586,7 +594,7 @@ async fn test_kvs_sticky_keys() {
                 forged,
                 "the portal's set with forbiddenUnstick sets a sticky key"
             );
-            stop(&client, bound).await;
+            stop(&client, server).await;
 
             connection.disconnect().await.unwrap();
         })
