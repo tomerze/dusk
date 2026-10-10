@@ -580,7 +580,7 @@ Two things you say, and both of them by returning:
    return. The caller then leaves your process alone instead of killing and
    reaping it. Two programs in the tree say it: `sh -d`
    (`base/sh/src/lib.rs`, the `DetachedScript` arm, unless its script is one
-   program) and `kvs bind` (`base/kvs/src/lib.rs`), which answers it from a
+   program) and `kvs server` (`base/kvs/src/lib.rs`), which answers it from a
    flag `main` set earlier.
 
 **By convention, a program does not daemonize itself.** `sh -d` runs any
