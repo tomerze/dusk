@@ -54,6 +54,7 @@ type Alert struct {
 	Severity       Severity        `json:"severity"`
 	Kind           string          `json:"kind"`
 	Fingerprint    string          `json:"fingerprint"`
+	Tenant         *string         `json:"tenant"`
 	Detail         json.RawMessage `json:"detail"`
 	AcknowledgedBy *string         `json:"acknowledged_by"`
 	AcknowledgedAt *time.Time      `json:"acknowledged_at"`
@@ -65,6 +66,7 @@ type Raised struct {
 	Severity    Severity
 	Kind        string
 	Fingerprint string
+	Tenant      string
 	Detail      map[string]any
 	At          time.Time
 }
@@ -100,12 +102,16 @@ func NewStore(pool *pgxpool.Pool, webhookURL string, logger *slog.Logger) *Store
 	return &Store{pool: pool, logger: logger, webhookURL: webhookURL, http: &http.Client{Timeout: 10 * time.Second}, queue: make(chan Alert, 1024)}
 }
 
-const alertColumns = `id, time, last_seen_at, occurrences, severity, kind, fingerprint, detail, acknowledged_by, acknowledged_at, resolved_by, resolved_at`
+const alertColumns = `id, time, last_seen_at, occurrences, severity, kind, fingerprint, tenant, detail, acknowledged_by, acknowledged_at, resolved_by, resolved_at`
+
+func alertTargets(alert *Alert) []any {
+	return []any{&alert.ID, &alert.Time, &alert.LastSeenAt, &alert.Occurrences, &alert.Severity, &alert.Kind, &alert.Fingerprint,
+		&alert.Tenant, &alert.Detail, &alert.AcknowledgedBy, &alert.AcknowledgedAt, &alert.ResolvedBy, &alert.ResolvedAt}
+}
 
 func scanAlert(row pgx.Row) (Alert, error) {
 	var alert Alert
-	failure := row.Scan(&alert.ID, &alert.Time, &alert.LastSeenAt, &alert.Occurrences, &alert.Severity, &alert.Kind, &alert.Fingerprint,
-		&alert.Detail, &alert.AcknowledgedBy, &alert.AcknowledgedAt, &alert.ResolvedBy, &alert.ResolvedAt)
+	failure := row.Scan(alertTargets(&alert)...)
 	if errors.Is(failure, pgx.ErrNoRows) {
 		return alert, ErrNotFound
 	}
@@ -120,20 +126,17 @@ func RaiseIn(operation context.Context, target Querier, raised Raised) (Alert, b
 	if raised.At.IsZero() {
 		raised.At = time.Now()
 	}
+	var alert Alert
 	var inserted bool
-	alert, failure := scanAlertWithInsert(target.QueryRow(operation, `insert into alerts (time, last_seen_at, severity, kind, fingerprint, detail)
-		values ($1, $1, $2, $3, $4, $5::jsonb)
+	failure = target.QueryRow(operation, `insert into alerts (time, last_seen_at, severity, kind, fingerprint, detail, tenant)
+		values ($1, $1, $2, $3, $4, $5::jsonb, coalesce(nullif($6, ''),
+			(select tenant from nodes where device_id = $5::jsonb ->> 'device_id' and installation_id = $5::jsonb ->> 'installation_id'),
+			(select tenant from campaigns where id = case when $5::jsonb ->> 'campaign_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+				then ($5::jsonb ->> 'campaign_id')::uuid end)))
 		on conflict (fingerprint) where resolved_at is null do update set occurrences = alerts.occurrences + 1,
 			last_seen_at = greatest(alerts.last_seen_at, excluded.last_seen_at)
-		returning `+alertColumns+`, (xmax = 0)`, raised.At, raised.Severity, raised.Kind, raised.Fingerprint, detail), &inserted)
+		returning `+alertColumns+`, (xmax = 0)`, raised.At, raised.Severity, raised.Kind, raised.Fingerprint, detail, raised.Tenant).Scan(append(alertTargets(&alert), &inserted)...)
 	return alert, inserted, failure
-}
-
-func scanAlertWithInsert(row pgx.Row, inserted *bool) (Alert, error) {
-	var alert Alert
-	failure := row.Scan(&alert.ID, &alert.Time, &alert.LastSeenAt, &alert.Occurrences, &alert.Severity, &alert.Kind, &alert.Fingerprint,
-		&alert.Detail, &alert.AcknowledgedBy, &alert.AcknowledgedAt, &alert.ResolvedBy, &alert.ResolvedAt, inserted)
-	return alert, failure
 }
 
 func (store *Store) Raise(operation context.Context, raised Raised) (Alert, error) {
@@ -148,7 +151,7 @@ func (store *Store) Raise(operation context.Context, raised Raised) (Alert, erro
 }
 
 func (store *Store) Announce(alert Alert) {
-	store.logger.Error("alert raised", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "detail", alert.Detail)
+	store.logger.Error("alert raised", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "tenant", alert.Tenant, "detail", alert.Detail)
 	if store.webhookURL == "" || (alert.Severity != Critical && alert.Severity != High) {
 		return
 	}

@@ -94,7 +94,12 @@ func sampleCampaign() *campaign.Campaign {
 }
 
 func sampleAlert() alerts.Alert {
-	return alerts.Alert{ID: 7, Time: sampleTime(), LastSeenAt: sampleTime(), Occurrences: 1, Severity: alerts.Critical, Kind: alerts.KindProcessWithoutIntent, Fingerprint: "f", Detail: json.RawMessage(`{"pid":"12808937078074471924"}`)}
+	tenant := "acme"
+	return alerts.Alert{
+		ID: 7, Time: sampleTime(), LastSeenAt: sampleTime(), Occurrences: 1, Severity: alerts.Critical, Kind: alerts.KindProcessWithoutIntent, Fingerprint: "f",
+		Tenant: &tenant,
+		Detail: json.RawMessage(`{"pid":"12808937078074471924"}`),
+	}
 }
 
 func (fake *fakeBackend) Overview(operation context.Context) (engine.Overview, error) {
