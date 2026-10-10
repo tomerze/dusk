@@ -150,6 +150,12 @@ impl Report {
             },
         })
     }
+
+    fn endorsement_key(&self) -> Option<&[u8]> {
+        self.tpm
+            .as_ref()
+            .map(|evidence| evidence.endorsement_key.as_slice())
+    }
 }
 
 struct Attempt {
@@ -430,6 +436,7 @@ impl Provisioning {
         &self,
         connection: &ConnectionInfo,
         presented: &Presented,
+        endorsement_key: Option<&[u8]>,
         operation: Operation,
     ) -> Result<(), Refusal> {
         let address = connection.remote_address.ip();
@@ -446,13 +453,16 @@ impl Provisioning {
             ));
         }
         let bucket = hex::encode(sha256(presented.secret()));
+        let endorsement_bucket =
+            endorsement_key.map(|key| format!("tpm:{}", hex::encode(sha256(key))));
         lock(&self.buckets)
-            .admit(&bucket, Instant::now())
+            .admit(&bucket, endorsement_bucket.as_deref(), Instant::now())
             .map_err(|limited| {
                 Refusal::rate_limited(
                     match limited {
                         crate::limits::RateLimited::Instance => "enrollment_rate",
                         crate::limits::RateLimited::Credential => "credential_rate",
+                        crate::limits::RateLimited::EndorsementKey => "endorsement_key_rate",
                     },
                     limited.to_string(),
                 )
@@ -577,7 +587,12 @@ impl Provisioning {
         report: &Report,
         attempt: &mut Attempt,
     ) -> Result<Assigned, Refusal> {
-        self.admit(connection, presented, Operation::Assign)?;
+        self.admit(
+            connection,
+            presented,
+            report.endorsement_key(),
+            Operation::Assign,
+        )?;
         self.verify_credential(connection, presented, attempt)?;
         let attested = report
             .tpm
@@ -675,7 +690,12 @@ impl Provisioning {
         csr: &[u8],
         attempt: &mut Attempt,
     ) -> Result<SignRequest, Refusal> {
-        self.admit(connection, presented, Operation::Enroll)?;
+        self.admit(
+            connection,
+            presented,
+            report.endorsement_key(),
+            Operation::Enroll,
+        )?;
         let verified = self.verify_credential(connection, presented, attempt)?;
         let device_id = self.check_fingerprint(report)?;
         let binding = self

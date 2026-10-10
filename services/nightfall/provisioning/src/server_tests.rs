@@ -1349,6 +1349,48 @@ async fn refuses_tpm_evidence_it_cannot_verify() {
 }
 
 #[tokio::test]
+async fn limits_the_enrollments_of_one_endorsement_key() {
+    let root = Authority::root("tpm manufacturer");
+    let certificate = root.certificate.clone();
+    let harness = harness_with(move |config, _| {
+        config.endorsement_roots = vec![CertificateDer::from(certificate)];
+        config.enrollments_per_second_per_credential = 2;
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let (evidence, _) = tpm_device(&root);
+    let fingerprint = sha256(&evidence.endorsement_key);
+    for token in ["lab secret", "retail secret"] {
+        assign_device(
+            &client,
+            Credential::Fleet(token),
+            &fingerprint,
+            Some(&evidence),
+        )
+        .await
+        .unwrap();
+    }
+    let limited = assign_device(
+        &client,
+        Credential::Fleet("lab secret"),
+        &fingerprint,
+        Some(&evidence),
+    )
+    .await
+    .err()
+    .unwrap();
+    assert_eq!(limited.kind, capnp::ErrorKind::Overloaded);
+    assert_eq!(
+        harness.events.last().reason.as_deref(),
+        Some("endorsement_key_rate")
+    );
+    assign(&client, Credential::Fleet("lab secret"), &[4u8; 32])
+        .await
+        .unwrap();
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
 async fn renews_a_tpm_bound_certificate_only_with_the_key_it_has() {
     let harness = harness().await;
     let device_id = harness.device_key.device_id(&[8u8; 32]);
