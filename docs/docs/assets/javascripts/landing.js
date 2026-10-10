@@ -451,6 +451,14 @@ for (const namespace of document.querySelectorAll(".dusk-os__namespace")) {
   namespace.textContent = namespaceId;
 }
 
+const today = new Date();
+const instanceName = `instance-${today.getFullYear()}${String(
+  today.getMonth() + 1,
+).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+for (const instance of document.querySelectorAll(".dusk-os__instance")) {
+  instance.textContent = instanceName;
+}
+
 const latencySteps = {
   17: { 16: { 17: 0.6 }, 17: { 16: 0.2, 18: 0.2 }, 18: { 17: 0.6 } },
   66: {

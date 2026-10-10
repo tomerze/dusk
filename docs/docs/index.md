@@ -201,7 +201,7 @@ Feels like an OS inside. Somehow you already know how to drive it.
 <div class="dusk-os__terminal dusk-os__terminal--cp">
 <div class="dusk-os__bar" aria-hidden="true"><span></span><span></span><span></span></div>
 <pre class="dusk-os__session dusk-os__session--narrow"><span class="dusk-os__gray">$</span> <span class="dusk-os__green dusk-os__bold">dusk</span> <span class="dusk-os__bright-cyan dusk-os__namespace">7c3f1a9e2b5d4086</span><span class="dusk-os__blue">.connect.nightfall</span>
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span>
 <span class="dusk-os__bright-cyan">●</span> <span class="dusk-os__green">❯</span> <span class="dusk-os__cyan dusk-os__bold">cp</span> <span class="dusk-os__white">report.txt</span> <span class="dusk-os__white">:/tmp/report.txt</span>
 ╭─────────────┬────────────────────────╮
 │ <span class="dusk-os__yellow dusk-os__bold">source</span>      │ report.txt             │
@@ -212,10 +212,10 @@ Feels like an OS inside. Somehow you already know how to drive it.
 │             │ 48c1caaaf8df4950c6ecce │
 │             │ 76a1b7a30cbba34be6d0   │
 ╰─────────────┴────────────────────────╯
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
 <span class="dusk-os__gray">○</span> <span class="dusk-os__green">❯</span> </pre>
 <pre class="dusk-os__session dusk-os__session--wide"><span class="dusk-os__gray">$</span> <span class="dusk-os__green dusk-os__bold">dusk</span> <span class="dusk-os__bright-cyan dusk-os__namespace">7c3f1a9e2b5d4086</span><span class="dusk-os__blue">.connect.nightfall</span>
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span>
 <span class="dusk-os__bright-cyan">●</span> <span class="dusk-os__green">❯</span> <span class="dusk-os__cyan dusk-os__bold">cp</span> <span class="dusk-os__white">report.txt</span> <span class="dusk-os__white">:/tmp/report.txt</span>
 ╭─────────────┬──────────────────────────────────╮
 │ <span class="dusk-os__yellow dusk-os__bold">source</span>      │ report.txt                       │
@@ -225,7 +225,7 @@ Feels like an OS inside. Somehow you already know how to drive it.
 │ <span class="dusk-os__yellow dusk-os__bold">sha256</span>      │ 3114865161b206080e637a48c1caaaf8 │
 │             │ df4950c6ecce76a1b7a30cbba34be6d0 │
 ╰─────────────┴──────────────────────────────────╯
-<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan">pc1</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
+<span class="dusk-os__yellow dusk-os__bold">dusk </span><span class="dusk-os__cyan">0.1.0</span><span class="dusk-os__yellow dusk-os__bold"> @</span><span class="dusk-os__cyan dusk-os__instance">instance-20261010</span><span class="dusk-os__gray"> ⇄ <span class="dusk-os__latency">17</span>ms</span>
 <span class="dusk-os__gray">○</span> <span class="dusk-os__green">❯</span> </pre>
 </div>
 </div>
