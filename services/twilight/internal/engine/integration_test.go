@@ -70,7 +70,50 @@ func (fake *fakeDawn) intended(pid campaign.Pid, node dawn.NodeRef, actionKind s
 	failure := fake.harness.pool.QueryRow(context.Background(), `select exists (select 1 from intended_processes
 		where pid = $1::text::numeric and device_id = $2 and installation_id = $3 and action_kind = $4)`,
 		pid.String(), node.DeviceID, node.InstallationID, actionKind).Scan(&found)
-	return failure == nil && found
+	return failure == nil && found && fake.harness.published(kafka.IntendedProcessKey(node.DeviceID, node.InstallationID, pid.String()), actionKind)
+}
+
+func (current *harness) published(key, actionKind string) bool {
+	operation, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	topic := current.settings.Kafka.Topics.IntendedProcesses
+	options, _ := kafka.Options(current.settings.Kafka, "published-check")
+	client, failure := kgo.NewClient(append(options, kgo.ConsumeTopics(topic), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))...)
+	if failure != nil {
+		return false
+	}
+	defer client.Close()
+	ends, failure := kadm.NewClient(client).ListEndOffsets(operation, topic)
+	if failure != nil {
+		return false
+	}
+	remaining := map[int32]int64{}
+	ends.Each(func(end kadm.ListedOffset) {
+		if end.Offset > 0 {
+			remaining[end.Partition] = end.Offset
+		}
+	})
+	var latest []byte
+	seen := false
+	for len(remaining) > 0 {
+		fetches := client.PollFetches(operation)
+		if fetches.IsClientClosed() || operation.Err() != nil {
+			return false
+		}
+		fetches.EachRecord(func(record *kgo.Record) {
+			if string(record.Key) == key {
+				latest, seen = record.Value, true
+			}
+			if record.Offset+1 >= remaining[record.Partition] {
+				delete(remaining, record.Partition)
+			}
+		})
+	}
+	if !seen || latest == nil || current.validator.Validate(kafka.ContractIntended, latest) != nil {
+		return false
+	}
+	var message kafka.IntendedProcess
+	return json.Unmarshal(latest, &message) == nil && message.ActionKind == actionKind
 }
 
 func (fake *fakeDawn) handler() http.Handler {
@@ -251,6 +294,7 @@ func newHarness(test *testing.T) *harness {
 	settings.Kafka.Topics = config.Topics{
 		Connections: "dusk.connections." + suffix, Census: "dusk.census." + suffix, Ledger: "dusk.ledger." + suffix,
 		Enrollments: "dusk.enrollments." + suffix, NodeState: "dusk.node-state." + suffix, ProcessResults: "dusk.process-results." + suffix,
+		IntendedProcesses: "dusk.intended-processes." + suffix,
 	}
 	settings.Kafka.ResultsGroup += "-" + suffix
 	settings.Kafka.InventoryGroup += "-" + suffix
@@ -281,6 +325,7 @@ func newHarness(test *testing.T) *harness {
 	}{
 		settings.Kafka.Topics.Connections: {3, &remove}, settings.Kafka.Topics.Census: {1, &compact}, settings.Kafka.Topics.Ledger: {3, &remove},
 		settings.Kafka.Topics.Enrollments: {3, &remove}, settings.Kafka.Topics.NodeState: {1, &compact}, settings.Kafka.Topics.ProcessResults: {3, &remove},
+		settings.Kafka.Topics.IntendedProcesses: {3, &compact},
 	} {
 		if _, failure := admin.CreateTopic(operation, layout.partitions, 1, map[string]*string{"cleanup.policy": layout.policy}, topic); failure != nil {
 			test.Fatal(failure)
@@ -319,6 +364,7 @@ func (current *harness) start() {
 		KafkaOptions: options,
 		Validator:    current.validator,
 		NodeState:    kafka.NewNodeStateProducer(nodeStateClient, current.validator, current.settings.Kafka.Topics.NodeState),
+		Intended:     kafka.NewIntendedProcessProducer(nodeStateClient, current.validator, current.settings.Kafka.Topics.IntendedProcesses),
 		Logger:       logger,
 	})
 	operation, cancel := context.WithCancel(context.Background())

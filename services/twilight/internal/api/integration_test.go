@@ -155,6 +155,7 @@ func newStack(test *testing.T) *stack {
 	settings.Kafka.Topics = config.Topics{
 		Connections: "dusk.connections." + suffix, Census: "dusk.census." + suffix, Ledger: "dusk.ledger." + suffix,
 		Enrollments: "dusk.enrollments." + suffix, NodeState: "dusk.node-state." + suffix, ProcessResults: "dusk.process-results." + suffix,
+		IntendedProcesses: "dusk.intended-processes." + suffix,
 	}
 	settings.Kafka.ResultsGroup += "-" + suffix
 	settings.Kafka.InventoryGroup += "-" + suffix
@@ -177,6 +178,7 @@ func newStack(test *testing.T) *stack {
 	for topic, policy := range map[string]*string{
 		settings.Kafka.Topics.Connections: &remove, settings.Kafka.Topics.Census: &compact, settings.Kafka.Topics.Ledger: &remove,
 		settings.Kafka.Topics.Enrollments: &remove, settings.Kafka.Topics.NodeState: &compact, settings.Kafka.Topics.ProcessResults: &remove,
+		settings.Kafka.Topics.IntendedProcesses: &compact,
 	} {
 		if _, failure := kadm.NewClient(current.producer).CreateTopic(context.Background(), 1, 1, map[string]*string{"cleanup.policy": policy}, topic); failure != nil {
 			test.Fatal(failure)
@@ -203,7 +205,8 @@ func newStack(test *testing.T) *stack {
 	core := engine.New(engine.Dependencies{
 		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: alerts.NewStore(pool, "", logger),
 		Dawn: dawnClient, KafkaOptions: options, Validator: current.validator,
-		NodeState: kafka.NewNodeStateProducer(nodeState, current.validator, settings.Kafka.Topics.NodeState), Logger: logger,
+		NodeState: kafka.NewNodeStateProducer(nodeState, current.validator, settings.Kafka.Topics.NodeState),
+		Intended:  kafka.NewIntendedProcessProducer(nodeState, current.validator, settings.Kafka.Topics.IntendedProcesses), Logger: logger,
 	})
 	current.api = newHarness(test, func(options *Options) {
 		options.Backend = core.Service()

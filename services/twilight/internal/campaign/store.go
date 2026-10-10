@@ -712,7 +712,7 @@ type IntendedProcess struct {
 
 func recordIntendedProcess(operation context.Context, target querier, intended IntendedProcess) error {
 	tag, failure := target.Exec(operation, `update intended_processes set expires_at = greatest(expires_at, $2), last_dispatched_at = greatest(last_dispatched_at, $3),
-			default_shell_commands = default_shell_commands + $6, max_commands = max_commands + $7
+			default_shell_commands = default_shell_commands + $6, max_commands = max_commands + $7, revision = revision + 1, tombstoned_at = null
 		where pid = $1::text::numeric and device_id = $4 and installation_id = $5`,
 		intended.Pid.String(), intended.ExpiresAt, intended.At, intended.DeviceID, intended.InstallationID, intended.DefaultShellCommands, intended.MaxCommands)
 	if failure != nil || tag.RowsAffected() > 0 {
@@ -728,6 +728,88 @@ func recordIntendedProcess(operation context.Context, target querier, intended I
 
 func (store *Store) RecordIntendedProcess(operation context.Context, intended IntendedProcess) error {
 	return recordIntendedProcess(operation, store.pool, intended)
+}
+
+type IntendedKey struct {
+	DeviceID       string
+	InstallationID string
+	Pid            Pid
+}
+
+type IntendedRecord struct {
+	IntendedKey
+	CampaignID           *uuid.UUID
+	ActionKind           string
+	Principal            string
+	Subject              string
+	CreatedAt            time.Time
+	ExpiresAt            time.Time
+	MaxCommands          int
+	DefaultShellCommands int
+	Live                 bool
+}
+
+func (store *Store) PublishIntendedProcess(operation context.Context, key IntendedKey, now time.Time, produce func(IntendedRecord) error) (bool, error) {
+	published := false
+	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
+		record := IntendedRecord{IntendedKey: key}
+		var created time.Time
+		var revision int64
+		var reapedAt *time.Time
+		row := transaction.QueryRow(operation, `select created_at, campaign_id, action_kind, principal, subject, expires_at, max_commands, default_shell_commands, revision, reaped_at
+			from intended_processes where pid = $1::text::numeric and device_id = $2 and installation_id = $3
+			order by created_at desc limit 1 for update`, key.Pid.String(), key.DeviceID, key.InstallationID)
+		if failure := row.Scan(&created, &record.CampaignID, &record.ActionKind, &record.Principal, &record.Subject, &record.ExpiresAt,
+			&record.MaxCommands, &record.DefaultShellCommands, &revision, &reapedAt); failure != nil {
+			if errors.Is(failure, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("read the intended process to publish: %w", failure)
+		}
+		record.CreatedAt = created
+		record.Live = reapedAt == nil && record.ExpiresAt.After(now)
+		if failure := produce(record); failure != nil {
+			return failure
+		}
+		if _, failure := transaction.Exec(operation, `update intended_processes set published_revision = $4,
+				tombstoned_at = case when $5 then null else coalesce(tombstoned_at, $6) end
+			where pid = $1::text::numeric and created_at = $2 and device_id = $3`,
+			key.Pid.String(), created, key.DeviceID, revision, record.Live, now); failure != nil {
+			return fmt.Errorf("mark the intended process published: %w", failure)
+		}
+		published = true
+		return nil
+	})
+	return published, failure
+}
+
+func (store *Store) IntendedToPublish(operation context.Context, now time.Time, limit int) ([]IntendedKey, error) {
+	rows, failure := store.pool.Query(operation, `(select device_id, installation_id, pid::text from intended_processes
+			where published_revision < revision and tombstoned_at is null and reaped_at is null and expires_at > $1
+			order by created_at limit $2)
+		union
+		(select device_id, installation_id, pid::text from intended_processes
+			where tombstoned_at is null and (reaped_at is not null or expires_at <= $1)
+			order by expires_at limit $2)`, now, limit)
+	if failure != nil {
+		return nil, fmt.Errorf("read the intended processes to publish: %w", failure)
+	}
+	defer rows.Close()
+	var keys []IntendedKey
+	for rows.Next() {
+		var key IntendedKey
+		var pid string
+		if failure := rows.Scan(&key.DeviceID, &key.InstallationID, &pid); failure != nil {
+			return nil, fmt.Errorf("read an intended process to publish: %w", failure)
+		}
+		parsed, failure := ParsePid(pid)
+		if failure != nil {
+			return nil, failure
+		}
+		key.Pid = parsed
+		keys = append(keys, key)
+	}
+	return keys, rows.Err()
 }
 
 type Reapable struct {

@@ -205,8 +205,47 @@ func TestRequiredTopicsCoverEveryTopicTwilightUses(test *testing.T) {
 	for _, requirement := range RequiredTopics(configTopics()) {
 		seen[requirement.Topic] = requirement.CleanupPolicy
 	}
-	if len(seen) != 6 || seen["dusk.census"] != "compact" || seen["dusk.node-state"] != "compact" || seen["dusk.ledger"] != "delete" {
+	if len(seen) != 7 || seen["dusk.census"] != "compact" || seen["dusk.node-state"] != "compact" || seen["dusk.ledger"] != "delete" ||
+		seen["dusk.intended-processes"] != "compact" {
 		test.Fatalf("requirements %v", seen)
+	}
+}
+
+func TestIntendedProcessMessagesPassTheirContract(test *testing.T) {
+	loaded := validator(test)
+	campaignID := "0192f3a4-5b6c-7d8e-9f01-23456789abcd"
+	intended := IntendedProcess{
+		Envelope: Envelope{Schema: "dusk.intended-processes/v1", ID: NewMessageID(), Time: FormatTime(time.Date(2026, 10, 7, 12, 0, 0, 5, time.UTC))},
+		Pid:      "13792273858822192861", DeviceID: "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13", InstallationID: "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70",
+		CampaignID: &campaignID, ActionKind: "run_script", Principal: "token:0192f3a4-1111-7d8e-9f01-23456789abcd", Subject: "campaign:" + campaignID,
+		CreatedAt: FormatTime(time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)), ExpiresAt: FormatTime(time.Date(2026, 10, 7, 12, 6, 0, 0, time.UTC)),
+		MaxCommands: 1, DefaultShellCommands: 3,
+	}
+	value, _ := json.Marshal(intended)
+	if failure := loaded.Validate(ContractIntended, value); failure != nil {
+		test.Fatalf("%s: %v", value, failure)
+	}
+	if intended.Key() != "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13/a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70/13792273858822192861" {
+		test.Fatalf("key %s", intended.Key())
+	}
+	reap := intended
+	reap.CampaignID, reap.ActionKind, reap.Subject, reap.MaxCommands = nil, "reap", "twilight", 0
+	value, _ = json.Marshal(reap)
+	if failure := loaded.Validate(ContractIntended, value); failure != nil {
+		test.Fatalf("a reap's intended process: %s: %v", value, failure)
+	}
+	for _, broken := range []func(*IntendedProcess){
+		func(message *IntendedProcess) { message.Pid = "0" },
+		func(message *IntendedProcess) { message.Pid = "17505437192229758416" },
+		func(message *IntendedProcess) { message.Subject = "" },
+		func(message *IntendedProcess) { message.MaxCommands = -1 },
+	} {
+		copied := intended
+		broken(&copied)
+		value, _ := json.Marshal(copied)
+		if loaded.Validate(ContractIntended, value) == nil {
+			test.Errorf("%s passed its contract", value)
+		}
 	}
 }
 

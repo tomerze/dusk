@@ -34,6 +34,11 @@ type NodeStateProducer interface {
 	ClearNodeState(operation context.Context, key string) error
 }
 
+type IntendedProcessProducer interface {
+	ProduceIntendedProcess(operation context.Context, intended kafka.IntendedProcess) error
+	ClearIntendedProcess(operation context.Context, key string) error
+}
+
 type Dependencies struct {
 	Config       config.Config
 	Pool         *pgxpool.Pool
@@ -44,6 +49,7 @@ type Dependencies struct {
 	KafkaOptions []kgo.Opt
 	Validator    *kafka.Validator
 	NodeState    NodeStateProducer
+	Intended     IntendedProcessProducer
 	Logger       *slog.Logger
 }
 
@@ -221,6 +227,7 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	start("enrollments", engine.runEnrollments)
 	start("revocations", engine.runRevocationCheck)
 	start("partitions", engine.runPartitionMaintenance)
+	start("intents", engine.runIntentPublication)
 	engine.requestSweep(sweepRequest{all: true})
 	running.Wait()
 	engine.dispatcher.reset()

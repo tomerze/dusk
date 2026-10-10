@@ -42,12 +42,13 @@ type KafkaSASL struct {
 }
 
 type Topics struct {
-	Connections    string `yaml:"connections"`
-	Census         string `yaml:"census"`
-	Ledger         string `yaml:"ledger"`
-	Enrollments    string `yaml:"enrollments"`
-	NodeState      string `yaml:"node_state"`
-	ProcessResults string `yaml:"process_results"`
+	Connections       string `yaml:"connections"`
+	Census            string `yaml:"census"`
+	Ledger            string `yaml:"ledger"`
+	Enrollments       string `yaml:"enrollments"`
+	NodeState         string `yaml:"node_state"`
+	ProcessResults    string `yaml:"process_results"`
+	IntendedProcesses string `yaml:"intended_processes"`
 }
 
 type Kafka struct {
@@ -206,12 +207,13 @@ func Default() Config {
 			Brokers:  []string{"kafka:9092"},
 			ClientID: "twilight",
 			Topics: Topics{
-				Connections:    "dusk.connections",
-				Census:         "dusk.census",
-				Ledger:         "dusk.ledger",
-				Enrollments:    "dusk.enrollments",
-				NodeState:      "dusk.node-state",
-				ProcessResults: "dusk.process-results",
+				Connections:       "dusk.connections",
+				Census:            "dusk.census",
+				Ledger:            "dusk.ledger",
+				Enrollments:       "dusk.enrollments",
+				NodeState:         "dusk.node-state",
+				ProcessResults:    "dusk.process-results",
+				IntendedProcesses: "dusk.intended-processes",
 			},
 			ResultsGroup:          "twilight-results",
 			InventoryGroup:        "twilight-inventory",

@@ -30,6 +30,7 @@ const (
 	ContractProcessResults = "dusk.process-results"
 	ContractProcessOutput  = "dusk.process-output"
 	ContractFiles          = "dusk.files"
+	ContractIntended       = "dusk.intended-processes"
 )
 
 var invalidMessages = promauto.NewCounterVec(prometheus.CounterOpts{

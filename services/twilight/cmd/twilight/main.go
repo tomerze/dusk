@@ -325,7 +325,8 @@ func serve(operation context.Context, arguments, environment []string, output, d
 	core := engine.New(engine.Dependencies{
 		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: alertStore,
 		Dawn: dawnClient, KafkaOptions: options, Validator: validator,
-		NodeState: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState), Logger: logger,
+		NodeState: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState),
+		Intended:  kafka.NewIntendedProcessProducer(producer, validator, settings.Kafka.Topics.IntendedProcesses), Logger: logger,
 	})
 	apiConfiguration, failure := apiOptions(settings, development, pool, core.Service(), logger)
 	if failure != nil {

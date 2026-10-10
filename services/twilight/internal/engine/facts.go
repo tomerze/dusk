@@ -196,5 +196,8 @@ func (engine *Engine) recordRandomProcess(operation context.Context, key NodeKey
 	if failure := engine.Campaigns.RecordIntendedProcess(operation, intended); failure != nil {
 		return 0, fmt.Errorf("record the intended %s process: %w", actionKind, failure)
 	}
+	if failure := engine.publishIntended(operation, key, pid); failure != nil {
+		return 0, fmt.Errorf("publish the intended %s process: %w", actionKind, failure)
+	}
 	return pid, nil
 }

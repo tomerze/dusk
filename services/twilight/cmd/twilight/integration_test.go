@@ -76,6 +76,7 @@ func TestMigrateTokenAndServe(test *testing.T) {
 	}
 	topics := map[string]string{
 		"CONNECTIONS": "delete", "CENSUS": "compact", "LEDGER": "delete", "ENROLLMENTS": "delete", "NODE_STATE": "compact", "PROCESS_RESULTS": "delete",
+		"INTENDED_PROCESSES": "compact",
 	}
 	environment := []string{
 		"TWILIGHT__DATABASE__URL=" + url,

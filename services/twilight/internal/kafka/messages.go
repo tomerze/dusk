@@ -198,3 +198,26 @@ func (state NodeState) Key() string {
 	}
 	return "installation/" + state.DeviceID + "/" + *state.InstallationID
 }
+
+type IntendedProcess struct {
+	Envelope
+	Pid                  string  `json:"pid"`
+	DeviceID             string  `json:"device_id"`
+	InstallationID       string  `json:"installation_id"`
+	CampaignID           *string `json:"campaign_id"`
+	ActionKind           string  `json:"action_kind"`
+	Principal            string  `json:"principal"`
+	Subject              string  `json:"subject"`
+	CreatedAt            string  `json:"created_at"`
+	ExpiresAt            string  `json:"expires_at"`
+	MaxCommands          int     `json:"max_commands"`
+	DefaultShellCommands int     `json:"default_shell_commands"`
+}
+
+func IntendedProcessKey(device, installation, pid string) string {
+	return device + "/" + installation + "/" + pid
+}
+
+func (intended IntendedProcess) Key() string {
+	return IntendedProcessKey(intended.DeviceID, intended.InstallationID, intended.Pid)
+}

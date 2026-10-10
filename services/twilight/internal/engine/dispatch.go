@@ -389,6 +389,16 @@ func (current *dispatcher) dispatch(operation context.Context, term int64, chose
 		sent = append(sent, prepared{campaign: target, row: written, intended: intended})
 		latest = deadline
 	}
+	var publishedWork []dawn.Work
+	var published []prepared
+	for index, item := range sent {
+		if failure := engine.publishIntended(operation, key, item.row.Pid); failure != nil {
+			engine.unpublished(operation, term, item, failure)
+			continue
+		}
+		publishedWork, published = append(publishedWork, work[index]), append(published, item)
+	}
+	work, sent = publishedWork, published
 	if len(work) == 0 {
 		current.release(key)
 		return
@@ -408,12 +418,20 @@ func (current *dispatcher) dispatch(operation context.Context, term int64, chose
 	var accepted []campaign.Pid
 	var failure error
 	delay := time.Second
+attempts:
 	for attempt := 1; attempt <= engine.Config.Engine.DispatchAttempts; attempt++ {
 		if attempt > 1 {
 			for _, item := range sent {
 				item.intended.At = time.Now()
 				if failure := engine.Campaigns.RecordIntendedProcess(operation, item.intended); failure != nil && operation.Err() == nil {
 					engine.Logger.Warn("the command budget of a retried dispatch was not recorded", "campaign_id", item.campaign.ID, "pid", item.row.Pid, "error", failure)
+				}
+				if failure := engine.publishIntended(operation, key, item.row.Pid); failure != nil {
+					if operation.Err() == nil {
+						engine.Logger.Warn("a retried dispatch was not published to nightfall; it is not sent again and waits for a result or its deadline",
+							"campaign_id", item.campaign.ID, "pid", item.row.Pid, "error", failure)
+					}
+					break attempts
 				}
 			}
 		}
@@ -485,6 +503,18 @@ func (current *dispatcher) dispatch(operation context.Context, term int64, chose
 }
 
 const rejectedDispatches = 3
+
+func (engine *Engine) unpublished(operation context.Context, term int64, item prepared, failure error) {
+	engine.registry.returnTokens(item.campaign.ID, 1)
+	if operation.Err() != nil {
+		return
+	}
+	engine.Logger.Warn("the intended process was not published to nightfall; dawn is not asked for it", "campaign_id", item.campaign.ID,
+		"device_id", item.row.DeviceID, "installation_id", item.row.InstallationID, "pid", item.row.Pid.String(), "error", failure)
+	if next, changed := item.row.Undelivered("intent_unpublished", failure.Error(), time.Now(), busyDelay(item.row.Unreached+1, engine.randomFloat())); changed {
+		engine.write(operation, term, &item.row, next, "intent unpublished")
+	}
+}
 
 func (engine *Engine) refuseDispatch(operation context.Context, term int64, item prepared, message string) {
 	refused := campaign.Result{Pid: item.row.Pid, Status: campaign.ResultDenied, Error: message}

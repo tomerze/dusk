@@ -83,6 +83,7 @@ func RequiredTopics(topics config.Topics) []TopicRequirement {
 		{topics.Enrollments, "delete"},
 		{topics.NodeState, "compact"},
 		{topics.ProcessResults, "delete"},
+		{topics.IntendedProcesses, "compact"},
 	}
 }
 
@@ -159,5 +160,25 @@ func (producer *Producer) ProduceNodeState(operation context.Context, state Node
 }
 
 func (producer *Producer) ClearNodeState(operation context.Context, key string) error {
+	return producer.client.ProduceSync(operation, &kgo.Record{Topic: producer.topic, Key: []byte(key)}).FirstErr()
+}
+
+func NewIntendedProcessProducer(client *kgo.Client, validator *Validator, topic string) *Producer {
+	return &Producer{client: client, validator: validator, topic: topic}
+}
+
+func (producer *Producer) ProduceIntendedProcess(operation context.Context, intended IntendedProcess) error {
+	value, failure := json.Marshal(intended)
+	if failure != nil {
+		return failure
+	}
+	if failure := producer.validator.Validate(ContractIntended, value); failure != nil {
+		return fmt.Errorf("intended-processes message fails its contract: %w", failure)
+	}
+	record := &kgo.Record{Topic: producer.topic, Key: []byte(intended.Key()), Value: value}
+	return producer.client.ProduceSync(operation, record).FirstErr()
+}
+
+func (producer *Producer) ClearIntendedProcess(operation context.Context, key string) error {
 	return producer.client.ProduceSync(operation, &kgo.Record{Topic: producer.topic, Key: []byte(key)}).FirstErr()
 }
