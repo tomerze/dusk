@@ -55,6 +55,7 @@ class Unreachable(Exception):
 REFUSALS = (
     "Unimplemented: remote exception: not permitted: ",
     "Unimplemented: remote exception: unknown interface ",
+    "Failed: remote exception: denied: not intended",
 )
 
 

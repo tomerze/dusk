@@ -69,6 +69,15 @@ async def test_a_connection_nightfall_refuses_is_a_denial(fleet: FakeFleet):
         await connect(fleet, dawn_settings(), node_ref(), PID)
 
 
+async def test_a_process_nightfall_did_not_admit_is_a_denial(fleet: FakeFleet):
+    fleet.add(FakeNode()).refusal = RuntimeError(
+        "Failed: remote exception: denied: not intended"
+    )
+
+    with pytest.raises(RuntimeError, match="denied: not intended$"):
+        await connect(fleet, dawn_settings(), node_ref(), PID)
+
+
 async def test_a_connection_that_does_not_come_up_in_time_is_closed_once_it_does(
     fleet: FakeFleet,
 ):

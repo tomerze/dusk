@@ -684,6 +684,11 @@ async def test_work_that_cannot_be_run_reports_unreachable(producer, fleet):
             "denied",
         ),
         (
+            RuntimeError("Failed: remote exception: denied: not intended"),
+            True,
+            "denied",
+        ),
+        (
             RuntimeError("Unimplemented: remote exception: remote exception: x"),
             True,
             "error",

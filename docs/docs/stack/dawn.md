@@ -389,7 +389,7 @@ Every message follows its schema in `services/contracts/kafka/` and carries `sch
 | `already_satisfied` | `ensure_version` or `ensure_config` found the value already in place. Nothing ran. |
 | `unreachable` | dawn could not get a connection to the node through nightfall: it was refused, or not up within `nightfall.connect_timeout_seconds`. |
 | `timed_out` | A time limit passed: the work's `timeout_seconds` for dispatched work and the files it collects, `limits.process_timeout_default` for a facts read or a file collection asked for through `/v1/files`. |
-| `denied` | nightfall's permissions refused a call. |
+| `denied` | nightfall refused a call: its permissions do not allow it, or no process twilight intends on the node allows it (`denied: not intended`). |
 | `reaped` | `action_kind` is `reap` and the process is out of the node's process table. |
 | `error` | Anything else, with the reason in `error`. |
 
