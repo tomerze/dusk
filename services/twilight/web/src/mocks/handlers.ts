@@ -1020,6 +1020,14 @@ export function createHandlers(
         .sort((left, right) => right.time.localeCompare(left.time) || right.id - left.id)
       return HttpResponse.json(paginate(alerts, url, limit))
     }),
+    http.get('/api/v1/alerts/:id', async ({ request, params: parameters }) => {
+      const refused = (await guard(request)) ?? unavailable()
+      if (refused !== null) {
+        return refused
+      }
+      const alert = state.alerts.find((candidate) => String(candidate.id) === parameters.id)
+      return alert === undefined ? notFound('alert') : HttpResponse.json(alert)
+    }),
     http.post('/api/v1/alerts/:id/:command', async ({ request, params: parameters }) => {
       const refused = await mutating(request)
       if (refused !== null) {

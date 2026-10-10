@@ -79,6 +79,7 @@ export const queryKeys = {
   everyCampaign: (status: CampaignListParameters['status']) =>
     ['campaigns', 'every', status] as const,
   everyAlert: (state: AlertListParameters['state']) => ['alerts', 'every', state] as const,
+  alert: (alertId: number) => ['alerts', 'one', alertId] as const,
   criticalAlerts: ['alerts', 'critical'] as const,
   selectorCount: (selector: string) => ['selector-count', selector] as const,
   hostnames: (installationIds: string[]) => ['nodes', 'hostnames', installationIds] as const,
@@ -347,6 +348,16 @@ export function useAlerts(parameters: AlertListParameters, enabled = true) {
       ),
     placeholderData: keepPreviousData,
     refetchInterval: 30_000,
+  })
+}
+
+export function useAlert(alertId: number | null) {
+  return useQuery({
+    enabled: alertId !== null,
+    queryKey: queryKeys.alert(alertId ?? 0),
+    queryFn: ({ signal }) =>
+      apiRequest<Alert>('GET', `/api/v1/alerts/${alertId}`, undefined, signal),
+    refetchInterval: 15_000,
   })
 }
 

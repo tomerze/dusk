@@ -18,7 +18,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { errorMessage } from '../api/client'
 import { usePermissions } from '../api/permissions'
-import { searchLimit, useAlertCommand, useAlerts, useEveryAlert } from '../api/queries'
+import { searchLimit, useAlert, useAlertCommand, useAlerts, useEveryAlert } from '../api/queries'
 import type { Alert, AlertDelivery, AlertTransition, JsonValue, Severity } from '../api/types'
 import { severities } from '../api/types'
 import { CursorPagination } from '../components/CursorPagination'
@@ -131,8 +131,16 @@ function AlertState({ alert }: { alert: Alert }) {
   )
 }
 
-function AlertRow({ alert, canOperate }: { alert: Alert; canOperate: boolean }) {
-  const [open, setOpen] = useState(false)
+function AlertRow({
+  alert,
+  canOperate,
+  initiallyOpen = false,
+}: {
+  alert: Alert
+  canOperate: boolean
+  initiallyOpen?: boolean
+}) {
+  const [open, setOpen] = useState(initiallyOpen)
   const command = useAlertCommand()
   const kind = alertKinds[alert.kind]
   const detailId = `alert-${alert.id}-detail`
@@ -350,9 +358,37 @@ const kindOptions = [
     .sort((left, right) => left.label.localeCompare(right.label)),
 ]
 
+function FocusedAlert({ alertId, canOperate }: { alertId: number; canOperate: boolean }) {
+  const found = useAlert(alertId)
+  return (
+    <Stack gap="md">
+      <Anchor component={Link} to="/alerts" size="sm">
+        All alerts
+      </Anchor>
+      {found.isError ? (
+        <QueryError error={found.error} what="the alert" onRetry={() => void found.refetch()} />
+      ) : found.isPending ? (
+        <Skeleton
+          height={52}
+          radius="md"
+          role="status"
+          aria-busy="true"
+          aria-label="Loading the alert"
+        />
+      ) : (
+        <ol className={classes.list} aria-label="Alerts">
+          <AlertRow alert={found.data} canOperate={canOperate} initiallyOpen />
+        </ol>
+      )}
+    </Stack>
+  )
+}
+
 export function AlertsPage() {
   const { canOperate } = usePermissions()
   const [searchParameters, setSearchParameters] = useSearchParams()
+  const focusText = searchParameters.get('alert') ?? ''
+  const focusId = /^[1-9][0-9]{0,15}$/.test(focusText) ? Number(focusText) : null
   const state = searchParameters.get('state') === 'all' ? 'all' : 'open'
   const severityText = searchParameters.get('severity')
   const severity = severities.find((candidate) => candidate === severityText) ?? null
@@ -360,8 +396,11 @@ export function AlertsPage() {
   const kind = kindText !== null && kindText in alertKinds ? kindText : null
   const pages = useCursorPages(`${state}/${severity}/${kind}`, 50)
   const filtered = severity !== null || kind !== null
-  const server = useAlerts({ state, limit: pages.pageSize, cursor: pages.cursor }, !filtered)
-  const every = useEveryAlert(state, filtered)
+  const server = useAlerts(
+    { state, limit: pages.pageSize, cursor: pages.cursor },
+    !filtered && focusId === null,
+  )
+  const every = useEveryAlert(state, filtered && focusId === null)
   const alerts = filtered ? every : server
   const offset = filtered ? Number(pages.cursor ?? 0) : 0
   const found = every.data?.items.filter(
@@ -397,112 +436,116 @@ export function AlertsPage() {
         documentTitle="Alerts"
         description="What twilight's checks found: processes nobody intended, broken ledger chains, revocations not enforced, enrollment spikes and campaign conflicts."
       />
-      <Stack gap="md">
-        <Group gap="sm" wrap="wrap" role="search" aria-label="Filter alerts">
-          <SegmentedControl
-            aria-label="Which alerts"
-            value={state}
-            onChange={(value) => setParameter('state', value === 'all' ? 'all' : null)}
-            data={[
-              { value: 'open', label: 'Open' },
-              { value: 'all', label: 'All' },
-            ]}
-          />
-          <Select
-            aria-label="Severity"
-            value={severity ?? 'any'}
-            onChange={(value) => setParameter('severity', value === 'any' ? null : value)}
-            data={[
-              { value: 'any', label: 'Any severity' },
-              ...severities.map((entry: Severity) => ({
-                value: entry,
-                label: severityStyles[entry].label,
-              })),
-            ]}
-            w={160}
-          />
-          <Select
-            aria-label="Kind"
-            value={kind ?? 'any'}
-            onChange={(value) => setParameter('kind', value === 'any' ? null : value)}
-            data={kindOptions}
-            w={240}
-          />
-          {filtered && (
-            <Button
-              variant="subtle"
-              color="gray"
-              leftSection={<IconFilterOff size={16} aria-hidden="true" />}
-              onClick={() =>
-                setSearchParameters(state === 'all' ? { state: 'all' } : {}, { replace: true })
+      {focusId !== null ? (
+        <FocusedAlert alertId={focusId} canOperate={canOperate} />
+      ) : (
+        <Stack gap="md">
+          <Group gap="sm" wrap="wrap" role="search" aria-label="Filter alerts">
+            <SegmentedControl
+              aria-label="Which alerts"
+              value={state}
+              onChange={(value) => setParameter('state', value === 'all' ? 'all' : null)}
+              data={[
+                { value: 'open', label: 'Open' },
+                { value: 'all', label: 'All' },
+              ]}
+            />
+            <Select
+              aria-label="Severity"
+              value={severity ?? 'any'}
+              onChange={(value) => setParameter('severity', value === 'any' ? null : value)}
+              data={[
+                { value: 'any', label: 'Any severity' },
+                ...severities.map((entry: Severity) => ({
+                  value: entry,
+                  label: severityStyles[entry].label,
+                })),
+              ]}
+              w={160}
+            />
+            <Select
+              aria-label="Kind"
+              value={kind ?? 'any'}
+              onChange={(value) => setParameter('kind', value === 'any' ? null : value)}
+              data={kindOptions}
+              w={240}
+            />
+            {filtered && (
+              <Button
+                variant="subtle"
+                color="gray"
+                leftSection={<IconFilterOff size={16} aria-hidden="true" />}
+                onClick={() =>
+                  setSearchParameters(state === 'all' ? { state: 'all' } : {}, { replace: true })
+                }
+              >
+                Clear filters
+              </Button>
+            )}
+          </Group>
+          {filtered && every.data?.truncated === true && (
+            <Text size="xs" c="dimmed">
+              Filtered the {formatNumber(searchLimit)} newest alerts.
+            </Text>
+          )}
+          {alerts.isError ? (
+            <QueryError error={alerts.error} what="alerts" onRetry={() => void alerts.refetch()} />
+          ) : alerts.isPending ? (
+            <Stack gap={6} role="status" aria-busy="true" aria-label="Loading alerts">
+              {Array.from(Array(6).keys(), (index) => (
+                <Skeleton key={index} height={52} radius="md" />
+              ))}
+            </Stack>
+          ) : items.length === 0 ? (
+            <EmptyState
+              size="md"
+              icon={
+                filtered ? (
+                  <IconFilterOff size={24} aria-hidden="true" />
+                ) : (
+                  <IconShieldCheck size={24} aria-hidden="true" />
+                )
+              }
+              title={
+                filtered
+                  ? 'No alert matches these filters'
+                  : state === 'open'
+                    ? 'No open alerts'
+                    : 'No alerts yet'
+              }
+              description={
+                filtered
+                  ? 'Change or clear the filters.'
+                  : 'Reconcile compares every call in the nightfall ledger with the processes twilight intended; anything that does not match lands here.'
               }
             >
-              Clear filters
-            </Button>
+              {state === 'open' && !filtered && (
+                <EmptyState.Actions>
+                  <Anchor component={Link} to="/alerts?state=all" size="sm">
+                    See resolved alerts
+                  </Anchor>
+                </EmptyState.Actions>
+              )}
+            </EmptyState>
+          ) : (
+            <ol className={classes.list} aria-label="Alerts">
+              {items.map((alert) => (
+                <AlertRow key={alert.id} alert={alert} canOperate={canOperate} />
+              ))}
+            </ol>
           )}
-        </Group>
-        {filtered && every.data?.truncated === true && (
-          <Text size="xs" c="dimmed">
-            Filtered the {formatNumber(searchLimit)} newest alerts.
-          </Text>
-        )}
-        {alerts.isError ? (
-          <QueryError error={alerts.error} what="alerts" onRetry={() => void alerts.refetch()} />
-        ) : alerts.isPending ? (
-          <Stack gap={6} role="status" aria-busy="true" aria-label="Loading alerts">
-            {Array.from(Array(6).keys(), (index) => (
-              <Skeleton key={index} height={52} radius="md" />
-            ))}
-          </Stack>
-        ) : items.length === 0 ? (
-          <EmptyState
-            size="md"
-            icon={
-              filtered ? (
-                <IconFilterOff size={24} aria-hidden="true" />
-              ) : (
-                <IconShieldCheck size={24} aria-hidden="true" />
-              )
-            }
-            title={
-              filtered
-                ? 'No alert matches these filters'
-                : state === 'open'
-                  ? 'No open alerts'
-                  : 'No alerts yet'
-            }
-            description={
-              filtered
-                ? 'Change or clear the filters.'
-                : 'Reconcile compares every call in the nightfall ledger with the processes twilight intended; anything that does not match lands here.'
-            }
-          >
-            {state === 'open' && !filtered && (
-              <EmptyState.Actions>
-                <Anchor component={Link} to="/alerts?state=all" size="sm">
-                  See resolved alerts
-                </Anchor>
-              </EmptyState.Actions>
-            )}
-          </EmptyState>
-        ) : (
-          <ol className={classes.list} aria-label="Alerts">
-            {items.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} canOperate={canOperate} />
-            ))}
-          </ol>
-        )}
-        {alerts.data !== undefined && (items.length > 0 || pages.pageIndex > 0) && (
-          <CursorPagination
-            pages={pages}
-            shown={items.length}
-            total={filtered && found !== undefined ? found.length : null}
-            nextCursor={nextCursor}
-            noun="alerts"
-            pageSizes={[50, 100, 200]}
-          />
-        )}
-      </Stack>
+          {alerts.data !== undefined && (items.length > 0 || pages.pageIndex > 0) && (
+            <CursorPagination
+              pages={pages}
+              shown={items.length}
+              total={filtered && found !== undefined ? found.length : null}
+              nextCursor={nextCursor}
+              noun="alerts"
+              pageSizes={[50, 100, 200]}
+            />
+          )}
+        </Stack>
+      )}
     </>
   )
 }
