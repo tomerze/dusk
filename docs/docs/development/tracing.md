@@ -40,11 +40,10 @@ program that spawns work must too - `sh`'s `sh_exec` task carries `__new_task_id
 
 ### Opening the span
 
-The embassy task id isn't known until the spawn token exists, but the task body
+The embassy task id isn't known until the task is spawned, but the task body
 needs it to build the span. Thread it through a shared `Rc<Cell<u32>>`:
 
 ```rust
-#[embassy_executor::task(pool_size = 16)]
 async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>, /* … */) {
     let span = info_span!(
         "process",
@@ -59,9 +58,10 @@ async fn process_task(task_id: Rc<Cell<u32>>, process: Box<dyn Process>, /* … 
 
 // at the spawn site:
 let task_id = Rc::new(Cell::new(0));
-let spawn_token = process_task(task_id.clone(), process, /* … */)?;
-task_id.set(spawn_token.id());            // the id is known only now; store it for the body
-namespace.spawner.spawn(spawn_token);
+task_id.set(dusk_core::task::spawn(
+    namespace.spawner,
+    process_task(task_id.clone(), process, /* … */),
+));
 ```
 
 For synchronous logging *outside* the instrumented future - a crash line, an exit
@@ -103,11 +103,11 @@ stack while another task is polled and leak into it. So the layer has to know wh
 entered spans belong to the task running *now*.
 
 The obvious key - the embassy task id - doesn't work, and this is the trap the
-rules step around. **The embassy task id is reused.** It is a pointer into a
-fixed-size task pool slot; when a task finishes, its slot is reclaimed, and the
-next task spawned can claim the same slot and be handed the *same* id. So the
-embassy id names a slot at a moment, not a task over time - two unrelated tasks can
-wear it one after another.
+rules step around. **The embassy task id is reused.** It is a pointer to the
+storage the task runs in; when a task finishes, its storage is reused, and the
+next task spawned can be given the same storage and be handed the *same* id. So
+the embassy id names a storage at a moment, not a task over time - two unrelated
+tasks can wear it one after another.
 
 The layer sidesteps that entirely:
 
