@@ -39,7 +39,7 @@ func (engine *Engine) flip(operation context.Context, target *campaign.Campaign,
 	}
 	reason := "quarantine campaign " + target.Name
 	now := time.Now()
-	previous, failure := engine.Inventory.SetLifecycle(operation, key, "quarantined", reason, now, func(previous string) error {
+	previous, failure := engine.Inventory.SetLifecycle(operation, key, "quarantined", reason, target.Subject(), now, func(previous string) error {
 		if Withdrawn(previous) {
 			return errWithdrawnNode
 		}

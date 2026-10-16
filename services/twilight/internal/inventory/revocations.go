@@ -171,10 +171,10 @@ func (store *Store) RevokeBatch(operation context.Context, revocation *Revocatio
 		if !leading {
 			return ErrNotLeading
 		}
-		tag, failure := transaction.Exec(operation, `update nodes n set lifecycle = 'revoked', lifecycle_reason = $3, lifecycle_changed_at = $4, updated_at = now()
+		tag, failure := transaction.Exec(operation, `update nodes n set lifecycle = 'revoked', lifecycle_reason = $3, lifecycle_changed_at = $4, lifecycle_actor = $5, updated_at = now()
 			from unnest($1::text[], $2::text[]) as revoking(device_id, installation_id)
 			where n.device_id = revoking.device_id and n.installation_id = revoking.installation_id and n.lifecycle <> 'revoked'`,
-			devices, installations, revocation.Reason, at)
+			devices, installations, revocation.Reason, at, revocation.Actor)
 		if failure != nil {
 			return failure
 		}

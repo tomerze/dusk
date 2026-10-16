@@ -519,7 +519,7 @@ func (service *Service) SetLifecycle(operation context.Context, key inventory.Ke
 		return failure
 	}
 	now := time.Now()
-	previous, failure := service.engine.Inventory.SetLifecycle(operation, key, lifecycle, reason, now, func(previous string) error {
+	previous, failure := service.engine.Inventory.SetLifecycle(operation, key, lifecycle, reason, actor, now, func(previous string) error {
 		if failure := CheckLifecycleChange(previous, lifecycle, administrator); failure != nil {
 			return failure
 		}

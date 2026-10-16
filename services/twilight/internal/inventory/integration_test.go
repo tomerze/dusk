@@ -46,17 +46,17 @@ func TestInventoryUpkeep(test *testing.T) {
 
 	accept := func(string) error { return nil }
 	refused := errors.New("the node-state record was not acknowledged")
-	if previous, failure := store.SetLifecycle(operation, key, "revoked", "test", at, func(string) error { return refused }); !errors.Is(failure, refused) || previous != "enrolled" {
+	if previous, failure := store.SetLifecycle(operation, key, "revoked", "test", "operator@example.org", at, func(string) error { return refused }); !errors.Is(failure, refused) || previous != "enrolled" {
 		test.Fatalf("a refused change: %q %v", previous, failure)
 	}
 	if node, _ := store.Get(operation, key); node.Lifecycle != "enrolled" {
 		test.Fatalf("a change its check refused was stored: %s", node.Lifecycle)
 	}
-	if previous, failure := store.SetLifecycle(operation, key, "quarantined", "test", at, accept); failure != nil || previous != "enrolled" {
+	if previous, failure := store.SetLifecycle(operation, key, "quarantined", "test", "operator@example.org", at, accept); failure != nil || previous != "enrolled" {
 		test.Fatalf("quarantine: %q %v", previous, failure)
 	}
 	stranger := inventory.Key{DeviceID: strings.Repeat("c", 32), InstallationID: strings.Repeat("d", 32)}
-	if _, failure := store.SetLifecycle(operation, stranger, "quarantined", "test", at, accept); !errors.Is(failure, inventory.ErrNotFound) {
+	if _, failure := store.SetLifecycle(operation, stranger, "quarantined", "test", "operator@example.org", at, accept); !errors.Is(failure, inventory.ErrNotFound) {
 		test.Fatalf("a node inventory does not hold: %v", failure)
 	}
 	if failure := store.RecordEnrollment(operation, inventory.Enrollment{Key: key, Operation: "renew", CertFingerprint: &renewed, At: at.Add(time.Hour)}); failure != nil {
@@ -66,7 +66,7 @@ func TestInventoryUpkeep(test *testing.T) {
 	if *node.CertFingerprint != renewed || node.Lifecycle != "quarantined" {
 		test.Fatalf("a renewal must change only the fingerprint: %+v", node)
 	}
-	if previous, failure := store.SetLifecycle(operation, key, "enrolled", "test", at, accept); failure != nil || previous != "quarantined" {
+	if previous, failure := store.SetLifecycle(operation, key, "enrolled", "test", "operator@example.org", at, accept); failure != nil || previous != "quarantined" {
 		test.Fatalf("back to enrolled: %q %v", previous, failure)
 	}
 	activated, failure := store.RecordConnections(operation, []inventory.Sighting{{Key: key, At: at}, {Key: stranger, At: at}})

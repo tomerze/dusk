@@ -427,7 +427,7 @@ func (store *Store) ApplyReport(operation context.Context, key Key, namespaceID 
 	})
 }
 
-func (store *Store) SetLifecycle(operation context.Context, key Key, lifecycle, reason string, at time.Time, before func(previous string) error) (string, error) {
+func (store *Store) SetLifecycle(operation context.Context, key Key, lifecycle, reason, actor string, at time.Time, before func(previous string) error) (string, error) {
 	var previous string
 	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
 		failure := transaction.QueryRow(operation, `select lifecycle from nodes where device_id = $1 and installation_id = $2 for update`, key.DeviceID, key.InstallationID).Scan(&previous)
@@ -440,8 +440,8 @@ func (store *Store) SetLifecycle(operation context.Context, key Key, lifecycle, 
 		if failure := before(previous); failure != nil {
 			return failure
 		}
-		_, failure = transaction.Exec(operation, `update nodes set lifecycle = $3, lifecycle_reason = $4, lifecycle_changed_at = $5, updated_at = now()
-			where device_id = $1 and installation_id = $2 and lifecycle <> $3`, key.DeviceID, key.InstallationID, lifecycle, reason, at)
+		_, failure = transaction.Exec(operation, `update nodes set lifecycle = $3, lifecycle_reason = $4, lifecycle_changed_at = $5, lifecycle_actor = $6, updated_at = now()
+			where device_id = $1 and installation_id = $2 and lifecycle <> $3`, key.DeviceID, key.InstallationID, lifecycle, reason, at, actor)
 		return failure
 	})
 	return previous, failure
