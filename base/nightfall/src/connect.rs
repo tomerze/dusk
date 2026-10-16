@@ -54,6 +54,7 @@ pub struct ConnectArgs {
     pub install_token_file: Option<String>,
     pub heartbeat_timeout_seconds: u32,
     pub tpm: Option<String>,
+    pub provision_token_file: Option<String>,
 }
 
 pub(crate) struct Settings {
@@ -62,6 +63,7 @@ pub(crate) struct Settings {
     pub provisioner: Provisioner,
     pub trust_anchors: String,
     pub install_token_file: Option<String>,
+    pub provision_token_file: Option<String>,
     pub heartbeat_timeout: Duration,
     pub tpm: Option<String>,
 }
@@ -92,6 +94,18 @@ impl Settings {
         {
             return Err(String::from("the install token file is an empty path"));
         }
+        if arguments
+            .provision_token_file
+            .as_deref()
+            .is_some_and(str::is_empty)
+        {
+            return Err(String::from("the provision token file is an empty path"));
+        }
+        if arguments.install_token_file.is_some() && arguments.provision_token_file.is_some() {
+            return Err(String::from(
+                "a node enrolls with an install token file or a provision token file, not both",
+            ));
+        }
         if arguments.heartbeat_timeout_seconds == 0 {
             return Err(String::from(
                 "the heartbeat timeout must be at least 1 second",
@@ -110,6 +124,7 @@ impl Settings {
             },
             trust_anchors: arguments.trust_anchors.clone(),
             install_token_file: arguments.install_token_file.clone(),
+            provision_token_file: arguments.provision_token_file.clone(),
             heartbeat_timeout: Duration::from_secs(u64::from(arguments.heartbeat_timeout_seconds)),
             tpm: arguments.tpm.clone(),
         })
@@ -590,20 +605,25 @@ impl Connector {
     }
 
     async fn token(&self) -> anyhow::Result<Token> {
-        let Some(path) = &self.settings.install_token_file else {
-            return Ok(Token::Fleet(String::from(
-                dusk_core::fleet_token::fleet_token(),
-            )));
+        let (path, token): (&str, fn(String) -> Token) = match (
+            &self.settings.install_token_file,
+            &self.settings.provision_token_file,
+        ) {
+            (Some(path), _) => (path, Token::Install),
+            (None, Some(path)) => (path, Token::Provision),
+            (None, None) => {
+                return Ok(Token::Fleet(String::from(
+                    dusk_core::fleet_token::fleet_token(),
+                )));
+            }
         };
+        let kind = token(String::new()).kind();
         let contents = crate::file::read(path, MAXIMUM_TOKEN_BYTES).await?;
-        let token = core::str::from_utf8(&contents)
-            .map_err(|_| anyhow::anyhow!("the install token file `{path}` is not UTF-8"))?
+        let text = core::str::from_utf8(&contents)
+            .map_err(|_| anyhow::anyhow!("the {kind} file `{path}` is not UTF-8"))?
             .trim();
-        anyhow::ensure!(
-            !token.is_empty(),
-            "the install token file `{path}` is empty"
-        );
-        Ok(Token::Install(token.to_string()))
+        anyhow::ensure!(!text.is_empty(), "the {kind} file `{path}` is empty");
+        Ok(token(text.to_string()))
     }
 
     fn new_key(&self) -> anyhow::Result<NodeKey> {
@@ -694,6 +714,7 @@ mod tests {
             install_token_file: None,
             heartbeat_timeout_seconds: DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
             tpm: Some(String::from(DEFAULT_TPM)),
+            provision_token_file: None,
         }
     }
 
@@ -727,6 +748,11 @@ mod tests {
             |arguments| arguments.fleet_server_name = Some(String::from("not a name")),
             |arguments| arguments.trust_anchors = String::new(),
             |arguments| arguments.install_token_file = Some(String::new()),
+            |arguments| arguments.provision_token_file = Some(String::new()),
+            |arguments| {
+                arguments.install_token_file = Some(String::from("/etc/dusk/install-token"));
+                arguments.provision_token_file = Some(String::from("/etc/dusk/provision-token"));
+            },
             |arguments| arguments.heartbeat_timeout_seconds = 0,
             |arguments| arguments.tpm = Some(String::new()),
         ];

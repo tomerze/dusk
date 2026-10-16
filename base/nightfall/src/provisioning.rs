@@ -45,6 +45,7 @@ pub(crate) struct TpmAttestation {
 pub(crate) enum Token {
     Fleet(String),
     Install(String),
+    Provision(String),
 }
 
 impl Token {
@@ -52,6 +53,7 @@ impl Token {
         match self {
             Token::Fleet(_) => "fleet token",
             Token::Install(_) => "install token",
+            Token::Provision(_) => "provision token",
         }
     }
 
@@ -59,6 +61,7 @@ impl Token {
         match self {
             Token::Fleet(token) => builder.set_fleet_token(token),
             Token::Install(token) => builder.set_install_token(token),
+            Token::Provision(token) => builder.set_provision_token(token),
         }
     }
 }

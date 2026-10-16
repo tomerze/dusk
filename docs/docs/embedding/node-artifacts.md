@@ -252,7 +252,9 @@ with `dusk_core::fleet_token::fleet_token()`, and a client holding the node's
 [`Dusk.fleetToken`](../sdk-reference/capnp-schemas.md#duskcapnp). The node
 itself uses it for two things: `nightfall -c` enrolls with it, the first time a
 node [connects to nightfall](../getting-started/guides/connect-to-nightfall.md),
-unless it is given an install token; and the key of its
+unless it is given an install token or a
+[provision token](../getting-started/guides/connect-to-nightfall.md#provision-tokens),
+which can be replaced where the fleet token cannot; and the key of its
 [persistent kvs file](../features/kvs.md#the-file) derives from it, so a node
 built with another token - a new random one included - cannot read the
 persistent keys an earlier build kept.

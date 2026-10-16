@@ -347,3 +347,56 @@ fn an_install_token_is_the_credential_when_one_is_given() {
         matches!(event, Event::Linked { connection: 1, certificate: linked, .. } if *linked == certificate)
     });
 }
+
+#[test]
+fn a_provision_token_is_the_credential_when_one_is_given() {
+    let mut fleet = Fleet::start("provision-token", Behaviour::default());
+    let token_file = fleet.directory.join("provision-token");
+    std::fs::write(&token_file, format!("  {PROVISION_TOKEN}\n")).unwrap();
+    let _node = fleet.start_node(&format!(" --provision-token-file {}", token_file.display()));
+    let Event::Assigned {
+        installation_id,
+        credential,
+        ..
+    } = fleet.expect(FIRST_LINK_TIMEOUT, "assignment", |event| {
+        matches!(event, Event::Assigned { .. })
+    })
+    else {
+        unreachable!()
+    };
+    assert_eq!(credential, "provision");
+    let Event::Enrolled { certificate, .. } =
+        fleet.expect(Duration::from_secs(10), "enrollment", |event| {
+            matches!(event, Event::Enrolled { installation_id: enrolled, .. } if *enrolled == installation_id)
+        })
+    else {
+        unreachable!()
+    };
+    fleet.expect(Duration::from_secs(10), "link", |event| {
+        matches!(event, Event::Linked { connection: 1, certificate: linked, .. } if *linked == certificate)
+    });
+}
+
+#[test]
+fn a_node_waits_for_its_provision_token_file_instead_of_enrolling_with_the_fleet_token() {
+    let mut fleet = Fleet::start("provision-token-later", Behaviour::default());
+    let token_file = fleet.directory.join("provision-token");
+    let _node = fleet.start_node(&format!(" --provision-token-file {}", token_file.display()));
+    fleet.quiet(
+        Duration::from_secs(8),
+        "an enrollment attempt without the provision token file",
+        |event| matches!(event, Event::AssignAttempted),
+    );
+    std::fs::write(&token_file, PROVISION_TOKEN).unwrap();
+    let Event::Assigned { credential, .. } = fleet.expect(
+        Duration::from_secs(660),
+        "assignment within the provisioning backoff's 10 minute cap",
+        |event| matches!(event, Event::Assigned { .. }),
+    ) else {
+        unreachable!()
+    };
+    assert_eq!(credential, "provision");
+    fleet.expect(Duration::from_secs(10), "link", |event| {
+        matches!(event, Event::Linked { connection: 1, .. })
+    });
+}
