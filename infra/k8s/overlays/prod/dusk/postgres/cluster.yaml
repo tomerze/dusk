@@ -25,9 +25,9 @@ spec:
       postInitSQL:
         - CREATE ROLE grafana LOGIN
         - ALTER ROLE grafana SET default_transaction_read_only = on
+      postInitApplicationSQL:
         - REVOKE ALL ON DATABASE inventory FROM PUBLIC
         - GRANT CONNECT ON DATABASE inventory TO grafana
-      postInitApplicationSQL:
         - REVOKE ALL ON SCHEMA public FROM PUBLIC
         - GRANT USAGE ON SCHEMA public TO grafana
         - |
