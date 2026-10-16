@@ -280,6 +280,7 @@ services:
         export CEPH_DEMO_ACCESS_KEY="$$(cat /run/secrets/ceph-admin/access-key)"
         CEPH_DEMO_SECRET_KEY="$$(cat /run/secrets/ceph-admin/secret-key)"
         && exec /opt/ceph-container/bin/demo
+    hostname: ceph
     networks:
       stack:
         ipv4_address: ${DUSK_CEPH_IP:-10.231.64.10}
