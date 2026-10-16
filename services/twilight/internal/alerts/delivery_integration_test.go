@@ -687,12 +687,22 @@ func TestA429PausesTheWholeReceiver(test *testing.T) {
 		Routes: []config.Route{{Receiver: "siem"}},
 	}
 	store, _ := running(test, pool, settings, "twilight-0")
-	for index := range 5 {
+	raise := func(index int) {
 		if _, failure := store.Raise(context.Background(), alerts.Raised{Severity: alerts.High, Kind: alerts.KindPidReused,
 			Fingerprint: fmt.Sprintf("pid_reused:%d", 2000+index)}); failure != nil {
 			test.Fatal(failure)
 		}
-		time.Sleep(50 * time.Millisecond)
+	}
+	raise(0)
+	eventually(test, "the 429 pauses the receiver", 30*time.Second, func() (bool, string) {
+		var paused bool
+		if failure := pool.QueryRow(context.Background(), `select count(*) > 0 from alert_receivers where name = 'siem' and paused_until is not null`).Scan(&paused); failure != nil {
+			test.Fatal(failure)
+		}
+		return paused, "not paused"
+	})
+	for index := 1; index < 5; index++ {
+		raise(index)
 	}
 	eventually(test, "every notification is delivered after the pause", 30*time.Second, func() (bool, string) {
 		got := len(receiving.accepted("/webhook"))
