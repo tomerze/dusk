@@ -1561,8 +1561,21 @@ async fn enroll_with_token(
     token: &str,
     fingerprint: [u8; 32],
 ) -> Result<(), capnp::Error> {
+    enroll_with_credential(
+        provisioning,
+        |mut credential| credential.set_fleet_token(token),
+        fingerprint,
+    )
+    .await
+}
+
+async fn enroll_with_credential(
+    provisioning: &nightfall_provisioning::provision_capnp::provisioning::Client,
+    credential: impl Fn(nightfall_provisioning::provision_capnp::credential::Builder<'_>),
+    fingerprint: [u8; 32],
+) -> Result<(), capnp::Error> {
     let mut assign = provisioning.assign_request();
-    assign.get().init_credential().set_fleet_token(token);
+    credential(assign.get().init_credential());
     device_report(assign.get().init_device());
     assign
         .get()
@@ -1587,7 +1600,7 @@ async fn enroll_with_token(
     ];
     let csr = parameters.serialize_request(&key).unwrap();
     let mut enroll = provisioning.enroll_request();
-    enroll.get().init_credential().set_fleet_token(token);
+    credential(enroll.get().init_credential());
     device_report(enroll.get().init_device());
     enroll
         .get()
@@ -1662,6 +1675,158 @@ fn a_credential_file_that_does_not_load_keeps_the_previous_credentials() {
         assert!(
             refused.extra.contains("denied: invalid credential"),
             "{refused}"
+        );
+    });
+    shutdown(instance);
+}
+
+#[test]
+fn a_live_reload_rotates_provision_tokens_and_retires_the_fleet_token() {
+    let environment = Environment::new();
+    let step_ca = support::step_ca::FakeStepCa::start(
+        environment.provisioner.public_jwk(),
+        environment.pki.fleet_client.clone(),
+    );
+    std::fs::write(
+        environment.paths().file("step-ca-root.crt"),
+        &step_ca.root_pem,
+    )
+    .unwrap();
+    let provision_tokens = environment.paths().file("provision-tokens.toml");
+    let entry = |name: &str, token: &str, extra: &str| {
+        format!(
+            "[[token]]\nname = \"{name}\"\nvalue_sha256 = \"{}\"\n{extra}\n",
+            nightfall_ledger::entry::sha256_hex(token.as_bytes())
+        )
+    };
+    std::fs::write(
+        &provision_tokens,
+        entry("october", "october provision token", ""),
+    )
+    .unwrap();
+    let mut config = environment.config("nightfall-0", 0);
+    config.step_ca.url = step_ca.url.clone();
+    config.provision.provision_tokens_file = provision_tokens.clone();
+    let (instance, _log) = environment.start(config);
+    let mut seen = nightfall::server::credential_files_modified(&instance.shared.config);
+    let provision = |token: &'static str| {
+        move |mut credential: nightfall_provisioning::provision_capnp::credential::Builder<'_>| {
+            credential.set_provision_token(token)
+        }
+    };
+    run(async {
+        let anonymous =
+            support::harness::anonymous_config(&environment.pki.fleet_server.certificate);
+        let provisioning =
+            support::harness::connect_provisioning(instance.addresses.fleet, anonymous).await;
+        enroll_with_credential(
+            &provisioning.client,
+            provision("october provision token"),
+            [70u8; 32],
+        )
+        .await
+        .unwrap();
+        let fleet_as_provision = error_of(enroll_with_credential(
+            &provisioning.client,
+            provision(support::harness::FLEET_TOKEN),
+            [71u8; 32],
+        ))
+        .await;
+        assert!(
+            fleet_as_provision
+                .extra
+                .contains("denied: invalid credential"),
+            "{fleet_as_provision}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(
+            environment.paths().file("fleet-tokens.toml"),
+            entry("test", support::harness::FLEET_TOKEN, "retired = true"),
+        )
+        .unwrap();
+        std::fs::write(
+            &provision_tokens,
+            format!(
+                "{}{}",
+                entry("october", "october provision token", ""),
+                entry("november", "november provision token", "")
+            ),
+        )
+        .unwrap();
+        nightfall::server::reload_credentials_if_changed(&instance.shared, &mut seen);
+        let retired_fleet_token = error_of(enroll_with_token(
+            &provisioning.client,
+            support::harness::FLEET_TOKEN,
+            [72u8; 32],
+        ))
+        .await;
+        assert!(
+            retired_fleet_token
+                .extra
+                .contains("denied: credential retired"),
+            "{retired_fleet_token}"
+        );
+        for (token, fingerprint) in [
+            ("october provision token", 73u8),
+            ("november provision token", 74u8),
+        ] {
+            enroll_with_credential(&provisioning.client, provision(token), [fingerprint; 32])
+                .await
+                .unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(
+            &provision_tokens,
+            format!(
+                "{}{}",
+                entry("october", "october provision token", "retired = true"),
+                entry("november", "november provision token", "")
+            ),
+        )
+        .unwrap();
+        nightfall::server::reload_credentials_if_changed(&instance.shared, &mut seen);
+        let retired_october = error_of(enroll_with_credential(
+            &provisioning.client,
+            provision("october provision token"),
+            [75u8; 32],
+        ))
+        .await;
+        assert!(
+            retired_october.extra.contains("denied: credential retired"),
+            "{retired_october}"
+        );
+        let before_overlap = seen;
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(
+            &provision_tokens,
+            format!(
+                "{}{}",
+                entry("november", "november provision token", ""),
+                entry("copied", support::harness::FLEET_TOKEN, "")
+            ),
+        )
+        .unwrap();
+        nightfall::server::reload_credentials_if_changed(&instance.shared, &mut seen);
+        assert_eq!(
+            seen, before_overlap,
+            "provision tokens sharing the fleet token's value were taken"
+        );
+        enroll_with_credential(
+            &provisioning.client,
+            provision("november provision token"),
+            [76u8; 32],
+        )
+        .await
+        .unwrap();
+        let still_refused = error_of(enroll_with_credential(
+            &provisioning.client,
+            provision(support::harness::FLEET_TOKEN),
+            [77u8; 32],
+        ))
+        .await;
+        assert!(
+            still_refused.extra.contains("denied: invalid credential"),
+            "{still_refused}"
         );
     });
     shutdown(instance);
