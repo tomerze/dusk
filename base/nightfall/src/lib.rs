@@ -135,8 +135,8 @@ impl dusk_program::process::ProcessMixin for Process {
                     let session_task = match dusk_core::session(
                         task_id.clone(),
                         self.namespace().clone(),
-                        Box::pin(reader),
-                        Box::pin(writer),
+                        Box::pin(capnp_futures::io::FromFutures(reader)),
+                        Box::pin(capnp_futures::io::FromFutures(writer)),
                     ) {
                         Ok(session_task) => session_task,
                         Err(error) => {
