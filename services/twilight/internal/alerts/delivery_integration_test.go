@@ -24,9 +24,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 
@@ -702,5 +704,116 @@ func TestA429PausesTheWholeReceiver(test *testing.T) {
 	}
 	if gap := tries[1].at.Sub(tries[0].at); gap < 2900*time.Millisecond {
 		test.Fatalf("the receiver was asked again %s after it answered 429 with Retry-After: 3", gap)
+	}
+}
+
+type secondLoadHeld struct {
+	loads   atomic.Int32
+	blocked chan struct{}
+	release chan struct{}
+}
+
+func (held *secondLoadHeld) TraceQueryStart(operation context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.Contains(data.SQL, "delivery.idempotency_key::text") && held.loads.Add(1) == 2 {
+		close(held.blocked)
+		<-held.release
+	}
+	return operation
+}
+
+func (*secondLoadHeld) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func TestANotificationClaimedBeforeA429IsNotSentOnceThePauseIsRecorded(test *testing.T) {
+	var requests atomic.Int32
+	arrived, answer := make(chan struct{}), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if requests.Add(1) == 1 {
+			close(arrived)
+			<-answer
+			writer.Header().Set("Retry-After", "3600")
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		writer.WriteHeader(http.StatusAccepted)
+	}))
+	test.Cleanup(server.Close)
+	_, url := testsupport.Database(test)
+	configuration, failure := pgxpool.ParseConfig(url)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	held := &secondLoadHeld{blocked: make(chan struct{}), release: make(chan struct{})}
+	configuration.ConnConfig.Tracer = held
+	pool, failure := pgxpool.NewWithConfig(context.Background(), configuration)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	test.Cleanup(pool.Close)
+	settings := config.Alerts{
+		PublicURL: "https://twilight.example.org", RunbookURL: "https://docs.example.org/{kind}/", DeliveryHorizonSeconds: 86400,
+		Receivers: []config.Receiver{
+			{Name: "siem", RatePerMinute: 6000, Webhook: &config.WebhookReceiver{URL: server.URL + "/webhook", SecretFile: writeSecret(test, webhookSecret)}},
+		},
+		Routes: []config.Route{{Receiver: "siem"}},
+	}
+	store, _ := running(test, pool, settings, "twilight-0")
+	answerFirst := sync.OnceFunc(func() { close(answer) })
+	releaseSecond := sync.OnceFunc(func() { close(held.release) })
+	test.Cleanup(func() {
+		answerFirst()
+		releaseSecond()
+	})
+	for index := range 2 {
+		if _, failure := store.Raise(context.Background(), alerts.Raised{Severity: alerts.High, Kind: alerts.KindPidReused,
+			Fingerprint: fmt.Sprintf("pid_reused:%d", 3000+index)}); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	for _, step := range []struct {
+		what    string
+		reached chan struct{}
+	}{{"the first notification reaches the receiver", arrived}, {"the second notification is claimed", held.blocked}} {
+		select {
+		case <-step.reached:
+		case <-time.After(30 * time.Second):
+			test.Fatalf("%s: not within 30s", step.what)
+		}
+	}
+	answerFirst()
+	operation := context.Background()
+	eventually(test, "the 429 pauses the receiver", 30*time.Second, func() (bool, string) {
+		var paused bool
+		if failure := pool.QueryRow(operation, `select count(*) > 0 from alert_receivers where name = 'siem' and paused_until > now()`).Scan(&paused); failure != nil {
+			test.Fatal(failure)
+		}
+		return paused, "not paused"
+	})
+	releaseSecond()
+	eventually(test, "the second notification gives up its claim", 30*time.Second, func() (bool, string) {
+		var claimed int
+		if failure := pool.QueryRow(operation, `select count(*) from alert_deliveries where receiver = 'siem' and lease is not null`).Scan(&claimed); failure != nil {
+			test.Fatal(failure)
+		}
+		return claimed == 0, fmt.Sprintf("%d claimed", claimed)
+	})
+	if asked := requests.Load(); asked != 1 {
+		test.Fatalf("the receiver was asked %d times; a notification claimed before it answered 429 was sent after the pause was recorded", asked)
+	}
+	var untried int
+	if failure := pool.QueryRow(operation, `select count(*) from alert_deliveries where receiver = 'siem' and state = 'pending' and attempts = 0 and last_error is null`).Scan(&untried); failure != nil || untried != 1 {
+		test.Fatalf("the notification the pause held back is not waiting untried: %d untried %v", untried, failure)
+	}
+	if _, failure := pool.Exec(operation, `update alert_receivers set paused_until = null where name = 'siem'`); failure != nil {
+		test.Fatal(failure)
+	}
+	eventually(test, "the held-back notification is delivered once the pause ends", 30*time.Second, func() (bool, string) {
+		var delivered int
+		if failure := pool.QueryRow(operation, `select count(*) from alert_deliveries where receiver = 'siem' and state = 'delivered' and attempts = 1`).Scan(&delivered); failure != nil {
+			test.Fatal(failure)
+		}
+		return delivered == 1, fmt.Sprintf("%d delivered on their first attempt", delivered)
+	})
+	if asked := requests.Load(); asked != 2 {
+		test.Fatalf("the receiver was asked %d times; the held-back notification should have been its second request", asked)
 	}
 }
