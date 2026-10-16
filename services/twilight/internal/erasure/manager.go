@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,13 +30,14 @@ const (
 	maximumBackoff       = time.Hour
 	stalledAttempts      = 5
 	stalledCheckInterval = 5 * time.Minute
+	retentionInterval    = 24 * time.Hour
 )
 
 var (
 	erasuresCompleted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "twilight_erasures_completed_total",
-		Help: "Erasures that finished, by scope.",
-	}, []string{"scope"})
+		Help: "Erasures that finished, by scope and kind (erasure or retention).",
+	}, []string{"scope", "kind"})
 	erasureFailures = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "twilight_erasure_step_failures_total",
 		Help: "Erasure steps that failed and are retried, by step.",
@@ -60,7 +62,8 @@ type Dependencies struct {
 
 type Manager struct {
 	Dependencies
-	checkedAt time.Time
+	scheduledAt time.Time
+	checkedAt   time.Time
 }
 
 func New(dependencies Dependencies) *Manager {
@@ -121,7 +124,7 @@ func (manager *Manager) RequestDevice(operation context.Context, device, reason,
 			return &problem
 		}
 		result, created, failure = insert(operation, transaction, Erasure{ID: uuid.Must(uuid.NewV7()), Scope: ScopeDevice, DeviceID: &device, Reason: reason,
-			RequestedBy: actor, RequestedAt: now, Steps: newSteps()})
+			RequestedBy: actor, RequestedAt: now, Steps: newSteps(false)})
 		return failure
 	})
 	if failure != nil {
@@ -172,7 +175,7 @@ func (manager *Manager) RequestTenant(operation context.Context, tenant, reason,
 			return &problem
 		}
 		result, created, failure = insert(operation, transaction, Erasure{ID: uuid.Must(uuid.NewV7()), Scope: ScopeTenant, Tenant: &tenant, Reason: reason,
-			RequestedBy: actor, RequestedAt: now, Steps: newSteps()})
+			RequestedBy: actor, RequestedAt: now, Steps: newSteps(false)})
 		return failure
 	})
 	if failure != nil {
@@ -206,6 +209,7 @@ func sleep(operation context.Context, duration time.Duration) bool {
 
 func (manager *Manager) Run(operation context.Context, term int64) {
 	for sleep(operation, tickInterval) {
+		manager.scheduleRetention(operation)
 		erasures, failure := due(operation, manager.Pool, manager.Now(), 10)
 		if failure != nil {
 			if operation.Err() == nil {
@@ -296,7 +300,9 @@ func (manager *Manager) advance(operation context.Context, erasure Erasure) {
 }
 
 func (manager *Manager) complete(operation context.Context, erasure Erasure) {
-	erasure.Retained = manager.retained(operation, erasure)
+	if erasure.Before == nil {
+		erasure.Retained = manager.retained(operation, erasure)
+	}
 	now := manager.Now()
 	erasure.Status = StatusCompleted
 	erasure.CompletedAt = &now
@@ -314,14 +320,18 @@ func (manager *Manager) complete(operation context.Context, erasure Erasure) {
 			manager.Logger.Warn("the finished erasure's scope was not deleted from ClickHouse; its table's TTL removes it", "erasure_id", erasure.ID, "error", failure)
 		}
 	}
-	erasuresCompleted.WithLabelValues(string(erasure.Scope)).Inc()
+	kind := "erasure"
+	if erasure.Before != nil {
+		kind = "retention"
+	}
+	erasuresCompleted.WithLabelValues(string(erasure.Scope), kind).Inc()
 	counts := map[string]int64{}
 	for _, step := range erasure.Steps {
 		for name, count := range step.Counts {
 			counts[step.Name+"."+name] = count
 		}
 	}
-	manager.Logger.Info("erasure finished", "erasure_id", erasure.ID, "scope", erasure.Scope, "subject", erasure.Subject(),
+	manager.Logger.Info("erasure finished", "erasure_id", erasure.ID, "scope", erasure.Scope, "subject", erasure.Subject(), "kind", kind,
 		"seconds", now.Sub(erasure.RequestedAt).Seconds(), "counts", counts)
 }
 
@@ -353,6 +363,39 @@ func (manager *Manager) raiseStalled(operation context.Context) {
 		if _, failure := manager.Alerts.Raise(operation, alerts.Raised{Severity: alerts.High, Kind: alerts.KindErasureStalled,
 			Fingerprint: alerts.KindErasureStalled + ":" + current.ID.String(), Detail: detail}); failure != nil {
 			manager.Logger.Warn("the stalled erasure alert was not raised", "erasure_id", current.ID, "error", failure)
+		}
+	}
+}
+
+func (manager *Manager) scheduleRetention(operation context.Context) {
+	now := manager.Now()
+	if now.Sub(manager.scheduledAt) < time.Hour || len(manager.Config.Retention.TenantDays) == 0 {
+		return
+	}
+	manager.scheduledAt = now
+	tenants := make([]string, 0, len(manager.Config.Retention.TenantDays))
+	for tenant := range manager.Config.Retention.TenantDays {
+		tenants = append(tenants, tenant)
+	}
+	sort.Strings(tenants)
+	for _, tenant := range tenants {
+		last, failure := lastRetention(operation, manager.Pool, tenant)
+		if failure != nil {
+			manager.Logger.Warn("the tenant's last retention run was not read", "tenant", tenant, "error", failure)
+			continue
+		}
+		if last != nil && now.Sub(*last) < retentionInterval {
+			continue
+		}
+		days := manager.Config.Retention.TenantDays[tenant]
+		before := now.Add(-time.Duration(days) * 24 * time.Hour)
+		erasure, created, failure := insert(operation, manager.Pool, Erasure{ID: uuid.Must(uuid.NewV7()), Scope: ScopeTenant, Tenant: &tenant, Before: &before,
+			Reason: fmt.Sprintf("retention of %d days for tenant %s", days, tenant), RequestedBy: "twilight", RequestedAt: now, Steps: newSteps(true)})
+		switch {
+		case failure != nil:
+			manager.Logger.Warn("the tenant's retention run was not scheduled", "tenant", tenant, "error", failure)
+		case created:
+			manager.Logger.Info("tenant retention scheduled", "erasure_id", erasure.ID, "tenant", tenant, "days", days, "before", before)
 		}
 	}
 }

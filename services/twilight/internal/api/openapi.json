@@ -5064,6 +5064,14 @@
               "null"
             ]
           },
+          "before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Set on a tenant's retention run: only data older than this is erased."
+          },
           "reason": {
             "type": "string"
           },
@@ -5117,6 +5125,7 @@
           "scope",
           "device_id",
           "tenant",
+          "before",
           "reason",
           "requested_by",
           "requested_at",

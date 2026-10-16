@@ -58,6 +58,7 @@ type Erasure struct {
 	Scope         Scope      `json:"scope"`
 	DeviceID      *string    `json:"device_id"`
 	Tenant        *string    `json:"tenant"`
+	Before        *time.Time `json:"before"`
 	Reason        string     `json:"reason"`
 	RequestedBy   string     `json:"requested_by"`
 	RequestedAt   time.Time  `json:"requested_at"`
@@ -80,8 +81,11 @@ func (erasure *Erasure) Subject() string {
 	return "nothing"
 }
 
-func newSteps() []Step {
+func newSteps(retention bool) []Step {
 	names := []string{StepScope, StepClickHouse, StepLake, StepFiles, StepInventory}
+	if retention {
+		names = names[:4]
+	}
 	steps := make([]Step, len(names))
 	for index, name := range names {
 		steps[index] = Step{Name: name, State: StepPending, Counts: map[string]int64{}}
@@ -134,11 +138,18 @@ func scopeSet(erasure uuid.UUID, kind string) string {
 	return fmt.Sprintf("(SELECT value FROM dusk.erasure_scope WHERE erasure_id = '%s' AND kind = '%s')", erasure, kind)
 }
 
-func predicate(current table, erasure uuid.UUID) string {
+func timeLiteral(at time.Time) string {
+	return fmt.Sprintf("toDateTime64('%s', 9, 'UTC')", at.UTC().Format("2006-01-02 15:04:05.000000000"))
+}
+
+func predicate(current table, erasure uuid.UUID, before *time.Time) string {
 	devices := scopeSet(erasure, "device")
 	condition := "device_id IN " + devices
 	if current.telemetry {
 		condition = "(attributes['device_id'] IN " + devices + " OR resource_attributes['host.id'] IN " + scopeSet(erasure, "host") + ")"
+	}
+	if before != nil {
+		condition += " AND time < " + timeLiteral(*before)
 	}
 	return condition
 }

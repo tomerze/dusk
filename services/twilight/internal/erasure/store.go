@@ -12,12 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const erasureColumns = `id, scope, device_id, tenant, reason, requested_by, requested_at, status, steps, retained, attempts, last_error, next_attempt_at, completed_at`
+const erasureColumns = `id, scope, device_id, tenant, before, reason, requested_by, requested_at, status, steps, retained, attempts, last_error, next_attempt_at, completed_at`
 
 func scanErasure(row pgx.Row) (Erasure, error) {
 	var erasure Erasure
 	var steps, retained []byte
-	failure := row.Scan(&erasure.ID, &erasure.Scope, &erasure.DeviceID, &erasure.Tenant, &erasure.Reason, &erasure.RequestedBy,
+	failure := row.Scan(&erasure.ID, &erasure.Scope, &erasure.DeviceID, &erasure.Tenant, &erasure.Before, &erasure.Reason, &erasure.RequestedBy,
 		&erasure.RequestedAt, &erasure.Status, &steps, &retained, &erasure.Attempts, &erasure.LastError, &erasure.NextAttemptAt, &erasure.CompletedAt)
 	if errors.Is(failure, pgx.ErrNoRows) {
 		return erasure, ErrNotFound
@@ -51,16 +51,16 @@ func insert(operation context.Context, target querier, erasure Erasure) (Erasure
 	if failure != nil {
 		return Erasure{}, false, failure
 	}
-	inserted, failure := scanErasure(target.QueryRow(operation, `insert into erasures (id, scope, device_id, tenant, reason, requested_by, requested_at,
+	inserted, failure := scanErasure(target.QueryRow(operation, `insert into erasures (id, scope, device_id, tenant, before, reason, requested_by, requested_at,
 			status, steps, next_attempt_at, updated_at)
-		values ($1, $2, $3, $4, $5, $6, $7, 'running', $8::jsonb, $7, $7)
-		on conflict (scope, coalesce(device_id, tenant)) where status = 'running' do nothing
-		returning `+erasureColumns, erasure.ID, erasure.Scope, erasure.DeviceID, erasure.Tenant, erasure.Reason, erasure.RequestedBy,
+		values ($1, $2, $3, $4, $5, $6, $7, $8, 'running', $9::jsonb, $8, $8)
+		on conflict (scope, coalesce(device_id, tenant), (before is null)) where status = 'running' do nothing
+		returning `+erasureColumns, erasure.ID, erasure.Scope, erasure.DeviceID, erasure.Tenant, erasure.Before, erasure.Reason, erasure.RequestedBy,
 		erasure.RequestedAt, steps))
 	if errors.Is(failure, ErrNotFound) {
 		running, failure := scanErasure(target.QueryRow(operation, `select `+erasureColumns+` from erasures
-			where status = 'running' and scope = $1 and coalesce(device_id, tenant) = $2`,
-			erasure.Scope, subjectOf(erasure)))
+			where status = 'running' and scope = $1 and coalesce(device_id, tenant) = $2 and (before is null) = $3`,
+			erasure.Scope, subjectOf(erasure), erasure.Before == nil))
 		return running, false, failure
 	}
 	return inserted, failure == nil, failure
@@ -138,4 +138,10 @@ func stalledErasures(operation context.Context, pool *pgxpool.Pool, overdueBefor
 		found = append(found, current)
 	}
 	return found, rows.Err()
+}
+
+func lastRetention(operation context.Context, pool *pgxpool.Pool, tenant string) (*time.Time, error) {
+	var last *time.Time
+	failure := pool.QueryRow(operation, `select max(requested_at) from erasures where scope = 'tenant' and tenant = $1 and before is not null`, tenant).Scan(&last)
+	return last, failure
 }

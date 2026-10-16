@@ -135,7 +135,7 @@ func (manager *Manager) deleteRows(operation context.Context, erasure *Erasure, 
 		if slices.Contains(step.Issued, current.name) {
 			continue
 		}
-		condition := predicate(current, erasure.ID)
+		condition := predicate(current, erasure.ID, erasure.Before)
 		counted, failure := clickhouse.Scan[struct {
 			Rows int64 `json:"rows"`
 		}](operation, manager.ClickHouse, clickhouse.Query{Text: "SELECT count() AS rows FROM dusk." + current.name + " WHERE " + condition})
@@ -148,6 +148,9 @@ func (manager *Manager) deleteRows(operation context.Context, erasure *Erasure, 
 		}
 		if rows > 0 {
 			statement := "ALTER TABLE dusk." + current.name + " DELETE WHERE " + condition
+			if erasure.Before != nil {
+				statement = "DELETE FROM dusk." + current.name + " WHERE " + condition
+			}
 			if failure := manager.ClickHouse.Exec(operation, clickhouse.Query{Text: statement, Settings: nondeterministic()}); failure != nil {
 				return false, fmt.Errorf("delete the rows of dusk.%s: %w", current.name, failure)
 			}
@@ -219,8 +222,10 @@ func (manager *Manager) deleteFiles(operation context.Context, erasure *Erasure,
 			var keys []string
 			var bytes int64
 			if failure := manager.ObjectStore.List(operation, bucket, "files/"+device+"/", func(object objectstore.Object) error {
-				keys = append(keys, object.Key)
-				bytes += object.Size
+				if erasure.Before == nil || object.LastModified.Before(*erasure.Before) {
+					keys = append(keys, object.Key)
+					bytes += object.Size
+				}
 				return nil
 			}); failure != nil {
 				return false, fmt.Errorf("list the collected files of device %s: %w", device, failure)

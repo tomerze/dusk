@@ -54,9 +54,13 @@ func (manager *Manager) rewriteLake(operation context.Context, erasure *Erasure,
 		if slices.Contains(step.Issued, current.name) {
 			continue
 		}
-		condition := "ifNull(" + predicate(current, erasure.ID) + ", false)"
+		condition := "ifNull(" + predicate(current, erasure.ID, erasure.Before) + ", false)"
+		window := ""
+		if erasure.Before != nil {
+			window = fmt.Sprintf(" WHERE extract(_path, '/dt=([0-9]{4}-[0-9]{2}-[0-9]{2})/') <= '%s'", erasure.Before.UTC().Format("2006-01-02"))
+		}
 		files, failure := clickhouse.Scan[lakeFile](operation, manager.ClickHouse, clickhouse.Query{Text: "SELECT _path AS path, countIf(" + condition + ") AS matched, count() AS total FROM dusk.lake_" +
-			current.name + "_parquet GROUP BY path HAVING matched > 0 ORDER BY path", Settings: map[string]string{"max_execution_time": "3600"}})
+			current.name + "_parquet" + window + " GROUP BY path HAVING matched > 0 ORDER BY path", Settings: map[string]string{"max_execution_time": "3600"}})
 		if failure != nil {
 			return false, fmt.Errorf("find the lake files of %s that hold the erased rows: %w", current.name, failure)
 		}

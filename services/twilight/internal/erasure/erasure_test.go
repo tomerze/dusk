@@ -10,15 +10,20 @@ import (
 
 var sampleErasure = uuid.MustParse("0192f0c4-9e1a-7b8e-9d2f-3a4b5c6d7e8f")
 
-func TestPredicatesSelectTheScope(test *testing.T) {
+func TestPredicatesSelectTheScopeAndTheWindow(test *testing.T) {
 	devices := "device_id IN (SELECT value FROM dusk.erasure_scope WHERE erasure_id = '" + sampleErasure.String() + "' AND kind = 'device')"
-	if got := predicate(table{"connections", false}, sampleErasure); got != devices {
+	if got := predicate(table{"connections", false}, sampleErasure, nil); got != devices {
 		test.Fatalf("connections: %s", got)
 	}
-	telemetry := predicate(table{"otel_logs", true}, sampleErasure)
+	telemetry := predicate(table{"otel_logs", true}, sampleErasure, nil)
 	if !strings.HasPrefix(telemetry, "(attributes['device_id'] IN (SELECT value") || !strings.Contains(telemetry, "resource_attributes['host.id'] IN (SELECT value") ||
 		!strings.Contains(telemetry, "kind = 'host'") {
 		test.Fatalf("telemetry: %s", telemetry)
+	}
+	before := time.Date(2026, 9, 1, 3, 4, 5, 600, time.FixedZone("plus two", 7200))
+	windowed := predicate(table{"files", false}, sampleErasure, &before)
+	if !strings.HasSuffix(windowed, " AND time < toDateTime64('2026-09-01 01:04:05.000000600', 9, 'UTC')") {
+		test.Fatalf("windowed: %s", windowed)
 	}
 }
 
@@ -38,7 +43,7 @@ func TestARewrittenLakeFileStaysInItsPartitionUnderAStableName(test *testing.T) 
 	}
 }
 
-func TestStepsOfAnErasure(test *testing.T) {
+func TestStepsOfAnErasureAndOfARetentionRun(test *testing.T) {
 	names := func(steps []Step) string {
 		var found []string
 		for _, step := range steps {
@@ -49,8 +54,11 @@ func TestStepsOfAnErasure(test *testing.T) {
 		}
 		return strings.Join(found, ",")
 	}
-	if got := names(newSteps()); got != "scope,clickhouse,lake,files,inventory" {
+	if got := names(newSteps(false)); got != "scope,clickhouse,lake,files,inventory" {
 		test.Fatalf("erasure steps %s", got)
+	}
+	if got := names(newSteps(true)); got != "scope,clickhouse,lake,files" {
+		test.Fatalf("retention steps %s", got)
 	}
 }
 

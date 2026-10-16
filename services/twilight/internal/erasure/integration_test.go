@@ -482,6 +482,49 @@ func TestAFailingStepIsRetriedAndRaisesAnAlert(test *testing.T) {
 	}
 }
 
+func TestATenantKeepsOnlyItsRetentionPeriod(test *testing.T) {
+	current := newSetup(test, func(settings *config.Config) { settings.Retention.TenantDays = map[string]int{"acme": 30} })
+	current.seed(test)
+	operation := context.Background()
+	current.manager.scheduleRetention(operation)
+	current.now = current.now.Add(2 * time.Hour)
+	current.manager.scheduleRetention(operation)
+	scheduled, failure := due(operation, current.pool, current.now, 10)
+	if failure != nil || len(scheduled) != 1 {
+		test.Fatalf("scheduled %+v %v", scheduled, failure)
+	}
+	retention := scheduled[0]
+	if retention.Tenant == nil || *retention.Tenant != "acme" || retention.Before == nil || !retention.Before.Equal(current.now.Add(-2*time.Hour).Add(-30*24*time.Hour)) ||
+		len(retention.Steps) != 4 || retention.RequestedBy != "twilight" {
+		test.Fatalf("the retention run %+v", retention)
+	}
+	current.objects.objects["dusk-files"]["files/"+erased+"/"+installation+"/70002/0-new.jpg"] = storedObject{size: 1, modified: current.now}
+	current.objects.objects["dusk-files"]["files/"+erased+"/"+installation+"/70003/0-old.jpg"] = storedObject{size: 1, modified: current.now.Add(-40 * 24 * time.Hour)}
+	finished := current.run(test, retention)
+	if len(finished.Retained) != 0 {
+		test.Fatalf("a retention run reported %v", finished.Retained)
+	}
+	if deletes := current.events.matching("DELETE FROM dusk.connections WHERE"); len(deletes) != 1 || !strings.Contains(deletes[0], " AND time < toDateTime64(") {
+		test.Fatalf("the retention deletes %v", deletes)
+	}
+	if altered := current.events.matching("ALTER TABLE dusk.connections DELETE"); len(altered) != 0 {
+		test.Fatalf("a retention run issued a mutation: %v", altered)
+	}
+	keys := current.objects.keys("dusk-files")
+	if slices.Contains(keys, "files/"+erased+"/"+installation+"/70003/0-old.jpg") || !slices.Contains(keys, "files/"+erased+"/"+installation+"/70002/0-new.jpg") {
+		test.Fatalf("the files bucket holds %v", keys)
+	}
+	if left := current.count(test, `select count(*) from nodes where tenant = 'acme'`); left != 3 {
+		test.Fatalf("a retention run deleted inventory rows: %d left", left)
+	}
+	current.now = current.now.Add(25 * time.Hour)
+	current.manager.scheduledAt = time.Time{}
+	current.manager.scheduleRetention(operation)
+	if runs := current.count(test, `select count(*) from erasures where tenant = 'acme' and before is not null`); runs != 2 {
+		test.Fatalf("%d retention runs after a day", runs)
+	}
+}
+
 func TestATenantIsErasedOnceAllItsNodesAreWithdrawn(test *testing.T) {
 	current := newSetup(test, nil)
 	current.seed(test)

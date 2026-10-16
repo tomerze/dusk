@@ -176,9 +176,10 @@ type ObjectStore struct {
 }
 
 type Retention struct {
-	InstallationDays   int `yaml:"installation_days"`
-	AlertDays          int `yaml:"alert_days"`
-	ErasureOverdueDays int `yaml:"erasure_overdue_days"`
+	InstallationDays   int            `yaml:"installation_days"`
+	AlertDays          int            `yaml:"alert_days"`
+	ErasureOverdueDays int            `yaml:"erasure_overdue_days"`
+	TenantDays         map[string]int `yaml:"tenant_days"`
 }
 
 const MinimumInstallationDays = 98
@@ -314,7 +315,7 @@ func Default() Config {
 			Cluster: "dusk", LakeCollection: "lake_writer"},
 		ObjectStore: ObjectStore{Endpoint: "http://ceph:8080", Region: "us-east-1", AccessKeyFile: "/etc/twilight/secrets/s3/access-key",
 			SecretKeyFile: "/etc/twilight/secrets/s3/secret-key", LakeBucket: "dusk-lake", FilesBucket: "dusk-files", EvidenceBucket: "dusk-ledger-evidence"},
-		Retention: Retention{InstallationDays: 120, AlertDays: 400, ErasureOverdueDays: 20},
+		Retention: Retention{InstallationDays: 120, AlertDays: 400, ErasureOverdueDays: 20, TenantDays: map[string]int{}},
 	}
 }
 
@@ -427,7 +428,7 @@ func assign(target reflect.Value, text string) error {
 		}
 		target.Set(reflect.ValueOf(items))
 	case reflect.Map:
-		entries := map[string]string{}
+		entries := reflect.MakeMap(target.Type())
 		for item := range strings.SplitSeq(text, ",") {
 			if strings.TrimSpace(item) == "" {
 				continue
@@ -437,9 +438,13 @@ func assign(target reflect.Value, text string) error {
 			if !found || key == "" {
 				return fmt.Errorf("%q is not a comma-separated list of key=value", text)
 			}
-			entries[key] = value
+			element := reflect.New(target.Type().Elem()).Elem()
+			if failure := assign(element, value); failure != nil {
+				return fmt.Errorf("%s: %w", key, failure)
+			}
+			entries.SetMapIndex(reflect.ValueOf(key), element)
 		}
-		target.Set(reflect.ValueOf(entries))
+		target.Set(entries)
 	default:
 		return fmt.Errorf("cannot set a %s from the environment", target.Kind())
 	}
@@ -636,6 +641,14 @@ func (loaded Config) Validate() error {
 	if loaded.Retention.InstallationDays < MinimumInstallationDays {
 		problem("retention.installation_days must be at least %d, longer than a node certificate's lifetime plus nightfall's renew_grace, so that no installation it removes can come back", MinimumInstallationDays)
 	}
+	for _, tenant := range sortedKeys(loaded.Retention.TenantDays) {
+		if !TenantPattern.MatchString(tenant) {
+			problem("retention.tenant_days names %q, which is not a tenant (1 to 63 of a-z, 0-9 and -)", tenant)
+		}
+		if loaded.Retention.TenantDays[tenant] < 1 {
+			problem("retention.tenant_days of %s must be at least 1", tenant)
+		}
+	}
 	switch loaded.LogLevel {
 	case "debug", "info", "warn", "error":
 	default:
@@ -652,7 +665,7 @@ var (
 	TenantPattern = regexp.MustCompile(`^[a-z0-9-]{1,63}$`)
 )
 
-func sortedKeys(entries map[string]string) []string {
+func sortedKeys[Value any](entries map[string]Value) []string {
 	keys := make([]string, 0, len(entries))
 	for key := range entries {
 		keys = append(keys, key)
