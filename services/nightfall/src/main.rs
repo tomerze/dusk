@@ -3,11 +3,13 @@ use clap::{Args, Parser, Subcommand};
 use nightfall::config::{Config, DEFAULT_PATH};
 use nightfall::kafka::KafkaBroker;
 use nightfall::server::Services;
+use nightfall_ledger::address;
 use nightfall_ledger::kafka::{KafkaLog, KafkaLogConfig, PartitionRange, verify_partition};
-use nightfall_ledger::param_hash::ParamKey;
+use nightfall_ledger::param_hash::{ParamKey, decode_hex_key};
 use nightfall_ledger::signing::VerifyingKeys;
 use nightfall_ledger::verifier::{VerifyOptions, verify_lines};
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -32,7 +34,9 @@ enum Action {
     Serve,
     #[command(about = "Verify ledger chains and checkpoints from JSON lines or a Kafka partition")]
     VerifyLedger(VerifyLedger),
-    #[command(about = "Recompute the param_hash of canonical call parameters")]
+    #[command(
+        about = "Recompute the param_hash of canonical call parameters, or the remote_address_hash of a client address"
+    )]
     LedgerHash(LedgerHash),
 }
 
@@ -69,12 +73,18 @@ struct VerifyLedger {
 }
 
 #[derive(Args)]
+#[group(required = true, multiple = false, id = "input", args = ["parameters", "address"])]
 struct LedgerHash {
     #[arg(
         long = "params",
         help = "A file holding the canonical Cap'n Proto encoding of the parameters"
     )]
-    parameters: PathBuf,
+    parameters: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "A client address whose remote_address_hash and remote_network to print"
+    )]
+    address: Option<IpAddr>,
     #[arg(
         long,
         help = "The param key file (default: ledger.param_key_file of the configuration)"
@@ -187,9 +197,18 @@ fn hash(config: &std::path::Path, arguments: LedgerHash) -> anyhow::Result<ExitC
         Some(key_file) => key_file,
         None => Config::load(config)?.ledger.param_key_file,
     };
+    if let Some(address) = arguments.address {
+        let text = std::fs::read_to_string(&key_file)
+            .with_context(|| format!("read {}", key_file.display()))?;
+        let key = decode_hex_key(&text)
+            .map_err(|error| anyhow::anyhow!("{}: {error}", key_file.display()))?;
+        println!("remote_address_hash {}", address::keyed_hash(&key, address));
+        println!("remote_network {}", address::network(address));
+        return Ok(ExitCode::SUCCESS);
+    }
     let key = ParamKey::load(&key_file).map_err(|error| anyhow::anyhow!("{error}"))?;
-    let parameters = std::fs::read(&arguments.parameters)
-        .with_context(|| format!("read {}", arguments.parameters.display()))?;
+    let path = arguments.parameters.context("give --params or --address")?;
+    let parameters = std::fs::read(&path).with_context(|| format!("read {}", path.display()))?;
     println!("{}", key.hash(&parameters));
     Ok(ExitCode::SUCCESS)
 }
