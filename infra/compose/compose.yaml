@@ -641,7 +641,7 @@ services:
 
   node:
     <<: [*restart, *logging]
-    image: dusk-node:dev
+    image: dusk-node:${COMPOSE_PROJECT_NAME}
     build:
       context: ../..
       dockerfile: infra/node/Dockerfile
