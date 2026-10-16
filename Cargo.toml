@@ -45,6 +45,10 @@ resolver = "2"
 [workspace.package]
 license = "AGPL-3.0-only"
 
+[patch.crates-io]
+capnp-futures = { path = "vendor/capnp-futures" }
+capnp-rpc = { path = "vendor/capnp-rpc" }
+
 [profile.release]
 strip = true
 
