@@ -11,10 +11,11 @@ ARG CARGO_BUILD_JOBS=default
 ARG CPUSET=
 ENV DUSK_GIT_REV=$GIT_REV
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+    --mount=type=cache,target=/build/target,sharing=locked \
     test -d vendor/capnproto/c++ || { echo "vendor/capnproto is empty: run git submodule update --init vendor/capnproto before docker build" >&2; exit 1; }; \
     test -n "$GIT_REV" || { echo "pass --build-arg GIT_REV=\$(git rev-parse HEAD)" >&2; exit 1; }; \
-    ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 cargo build --locked --release --package nightfall --bin nightfall \
+    find . -path ./target -prune -o -type f -exec touch {} + \
+    && ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 cargo build --locked --release --package nightfall --bin nightfall \
     && mkdir -p /out/schemas \
     && cp target/release/nightfall /out/nightfall \
     && find services/nightfall/schemas -maxdepth 1 -type f \( -name '*.capnp.bin' -o -name '*.json' \) -exec cp {} /out/schemas/ \; \

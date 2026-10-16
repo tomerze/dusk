@@ -14,11 +14,12 @@ ARG CARGO_BUILD_JOBS=default
 ARG CPUSET=
 ENV DUSK_GIT_REV=$GIT_REV
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+    --mount=type=cache,target=/build/target,sharing=locked \
     --mount=type=cache,target=/root/.cache/uv \
     test -d vendor/capnproto/c++ || { echo "vendor/capnproto is empty: run git submodule update --init vendor/capnproto before docker build" >&2; exit 1; }; \
     test -n "$GIT_REV" || { echo "pass --build-arg GIT_REV=\$(git rev-parse HEAD)" >&2; exit 1; }; \
-    ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 uv tool run --python 3.14.8 maturin@1.15.0 build --release --locked --compatibility linux \
+    find . -path ./target -prune -o -type f -exec touch {} + \
+    && ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 uv tool run --python 3.14.8 maturin@1.15.0 build --release --locked --compatibility linux \
         --interpreter "$(uv python find 3.14.8)" --out /out
 
 FROM python:3.14.8-slim-trixie AS environment
