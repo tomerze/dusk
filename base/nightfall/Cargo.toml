@@ -17,6 +17,7 @@ futures = { version = "0.3.31", features = ["async-await"] }
 tracing = { version = "0.1.41", default-features = false }
 capnp = { version = "0.21", public = false }
 capnp-futures = { version = "0.21.0", features = ["std"] }
+capnp-rpc = { version = "0.21.0", features = ["std"] }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
 
