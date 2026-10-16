@@ -498,6 +498,76 @@ func (store *Store) GetDeviceLifecycle(operation context.Context, device string)
 	return found, nil
 }
 
+type LifecycleState struct {
+	DeviceID       string
+	InstallationID string
+	Lifecycle      string
+	Reason         *string
+	Actor          *string
+	ChangedAt      *time.Time
+}
+
+func (state LifecycleState) DeviceScope() bool {
+	return state.InstallationID == ""
+}
+
+func (store *Store) EachWithdrawnOrQuarantined(operation context.Context, visit func(LifecycleState) error) error {
+	rows, failure := store.pool.Query(operation, `select device_id, '', lifecycle, lifecycle_reason, actor, lifecycle_changed_at from devices
+			where lifecycle in ('retired', 'revoked')
+		union all
+		select device_id, installation_id, lifecycle, lifecycle_reason, lifecycle_actor, lifecycle_changed_at from nodes
+			where lifecycle in ('quarantined', 'retired', 'revoked')`)
+	if failure != nil {
+		return fmt.Errorf("read lifecycles: %w", failure)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var state LifecycleState
+		if failure := rows.Scan(&state.DeviceID, &state.InstallationID, &state.Lifecycle, &state.Reason, &state.Actor, &state.ChangedAt); failure != nil {
+			return fmt.Errorf("read lifecycles: %w", failure)
+		}
+		if failure := visit(state); failure != nil {
+			return failure
+		}
+	}
+	return rows.Err()
+}
+
+func (store *Store) ApplyLifecycle(operation context.Context, device, installation string, apply func(current LifecycleState) (*LifecycleState, error)) error {
+	return pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
+		current := LifecycleState{DeviceID: device, InstallationID: installation}
+		var failure error
+		if installation == "" {
+			if _, failure := transaction.Exec(operation, `select pg_advisory_xact_lock(hashtextextended('devices/' || $1, 0))`, device); failure != nil {
+				return failure
+			}
+			failure = transaction.QueryRow(operation, `select lifecycle, lifecycle_reason, actor, lifecycle_changed_at from devices where device_id = $1`, device).
+				Scan(&current.Lifecycle, &current.Reason, &current.Actor, &current.ChangedAt)
+		} else {
+			failure = transaction.QueryRow(operation, `select lifecycle, lifecycle_reason, lifecycle_actor, lifecycle_changed_at from nodes
+				where device_id = $1 and installation_id = $2 for update`, device, installation).
+				Scan(&current.Lifecycle, &current.Reason, &current.Actor, &current.ChangedAt)
+		}
+		if failure != nil && !errors.Is(failure, pgx.ErrNoRows) {
+			return failure
+		}
+		replacement, failure := apply(current)
+		if failure != nil || replacement == nil {
+			return failure
+		}
+		if installation == "" {
+			_, failure = transaction.Exec(operation, `insert into devices (device_id, lifecycle, lifecycle_reason, lifecycle_changed_at, actor) values ($1, $2, coalesce($3, ''), $4, $5)
+				on conflict (device_id) do update set lifecycle = excluded.lifecycle, lifecycle_reason = excluded.lifecycle_reason,
+					lifecycle_changed_at = excluded.lifecycle_changed_at, actor = excluded.actor`,
+				device, replacement.Lifecycle, replacement.Reason, replacement.ChangedAt, replacement.Actor)
+		} else {
+			_, failure = transaction.Exec(operation, `update nodes set lifecycle = $3, lifecycle_reason = $4, lifecycle_actor = $5, lifecycle_changed_at = $6, updated_at = now()
+				where device_id = $1 and installation_id = $2`, device, installation, replacement.Lifecycle, replacement.Reason, replacement.Actor, replacement.ChangedAt)
+		}
+		return failure
+	})
+}
+
 type Lifecycle struct {
 	Key
 	Lifecycle string

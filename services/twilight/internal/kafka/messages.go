@@ -200,6 +200,22 @@ func (state NodeState) Key() string {
 	return "installation/" + state.DeviceID + "/" + *state.InstallationID
 }
 
+const NodeStateCompletePrefix = "complete/"
+
+type NodeStateComplete struct {
+	Envelope
+	Record string `json:"record"`
+	Actor  string `json:"actor"`
+}
+
+func NewNodeStateComplete(actor string, at time.Time) NodeStateComplete {
+	return NodeStateComplete{
+		Envelope: Envelope{Schema: "dusk.node-state/v2", ID: NewMessageID(), Time: FormatTime(at)},
+		Record:   "complete",
+		Actor:    actor,
+	}
+}
+
 type IntendedProcess struct {
 	Envelope
 	Pid                  string  `json:"pid"`

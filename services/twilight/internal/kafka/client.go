@@ -193,6 +193,25 @@ func (producer *Producer) ClearNodeState(operation context.Context, key string) 
 	return producer.client.ProduceSync(operation, &kgo.Record{Topic: producer.topic, Key: []byte(key)}).FirstErr()
 }
 
+func (producer *Producer) ProduceNodeStateComplete(operation context.Context, key string, complete NodeStateComplete) (int32, error) {
+	value, failure := json.Marshal(complete)
+	if failure != nil {
+		return -1, failure
+	}
+	if failure := producer.validator.Validate(ContractNodeStateV2, value); failure != nil {
+		return -1, fmt.Errorf("node-state completion record fails its contract: %w", failure)
+	}
+	record := &kgo.Record{Topic: producer.topic, Key: []byte(key), Value: value}
+	if failure := producer.client.ProduceSync(operation, record).FirstErr(); failure != nil {
+		return -1, failure
+	}
+	return record.Partition, nil
+}
+
+func (producer *Producer) RefreshMetadata() {
+	producer.client.ForceMetadataRefresh()
+}
+
 func NewIntendedProcessProducer(client *kgo.Client, validator *Validator, topic string) *Producer {
 	return &Producer{client: client, validator: validator, topic: topic}
 }

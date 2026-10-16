@@ -27,6 +27,7 @@ const (
 	ContractLedger         = "dusk.ledger"
 	ContractEnrollments    = "dusk.enrollments"
 	ContractNodeState      = "dusk.node-state"
+	ContractNodeStateV2    = "dusk.node-state.v2"
 	ContractProcessResults = "dusk.process-results"
 	ContractProcessOutput  = "dusk.process-output"
 	ContractFiles          = "dusk.files"
@@ -37,6 +38,16 @@ var invalidMessages = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "twilight_kafka_invalid_messages_total",
 	Help: "Kafka records dropped because they failed their contract schema.",
 }, []string{"topic"})
+
+func NodeStateContract(value []byte) string {
+	var versioned struct {
+		Schema string `json:"schema"`
+	}
+	if json.Unmarshal(value, &versioned) == nil && versioned.Schema == "dusk.node-state/v2" {
+		return ContractNodeStateV2
+	}
+	return ContractNodeState
+}
 
 func CountInvalid(topic string) {
 	invalidMessages.WithLabelValues(topic).Inc()
