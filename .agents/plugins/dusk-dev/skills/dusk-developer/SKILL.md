@@ -120,7 +120,7 @@ which links Dusk Core, the Base programs, and one impl. There is one library
 artifact, `dusk_node` in `artifacts/dusk_node/lib`, and one binary wrapping it in
 `artifacts/dusk_node/bin`. Which impl they link is a cargo feature on the library
 - `impl_nix`, `impl_std` or `impl_windows` - defaulting to `impl_nix`. Exactly one
-may be enabled: every impl defines `_dusk_hostname`, `_dusk_tid` and `_dusk_exit`, so two in
+may be enabled: every impl defines `_dusk_hostname`, `_dusk_random`, `_dusk_tid` and `_dusk_exit`, so two in
 one link is a duplicate symbol. Nothing enforces it - selecting none fails on an
 unresolved `dusk_impl`, selecting two on a duplicate definition of it.
 
@@ -193,6 +193,9 @@ Everything platform-specific lives behind the `Driver` trait
 (`Send + Sync`), which an impl implements:
 
 - `hostname()` - the node's hostname.
+- `random(buffer)` - fill `buffer` from the platform's cryptographic random
+  source, or return an error when it fails, never weaker bytes. The impls draw
+  the namespace seed from it.
 - `tid()` - which thread is calling: the same number for the whole life of a
   thread, a different one for every thread running a node at the same time. The
   logs program routes each record to the node registered under it.
@@ -284,7 +287,7 @@ back into the client that defined it for as long as the function is defined. See
 `dusk_core` is `no_std` and depends on no impl, yet it must call into one. It does
 so through a link-time shim. `dusk_driver_impl!` defines a `lazy_static` singleton
 for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
+`_dusk_random`, `_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols
 as `unsafe extern "Rust"` and calls through them. The linker resolves them to
 whichever impl is in the final binary.
 
@@ -299,8 +302,8 @@ own crate. The shim is the route *into* the impl for `no_std` callers; the impl 
 the destination. Call the OS/hardware primitive directly.
 
 **Impls stay lean.** `dusk_core` owns every piece of policy that can be
-platform-agnostic. An impl owns only what the platform forces: the hostname, how
-to halt, the program set to launch, its name and what its OS and device report
+platform-agnostic. An impl owns only what the platform forces: the hostname, its
+source of random bytes, how to halt, the program set to launch, its name and what its OS and device report
 about themselves, which it writes into the kvs as the node starts, and the
 platform's `embassy-time` driver
 and `critical-section` implementation. A queue, scheduler, or state machine sneaking
