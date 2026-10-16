@@ -9,6 +9,7 @@ use core::cell::Cell;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::embassy_sync::watch::Watch;
 use dusk_program::{ready::Ready, signal::SignalReceiver};
+use futures::AsyncReadExt as _;
 
 type Terminated = Watch<CriticalSectionRawMutex, bool, 16>;
 
