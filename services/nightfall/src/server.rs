@@ -49,6 +49,7 @@ pub struct TlsConfigs {
 #[derive(Default)]
 pub struct Readiness {
     pub node_state: AtomicBool,
+    pub node_state_incomplete: AtomicBool,
     pub directory: AtomicBool,
     pub topics: AtomicBool,
     pub draining: AtomicBool,
@@ -88,6 +89,11 @@ impl Shared {
     pub fn ready(&self) -> Result<(), &'static str> {
         if self.readiness.draining.load(Ordering::Acquire) {
             return Err("draining");
+        }
+        if self.readiness.node_state_incomplete.load(Ordering::Acquire) {
+            return Err(
+                "node state incomplete: a partition of the node-state topic holds no completion record",
+            );
         }
         if !self.readiness.node_state.load(Ordering::Acquire) {
             return Err("node state not caught up");

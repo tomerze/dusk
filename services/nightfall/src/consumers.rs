@@ -4,9 +4,10 @@ use crate::contracts::{Contract, ContractValidator};
 use crate::kafka::{
     Broker, IncomingRecord, RecordConsumer, Start, Watermarks, caught_up, unix_milliseconds,
 };
-use crate::node_state::Change;
+use crate::node_state::{Change, Entry};
 use crate::server::Shared;
 use crate::shard::Control;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -119,64 +120,176 @@ fn positions_reached(consumer: &mut Box<dyn RecordConsumer>, targets: &[Watermar
     }
 }
 
+pub struct NodeStateValidators {
+    pub first: ContractValidator,
+    pub second: ContractValidator,
+}
+
+#[derive(serde::Deserialize)]
+struct Versioned {
+    schema: String,
+}
+
+impl NodeStateValidators {
+    fn check(&self, payload: &[u8]) -> Result<(), String> {
+        let versioned: Versioned =
+            serde_json::from_slice(payload).map_err(|error| error.to_string())?;
+        if versioned.schema == crate::node_state::SCHEMA_V2 {
+            self.second.check(payload).map(|_| ())
+        } else {
+            self.first.check(payload).map(|_| ())
+        }
+    }
+}
+
 fn node_state(
     shared: Arc<Shared>,
     broker: Arc<dyn Broker>,
-    validator: ContractValidator,
+    validators: NodeStateValidators,
     stop: CancellationToken,
 ) {
     let topic = shared.config.kafka.topics.node_state.clone();
-    let Some((mut consumer, targets)) = open(
-        broker.as_ref(),
-        "node-state",
-        &topic,
-        Start::Beginning,
-        &stop,
-    ) else {
-        return;
-    };
-    let started = Instant::now();
-    let mut ready = false;
-    let mut failures = 0u32;
-    let mut applied = 0u64;
-    while !stop.is_cancelled() {
-        let record = poll(&mut consumer, &topic, POLL, &mut failures, &stop);
-        if let Some(record) = record {
-            let checked = match &record.payload {
-                Some(payload) => validator.check(payload).map(|_| ()),
-                None => Ok(()),
-            };
-            match checked.and_then(|()| {
-                crate::node_state::parse(record.key.as_deref(), record.payload.as_deref())
-            }) {
-                Ok(state) => {
-                    applied += 1;
-                    let flip = shared.node_states.apply(state);
-                    if ready && flip.change != Change::Unchanged {
-                        tracing::info!(scope = ?flip.scope, change = ?flip.change, "node state changed");
-                        shared.flip(flip.scope);
+    let mut served = false;
+    'assignment: while !stop.is_cancelled() {
+        let Some((mut consumer, mut targets)) = open(
+            broker.as_ref(),
+            "node-state",
+            &topic,
+            Start::Beginning,
+            &stop,
+        ) else {
+            return;
+        };
+        let partitions: BTreeSet<i32> = targets.iter().map(|target| target.partition).collect();
+        let partition_check =
+            Duration::from_secs(shared.config.kafka.node_state_partition_check_seconds);
+        let mut complete = BTreeSet::new();
+        let started = Instant::now();
+        let mut checked_partitions = Instant::now();
+        let mut ready = false;
+        let mut confirmed = false;
+        let mut reported = false;
+        let mut failures = 0u32;
+        let mut applied = 0u64;
+        while !stop.is_cancelled() {
+            let record = poll(&mut consumer, &topic, POLL, &mut failures, &stop);
+            if let Some(record) = record {
+                let checked = match &record.payload {
+                    Some(payload) => validators.check(payload),
+                    None => Ok(()),
+                };
+                match checked.and_then(|()| {
+                    crate::node_state::parse(
+                        record.key.as_deref(),
+                        record.payload.as_deref(),
+                        record.timestamp_ms.unwrap_or(0),
+                    )
+                }) {
+                    Ok(Entry::Complete) => {
+                        if complete.insert(record.partition) && !ready {
+                            tracing::info!(
+                                partition = record.partition,
+                                offset = record.offset,
+                                "read a node-state completion record"
+                            );
+                        }
+                    }
+                    Ok(Entry::State(state)) => {
+                        applied += 1;
+                        let flip = shared.node_states.apply(state, record.partition);
+                        if (ready || served) && flip.change != Change::Unchanged {
+                            tracing::info!(scope = ?flip.scope, change = ?flip.change, "node state changed");
+                            shared.flip(flip.scope);
+                        }
+                    }
+                    Err(reason) => invalid(&record, &reason),
+                }
+                if let Some(timestamp) = record.timestamp_ms {
+                    let lag = (unix_milliseconds() - timestamp).max(0) as f64 / 1000.0;
+                    metrics::gauge!("nightfall_node_state_lag_seconds").set(lag);
+                }
+            } else if ready {
+                metrics::gauge!("nightfall_node_state_lag_seconds").set(0.0);
+            }
+            if checked_partitions.elapsed() >= partition_check {
+                checked_partitions = Instant::now();
+                match broker.describe(&topic) {
+                    Ok(Some(description))
+                        if description.partitions as usize != partitions.len() =>
+                    {
+                        shared.readiness.node_state.store(false, Ordering::Release);
+                        shared
+                            .readiness
+                            .node_state_incomplete
+                            .store(true, Ordering::Release);
+                        tracing::warn!(
+                            topic,
+                            partitions = partitions.len(),
+                            now = description.partitions,
+                            "the node-state topic's partition count changed: nodes and provisioning stay refused until every partition has been read and holds a completion record"
+                        );
+                        continue 'assignment;
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::debug!(
+                            topic,
+                            error = format!("{error:#}"),
+                            "the node-state topic could not be described"
+                        );
                     }
                 }
-                Err(reason) => invalid(&record, &reason),
             }
-            if let Some(timestamp) = record.timestamp_ms {
-                let lag = (unix_milliseconds() - timestamp).max(0) as f64 / 1000.0;
-                metrics::gauge!("nightfall_node_state_lag_seconds").set(lag);
+            if ready || !positions_reached(&mut consumer, &targets) {
+                continue;
             }
-        } else if ready {
-            metrics::gauge!("nightfall_node_state_lag_seconds").set(0.0);
-        }
-        if !ready && positions_reached(&mut consumer, &targets) {
+            if !partitions.is_subset(&complete) {
+                if !reported {
+                    reported = true;
+                    shared
+                        .readiness
+                        .node_state_incomplete
+                        .store(true, Ordering::Release);
+                    let missing: Vec<i32> = partitions.difference(&complete).copied().collect();
+                    tracing::warn!(
+                        topic,
+                        partitions = ?missing,
+                        records = applied,
+                        states = shared.node_states.len(),
+                        "the node states are read but a partition holds no completion record - a new stack before twilight first wrote it, a topic Kafka lost, or partitions added - so nodes and provisioning stay refused until twilight writes it from the inventory"
+                    );
+                }
+                continue;
+            }
+            if !confirmed {
+                match consumer.watermarks() {
+                    Ok(current) => {
+                        targets = current;
+                        confirmed = true;
+                    }
+                    Err(error) => {
+                        tracing::warn!(topic, %error, "the node-state watermarks could not be read again");
+                    }
+                }
+                continue;
+            }
             ready = true;
+            served = true;
+            shared
+                .readiness
+                .node_state_incomplete
+                .store(false, Ordering::Release);
             shared.readiness.node_state.store(true, Ordering::Release);
             shared.broadcast(|| Control::Recheck);
             tracing::info!(
                 records = applied,
                 states = shared.node_states.len(),
+                complete_partitions = complete.len(),
                 seconds = started.elapsed().as_secs_f64(),
                 "node state caught up"
             );
         }
+        return;
     }
 }
 
@@ -517,7 +630,10 @@ pub fn start(
     broker: Arc<dyn Broker>,
     stop: CancellationToken,
 ) -> anyhow::Result<Vec<std::thread::JoinHandle<()>>> {
-    let node_state_validator = Contract::NodeState.validator()?;
+    let node_state_validators = NodeStateValidators {
+        first: Contract::NodeState.validator()?,
+        second: Contract::NodeStateV2.validator()?,
+    };
     let intended_processes_validator = Contract::IntendedProcesses.validator()?;
     let quota_validator = Contract::CredentialQuota.validator()?;
     let directory_consumer = DirectoryConsumer {
@@ -531,7 +647,7 @@ pub fn start(
         let stop = stop.clone();
         std::thread::Builder::new()
             .name("nightfall-node-state".to_string())
-            .spawn(move || node_state(shared, broker, node_state_validator, stop))?
+            .spawn(move || node_state(shared, broker, node_state_validators, stop))?
     };
     let intended_processes_thread = {
         let shared = shared.clone();

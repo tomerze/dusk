@@ -18,8 +18,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use support::harness::{
     DEVICE, Environment, INSTALLATION, connect_client, free_port, intended_process_record,
-    link_node, local_session, node_state_record, run, shutdown, wait_for_session, wait_ready,
-    wait_until,
+    link_node, local_session, node_state_completion_record, node_state_record, run, shutdown,
+    wait_for_session, wait_ready, wait_until,
 };
 use support::node::{ps, run_script, shell_server_request};
 
@@ -100,6 +100,13 @@ fn nightfall_runs_its_sessions_census_ledger_and_node_state_through_a_real_broke
     config.kafka.brokers = brokers.clone();
     config.kafka.topics = topics.clone();
     let broker = KafkaBroker::new(&brokers, &BTreeMap::new(), &instance_name);
+    let producer = broker.producer("test").unwrap();
+    run(async {
+        producer
+            .send(node_state_completion_record(&topics.node_state, 0))
+            .await
+            .unwrap();
+    });
     let ledger_log = KafkaLog::connect(KafkaLogConfig {
         brokers: brokers.clone(),
         properties: BTreeMap::new(),
@@ -121,7 +128,6 @@ fn nightfall_runs_its_sessions_census_ledger_and_node_state_through_a_real_broke
     let node_port = free_port();
     let node = DuskNixImpl::new(LISTEN_ADDRESS, node_port);
     node.expect_errors();
-    let producer = broker.producer("test").unwrap();
     run(async {
         let _bridge = link_node(
             instance.addresses.fleet,

@@ -177,6 +177,15 @@ impl MemoryBroker {
         );
     }
 
+    pub fn add_partitions(&self, topic: &str, partitions: u32) {
+        if let Some(stored) = lock(&self.state).topics.get_mut(topic) {
+            let wanted = partitions as usize;
+            if stored.partitions.len() < wanted {
+                stored.partitions.resize(wanted, Vec::new());
+            }
+        }
+    }
+
     pub fn fail_topic(&self, topic: &str, reason: Option<&str>) {
         let mut state = lock(&self.state);
         match reason {
@@ -284,6 +293,9 @@ impl RecordConsumer for MemoryConsumer {
                     let Some(position) = self.positions.get_mut(partition) else {
                         continue;
                     };
+                    if *position as usize > records.len() {
+                        *position = 0;
+                    }
                     if let Some(record) = records.get(*position as usize) {
                         let incoming = IncomingRecord {
                             topic: self.topic.clone(),

@@ -146,6 +146,9 @@ impl Environment {
         broker.create_topic("dusk.ledger", 2, "delete");
         broker.create_topic("dusk.enrollments", 3, "delete");
         broker.create_topic("dusk.node-state", 1, "compact");
+        broker
+            .produce(node_state_completion_record("dusk.node-state", 0))
+            .unwrap();
         broker.create_topic("dusk.intended-processes", 3, "compact");
         broker.create_topic("dusk.credential-quota", 1, "compact");
         Environment {
@@ -219,6 +222,12 @@ impl Environment {
     }
 
     pub fn start(&self, config: Config) -> (Instance, MemoryLog) {
+        let (instance, log) = self.start_unready(config);
+        wait_ready(&instance);
+        (instance, log)
+    }
+
+    pub fn start_unready(&self, config: Config) -> (Instance, MemoryLog) {
         let log = MemoryLog::new();
         let broker: Arc<dyn Broker> = Arc::new(self.broker.clone());
         let instance = nightfall::server::start(
@@ -229,7 +238,6 @@ impl Environment {
             },
         )
         .unwrap();
-        wait_ready(&instance);
         (instance, log)
     }
 
@@ -410,6 +418,25 @@ pub fn node_state_record(
         partition: None,
         key: Some(key),
         payload,
+    }
+}
+
+pub fn node_state_completion_record(topic: &str, index: u32) -> OutgoingRecord {
+    OutgoingRecord {
+        topic: topic.to_string(),
+        partition: None,
+        key: Some(format!("complete/{index}")),
+        payload: Some(
+            serde_json::json!({
+                "schema": "dusk.node-state/v2",
+                "id": uuid::Uuid::now_v7().to_string(),
+                "time": nightfall_ledger::time::now(),
+                "record": "complete",
+                "actor": "twilight-0",
+            })
+            .to_string()
+            .into_bytes(),
+        ),
     }
 }
 

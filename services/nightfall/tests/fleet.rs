@@ -948,6 +948,286 @@ fn a_node_is_refused_until_the_node_states_are_read() {
     shutdown(instance);
 }
 
+fn completion_key_on(partition: i32, partitions: u32) -> u32 {
+    (0..)
+        .find(|index| {
+            nightfall::kafka::default_partition(&format!("complete/{index}"), partitions)
+                == partition
+        })
+        .unwrap()
+}
+
+#[test]
+fn nodes_and_provisioning_wait_for_a_completion_record_on_every_node_state_partition() {
+    let environment = Environment::new();
+    environment
+        .broker
+        .create_topic("dusk.node-state", 2, "compact");
+    let (instance, log) = environment.start_unready(environment.config("nightfall-0", 0));
+    let incomplete = || {
+        instance
+            .shared
+            .readiness
+            .node_state_incomplete
+            .load(std::sync::atomic::Ordering::Acquire)
+    };
+    let (_node, node_port) = node();
+    run(async {
+        wait_until(
+            "nightfall to find the node states incomplete",
+            Duration::from_secs(20),
+            incomplete,
+        )
+        .await;
+        assert!(
+            instance
+                .shared
+                .ready()
+                .unwrap_err()
+                .starts_with("node state incomplete")
+        );
+        let tcp = tokio::net::TcpStream::connect(instance.addresses.fleet)
+            .await
+            .unwrap();
+        let refused =
+            tokio_rustls::TlsConnector::from(environment.node_identity(OTHER_DEVICE, INSTALLATION))
+                .connect(
+                    rustls_pki_types::ServerName::try_from(support::harness::FLEET_NAME).unwrap(),
+                    tcp,
+                )
+                .await;
+        assert!(refused.is_err());
+        let tcp = tokio::net::TcpStream::connect(instance.addresses.provision)
+            .await
+            .unwrap();
+        let refused = tokio_rustls::TlsConnector::from(support::harness::anonymous_config(
+            &environment.pki.fleet_server.certificate,
+        ))
+        .connect(
+            rustls_pki_types::ServerName::try_from(support::harness::PROVISION_NAME).unwrap(),
+            tcp,
+        )
+        .await;
+        assert!(refused.is_err());
+
+        environment.node_state(DEVICE, None, Some("revoked"));
+        environment
+            .broker
+            .produce(support::harness::node_state_completion_record(
+                "dusk.node-state",
+                completion_key_on(0, 2),
+            ))
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(incomplete());
+        assert!(
+            !instance
+                .shared
+                .readiness
+                .node_state
+                .load(std::sync::atomic::Ordering::Acquire)
+        );
+        environment
+            .broker
+            .produce(support::harness::node_state_completion_record(
+                "dusk.node-state",
+                completion_key_on(1, 2),
+            ))
+            .unwrap();
+        wait_until("nightfall to become ready", Duration::from_secs(20), || {
+            instance.shared.ready().is_ok()
+        })
+        .await;
+        assert!(!incomplete());
+
+        let _revoked = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(DEVICE, INSTALLATION),
+        )
+        .await;
+        wait_until("the refusal to be ledgered", Duration::from_secs(5), || {
+            !with_event(&ledger(&log), "session_refused").is_empty()
+        })
+        .await;
+        assert!(local_session(&instance).is_none());
+        let _other = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(OTHER_DEVICE, INSTALLATION),
+        )
+        .await;
+        wait_for_session(&instance).await;
+    });
+    shutdown(instance);
+}
+
+#[test]
+fn a_running_instance_keeps_its_node_states_when_the_topic_is_recreated() {
+    let environment = Environment::new();
+    let (instance, log) = environment.start(environment.config("nightfall-0", 0));
+    let (_node, node_port) = node();
+    let refusals = |log: &nightfall_ledger::memory::MemoryLog| {
+        with_event(&ledger(log), "session_refused").len()
+    };
+    run(async {
+        environment.node_state(DEVICE, None, Some("revoked"));
+        wait_until(
+            "the revocation to be applied",
+            Duration::from_secs(5),
+            || {
+                instance.shared.node_states.effective(
+                    nightfall::directory::NodeIdentity::parse(DEVICE, INSTALLATION).unwrap(),
+                ) == Some(nightfall_provisioning::state::Lifecycle::Revoked)
+            },
+        )
+        .await;
+        environment
+            .broker
+            .create_topic("dusk.node-state", 1, "compact");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(instance.shared.ready().is_ok());
+        let _revoked = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(DEVICE, INSTALLATION),
+        )
+        .await;
+        wait_until(
+            "the revoked node to be refused",
+            Duration::from_secs(5),
+            || refusals(&log) == 1,
+        )
+        .await;
+        environment.node_state(OTHER_DEVICE, None, Some("revoked"));
+        wait_until(
+            "a revocation on the new topic to be applied",
+            Duration::from_secs(5),
+            || {
+                instance.shared.node_states.effective(
+                    nightfall::directory::NodeIdentity::parse(OTHER_DEVICE, INSTALLATION).unwrap(),
+                ) == Some(nightfall_provisioning::state::Lifecycle::Revoked)
+            },
+        )
+        .await;
+        let _other = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(OTHER_DEVICE, INSTALLATION),
+        )
+        .await;
+        wait_until(
+            "the other revoked node to be refused",
+            Duration::from_secs(5),
+            || refusals(&log) == 2,
+        )
+        .await;
+        assert!(local_session(&instance).is_none());
+    });
+    shutdown(instance);
+}
+
+#[test]
+fn added_node_state_partitions_hold_nodes_back_until_they_hold_a_completion_record() {
+    let environment = Environment::new();
+    let mut config = environment.config("nightfall-0", 0);
+    config.kafka.node_state_partition_check_seconds = 1;
+    let (instance, _log) = environment.start(config);
+    let incomplete = || {
+        instance
+            .shared
+            .readiness
+            .node_state_incomplete
+            .load(std::sync::atomic::Ordering::Acquire)
+    };
+    let (_node, node_port) = node();
+    run(async {
+        environment.broker.add_partitions("dusk.node-state", 2);
+        wait_until(
+            "nightfall to find the added partition unread",
+            Duration::from_secs(10),
+            incomplete,
+        )
+        .await;
+        assert!(
+            instance
+                .shared
+                .ready()
+                .unwrap_err()
+                .starts_with("node state incomplete")
+        );
+        let tcp = tokio::net::TcpStream::connect(instance.addresses.fleet)
+            .await
+            .unwrap();
+        let refused =
+            tokio_rustls::TlsConnector::from(environment.node_identity(DEVICE, INSTALLATION))
+                .connect(
+                    rustls_pki_types::ServerName::try_from(support::harness::FLEET_NAME).unwrap(),
+                    tcp,
+                )
+                .await;
+        assert!(refused.is_err());
+        environment
+            .broker
+            .produce(support::harness::node_state_completion_record(
+                "dusk.node-state",
+                completion_key_on(1, 2),
+            ))
+            .unwrap();
+        wait_until("nightfall to become ready", Duration::from_secs(20), || {
+            instance.shared.ready().is_ok()
+        })
+        .await;
+        let _bridge = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(DEVICE, INSTALLATION),
+        )
+        .await;
+        wait_for_session(&instance).await;
+    });
+    shutdown(instance);
+}
+
+#[test]
+fn a_node_revoked_while_added_partitions_are_read_is_dropped_live() {
+    let environment = Environment::new();
+    let mut config = environment.config("nightfall-0", 0);
+    config.kafka.node_state_partition_check_seconds = 1;
+    let (instance, _log) = environment.start(config);
+    let (_node, node_port) = node();
+    run(async {
+        let _bridge = link_node(
+            instance.addresses.fleet,
+            node_port,
+            environment.node_identity(DEVICE, INSTALLATION),
+        )
+        .await;
+        wait_for_session(&instance).await;
+        environment.broker.add_partitions("dusk.node-state", 2);
+        wait_until(
+            "nightfall to find the added partition unread",
+            Duration::from_secs(10),
+            || {
+                instance
+                    .shared
+                    .readiness
+                    .node_state_incomplete
+                    .load(std::sync::atomic::Ordering::Acquire)
+            },
+        )
+        .await;
+        environment.node_state(DEVICE, None, Some("revoked"));
+        wait_until(
+            "the revoked session to close",
+            Duration::from_secs(5),
+            || local_session(&instance).is_none(),
+        )
+        .await;
+    });
+    shutdown(instance);
+}
+
 fn http_get(address: std::net::SocketAddr, path: &str) -> String {
     let mut stream = std::net::TcpStream::connect(address).unwrap();
     std::io::Write::write_all(

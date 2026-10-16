@@ -116,6 +116,7 @@ pub struct KafkaConfig {
     pub topics: Topics,
     pub census_interval_seconds: u64,
     pub census_heartbeat_seconds: u64,
+    pub node_state_partition_check_seconds: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -268,6 +269,7 @@ impl Default for KafkaConfig {
             topics: Topics::default(),
             census_interval_seconds: 300,
             census_heartbeat_seconds: 15,
+            node_state_partition_check_seconds: 30,
         }
     }
 }
@@ -591,6 +593,10 @@ impl Config {
                 "kafka.census_heartbeat_seconds",
                 self.kafka.census_heartbeat_seconds,
             ),
+            (
+                "kafka.node_state_partition_check_seconds",
+                self.kafka.node_state_partition_check_seconds,
+            ),
         ] {
             if value == 0 {
                 bail!("{name} must be greater than 0");
@@ -820,6 +826,7 @@ properties = {}
 topics = { connections = "dusk.connections", census = "dusk.census", ledger = "dusk.ledger", enrollments = "dusk.enrollments", node_state = "dusk.node-state", intended_processes = "dusk.intended-processes", credential_quota = "dusk.credential-quota" }
 census_interval_seconds = 300
 census_heartbeat_seconds = 15
+node_state_partition_check_seconds = 30
 
 [schemas]
 directory = "/usr/share/nightfall/schemas"
