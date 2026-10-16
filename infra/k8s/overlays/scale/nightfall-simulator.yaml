@@ -37,6 +37,9 @@ spec:
         - name: simulator
           image: dusk-nightfall-simulator:dev
           imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: twilight-scale
           env:
             - name: SIMULATOR_INDEX
               valueFrom:
@@ -54,7 +57,7 @@ spec:
             - --issuer-key
             - /etc/nightfall-simulator/issuer/tls.key
             - --links
-            - "50000"
+            - $(SCALE_LINKS_PER_SIMULATOR)
             - --simulator
             - $(SIMULATOR_INDEX)
             - --links-per-second

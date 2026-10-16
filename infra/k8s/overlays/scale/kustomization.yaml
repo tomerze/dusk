@@ -8,10 +8,24 @@ resources:
   - ../dev
   - simulator-ca.yaml
   - nightfall-simulator.yaml
+  - twilight-scale.yaml
 configMapGenerator:
   - name: grafana-scale-dashboard
     files:
       - scale.json=grafana-scale.json
+  - name: postgres-scale-init
+    files:
+      - postgres-scale.sh
+  - name: twilight-scale
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - SCALE_RUN=scale-1
+      - SCALE_CAMPAIGNS=5
+      - SCALE_NODES_PER_CAMPAIGN=10000
+      - SCALE_LINKS_PER_SIMULATOR=50000
+      - SCALE_RATE=100
 patches:
   - path: nightfall.yaml
   - path: grafana.yaml
+  - path: postgres.yaml

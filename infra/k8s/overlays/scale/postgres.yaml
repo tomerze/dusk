@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          env:
+            - name: DUSK_SCALE_PASSWORD_FILE
+              value: /var/run/dusk-scale/password
+          volumeMounts:
+            - name: scale-secret
+              mountPath: /var/run/dusk-scale
+              readOnly: true
+      volumes:
+        - name: init
+          configMap: null
+          projected:
+            defaultMode: 0555
+            sources:
+              - configMap:
+                  name: postgres-init
+                  items:
+                    - key: init.sh
+                      path: 10-dusk.sh
+              - configMap:
+                  name: postgres-scale-init
+                  items:
+                    - key: postgres-scale.sh
+                      path: 20-scale.sh
+        - name: scale-secret
+          secret:
+            secretName: postgres-scale
+            optional: true
+            defaultMode: 0440
+            items:
+              - key: password
+                path: password
