@@ -23,6 +23,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/redpanda"
 
+	"dusk/services/twilight/internal/alerts"
+	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/migrations"
 )
@@ -186,4 +188,12 @@ func Brokers(test testing.TB) string {
 	}
 	brokers = seed
 	return brokers
+}
+
+func AlertStore(test testing.TB, pool *pgxpool.Pool) *alerts.Store {
+	store, failure := alerts.NewStore(pool, config.Default().Alerts, "test", Logger())
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	return store
 }

@@ -99,11 +99,6 @@ type Engine struct {
 	ReapRetrySeconds             int `yaml:"reap_retry_seconds"`
 }
 
-type Alerts struct {
-	WebhookURL              string `yaml:"webhook_url"`
-	EnrollmentRatePerMinute int    `yaml:"enrollment_rate_per_minute"`
-}
-
 type Reconcile struct {
 	Enabled                     bool         `yaml:"enabled"`
 	LedgerKeys                  string       `yaml:"ledger_keys"`
@@ -251,7 +246,7 @@ func Default() Config {
 			ProcessLifetimeSeconds:       900,
 			IntendedProcessRetentionDays: 31,
 		},
-		Alerts: Alerts{EnrollmentRatePerMinute: 600},
+		Alerts: Alerts{EnrollmentRatePerMinute: 600, DeliveryHorizonSeconds: 86400},
 		Reconcile: Reconcile{Enabled: true, LedgerKeys: "/etc/twilight/pki/ledger-keys.json", CheckpointIntervalMS: 1000,
 			CommandsPerSession: 10000, IntendedProcessCacheEntries: 1000000,
 			DefaultShell: DefaultShell{Ps: 1, StateReads: 1, LogsDump: 1, Kill: 1, ReapRounds: 3}},
@@ -356,6 +351,9 @@ func assign(target reflect.Value, text string) error {
 		}
 		target.SetInt(parsed)
 	case reflect.Slice:
+		if target.Type().Elem().Kind() != reflect.String {
+			return errors.New("this list is set in the configuration file only")
+		}
 		var items []string
 		for item := range strings.SplitSeq(text, ",") {
 			if trimmed := strings.TrimSpace(item); trimmed != "" {
@@ -467,11 +465,7 @@ func (loaded Config) Validate() error {
 	if loaded.Sessions.LifetimeSeconds < 60 || loaded.Sessions.IdleSeconds < 60 || loaded.Sessions.IdleSeconds > loaded.Sessions.LifetimeSeconds {
 		problem("sessions.lifetime_seconds and sessions.idle_seconds must be at least 60, and idle_seconds at most lifetime_seconds")
 	}
-	if loaded.Alerts.WebhookURL != "" {
-		if parsed, failure := url.Parse(loaded.Alerts.WebhookURL); failure != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
-			problem("alerts.webhook_url must be an http or https URL")
-		}
-	}
+	loaded.Alerts.validate(problem)
 	positive := map[string]int{
 		"drain_seconds":                            loaded.DrainSeconds,
 		"max_streams":                              loaded.MaxStreams,
@@ -500,6 +494,7 @@ func (loaded Config) Validate() error {
 		"engine.last_seen_bucket_seconds":          loaded.Engine.LastSeenBucketSeconds,
 		"engine.dispatch_attempts":                 loaded.Engine.DispatchAttempts,
 		"alerts.enrollment_rate_per_minute":        loaded.Alerts.EnrollmentRatePerMinute,
+		"alerts.delivery_horizon_seconds":          loaded.Alerts.DeliveryHorizonSeconds,
 		"reconcile.checkpoint_interval_ms":         loaded.Reconcile.CheckpointIntervalMS,
 		"reconcile.commands_per_session":           loaded.Reconcile.CommandsPerSession,
 		"reconcile.intended_process_cache_entries": loaded.Reconcile.IntendedProcessCacheEntries,
