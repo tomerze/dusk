@@ -28,14 +28,14 @@ func TestMigrationsApplyOnceAndRefuseEditedHistory(test *testing.T) {
 	if failure != nil {
 		test.Fatal(failure)
 	}
-	applied, failure := database.Migrate(operation, pool, loaded, testsupport.Logger())
+	applied, failure := database.Migrate(operation, pool, loaded, testsupport.MigrationSettings, testsupport.Logger())
 	if failure != nil {
 		test.Fatal(failure)
 	}
 	if len(applied) != len(loaded) {
 		test.Fatalf("applied %d of %d migrations", len(applied), len(loaded))
 	}
-	again, failure := database.Migrate(operation, pool, loaded, testsupport.Logger())
+	again, failure := database.Migrate(operation, pool, loaded, testsupport.MigrationSettings, testsupport.Logger())
 	if failure != nil || len(again) != 0 {
 		test.Fatalf("second run applied %d, error %v", len(again), failure)
 	}
@@ -45,7 +45,7 @@ func TestMigrationsApplyOnceAndRefuseEditedHistory(test *testing.T) {
 	}
 	edited := append([]database.Migration(nil), loaded...)
 	edited[0].Checksum = strings.Repeat("0", 64)
-	if _, failure := database.Migrate(operation, pool, edited, testsupport.Logger()); failure == nil || !strings.Contains(failure.Error(), "never change once applied") {
+	if _, failure := database.Migrate(operation, pool, edited, testsupport.MigrationSettings, testsupport.Logger()); failure == nil || !strings.Contains(failure.Error(), "never change once applied") {
 		test.Fatalf("edited migration accepted: %v", failure)
 	}
 	for _, table := range []string{"nodes", "node_presence", "campaigns", "campaign_counters", "campaign_events", "campaign_nodes", "intended_processes", "alerts", "reconcile_offsets", "ledger_chain_heads", "reconcile_processes", "leadership", "api_tokens", "api_sessions", "api_login_key"} {
@@ -75,7 +75,7 @@ func TestMigrationRunnerRollsBackAFailedMigration(test *testing.T) {
 	if failure != nil {
 		test.Fatal(failure)
 	}
-	if _, failure := database.Migrate(operation, pool, loaded, testsupport.Logger()); failure == nil || !strings.Contains(failure.Error(), "0002_broken") {
+	if _, failure := database.Migrate(operation, pool, loaded, testsupport.MigrationSettings, testsupport.Logger()); failure == nil || !strings.Contains(failure.Error(), "0002_broken") {
 		test.Fatalf("broken migration: %v", failure)
 	}
 	var half bool

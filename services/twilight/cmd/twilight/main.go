@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"os/user"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -188,12 +190,47 @@ func migrate(operation context.Context, arguments, environment []string, diagnos
 	if failure != nil {
 		return failure
 	}
-	applied, failure := database.Migrate(operation, pool, loaded, logger)
+	applied, failure := database.Migrate(operation, pool, loaded, migrationSettings(settings, logger), logger)
 	if failure != nil {
 		return failure
 	}
 	logger.Info("the database schema is current", "applied", len(applied), "known", len(loaded))
 	return nil
+}
+
+func migrationSettings(settings config.Config, logger *slog.Logger) map[string]func(context.Context) (string, error) {
+	return map[string]func(context.Context) (string, error){database.NodePartitionsSetting: func(operation context.Context) (string, error) {
+		options, failure := kafka.Options(settings.Kafka, settings.Instance)
+		if failure != nil {
+			return "", failure
+		}
+		client, failure := kgo.NewClient(options...)
+		if failure != nil {
+			return "", failure
+		}
+		defer client.Close()
+		topic := settings.Kafka.Topics.ProcessResults
+		waiting, cancel := context.WithTimeout(operation, 5*time.Minute)
+		defer cancel()
+		backoff := time.Second
+		for {
+			describing, cancelDescribing := context.WithTimeout(waiting, 30*time.Second)
+			partitions, failure := kafka.TopicPartitions(describing, client, topic)
+			cancelDescribing()
+			if failure == nil {
+				logger.Info("the migrations partition the inventory like the process results topic", "topic", topic, "partitions", partitions)
+				return strconv.Itoa(int(partitions)), nil
+			}
+			delay := time.Duration(rand.Int64N(int64(backoff))) + 1
+			logger.Warn("the migrations wait for the process results topic, whose partition count partitions the inventory", "topic", topic, "retry_in_seconds", delay.Seconds(), "error", failure)
+			select {
+			case <-waiting.Done():
+				return "", fmt.Errorf("the migrations partition the inventory like %s and need its partition count: %w", topic, failure)
+			case <-time.After(delay):
+			}
+			backoff = min(2*backoff, 30*time.Second)
+		}
+	}}
 }
 
 func grafanaAlerting(arguments, environment []string, output, diagnostics io.Writer) error {
@@ -328,7 +365,7 @@ func serve(operation context.Context, arguments, environment []string, output, d
 		return failure
 	}
 	if applyMigrations {
-		if _, failure := database.Migrate(signals, pool, loaded, logger); failure != nil {
+		if _, failure := database.Migrate(signals, pool, loaded, migrationSettings(settings, logger), logger); failure != nil {
 			return failure
 		}
 	}

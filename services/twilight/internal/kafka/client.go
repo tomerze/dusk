@@ -87,6 +87,21 @@ func RequiredTopics(topics config.Topics) []TopicRequirement {
 	}
 }
 
+func TopicPartitions(operation context.Context, client *kgo.Client, topic string) (int32, error) {
+	listed, failure := kadm.NewClient(client).ListTopics(operation, topic)
+	if failure != nil {
+		return 0, fmt.Errorf("list topics: %w", failure)
+	}
+	detail, found := listed[topic]
+	if !found {
+		return 0, fmt.Errorf("%s is missing", topic)
+	}
+	if detail.Err != nil {
+		return 0, fmt.Errorf("%s: %w", topic, detail.Err)
+	}
+	return int32(len(detail.Partitions)), nil
+}
+
 func CheckTopics(operation context.Context, client *kgo.Client, requirements []TopicRequirement) error {
 	admin := kadm.NewClient(client)
 	names := make([]string, len(requirements))

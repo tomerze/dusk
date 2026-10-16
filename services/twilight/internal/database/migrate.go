@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -130,7 +131,7 @@ func Status(operation context.Context, pool *pgxpool.Pool, migrations []Migratio
 	return status(operation, connection.Conn(), migrations)
 }
 
-func Migrate(operation context.Context, pool *pgxpool.Pool, migrations []Migration, logger *slog.Logger) ([]Migration, error) {
+func Migrate(operation context.Context, pool *pgxpool.Pool, migrations []Migration, settings map[string]func(context.Context) (string, error), logger *slog.Logger) ([]Migration, error) {
 	connection, failure := pool.Acquire(operation)
 	if failure != nil {
 		return nil, fmt.Errorf("acquire connection: %w", failure)
@@ -157,9 +158,31 @@ func Migrate(operation context.Context, pool *pgxpool.Pool, migrations []Migrati
 	if len(current.Unknown) > 0 {
 		logger.Warn("the database holds migrations this build does not know", "versions", current.Unknown)
 	}
+	values := map[string]string{}
 	var applied []Migration
 	for _, migration := range current.Pending {
+		var names []string
+		for name, read := range settings {
+			if !strings.Contains(migration.SQL, name) {
+				continue
+			}
+			names = append(names, name)
+			if _, known := values[name]; known {
+				continue
+			}
+			value, failure := read(operation)
+			if failure != nil {
+				return applied, fmt.Errorf("migration %04d_%s needs %s: %w", migration.Version, migration.Name, name, failure)
+			}
+			values[name] = value
+		}
+		sort.Strings(names)
 		failure := pgx.BeginFunc(operation, connection.Conn(), func(transaction pgx.Tx) error {
+			for _, name := range names {
+				if _, failure := transaction.Exec(operation, `select set_config($1, $2, true)`, name, values[name]); failure != nil {
+					return fmt.Errorf("set %s: %w", name, failure)
+				}
+			}
 			if _, failure := transaction.Exec(operation, migration.SQL); failure != nil {
 				return failure
 			}
@@ -176,3 +199,13 @@ func Migrate(operation context.Context, pool *pgxpool.Pool, migrations []Migrati
 }
 
 var ErrPendingMigrations = errors.New("the database lacks migrations this build needs; run twilight migrate")
+
+const NodePartitionsSetting = "twilight.node_partitions"
+
+func NodePartitionCount(operation context.Context, pool *pgxpool.Pool) (int32, error) {
+	var count int32
+	if failure := pool.QueryRow(operation, `select count(*)::integer from node_partition_leases`).Scan(&count); failure != nil {
+		return 0, fmt.Errorf("count node_partition_leases: %w", failure)
+	}
+	return count, nil
+}

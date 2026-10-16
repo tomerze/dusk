@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,12 @@ import (
 	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/migrations"
 )
+
+const NodePartitions = 3
+
+var MigrationSettings = map[string]func(context.Context) (string, error){
+	database.NodePartitionsSetting: func(context.Context) (string, error) { return strconv.Itoa(NodePartitions), nil },
+}
 
 const (
 	PostgresImage = "postgres:17-alpine"
@@ -167,7 +174,7 @@ func Database(test testing.TB) (*pgxpool.Pool, string) {
 	if failure != nil {
 		test.Fatalf("load migrations: %v", failure)
 	}
-	if _, failure := database.Migrate(operation, pool, loaded, Logger()); failure != nil {
+	if _, failure := database.Migrate(operation, pool, loaded, MigrationSettings, Logger()); failure != nil {
 		test.Fatalf("migrate: %v", failure)
 	}
 	if _, failure := database.MaintainIntendedProcessPartitions(operation, pool, time.Now(), 3, 31*24*time.Hour); failure != nil {

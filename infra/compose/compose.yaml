@@ -597,6 +597,8 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       alert-receivers-init:
         condition: service_completed_successfully
     volumes: &twilight-volumes
