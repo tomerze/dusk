@@ -13,6 +13,13 @@ import pytest
 from conftest import insert_chains, required, secret
 
 DASHBOARDS = Path(__file__).resolve().parents[1] / "grafana" / "dashboards"
+SCALE_DASHBOARD = (
+    Path(__file__).resolve().parents[1]
+    / "k8s"
+    / "overlays"
+    / "scale"
+    / "grafana-scale.json"
+)
 ALERT_RULES = {
     "dusk-open-critical-alert",
     "dusk-ledger-chain-broken",
@@ -75,7 +82,7 @@ def alert_rules() -> dict[str, Any]:
 
 def panel_queries() -> list[tuple[str, str, dict[str, Any]]]:
     queries = []
-    for path in sorted(DASHBOARDS.glob("*.json")):
+    for path in [*sorted(DASHBOARDS.glob("*.json")), SCALE_DASHBOARD]:
         for panel in json.loads(path.read_text())["panels"]:
             for target in panel.get("targets", []):
                 queries.append((path.stem, panel["title"], target))
@@ -93,7 +100,8 @@ def test_every_dashboard_is_provisioned_in_the_dusk_folder() -> None:
     expected = {
         json.loads(path.read_text())["uid"] for path in DASHBOARDS.glob("*.json")
     }
-    assert {item["uid"] for item in found} == expected
+    scale = json.loads(SCALE_DASHBOARD.read_text())["uid"]
+    assert {item["uid"] for item in found} - {scale} == expected
     assert {item["folderTitle"] for item in found} == {"Dusk"}
 
 

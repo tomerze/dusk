@@ -8,5 +8,10 @@ resources:
   - ../dev
   - simulator-ca.yaml
   - nightfall-simulator.yaml
+configMapGenerator:
+  - name: grafana-scale-dashboard
+    files:
+      - scale.json=grafana-scale.json
 patches:
   - path: nightfall.yaml
+  - path: grafana.yaml

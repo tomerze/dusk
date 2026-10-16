@@ -32,6 +32,10 @@ services:
     volumes:
       - { type: volume, source: simulator-ca, target: /etc/nightfall/pki/fleet-client-ca.crt, read_only: true, volume: { subpath: fleet-client-ca.crt } }
 
+  grafana:
+    volumes:
+      - ../k8s/overlays/scale/grafana-scale.json:/etc/dusk/grafana/dashboards/scale.json:ro
+
   nightfall-simulator:
     image: dusk-nightfall-simulator:dev
     build:

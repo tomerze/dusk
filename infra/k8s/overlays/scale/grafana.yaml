@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  template:
+    spec:
+      containers:
+        - name: grafana
+          volumeMounts:
+            - name: scale-dashboard
+              mountPath: /etc/dusk/grafana/dashboards/scale.json
+              subPath: scale.json
+              readOnly: true
+      volumes:
+        - name: scale-dashboard
+          configMap:
+            name: grafana-scale-dashboard
+            defaultMode: 0444
