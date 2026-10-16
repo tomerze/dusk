@@ -146,11 +146,18 @@ function generateAlerts(state: MockState): Alert[] {
       minutesAgo: 26,
       severity: 'high',
       kind: 'enrollment_rate',
-      fingerprint: 'enrollment_rate:2026-10-09T09:34:00Z',
+      fingerprint: 'enrollment_rate:credential:fleet_token:retail-eu-2026',
       detail: {
-        minute: minutes(26),
-        threshold: 600,
-        message: 'more enrollments in one minute than alerts.enrollment_rate_per_minute',
+        scope: 'credential',
+        credential_kind: 'fleet_token',
+        credential: 'retail-eu-2026',
+        tenant: 'retail-eu',
+        count: 412,
+        threshold: 100,
+        baseline: 18.5,
+        baseline_days: 7,
+        window_seconds: 300,
+        message: 'More new installations enrolled than the baseline allows',
       },
     },
     {
@@ -273,11 +280,7 @@ function generateAlerts(state: MockState): Alert[] {
     },
   ]
   const history: [Severity, string, string][] = [
-    [
-      'high',
-      'enrollment_rate',
-      'more enrollments in one minute than alerts.enrollment_rate_per_minute',
-    ],
+    ['high', 'enrollment_rate', 'More new installations enrolled than the baseline allows'],
     [
       'medium',
       'campaign_conflict',

@@ -62,7 +62,22 @@ export const alertKinds: Record<string, AlertKind> = {
   enrollment_rate: {
     label: 'Enrollment spike',
     meaning:
-      'More nodes enrolled in a minute than the threshold. A leaked fleet token looks like this; so does a large rollout.',
+      'More new installations enrolled in five minutes, for one credential, one network or the whole fleet, than its floor and four times its baseline. A leaked fleet token or install token key looks like this; so does a large rollout.',
+  },
+  denied_enrollments_spike: {
+    label: 'Refused enrollment spike',
+    meaning:
+      'More enrollments were refused in five minutes than the baseline allows. Someone is presenting a retired, capped or wrong credential, or pressing against the rate limits.',
+  },
+  enrollment_from_new_network_burst: {
+    label: 'Enrollments from new networks',
+    meaning:
+      'More new installations enrolled from networks none enrolled from in the last seven days than the baseline allows. A leaked credential used from many places at once looks like this.',
+  },
+  credential_quota_reached: {
+    label: 'Credential cap reached',
+    meaning:
+      'A fleet token entry or an install token key enrolled its max_installations, and nightfall refuses its new installations.',
   },
   campaign_conflict: {
     label: 'Campaign conflict',

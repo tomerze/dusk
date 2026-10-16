@@ -31,6 +31,9 @@ const (
 
 const (
 	KindEnrollmentRate            = "enrollment_rate"
+	KindDeniedEnrollmentsSpike    = "denied_enrollments_spike"
+	KindNewNetworkBurst           = "enrollment_from_new_network_burst"
+	KindCredentialQuotaReached    = "credential_quota_reached"
 	KindRevocationNotEnforced     = "revocation_not_enforced"
 	KindCampaignConflict          = "campaign_conflict"
 	KindProcessWithoutIntent      = "process_without_intent"
@@ -166,6 +169,64 @@ func (store *Store) Raise(operation context.Context, raised Raised) (Alert, erro
 		store.Announce(alert)
 	}
 	return alert, nil
+}
+
+func (store *Store) Open(operation context.Context, raised Raised) (Alert, bool, error) {
+	alert, inserted, failure := RaiseIn(operation, store.pool, raised)
+	if failure != nil {
+		return alert, false, fmt.Errorf("raise %s alert: %w", raised.Kind, failure)
+	}
+	if inserted {
+		store.Announce(alert)
+	}
+	return alert, inserted, nil
+}
+
+func (store *Store) OpenOfKinds(operation context.Context, kinds []string) ([]Alert, error) {
+	rows, failure := store.pool.Query(operation, `select `+alertColumns+` from alerts where resolved_at is null and kind = any($1)`, kinds)
+	if failure != nil {
+		return nil, failure
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Alert, error) { return scanAlert(row) })
+}
+
+func (store *Store) Escalate(operation context.Context, fingerprint string, severity Severity, detail map[string]any, at time.Time) (Alert, error) {
+	encoded, failure := json.Marshal(detail)
+	if failure != nil {
+		return Alert{}, failure
+	}
+	var alert Alert
+	var raised bool
+	failure = store.pool.QueryRow(operation, `with previous as (select severity from alerts where fingerprint = $1 and resolved_at is null)
+		update alerts set detail = $2::jsonb, occurrences = occurrences + 1, last_seen_at = greatest(last_seen_at, $3),
+			severity = case when alert_severity_rank($4) > alert_severity_rank(severity) then $4 else severity end,
+			acknowledged_by = case when alert_severity_rank($4) > alert_severity_rank(severity) then null else acknowledged_by end,
+			acknowledged_at = case when alert_severity_rank($4) > alert_severity_rank(severity) then null else acknowledged_at end
+		where fingerprint = $1 and resolved_at is null
+		returning `+alertColumns+`, alert_severity_rank(alerts.severity) > (select alert_severity_rank(severity) from previous)`,
+		fingerprint, encoded, at, severity).Scan(append(alertTargets(&alert), &raised)...)
+	if errors.Is(failure, pgx.ErrNoRows) {
+		failure = ErrNotFound
+	}
+	if failure != nil {
+		return alert, fmt.Errorf("escalate the alert %s: %w", fingerprint, failure)
+	}
+	alert.Deliveries = []Delivery{}
+	if raised {
+		store.Announce(alert)
+	} else {
+		store.logger.Warn("open alert updated", "alert_id", alert.ID, "severity", alert.Severity, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "tenant", alert.Tenant, "detail", alert.Detail)
+	}
+	return alert, nil
+}
+
+func (store *Store) ResolveOpen(operation context.Context, fingerprint, actor string, at time.Time) (Alert, error) {
+	alert, failure := scanAlert(store.pool.QueryRow(operation, `update alerts set resolved_by = $2, resolved_at = $3
+		where fingerprint = $1 and resolved_at is null returning `+alertColumns, fingerprint, actor, at))
+	if failure == nil {
+		store.logger.Info("alert resolved", "alert_id", alert.ID, "kind", alert.Kind, "fingerprint", alert.Fingerprint, "principal", actor)
+	}
+	return alert, failure
 }
 
 func (store *Store) Announce(alert Alert) {

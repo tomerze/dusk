@@ -10,12 +10,12 @@ import (
 )
 
 type Alerts struct {
-	EnrollmentRatePerMinute int        `yaml:"enrollment_rate_per_minute"`
-	PublicURL               string     `yaml:"public_url"`
-	RunbookURL              string     `yaml:"runbook_url"`
-	DeliveryHorizonSeconds  int        `yaml:"delivery_horizon_seconds"`
-	Receivers               []Receiver `yaml:"receivers"`
-	Routes                  []Route    `yaml:"routes"`
+	Enrollments            Enrollments `yaml:"enrollments"`
+	PublicURL              string      `yaml:"public_url"`
+	RunbookURL             string      `yaml:"runbook_url"`
+	DeliveryHorizonSeconds int         `yaml:"delivery_horizon_seconds"`
+	Receivers              []Receiver  `yaml:"receivers"`
+	Routes                 []Route     `yaml:"routes"`
 }
 
 type Receiver struct {

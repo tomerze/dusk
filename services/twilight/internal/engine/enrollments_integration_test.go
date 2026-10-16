@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/twmb/franz-go/pkg/kgo"
 
+	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/engine"
 	"dusk/services/twilight/internal/kafka"
 )
@@ -105,5 +107,122 @@ func TestABulkRevocationRevokesEveryInstallationOneCredentialEnrolledAtItsPace(t
 	}
 	if len(states) != 25 {
 		test.Fatalf("%d node-state records for 25 revoked installations", len(states))
+	}
+}
+
+func TestAnEnrollmentFloodOpensAnAlertThatNamesItsCredential(test *testing.T) {
+	current := newHarness(test)
+	current.settings.Alerts.Enrollments.IssuedFloors.Credential = 5
+	for index := range 12 {
+		current.enrollWith(identity(300+index), "leaked", fmt.Sprintf("203.0.113.%d:4000", index))
+	}
+	current.start()
+	var detail map[string]any
+	var occurrences int64
+	current.eventually("the enrollment alert opens and is escalated once the count doubles", time.Minute, func() (bool, string) {
+		var encoded []byte
+		failure := current.pool.QueryRow(context.Background(), `select detail, occurrences from alerts where fingerprint = 'enrollment_rate:credential:fleet_token:leaked' and resolved_at is null`).Scan(&encoded, &occurrences)
+		if failure != nil {
+			return false, failure.Error()
+		}
+		_ = json.Unmarshal(encoded, &detail)
+		return occurrences == 2, fmt.Sprintf("%d occurrences, detail %v", occurrences, detail)
+	})
+	if detail["credential"] != "leaked" || detail["credential_kind"] != "fleet_token" || detail["tenant"] != "acme" || detail["count"] != float64(12) || detail["threshold"] != float64(5) {
+		test.Fatalf("the alert detail %v", detail)
+	}
+	transitions := func() string {
+		rows, failure := current.pool.Query(context.Background(), `select transition.transition || ':' || transition.severity from alert_transitions transition
+			join alerts alert on alert.id = transition.alert_id where alert.fingerprint = 'enrollment_rate:credential:fleet_token:leaked' order by transition.id`)
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		listed, failure := pgx.CollectRows(rows, pgx.RowTo[string])
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		return strings.Join(listed, " ")
+	}
+	if recorded := transitions(); recorded != "opened:high re_escalated:critical" {
+		test.Fatalf("the first doubling recorded the transitions %q", recorded)
+	}
+	for index := range 12 {
+		current.enrollWith(identity(320+index), "leaked", fmt.Sprintf("203.0.113.%d:4000", 20+index))
+	}
+	current.eventually("the second doubling updates the alert", time.Minute, func() (bool, string) {
+		failure := current.pool.QueryRow(context.Background(), `select occurrences from alerts where fingerprint = 'enrollment_rate:credential:fleet_token:leaked' and resolved_at is null`).Scan(&occurrences)
+		return failure == nil && occurrences == 3, fmt.Sprintf("%d occurrences: %v", occurrences, failure)
+	})
+	if recorded := transitions(); recorded != "opened:high re_escalated:critical" {
+		test.Fatalf("the second doubling recorded the transitions %q", recorded)
+	}
+	current.eventually("the counts up to the alert reach the baseline table", time.Minute, func() (bool, string) {
+		var counted int64
+		_ = current.pool.QueryRow(context.Background(), `select coalesce(sum(count), 0) from enrollment_counts where signal = 'issued' and scope = 'credential' and name = 'fleet_token:leaked'`).Scan(&counted)
+		return counted == 6, fmt.Sprintf("%d counted", counted)
+	})
+}
+
+func TestAnEnrollmentAlertResolvedByHandMidBurstOpensANewOneOnTheNextBreach(test *testing.T) {
+	current := newHarness(test)
+	current.settings.Alerts.Enrollments.IssuedFloors.Credential = 5
+	for index := range 6 {
+		current.enrollWith(identity(400+index), "reused", fmt.Sprintf("203.0.113.%d:4000", index))
+	}
+	current.start()
+	const fingerprint = "enrollment_rate:credential:fleet_token:reused"
+	var first int64
+	current.eventually("the enrollment alert opens", time.Minute, func() (bool, string) {
+		failure := current.pool.QueryRow(context.Background(), `select id from alerts where fingerprint = $1 and resolved_at is null`, fingerprint).Scan(&first)
+		return failure == nil, fmt.Sprint(failure)
+	})
+	if _, failure := current.pool.Exec(context.Background(), `update alerts set resolved_by = 'token:operator', resolved_at = now() where id = $1`, first); failure != nil {
+		test.Fatal(failure)
+	}
+	for index := range 18 {
+		current.enrollWith(identity(410+index), "reused", fmt.Sprintf("203.0.113.%d:4000", 10+index))
+	}
+	current.eventually("the burst after the hand resolution opens a new alert", time.Minute, func() (bool, string) {
+		var second int64
+		failure := current.pool.QueryRow(context.Background(), `select id from alerts where fingerprint = $1 and resolved_at is null`, fingerprint).Scan(&second)
+		return failure == nil && second != first, fmt.Sprintf("open alert %d, the one resolved by hand %d: %v", second, first, failure)
+	})
+	var resolvedBy string
+	if failure := current.pool.QueryRow(context.Background(), `select resolved_by from alerts where id = $1`, first).Scan(&resolvedBy); failure != nil || resolvedBy != "token:operator" {
+		test.Fatalf("the alert resolved by hand is resolved by %q: %v", resolvedBy, failure)
+	}
+}
+
+func TestARefusalFloodFromManyNetworksOpensABoundedNumberOfNotifiedAlerts(test *testing.T) {
+	current := newHarness(test)
+	current.settings.Alerts.Enrollments.RefusedFloors = config.Floors{Fleet: 1_000_000, Credential: 1_000_000, Network: 2}
+	networks := 30
+	for round := range 3 {
+		for network := range networks {
+			now := kafka.FormatTime(time.Now())
+			current.produceJSON(current.settings.Kafka.Topics.Enrollments, fmt.Sprintf("refused/%d/%d", network, round), kafka.ContractEnrollments, map[string]any{
+				"schema": "dusk.enrollments/v1", "id": kafka.NewMessageID(), "time": now, "operation": "assign", "outcome": "denied", "reason": "invalid_credential",
+				"device_id": nil, "installation_id": nil, "tenant": nil, "credential_kind": "fleet_token", "credential_ref": nil, "credential_issuer": nil,
+				"hardware_fingerprint_hash": strings.Repeat("d", 64), "remote_address": fmt.Sprintf("198.18.%d.7:4000", network), "cert_serial": nil,
+				"cert_fingerprint": nil, "cert_not_after": nil, "dusk_version": nil, "impl": nil, "target_os": nil, "target_arch": nil, "hostname": nil,
+				"instance": "nightfall-0",
+			})
+		}
+	}
+	current.start()
+	current.eventually("every network above its floor is alerted on or folded", time.Minute, func() (bool, string) {
+		var folded int64
+		failure := current.pool.QueryRow(context.Background(), `select (detail ->> 'count')::bigint from alerts
+			where fingerprint = 'denied_enrollments_spike:network' and resolved_at is null`).Scan(&folded)
+		return failure == nil && folded == 16, fmt.Sprintf("%d folded: %v", folded, failure)
+	})
+	var opened, perNetwork int64
+	if failure := current.pool.QueryRow(context.Background(), `select count(*), count(*) filter (where alert.fingerprint like 'denied_enrollments_spike:network:%')
+		from alert_transitions transition join alerts alert on alert.id = transition.alert_id
+		where transition.transition = 'opened' and alert.kind = 'denied_enrollments_spike'`).Scan(&opened, &perNetwork); failure != nil {
+		test.Fatal(failure)
+	}
+	if opened != 11 || perNetwork != 10 {
+		test.Fatalf("a refusal flood from %d networks recorded %d opened transitions for receivers, %d of them per network", networks, opened, perNetwork)
 	}
 }
