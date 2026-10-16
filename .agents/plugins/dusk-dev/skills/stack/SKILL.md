@@ -193,3 +193,5 @@ From the repository root unless a directory is named. A fresh worktree needs
 | `docker build --cpuset-cpus` to keep a compile off the user's cores | `--build-arg CPUSET=<cores>` (compose: `DUSK_BUILD_CPUSET`); `--cpuset-cpus` only on `docker run` |
 | A test container with a fixed name, left running | A unique name, removed when the test ends; never touch the host's firewall, sysctl or systemd |
 | A `# comment` in YAML, a `//` in Go or TypeScript | The explanation goes in the commit message |
+| A client's full address in a ledger entry | `remote_network` and `remote_address_hash` from `nightfall_ledger::address`; the ledger is kept 400 days and cannot be erased |
+| A new table, bucket or topic that holds data about a node | Give it a retention, add it to twilight's erasure and export (`services/twilight/internal/erasure/`) and to `docs/docs/stack/data.md` |
