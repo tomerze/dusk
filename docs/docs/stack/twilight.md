@@ -374,7 +374,10 @@ the kind with the fewest notifications waiting first, so a backlog of one kind
 never holds back an alert of another. A receiver gets at most its
 `rate_per_minute` notifications a minute, counted across all instances. When it
 answers 429, twilight pauses the whole receiver, not only that notification,
-for its `Retry-After` or the backoff above, whichever is longer.
+for its `Retry-After` or the backoff above, whichever is longer. Once the pause
+is recorded, no instance starts a send to that receiver, not even for a
+notification it had already taken; only a send that checked the pause before it
+was recorded still reaches it.
 
 Slack, Teams and email get at most one notification per kind and transition a
 minute. Whatever of one kind waits for one of them goes out together - one
