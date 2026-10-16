@@ -156,12 +156,8 @@ func (store *Store) RevocationBatch(operation context.Context, revocation Revoca
 
 var ErrNotLeading = errors.New("this instance no longer leads")
 
-func (store *Store) RevokeBatch(operation context.Context, revocation *Revocation, keys []Key, at time.Time, term int64) error {
-	devices := make([]string, len(keys))
-	installations := make([]string, len(keys))
-	for index, key := range keys {
-		devices[index], installations[index] = key.DeviceID, key.InstallationID
-	}
+func (store *Store) RevokeBatch(operation context.Context, revocation *Revocation, keys []Key, term int64, publish func(revoking []Key, at time.Time) error) error {
+	devices, installations := split(keys)
 	var revoked int64
 	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
 		var leading bool
@@ -171,14 +167,34 @@ func (store *Store) RevokeBatch(operation context.Context, revocation *Revocatio
 		if !leading {
 			return ErrNotLeading
 		}
-		tag, failure := transaction.Exec(operation, `update nodes n set lifecycle = 'revoked', lifecycle_reason = $3, lifecycle_changed_at = $4, lifecycle_actor = $5, updated_at = now()
-			from unnest($1::text[], $2::text[]) as revoking(device_id, installation_id)
-			where n.device_id = revoking.device_id and n.installation_id = revoking.installation_id and n.lifecycle <> 'revoked'`,
-			devices, installations, revocation.Reason, at, revocation.Actor)
+		rows, failure := transaction.Query(operation, `select n.device_id, n.installation_id from nodes n
+			join unnest($1::text[], $2::text[]) as revoking(device_id, installation_id)
+				on n.device_id = revoking.device_id and n.installation_id = revoking.installation_id
+			where n.lifecycle <> 'revoked'
+			order by n.device_id, n.installation_id
+			for update of n`, devices, installations)
 		if failure != nil {
 			return failure
 		}
-		revoked = tag.RowsAffected()
+		locked, failure := pgx.CollectRows(rows, pgx.RowToStructByPos[Key])
+		if failure != nil {
+			return failure
+		}
+		if len(locked) > 0 {
+			at := time.Now()
+			if failure := publish(locked, at); failure != nil {
+				return failure
+			}
+			lockedDevices, lockedInstallations := split(locked)
+			tag, failure := transaction.Exec(operation, `update nodes n set lifecycle = 'revoked', lifecycle_reason = $3, lifecycle_changed_at = $4, lifecycle_actor = $5, updated_at = now()
+				from unnest($1::text[], $2::text[]) as revoking(device_id, installation_id)
+				where n.device_id = revoking.device_id and n.installation_id = revoking.installation_id`,
+				lockedDevices, lockedInstallations, revocation.Reason, at, revocation.Actor)
+			if failure != nil {
+				return failure
+			}
+			revoked = tag.RowsAffected()
+		}
 		last := keys[len(keys)-1]
 		_, failure = transaction.Exec(operation, `update revocations set revoked = revoked + $2, cursor_device_id = $3, cursor_installation_id = $4 where id = $1`,
 			revocation.ID, revoked, last.DeviceID, last.InstallationID)

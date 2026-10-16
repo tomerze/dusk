@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -119,22 +120,19 @@ func (engine *Engine) revokeSome(operation context.Context, term int64, revocati
 				"matched", revocation.Matched, "revoked", revocation.Revoked, "seconds", now.Sub(revocation.CreatedAt).Seconds())
 			return done, false
 		}
-		now := time.Now()
-		states := make([]kafka.NodeState, len(keys))
-		for position, key := range keys {
-			states[position] = kafka.NewInstallationState(key.DeviceID, key.InstallationID, "revoked", &revocation.Reason, revocation.Actor, now)
-		}
-		producing, cancel := context.WithTimeout(operation, 30*time.Second)
-		failure = engine.NodeState.ProduceNodeStates(producing, states)
-		cancel()
-		if failure != nil {
-			if operation.Err() == nil {
-				engine.Logger.Warn("the node-state records of a revocation were not acknowledged; the batch is sent again on the next round",
-					"revocation_id", revocation.ID, "nodes", len(keys), "error", failure)
+		publish := func(revoking []inventory.Key, at time.Time) error {
+			states := make([]kafka.NodeState, len(revoking))
+			for position, key := range revoking {
+				states[position] = kafka.NewInstallationState(key.DeviceID, key.InstallationID, "revoked", &revocation.Reason, revocation.Actor, at)
 			}
-			return done, true
+			producing, cancel := context.WithTimeout(operation, 30*time.Second)
+			defer cancel()
+			if failure := engine.NodeState.ProduceNodeStates(producing, states); failure != nil {
+				return fmt.Errorf("the node-state records were not acknowledged: %w", failure)
+			}
+			return nil
 		}
-		if failure := engine.Inventory.RevokeBatch(operation, revocation, keys, now, term); failure != nil {
+		if failure := engine.Inventory.RevokeBatch(operation, revocation, keys, term, publish); failure != nil {
 			if !errors.Is(failure, inventory.ErrNotLeading) && operation.Err() == nil {
 				engine.Logger.Warn("a revocation batch was not recorded; it is sent again on the next round", "revocation_id", revocation.ID, "nodes", len(keys), "error", failure)
 			}

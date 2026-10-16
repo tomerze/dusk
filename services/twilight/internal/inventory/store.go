@@ -340,6 +340,14 @@ func (store *Store) RecordConnections(operation context.Context, sightings []Sig
 				on conflict (device_id, installation_id) do nothing`, devices, installations, times, tenants); failure != nil {
 				return failure
 			}
+			if _, failure := transaction.Exec(operation, `select from nodes n
+				join unnest($1::text[], $2::text[]) as sighted(device_id, installation_id)
+					on n.device_id = sighted.device_id and n.installation_id = sighted.installation_id
+				where n.lifecycle = 'enrolled'
+				order by n.device_id, n.installation_id
+				for update of n`, devices, installations); failure != nil {
+				return failure
+			}
 			rows, failure := transaction.Query(operation, `update nodes n set lifecycle = 'active', lifecycle_changed_at = sighted.seen, lifecycle_reason = 'first connection', updated_at = now()
 				from unnest($1::text[], $2::text[], $3::timestamptz[]) as sighted(device_id, installation_id, seen)
 				where n.device_id = sighted.device_id and n.installation_id = sighted.installation_id and n.lifecycle = 'enrolled'
