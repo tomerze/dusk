@@ -40,9 +40,10 @@ var MigrationSettings = map[string]func(context.Context) (string, error){
 }
 
 const (
-	PostgresImage = "postgres:17-alpine"
-	RedpandaImage = "docker.redpanda.com/redpandadata/redpanda:v25.2.4"
-	MailpitImage  = "axllent/mailpit:v1.31.2"
+	PostgresImage   = "postgres:17-alpine"
+	RedpandaImage   = "docker.redpanda.com/redpandadata/redpanda:v25.2.4"
+	MailpitImage    = "axllent/mailpit:v1.31.2"
+	ClickHouseImage = "clickhouse/clickhouse-server:26.8.19.9"
 )
 
 var (
@@ -255,4 +256,34 @@ func Mailpit(test testing.TB, environment map[string]string, files ...testcontai
 		test.Fatalf("mailpit api port: %v", failure)
 	}
 	return smtpEndpoint, apiEndpoint
+}
+
+func ClickHouse(test testing.TB, user, password string) string {
+	test.Helper()
+	operation, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	started, failure := testcontainers.Run(operation, ClickHouseImage,
+		testcontainers.WithName(containerName("clickhouse")),
+		testcontainers.WithExposedPorts("8123/tcp"),
+		testcontainers.WithEnv(map[string]string{"CLICKHOUSE_USER": user, "CLICKHOUSE_PASSWORD": password, "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1"}),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/ping").WithPort("8123/tcp")),
+		localPorts("8123/tcp"),
+	)
+	if started != nil {
+		test.Cleanup(func() {
+			stopping, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			if failure := started.Terminate(stopping); failure != nil {
+				test.Logf("terminate clickhouse: %v", failure)
+			}
+		})
+	}
+	if failure != nil {
+		test.Fatalf("start clickhouse: %v", failure)
+	}
+	endpoint, failure := started.PortEndpoint(operation, "8123/tcp", "http")
+	if failure != nil {
+		test.Fatalf("clickhouse http port: %v", failure)
+	}
+	return endpoint
 }

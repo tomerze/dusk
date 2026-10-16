@@ -11,15 +11,20 @@ import (
 	"syscall"
 )
 
-const usage = `twilight-scale loads the Dusk stack with campaigns.
+const usage = `twilight-scale loads the Dusk stack with campaigns and judges the run.
 
 Usage:
   twilight-scale load --token-file FILE [flags]
+  twilight-scale report --run NAME [flags]
 
 load creates and starts campaigns through twilight's API, each over its own
 range of simulated nodes, and waits for them to finish.
 
-twilight-scale load --help lists the flags.
+report counts, from twilight's intended processes, the ledger and
+dusk.process-results, whether every intended process has a result and whether
+any pid was started more than once on its node, and prints PASS or FAIL.
+
+twilight-scale load --help and twilight-scale report --help list the flags.
 `
 
 type usageError struct{ message string }
@@ -42,6 +47,8 @@ func run(operation context.Context, arguments []string, output, diagnostics io.W
 	switch arguments[0] {
 	case "load":
 		verdict, failure = load(operation, arguments[1:], output, diagnostics)
+	case "report":
+		verdict, failure = report(operation, arguments[1:], output, diagnostics)
 	case "help", "-h", "--help":
 		fmt.Fprint(output, usage)
 		return 0
