@@ -59,4 +59,6 @@ default-features = false
 [dev-dependencies.quickcheck]
 version = "1"
 
-[lints]
+[lints.rust]
+exported_private_dependencies = "allow"
+mismatched_lifetime_syntaxes = "allow"
