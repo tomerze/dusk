@@ -21,6 +21,11 @@ impl Driver for NixDriver {
             .map_err(|os_str| anyhow!("failed to parse hostname `{os_str:#?}` to UTF-8"))?)
     }
 
+    fn random(&self, buffer: &mut [u8]) -> Result<()> {
+        getrandom::getrandom(buffer)
+            .map_err(|error| anyhow!("the operating system's random source failed: {error}"))
+    }
+
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn tid(&self) -> u64 {
         nix::unistd::gettid().as_raw() as u64

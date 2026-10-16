@@ -6,6 +6,8 @@ use dusk_program::anyhow::Result;
 pub trait Driver: Send + Sync + 'static {
     fn hostname(&self) -> Result<String>;
 
+    fn random(&self, buffer: &mut [u8]) -> Result<()>;
+
     fn tid(&self) -> u64;
 
     fn exit(&self, exit_code: i32);
@@ -25,6 +27,11 @@ macro_rules! dusk_driver_impl {
         }
 
         #[unsafe(no_mangle)]
+        fn _dusk_random(buffer: &mut [u8]) -> Result<()> {
+            <$t as $crate::driver::Driver>::random(&$name, buffer)
+        }
+
+        #[unsafe(no_mangle)]
         fn _dusk_tid() -> u64 {
             <$t as $crate::driver::Driver>::tid(&$name)
         }
@@ -39,6 +46,8 @@ macro_rules! dusk_driver_impl {
 unsafe extern "Rust" {
     fn _dusk_hostname() -> Result<String>;
 
+    fn _dusk_random(buffer: &mut [u8]) -> Result<()>;
+
     fn _dusk_tid() -> u64;
 
     fn _dusk_exit(exit_code: i32);
@@ -46,6 +55,10 @@ unsafe extern "Rust" {
 
 pub fn hostname() -> Result<String> {
     unsafe { _dusk_hostname() }
+}
+
+pub fn random(buffer: &mut [u8]) -> Result<()> {
+    unsafe { _dusk_random(buffer) }
 }
 
 pub fn tid() -> u64 {
