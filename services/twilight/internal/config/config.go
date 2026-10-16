@@ -154,6 +154,13 @@ func (shell DefaultShell) Commands(actionKind string, reapedPids int) int {
 	return shell.Kill + shell.ReapRounds
 }
 
+type Retention struct {
+	InstallationDays int `yaml:"installation_days"`
+	AlertDays        int `yaml:"alert_days"`
+}
+
+const MinimumInstallationDays = 98
+
 type TLS struct {
 	Certificate string `yaml:"certificate"`
 	Key         string `yaml:"key"`
@@ -194,6 +201,7 @@ type Config struct {
 	Engine                Engine            `yaml:"engine"`
 	Alerts                Alerts            `yaml:"alerts"`
 	Reconcile             Reconcile         `yaml:"reconcile"`
+	Retention             Retention         `yaml:"retention"`
 }
 
 var Roles = []string{"viewer", "operator", "admin"}
@@ -278,6 +286,7 @@ func Default() Config {
 		Reconcile: Reconcile{Enabled: true, LedgerKeys: "/etc/twilight/pki/ledger-keys.json", CheckpointIntervalMS: 1000,
 			CommandsPerSession: 10000, IntendedProcessCacheEntries: 1000000,
 			DefaultShell: DefaultShell{Ps: 1, StateReads: 1, LogsDump: 1, Kill: 1, ReapRounds: 3}},
+		Retention: Retention{InstallationDays: 120, AlertDays: 400},
 	}
 }
 
@@ -539,6 +548,7 @@ func (loaded Config) Validate() error {
 		"reconcile.checkpoint_interval_ms":                 loaded.Reconcile.CheckpointIntervalMS,
 		"reconcile.commands_per_session":                   loaded.Reconcile.CommandsPerSession,
 		"reconcile.intended_process_cache_entries":         loaded.Reconcile.IntendedProcessCacheEntries,
+		"retention.alert_days":                             loaded.Retention.AlertDays,
 	}
 	names := make([]string, 0, len(positive))
 	for name := range positive {
@@ -569,6 +579,9 @@ func (loaded Config) Validate() error {
 		if group.value == "" {
 			problem("%s is required", group.name)
 		}
+	}
+	if loaded.Retention.InstallationDays < MinimumInstallationDays {
+		problem("retention.installation_days must be at least %d, longer than a node certificate's lifetime plus nightfall's renew_grace, so that no installation it removes can come back", MinimumInstallationDays)
 	}
 	switch loaded.LogLevel {
 	case "debug", "info", "warn", "error":

@@ -377,6 +377,14 @@ type kindCount struct {
 	unacknowledged int64
 }
 
+func (store *Store) PurgeResolved(operation context.Context, before time.Time, limit int) (int64, error) {
+	tag, failure := store.pool.Exec(operation, `delete from alerts where id in (select id from alerts where resolved_at < $1 order by resolved_at limit $2)`, before, limit)
+	if failure != nil {
+		return 0, fmt.Errorf("purge resolved alerts: %w", failure)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (store *Store) countByKind(operation context.Context) ([]kindCount, error) {
 	rows, failure := store.pool.Query(operation, `select severity, kind, count(*), count(*) filter (where acknowledged_at is null)
 		from alerts where resolved_at is null group by severity, kind`)

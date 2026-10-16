@@ -511,6 +511,31 @@ func (store *Store) Withdrawn(operation context.Context) ([]Lifecycle, error) {
 	})
 }
 
+func (store *Store) PurgeInactive(operation context.Context, before time.Time, limit int) (map[string]int64, error) {
+	rows, failure := store.pool.Query(operation, `with inactive as (
+			select node.device_id, node.installation_id from nodes node
+			left join node_presence presence using (device_id, installation_id)
+			where not coalesce(presence.online, false)
+				and greatest(node.updated_at, node.first_seen_at, node.enrolled_at, node.lifecycle_changed_at, node.reported_at, node.facts_read_at,
+					presence.last_seen_at, presence.connected_at, presence.disconnected_at) < $1
+			limit $2
+		)
+		delete from nodes node using inactive where node.device_id = inactive.device_id and node.installation_id = inactive.installation_id
+		returning node.lifecycle`, before, limit)
+	if failure != nil {
+		return nil, fmt.Errorf("purge inactive installations: %w", failure)
+	}
+	lifecycles, failure := pgx.CollectRows(rows, pgx.RowTo[string])
+	if failure != nil {
+		return nil, fmt.Errorf("purge inactive installations: %w", failure)
+	}
+	removed := map[string]int64{}
+	for _, lifecycle := range lifecycles {
+		removed[lifecycle]++
+	}
+	return removed, nil
+}
+
 func (store *Store) WritePresence(operation context.Context, rows []Presence) error {
 	for start := 0; start < len(rows); start += 5000 {
 		batch := &pgx.Batch{}

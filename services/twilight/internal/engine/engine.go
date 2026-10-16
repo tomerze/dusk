@@ -230,6 +230,7 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	start("bulk revocations", engine.runRevocations)
 	start("partitions", engine.runPartitionMaintenance)
 	start("intents", engine.runIntentPublication)
+	start("retention", engine.runRetention)
 	engine.requestSweep(sweepRequest{all: true})
 	running.Wait()
 	engine.dispatcher.reset()
