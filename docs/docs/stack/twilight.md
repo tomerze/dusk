@@ -177,7 +177,7 @@ creates.
 | `topics.node_state` | `dusk.node-state` | |
 | `topics.process_results` | `dusk.process-results` | |
 | `topics.intended_processes` | `dusk.intended-processes` | |
-| `results_group` | `twilight-results` | The consumer group the leader applies process results in. |
+| `results_group` | `twilight-results` | The consumer group in which the leader owns the partitions of `topics.process_results`, the inventory's slices, and applies the process results that land in them. |
 | `inventory_group` | `twilight-inventory` | The consumer group the leader records enrollments in. |
 | `reconcile_group` | `twilight-reconcile` | The consumer group every instance shares to reconcile the ledger. |
 | `reconcile_results_group` | `twilight-reconcile-results` | The consumer group every instance shares to read process results for reconcile. |
@@ -980,6 +980,9 @@ On `health_listen`:
 | Metric | What it counts |
 |--------|----------------|
 | `twilight_leader`, `twilight_leader_term` | 1 and the term while this instance leads. |
+| `twilight_slices_owned` | Partitions of `topics.process_results` this instance owns under a lease. |
+| `twilight_slice_lease_losses_total{how}` | Slices this instance stopped owning without giving them up: `lost` when the consumer group dropped it, `fenced` when another instance took the lease. |
+| `twilight_slice_partition_mismatches_total` | Process results that arrived in a partition other than the one their node's key hashes to, which means their producer does not partition like Kafka's default partitioner. Each is logged at `error`. |
 | `twilight_online_nodes` | Nodes the online view holds as online. |
 | `twilight_process_results_partitions_mismatched` | 1 while `topics.process_results` has another partition count than the inventory was migrated with; the leader writes no campaign row, advances no phase and dispatches nothing then. |
 | `twilight_view_degraded` | 1 while the online view is degraded (below). |
@@ -1010,7 +1013,7 @@ On `health_listen`:
 
 twilight logs JSON lines to standard output, one per event, with the ids it
 concerns as fields: `campaign_id`, `device_id`, `installation_id`,
-`namespace_id`, `epoch`, `pid`, `term`, `instance`.
+`namespace_id`, `epoch`, `pid`, `term`, `partition`, `lease_epoch`, `instance`.
 
 ## What twilight guarantees
 
@@ -1023,12 +1026,62 @@ lock, and stops leading after two failed checks. The connection sets TCP
 keepalives (idle 10 s, interval 5 s, 3 probes) and a 15-second TCP user
 timeout, so a lost primary is noticed within seconds rather than minutes.
 
-Every change the leader makes to a campaign's node rows is a compare-and-set
-that also requires the term to be the current one, so a leader that lost the
-lock without noticing cannot change anything after the next leader took over.
-A new leader starts every campaign's rate budget empty - a failover never
-releases a burst on top of what the previous leader spent - and rebuilds the
-campaigns' counters from their rows.
+Every change to a campaign's node rows is a compare-and-set that also requires
+the term to be the current one and the lease of the node's slice to be current
+(below), so a leader that lost the lock without noticing cannot change anything
+after the next leader took over. A new leader starts every campaign's rate budget empty - a failover
+never releases a burst on top of what the previous leader spent - and rebuilds
+the campaigns' counters from their rows.
+
+### Slices
+
+The partitions of `topics.process_results` are the inventory's slices: every
+node row carries the partition its node's results land in (see Upgrading the
+schema). The leader joins the consumer group `kafka.results_group` on that topic,
+with a 10-second session timeout and a heartbeat every second, and owns the
+partitions the group assigns it. For each one it adds one to the partition's
+epoch in `node_partition_leases` and records itself as the owner, works out from
+the slice's rows which of its nodes have a process in flight, and only then
+reads the slice's results.
+
+* Every insert and update of a campaign node row names the slice's partition
+  and the epoch its writer holds, and Postgres refuses it unless that is still
+  the partition's epoch. Every write holds a shared lock on its slice until it
+  commits, and taking the lease takes that lock exclusively, so a write either
+  commits before its successor takes the lease or is refused: an instance that
+  lost a slice without noticing writes nothing once its successor took the
+  lease.
+* When the group takes a slice away, its owner stops writing the slice's rows,
+  waits for the writes already running, and commits the results it applied
+  before the rebalance goes on. When the group drops the instance, because its
+  session expired, it stops at once.
+* An owner whose write is refused because another instance took the lease
+  stops reading that slice until the group assigns it again.
+* A slice whose epoch could not be raised is not read until it is. The owner
+  tries again after a random wait that doubles with every failure, up to a
+  minute, and logs at `error` once a slice has gone without its lease for a
+  minute. Taking a slice away waits only for the attempt on that slice; losing
+  it cancels the attempt.
+* Results arrive at least once: a rebalance, a restart or a new leader can
+  hand a result over again. Applying one is safe twice and out of order: a
+  report older than the node's last one does not replace it, and a row whose
+  outcome is `unknown` takes no `started`, `running`, `duplicate`, `ended` or
+  `timed_out` from before it became `unknown`. Older and newer are told apart
+  by time: the time dawn stamped on the result, against the time of the node's
+  last report (stamped by dawn, or taken by twilight when it read the facts
+  itself) and the time twilight marked the row `unknown`. That holds while
+  dawn's and twilight's clocks agree to within the time between two results
+  for one node, so keep their hosts' clocks synchronized.
+* Operator retries and resolutions through the API write under the slice's
+  current lease, whichever instance answers the request; their compare-and-set
+  on the row's revision keeps them from overwriting a change the owner made in
+  between.
+
+Only the leader joins the group. While a deposed leader is still a member, the
+new leader may own only part of the slices; the deposed leader's writes fail on
+the term, it commits no result past one it could not apply and keeps trying
+that one until it stops leading, and once it leaves the group its slices move
+to the new leader, which reads from there.
 
 ### The online view
 
