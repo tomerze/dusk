@@ -13,6 +13,7 @@ extern crate alloc;
 extern crate capnp;
 extern crate self as dusk_program_logs;
 
+#[cfg(any(feature = "client", feature = "console", test))]
 #[macro_use]
 extern crate std;
 

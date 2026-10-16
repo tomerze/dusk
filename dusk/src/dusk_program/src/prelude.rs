@@ -20,7 +20,6 @@ pub use embassy_sync::channel::DynamicReceiver;
 
 // Re-export specific futures traits that are commonly needed
 pub use futures::FutureExt;
-pub use futures::io::{AsyncReadExt, AsyncWriteExt};
 
 // Re-export commonly used dusk_program modules and types
 

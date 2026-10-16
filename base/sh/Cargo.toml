@@ -11,11 +11,11 @@ dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 embassy-executor = { version = "0.10.0", features = ["nightly"] }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core = { path = "../../dusk/src/dusk_core/", public = true }
-slab = { version = "0.4.11", public = true }
+slab = { version = "0.4.11", default-features = false, public = true }
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher"] }
 linkme = { version = "0.3", optional = true, public = true }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "0.21", public = false }
+capnp = { version = "0.21", default-features = false, features = ["alloc"], public = false }
 clap = { version = "4", features = ["derive"], optional = true }
 dusk_program_sh_proc = { path = "proc", optional = true }
 dusk_program_sh_compiler = { path = "compiler", optional = true, public = true }
