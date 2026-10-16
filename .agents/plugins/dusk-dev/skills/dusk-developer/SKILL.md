@@ -623,9 +623,7 @@ first field; domain fields follow (`namespace_id`, `pid`, `program_id`,
 
 ```rust
 let task_id = Rc::new(Cell::new(0));
-let spawn_token = my_task(task_id.clone(), /* … */);
-task_id.set(spawn_token.id());
-spawner.spawn(spawn_token).unwrap();
+task_id.set(dusk_core::task::spawn(spawner, my_task(task_id.clone(), /* … */)));
 
 // inside the task:
 let span = info_span!("task_name", task_id = task_id.get(), /* … */);
