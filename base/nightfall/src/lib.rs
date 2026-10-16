@@ -131,23 +131,15 @@ impl dusk_program::process::ProcessMixin for Process {
                     let (reader, writer) = stream.split();
 
                     let task_id = Rc::new(Cell::new(0));
-                    let session_task = match dusk_core::session(
-                        task_id.clone(),
-                        self.namespace().clone(),
-                        Box::pin(reader),
-                        Box::pin(writer),
-                    ) {
-                        Ok(session_task) => session_task,
-                        Err(error) => {
-                            tracing::error!(
-                                error = %error,
-                                "couldn't take a connection: every session slot is in use"
-                            );
-                            continue;
-                        }
-                    };
-                    task_id.set(session_task.id());
-                    self.ctx.namespace.spawner.spawn(session_task);
+                    task_id.set(dusk_core::task::spawn(
+                        self.ctx.namespace.spawner,
+                        dusk_core::session(
+                            task_id.clone(),
+                            self.namespace().clone(),
+                            Box::pin(reader),
+                            Box::pin(writer),
+                        ),
+                    ));
                 }
                 signal = signal_receiver.receive().fuse() => {
                     if let Signal::Terminate = signal {

@@ -26,7 +26,6 @@ async fn run_init_process(
     Ok(())
 }
 
-#[embassy_executor::task(pool_size = 16)]
 async fn init_task(
     task_id: Rc<Cell<u32>>,
     namespace: Rc<Namespace>,
@@ -62,11 +61,8 @@ pub fn init(
         );
     }
     let task_id = Rc::new(Cell::new(0));
-    match init_task(task_id.clone(), namespace.clone(), init_program_args) {
-        Ok(spawn_token) => {
-            task_id.set(spawn_token.id());
-            namespace.spawner.spawn(spawn_token);
-        }
-        Err(err) => error!("failed to create init task: {err:#?}"),
-    }
+    task_id.set(crate::task::spawn(
+        namespace.spawner,
+        init_task(task_id.clone(), namespace.clone(), init_program_args),
+    ));
 }
