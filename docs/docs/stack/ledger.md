@@ -83,7 +83,7 @@ carries.
 | `param_hash` | The parameter HMAC on calls; `""` on results, events and checkpoints. |
 | `result_code` | `ok`, `error:failed`, `error:overloaded`, `error:disconnected`, `error:unimplemented` or `revoked` on results; `denied` or `rate_limited` on refused calls; `null` on calls that were forwarded. |
 | `result_cap_ids` | The capabilities a result returned. |
-| `event`, `event_detail` | The event an `event` entry records, and what it carries. A `denied` call refused by admission carries `{"rule": ...}` in `event_detail`; every other non-event entry carries `null`. |
+| `event`, `event_detail` | The event an `event` entry records, and what it carries. A `denied` call refused by admission carries `{"rule": ...}` in `event_detail`; every other non-event entry carries `null`. No entry carries a client's full address: an `rpc_rejected` event from a client nightfall knows no identity of yet carries `remote_network`, the address's IPv4 /24 or IPv6 /48, and `remote_address_hash` ([Parameter hashes](#parameter-hashes)). |
 | `key_id`, `signature` | Checkpoints only: which key signed and the signature. |
 
 These three records are a call, its result and the checkpoint after them, exactly
@@ -283,6 +283,15 @@ in the schema and every capability has been cleared. Without the key the hash
 reveals nothing about the parameters except whether two calls had the same ones:
 equal parameters give equal hashes. An investigator who holds the key and has a candidate set of parameters
 recomputes the hash with `nightfall ledger-hash --params <file>` and compares.
+
+`remote_address_hash` is HMAC-SHA256 with the same key over the bytes
+`dusk-remote-address-v1:` followed by the address as text (an IPv4-mapped IPv6
+address written as IPv4). It tells whether two events came from the same
+address, and an investigator holding the key checks a candidate address with
+`nightfall ledger-hash --address <address>`, which prints the address's
+`remote_address_hash` and `remote_network`. With the key, every IPv4 address
+can be tried in minutes, so the hash keeps the address from whoever reads the
+ledger without the key, not from the key's holders.
 
 ## What the ledger can and cannot show
 

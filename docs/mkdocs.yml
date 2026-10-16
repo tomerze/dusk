@@ -106,6 +106,7 @@ nav:
       - Campaigns: stack/campaigns.md
       - The twilight UI: stack/ui.md
       - Security model: stack/security.md
+      - Personal data and retention: stack/data.md
       - Runbooks:
           - stack/runbooks/index.md
           - Process nobody intended: stack/runbooks/process_without_intent.md
@@ -131,6 +132,7 @@ nav:
           - Ledger evidence copy stalled: stack/runbooks/ledger_evidence_stalled.md
           - Alert delivery failing: stack/runbooks/alert_delivery_failing.md
           - Messages dropped by Vector: stack/runbooks/vector_messages_dropped.md
+          - Erasure stalled: stack/runbooks/erasure_stalled.md
   - Telemetry:
       - Collected information: telemetry/collected-information.md
   - Customize:

@@ -36,7 +36,9 @@ What the data layer keeps where:
 | Ceph RGW, S3 | The object-locked evidence copy of the ledger, the Parquet lake that is the events database's bulk storage, the files dawn collects, and SigNoz's cold tier. |
 | Your own sinks | Vector reads every topic; add a sink to its configuration (`infra/vector/`) to copy events anywhere Vector can write. |
 
-How to run all of it is on [Deploying the Dusk stack](deploy.md).
+How long each store keeps what, and how to erase a device's data, is on
+[Personal data and retention](data.md). How to run all of it is on
+[Deploying the Dusk stack](deploy.md).
 
 ## How they connect
 
@@ -44,8 +46,9 @@ Each arrow points from the side that opens the connection to the side that
 accepts it. The dashed arrows mark links that the components' descriptions do
 not make obvious: the OTel collector scrapes the services' metrics, SigNoz reads
 telemetry straight from Kafka, ClickHouse reads the lake in the object store -
-which is how Grafana and SigNoz reach the data kept there - and dawn streams
-node logs to any OTLP endpoint it is allowed to, yours included.
+which is how Grafana and SigNoz reach the data kept there - dawn streams node
+logs to any OTLP endpoint it is allowed to, yours included, and twilight
+reaches ClickHouse and the object store to erase a device's data.
 
 ```mermaid
 flowchart TB
@@ -90,6 +93,8 @@ flowchart TB
     dawn --> kafka
     twilight --> kafka
     twilight --> postgres
+    twilight -. "erasures" .-> clickhouse
+    twilight -. "erasures" .-> ceph
     dawn -- "collected files" --> ceph
     dawn -- "node logs, telemetry" --> collector
     dawn -. "node logs" .-> otlp
@@ -122,13 +127,15 @@ flowchart TB
 | dawn | OTel collector, or your own OTLP endpoint | OTLP | Node logs it was asked to stream, to an endpoint its configuration allows; its own traces and logs. |
 | twilight | dawn | HTTPS with twilight's client certificate | Dispatching processes, reaping them, reading facts, starting log streams and file collections. |
 | twilight | Kafka | Kafka protocol | Reads `dusk.connections`, `dusk.census`, `dusk.ledger`, `dusk.enrollments`, `dusk.process-results`; writes `dusk.node-state`. |
-| twilight | Postgres | PostgreSQL protocol | The inventory, campaigns, intended processes and alerts. |
+| twilight | Postgres | PostgreSQL protocol | The inventory, campaigns, intended processes, alerts and erasures. |
+| twilight | ClickHouse | HTTP | Erasing and exporting a device's rows, and rewriting the lake files that hold them, as the `twilight` user. |
+| twilight | Ceph RGW | S3 | Deleting a device's collected files and the lake files an erasure rewrote, and reading the buckets' lifecycle and lock settings for an erasure's report. |
 | OTel collector | Kafka | Kafka protocol | Writes `dusk.otel-logs`, `dusk.otel-spans`, `dusk.otel-metrics`. |
 | OTel collector | nightfall, dawn, twilight | HTTP | Scrapes their Prometheus metrics: nightfall on 9100, dawn on 9101, twilight on 9102. |
 | Vector | Kafka | Kafka protocol | Reads every topic but `dusk.census`, `dusk.node-state` and `dusk.credential-quota`; the ledger with `isolation.level=read_committed`. |
 | Vector | ClickHouse | HTTP | One table per topic. |
 | Vector | Ceph RGW | S3 | The Parquet lake (`dusk-lake`) and the ledger's evidence copy (`dusk-ledger-evidence`), with credentials that may only add objects to the evidence bucket. |
-| ClickHouse | Ceph RGW | S3 | Views over the Parquet lake, and SigNoz's cold storage tier (`signoz-cold`). Grafana and SigNoz reach the object store only this way. |
+| ClickHouse | Ceph RGW | S3 | Views over the Parquet lake, the lake files an erasure rewrites, and SigNoz's cold storage tier (`signoz-cold`). Grafana and SigNoz reach the object store only this way. |
 | SigNoz | Kafka | Kafka protocol | Its ingester reads the three `dusk.otel-*` topics as consumer group `signoz`. |
 | SigNoz | ClickHouse, Postgres | | Its data in the shared ClickHouse; its metadata in the `signoz` database. |
 | Grafana | Postgres, ClickHouse | | Read-only access to the inventory and to ClickHouse. |
@@ -218,3 +225,5 @@ details).
   simulated nodes.
 * [The security model](security.md) - what each part defends, and what an
   attacker who holds one of them can and cannot do.
+* [Personal data and retention](data.md) - what is stored where and for how
+  long, erasing a device or a tenant, and exporting what is held about a device.

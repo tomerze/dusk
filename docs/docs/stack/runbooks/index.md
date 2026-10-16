@@ -27,6 +27,7 @@ rule, whose notifications link the page.
 | `credential_quota_reached` | high, then critical | twilight leader | [Credential cap reached](credential_quota_reached.md) |
 | `campaign_paused_by_gate` | high | twilight leader | [Campaign paused by its gate](campaign_paused_by_gate.md) |
 | `campaign_failed_by_policy` | high | twilight leader | [Campaign failed by its policy](campaign_failed_by_policy.md) |
+| `erasure_stalled` | high | twilight leader | [Erasure stalled](erasure_stalled.md) |
 | `campaign_conflict` | medium | twilight leader | [Campaign conflict](campaign_conflict.md) |
 | `critical_alert_unacknowledged` | critical | Grafana, over the inventory database | [Critical alert unacknowledged](critical_alert_unacknowledged.md) |
 | `clickhouse_ledger_chain_broken` | critical | Grafana, over ClickHouse | [Ledger chain broken in ClickHouse](clickhouse_ledger_chain_broken.md) |

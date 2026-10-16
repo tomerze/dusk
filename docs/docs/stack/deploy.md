@@ -600,9 +600,9 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | `nightfall-ledger` | `ledger-signing.key` (Ed25519) and `ledger-param.key`; `ledger-verify-jwks.json`, the public key | nightfall; secrets-init reads it to derive `nightfall-ledger-verify` |
 | `nightfall-ledger-verify` | `ledger-verify-jwks.json`, the public key of `nightfall-ledger`, alone | twilight and verifiers |
 | `dawn-output-key` | `output.key`, the HMAC key of process output digests | dawn |
-| `ceph-admin`, `ceph-vector`, `ceph-ledger-writer`, `ceph-dawn`, `ceph-reader`, `ceph-signoz` | `access-key`, `secret-key` of each object store user | ceph-init; Vector (`vector`, `ledger-writer`), dawn, ClickHouse (`reader`, `signoz`), SigNoz |
+| `ceph-admin`, `ceph-vector`, `ceph-ledger-writer`, `ceph-dawn`, `ceph-reader`, `ceph-signoz`, `ceph-twilight` | `access-key`, `secret-key` of each object store user | ceph-init; Vector (`vector`, `ledger-writer`), dawn, ClickHouse (`reader`, `signoz`, and `vector` to rewrite lake files for an erasure), SigNoz, twilight (`twilight`) |
 | `postgres-superuser`, `postgres-twilight`, `postgres-grafana`, `postgres-signoz` | `username`, `password`, `pgpass` | Postgres; twilight, Grafana, SigNoz |
-| `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz |
+| `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz`, `clickhouse-twilight` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz, twilight |
 | `grafana-admin` | `password` | Grafana |
 | `signoz-admin` | `password`, the password of SigNoz's root account | SigNoz, signoz-dashboards |
 

@@ -681,6 +681,41 @@ Both are at least 60. A session's last use is recorded at most once a minute,
 so an unused session ends `idle_seconds` after its last request at the
 latest, and up to a minute sooner.
 
+### `clickhouse`
+
+twilight reaches ClickHouse to erase and export a device's rows
+([Personal data and retention](data.md)).
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `url` | `http://clickhouse:8123` | ClickHouse's HTTP interface. |
+| `user` | `twilight` | The ClickHouse user, which may read `dusk`, delete from its tables, write `dusk.erasure_scope` and use the `lake` and `lake_writer` collections. |
+| `password_file` | `/etc/twilight/secrets/clickhouse/password` | A file holding the user's password, read at start. |
+| `ca` | | A PEM file of the authorities to trust for an `https` URL, instead of the system's. |
+| `cluster` | `dusk` | The ClickHouse cluster whose replicas an erasure waits for. |
+| `lake_collection` | `lake_writer` | The ClickHouse named collection that writes the lake, through which an erasure rewrites lake files. |
+
+### `object_store`
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `endpoint` | `http://ceph:8080` | The S3 endpoint, addressed by path. |
+| `region` | `us-east-1` | The region requests are signed for. |
+| `access_key_file`, `secret_key_file` | `/etc/twilight/secrets/s3/access-key`, `/etc/twilight/secrets/s3/secret-key` | Files holding twilight's object store keys, read at start. The user may only list and delete in `dusk-files` and `dusk-lake`, read the lake's lifecycle rules and read the evidence bucket's lock settings. |
+| `ca` | | A PEM file of the authorities to trust for an `https` endpoint. |
+| `lake_bucket`, `files_bucket`, `evidence_bucket` | `dusk-lake`, `dusk-files`, `dusk-ledger-evidence` | The buckets. |
+
+### `retention`
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `installation_days` | `120` | An installation offline and unseen for this many days leaves the inventory; at least 98. |
+| `alert_days` | `400` | A resolved alert is deleted this many days after it was resolved. |
+| `erasure_overdue_days` | `20` | An erasure still running this many days after it was asked for raises `erasure_stalled`. |
+| `tenant_days` | none | `tenant: days` for tenants whose data is kept for less time than the stores keep it. |
+
+[Personal data and retention](data.md) says what each does and why.
+
 ## Signing in
 
 Every API route except the OpenAPI document and the login routes needs a caller
@@ -893,6 +928,10 @@ to the query that made it: a node cursor made for one `sort` is refused with
 | `POST /api/v1/revocations` | admin | `{"credential_kind", "credential", "enrolled_after", "enrolled_before", "reason", "dry_run"}` revokes every installation one credential enrolled: 202 `{"matched", "revocation"}`, or 200 with `revocation` `null` for a `dry_run`, which only counts. |
 | `GET /api/v1/revocations/{id}` | viewer | A revocation and how far it got. |
 | `POST /api/v1/devices/{device}/lifecycle` | admin | `{"lifecycle", "reason"}` with `retired` or `revoked` blocks every installation of the device, those enrolled now and any it enrolls later, through a device-scope `dusk.node-state` record; `active` lifts the block, and each installation keeps its own lifecycle. Answers `{"device_id", "lifecycle", "reason", "changed_at", "actor"}`. |
+| `POST /api/v1/devices/{device}/erasure` | admin | `{"reason"}` erases what the stack holds about the device, which must be retired or revoked and offline: 202 with the erasure. See [Personal data and retention](data.md#erasing-a-device). |
+| `POST /api/v1/devices/{device}/export` | admin | `{"reason"}` streams every record the stack holds about the device as JSON lines (`application/x-ndjson`), ending with a summary line. |
+| `POST /api/v1/tenants/{tenant}/erasure` | admin | `{"reason"}` erases every device of the tenant and deletes its campaigns: 202 with the erasure. |
+| `GET /api/v1/erasures/{id}` | admin | An erasure's steps, what each did, and once it finished what the stack retained, until when and why. |
 | `POST /api/v1/selectors/validate` | viewer | `{"selector"}` answers `ok`, the `error` with its position, how many nodes it `matched`, and a `sample` of them. |
 | `GET /api/v1/campaigns?status=&limit=&cursor=` | viewer | Campaigns, newest first, each with its counters; `status` takes one status or several, comma-separated. |
 | `POST /api/v1/campaigns` | operator | Creates a draft from a [definition](campaigns.md): 201 with `Location`. |
@@ -974,6 +1013,9 @@ On `health_listen`:
 | `twilight_api_authentication_failures_total{reason}` | API requests refused because the caller could not be authenticated or lacked the role: `missing`, `malformed_authorization`, `token`, `session`, `certificate`, `principal`, `role`, `csrf`, `oidc` or `no_role`. |
 | `twilight_api_streams` | Live-update streams open on this instance. |
 | `twilight_api_requests_refused_total` | API requests answered 503 `busy` because no request slot came free before their deadline. |
+| `twilight_erasures_running`, `twilight_erasures_completed_total{scope,kind}` | Erasures not yet finished, and those finished, by scope (`device`, `tenant`) and kind (`erasure`, or `retention` for a tenant's daily retention run). |
+| `twilight_erasure_step_failures_total{step}` | Erasure steps that failed and are tried again. |
+| `twilight_installations_purged_total{lifecycle}`, `twilight_alerts_purged_total` | Inventory rows removed after `retention.installation_days`, and resolved alerts removed after `retention.alert_days`. |
 
 twilight logs JSON lines to standard output, one per event, with the ids it
 concerns as fields: `campaign_id`, `device_id`, `installation_id`,
