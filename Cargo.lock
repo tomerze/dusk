@@ -3479,11 +3479,17 @@ checksum = "1db0d8f1fc9e62caebd0319e11eaec5822b0186c171568f0480b46a0137f9108"
 dependencies = [
  "base64 0.22.1",
  "evmap",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "indexmap 2.14.2",
+ "ipnet",
  "metrics",
  "metrics-util",
  "quanta",
  "thiserror 2.0.21",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3645,6 +3651,7 @@ dependencies = [
  "nightfall_ledger",
  "nightfall_membrane",
  "nightfall_provisioning",
+ "nightfall_simulator",
  "rand 0.9.5",
  "rcgen 0.14.10",
  "rdkafka",
@@ -3739,6 +3746,30 @@ dependencies = [
  "tracing",
  "uuid",
  "x509-parser",
+]
+
+[[package]]
+name = "nightfall_simulator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "capnp",
+ "capnp-rpc",
+ "clap",
+ "dusk_capnp",
+ "libc",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "rand 0.9.5",
+ "rcgen 0.14.10",
+ "ring",
+ "rustls",
+ "rustls-pki-types",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

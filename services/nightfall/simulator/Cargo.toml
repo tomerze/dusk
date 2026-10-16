@@ -1,0 +1,25 @@
+[package]
+name = "nightfall_simulator"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+anyhow = { version = "1.0", public = true }
+capnp = { version = "0.21.7", public = true }
+capnp-rpc = "0.21.0"
+clap = { version = "4.5", features = ["derive"] }
+dusk_capnp = { path = "../../../dusk/src/dusk_capnp", public = true }
+libc = "0.2"
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false, features = ["http-listener"] }
+rand = "0.9"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std", "tls12"], public = true }
+rustls-pki-types = { version = "1.12", features = ["std"], public = true }
+tokio = { version = "1.47", features = ["io-util", "macros", "net", "rt", "signal", "sync", "time"], public = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "ring", "tls12"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }

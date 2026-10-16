@@ -56,5 +56,6 @@ dusk_nix = { path = "../../impls/nix" }
 dusk_tests = { path = "../../tests/common" }
 jsonschema = { version = "0.58", default-features = false, features = ["resolve-file"] }
 nightfall_membrane = { path = "membrane", features = ["test-support"] }
+nightfall_simulator = { path = "simulator" }
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
 tempfile = "3"

@@ -44,6 +44,7 @@ members = [
     "services/nightfall/ledger",
     "services/nightfall/provisioning",
     "services/nightfall",
+    "services/nightfall/simulator",
 ]
 resolver = "2"
 
