@@ -63,4 +63,15 @@ mod tests {
         assert_ne!(there, 0);
         assert_ne!(there, here);
     }
+
+    #[test]
+    fn test_random_fills_the_buffer() {
+        let mut direct = [0u8; 32];
+        let mut through_the_shim = [0u8; 32];
+        NixDriver.random(&mut direct).unwrap();
+        dusk_core::driver::random(&mut through_the_shim).unwrap();
+        assert_ne!(direct, [0u8; 32]);
+        assert_ne!(through_the_shim, [0u8; 32]);
+        assert_ne!(direct, through_the_shim);
+    }
 }
