@@ -28,6 +28,7 @@ spec:
       postInitApplicationSQL:
         - REVOKE ALL ON DATABASE inventory FROM PUBLIC
         - GRANT CONNECT ON DATABASE inventory TO grafana
+        - GRANT CONNECT ON DATABASE inventory TO pg_monitor
         - REVOKE ALL ON SCHEMA public FROM PUBLIC
         - GRANT USAGE ON SCHEMA public TO grafana
         - |
