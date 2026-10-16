@@ -63,6 +63,7 @@ impl Args {
             root.set_install_token_file(arguments.install_token_file.as_deref().unwrap_or(""));
             root.set_heartbeat_timeout_seconds(arguments.heartbeat_timeout_seconds);
             root.set_tpm(arguments.tpm.as_deref().unwrap_or(""));
+            root.set_provision_token_file(arguments.provision_token_file.as_deref().unwrap_or(""));
         }
         Args { data }
     }
@@ -81,6 +82,7 @@ fn read_connect(
         install_token_file: optional(reader.get_install_token_file()?.to_string()?),
         heartbeat_timeout_seconds: reader.get_heartbeat_timeout_seconds(),
         tpm: optional(reader.get_tpm()?.to_string()?),
+        provision_token_file: optional(reader.get_provision_token_file()?.to_string()?),
     })
 }
 
