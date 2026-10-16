@@ -14,19 +14,19 @@ fi
 
 day=86400000
 topics=(
-    "dusk.connections 3 48 cleanup.policy=delete,retention.ms=$((7 * day))"
+    "dusk.connections 3 48 cleanup.policy=delete,retention.ms=$((7 * day)),segment.ms=$day"
     "dusk.census 1 6 cleanup.policy=compact,max.message.bytes=2097152,segment.ms=600000,min.cleanable.dirty.ratio=0.1,delete.retention.ms=3600000"
-    "dusk.ledger 3 32 cleanup.policy=delete,retention.ms=$((30 * day)),unclean.leader.election.enable=false"
-    "dusk.enrollments 3 12 cleanup.policy=delete,retention.ms=$((30 * day))"
+    "dusk.ledger 3 32 cleanup.policy=delete,retention.ms=$((30 * day)),segment.ms=$day,unclean.leader.election.enable=false"
+    "dusk.enrollments 3 12 cleanup.policy=delete,retention.ms=$((7 * day)),segment.ms=$day"
     "dusk.node-state 1 6 cleanup.policy=compact"
     "dusk.credential-quota 1 1 cleanup.policy=compact"
-    "dusk.process-results 3 48 cleanup.policy=delete,retention.ms=$((7 * day))"
-    "dusk.process-output 3 24 cleanup.policy=delete,retention.ms=$((7 * day))"
-    "dusk.files 3 12 cleanup.policy=delete,retention.ms=$((30 * day))"
+    "dusk.process-results 3 48 cleanup.policy=delete,retention.ms=$((7 * day)),segment.ms=$day"
+    "dusk.process-output 3 24 cleanup.policy=delete,retention.ms=$((7 * day)),segment.ms=$day"
+    "dusk.files 3 12 cleanup.policy=delete,retention.ms=$((7 * day)),segment.ms=$day"
     "dusk.intended-processes 3 12 cleanup.policy=compact,segment.ms=600000,min.cleanable.dirty.ratio=0.1,delete.retention.ms=3600000"
-    "dusk.otel-logs 3 24 cleanup.policy=delete,retention.ms=$((3 * day)),max.message.bytes=4194304"
-    "dusk.otel-spans 3 24 cleanup.policy=delete,retention.ms=$((3 * day)),max.message.bytes=4194304"
-    "dusk.otel-metrics 3 24 cleanup.policy=delete,retention.ms=$((3 * day)),max.message.bytes=4194304"
+    "dusk.otel-logs 3 24 cleanup.policy=delete,retention.ms=$((3 * day)),segment.ms=$day,max.message.bytes=4194304"
+    "dusk.otel-spans 3 24 cleanup.policy=delete,retention.ms=$((3 * day)),segment.ms=$day,max.message.bytes=4194304"
+    "dusk.otel-metrics 3 24 cleanup.policy=delete,retention.ms=$((3 * day)),segment.ms=$day,max.message.bytes=4194304"
 )
 
 attempt=0

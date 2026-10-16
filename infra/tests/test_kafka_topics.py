@@ -7,7 +7,14 @@ from conftest import required
 
 DAY = 86400000
 TOPICS: dict[str, tuple[int, dict[str, str]]] = {
-    "dusk.connections": (3, {"cleanup.policy": "delete", "retention.ms": str(7 * DAY)}),
+    "dusk.connections": (
+        3,
+        {
+            "cleanup.policy": "delete",
+            "retention.ms": str(7 * DAY),
+            "segment.ms": str(DAY),
+        },
+    ),
     "dusk.census": (
         1,
         {
@@ -23,24 +30,44 @@ TOPICS: dict[str, tuple[int, dict[str, str]]] = {
         {
             "cleanup.policy": "delete",
             "retention.ms": str(30 * DAY),
+            "segment.ms": str(DAY),
             "unclean.leader.election.enable": "false",
         },
     ),
     "dusk.enrollments": (
         3,
-        {"cleanup.policy": "delete", "retention.ms": str(30 * DAY)},
+        {
+            "cleanup.policy": "delete",
+            "retention.ms": str(7 * DAY),
+            "segment.ms": str(DAY),
+        },
     ),
     "dusk.node-state": (1, {"cleanup.policy": "compact"}),
     "dusk.credential-quota": (1, {"cleanup.policy": "compact"}),
     "dusk.process-results": (
         3,
-        {"cleanup.policy": "delete", "retention.ms": str(7 * DAY)},
+        {
+            "cleanup.policy": "delete",
+            "retention.ms": str(7 * DAY),
+            "segment.ms": str(DAY),
+        },
     ),
     "dusk.process-output": (
         3,
-        {"cleanup.policy": "delete", "retention.ms": str(7 * DAY)},
+        {
+            "cleanup.policy": "delete",
+            "retention.ms": str(7 * DAY),
+            "segment.ms": str(DAY),
+        },
     ),
-    "dusk.files": (3, {"cleanup.policy": "delete", "retention.ms": str(30 * DAY)}),
+    "dusk.files": (
+        3,
+        {
+            "cleanup.policy": "delete",
+            "retention.ms": str(7 * DAY),
+            "segment.ms": str(DAY),
+        },
+    ),
     "dusk.intended-processes": (
         3,
         {
@@ -55,6 +82,7 @@ TOPICS: dict[str, tuple[int, dict[str, str]]] = {
         {
             "cleanup.policy": "delete",
             "retention.ms": str(3 * DAY),
+            "segment.ms": str(DAY),
             "max.message.bytes": "4194304",
         },
     ),
@@ -63,6 +91,7 @@ TOPICS: dict[str, tuple[int, dict[str, str]]] = {
         {
             "cleanup.policy": "delete",
             "retention.ms": str(3 * DAY),
+            "segment.ms": str(DAY),
             "max.message.bytes": "4194304",
         },
     ),
@@ -71,6 +100,7 @@ TOPICS: dict[str, tuple[int, dict[str, str]]] = {
         {
             "cleanup.policy": "delete",
             "retention.ms": str(3 * DAY),
+            "segment.ms": str(DAY),
             "max.message.bytes": "4194304",
         },
     ),
