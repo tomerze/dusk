@@ -23,12 +23,12 @@ hide:
 # ![](assets/landing/logo-d.svg){ .dusk-hero__d }usk { #dusk .dusk-hero__wordmark aria-label="Dusk" }
 
 The one solution for every fleet.<br>
-Seamlessly drop it in at any scale.
+Smoothly drop it in at any scale.
 { .dusk-hero__lead }
 
-Dusk can monitor and manage fleets deployed on everything from
-microcontrollers to supercomputers. Run it inside applications you already
-ship.
+Dusk is a Management Plane platform for running software. It abstracts away
+the complexities of managing and deploying fleets of software on everything
+from microcontrollers to supercomputers.
 { .dusk-hero__pitch }
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
