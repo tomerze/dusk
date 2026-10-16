@@ -31,7 +31,7 @@ spec:
         - REVOKE ALL ON SCHEMA public FROM PUBLIC
         - GRANT USAGE ON SCHEMA public TO grafana
         - |
-          CREATE FUNCTION public.grant_grafana_reporting_tables() RETURNS event_trigger LANGUAGE plpgsql AS $$
+          CREATE FUNCTION public.grant_grafana_reporting_tables() RETURNS event_trigger LANGUAGE plpgsql AS $grant$
           DECLARE
               created record;
           BEGIN
@@ -43,7 +43,7 @@ spec:
                   EXECUTE format('GRANT SELECT ON %s TO grafana', created.object_identity);
               END LOOP;
           END
-          $$
+          $grant$
         - CREATE EVENT TRIGGER grant_grafana_reporting_tables ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION public.grant_grafana_reporting_tables()
   managed:
     roles:
