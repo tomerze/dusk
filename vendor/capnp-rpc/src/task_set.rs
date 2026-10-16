@@ -18,14 +18,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use futures::channel::{mpsc, oneshot};
+#[allow(unused_imports)]
+use crate::prelude::*;
+
+use capnp_futures::channel;
+use futures::channel::oneshot;
 use futures::stream::FuturesUnordered;
 use futures::{Future, FutureExt, Stream};
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use core::pin::Pin;
+use core::task::{Context, Poll};
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use core::cell::RefCell;
+use alloc::rc::Rc;
 
 enum EnqueuedTask<E> {
     Task(Pin<Box<dyn Future<Output = Result<(), E>>>>),
@@ -61,7 +65,7 @@ impl<E> Future for TaskInProgress<E> {
 
 #[must_use = "a TaskSet does nothing unless polled"]
 pub struct TaskSet<E> {
-    enqueued: Option<mpsc::UnboundedReceiver<EnqueuedTask<E>>>,
+    enqueued: Option<channel::UnboundedReceiver<EnqueuedTask<E>>>,
     in_progress: FuturesUnordered<TaskInProgress<E>>,
     on_empty_fulfillers: Vec<oneshot::Sender<()>>,
     reaper: Rc<RefCell<Box<dyn TaskReaper<E>>>>,
@@ -74,9 +78,9 @@ where
     pub fn new(reaper: Box<dyn TaskReaper<E>>) -> (TaskSetHandle<E>, Self)
     where
         E: 'static,
-        E: ::std::fmt::Debug,
+        E: ::core::fmt::Debug,
     {
-        let (sender, receiver) = mpsc::unbounded();
+        let (sender, receiver) = channel::unbounded();
 
         let set = Self {
             enqueued: Some(receiver),
@@ -98,7 +102,7 @@ where
     fn update_on_empty_fulfillers(&mut self) {
         // There is always the one pending() future that we added in `new()`.
         if self.in_progress.len() <= 1 {
-            for f in std::mem::take(&mut self.on_empty_fulfillers) {
+            for f in core::mem::take(&mut self.on_empty_fulfillers) {
                 let _ = f.send(());
             }
         }
@@ -107,7 +111,7 @@ where
 
 #[derive(Clone)]
 pub struct TaskSetHandle<E> {
-    sender: mpsc::UnboundedSender<EnqueuedTask<E>>,
+    sender: channel::UnboundedSender<EnqueuedTask<E>>,
 }
 
 impl<E> TaskSetHandle<E>

@@ -58,15 +58,24 @@
 //!
 //! For a more complete example, see <https://github.com/capnproto/capnproto-rust/tree/master/capnp-rpc/examples/calculator>
 
+#![no_std]
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use capnp::capability::Promise;
 use capnp::private::capability::ClientHook;
 use capnp::Error;
 use futures::channel::oneshot;
 use futures::{Future, FutureExt, TryFutureExt};
-use std::cell::RefCell;
-use std::pin::Pin;
-use std::rc::{Rc, Weak};
-use std::task::{Context, Poll};
+use core::cell::RefCell;
+use core::pin::Pin;
+use alloc::rc::{Rc, Weak};
+use core::task::{Context, Poll};
 
 pub use crate::rpc::Disconnector;
 use crate::task_set::TaskSet;
@@ -89,15 +98,17 @@ pub mod rpc_twoparty_capnp;
 macro_rules! pry {
     ($expr:expr) => {
         match $expr {
-            ::std::result::Result::Ok(val) => val,
-            ::std::result::Result::Err(err) => {
-                return ::capnp::capability::Promise::err(::std::convert::From::from(err))
+            ::core::result::Result::Ok(val) => val,
+            ::core::result::Result::Err(err) => {
+                return ::capnp::capability::Promise::err(::core::convert::From::from(err))
             }
         }
     };
 }
 
 mod attach;
+mod prelude;
+mod shared;
 mod broken;
 mod flow_control;
 mod local;
@@ -394,7 +405,7 @@ pub struct CapabilityServerSet<S, C>
 where
     C: capnp::capability::FromServer<S>,
 {
-    caps: std::collections::HashMap<usize, Weak<RefCell<C::Dispatch>>>,
+    caps: alloc::collections::BTreeMap<usize, Weak<RefCell<C::Dispatch>>>,
 }
 
 impl<S, C> Default for CapabilityServerSet<S, C>
@@ -403,7 +414,7 @@ where
 {
     fn default() -> Self {
         Self {
-            caps: std::default::Default::default(),
+            caps: core::default::Default::default(),
         }
     }
 }
@@ -485,7 +496,9 @@ where
 struct SystemTaskReaper;
 impl crate::task_set::TaskReaper<Error> for SystemTaskReaper {
     fn task_failed(&mut self, error: Error) {
-        println!("ERROR: {error}");
+        tracing::error!(error = %error, "an RPC system task failed");
+        #[cfg(feature = "std")]
+        std::println!("ERROR: {error}");
     }
 }
 

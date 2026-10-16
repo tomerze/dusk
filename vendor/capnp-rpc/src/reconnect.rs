@@ -1,6 +1,9 @@
-use std::cell::RefCell;
-use std::marker::PhantomData;
-use std::rc::Rc;
+#[allow(unused_imports)]
+use crate::prelude::*;
+
+use core::cell::RefCell;
+use core::marker::PhantomData;
+use alloc::rc::Rc;
 
 use capnp::capability::{FromClientHook, Promise};
 use capnp::private::capability::{ClientHook, RequestHook};

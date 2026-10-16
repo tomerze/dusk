@@ -19,16 +19,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use futures::channel::oneshot;
 use futures::{FutureExt, TryFutureExt};
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use core::cell::RefCell;
+use alloc::rc::{Rc, Weak};
 
 use capnp::capability::Promise;
 use capnp::Error;
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 struct Inner<In, Out>
 where
@@ -133,7 +136,7 @@ where
             ..
         } = *self.inner.borrow_mut();
         *next_id = 0;
-        let map = ::std::mem::take(map);
+        let map = ::core::mem::take(map);
         Drain {
             iter: map.into_iter(),
         }
@@ -145,10 +148,10 @@ where
     In: 'static,
     Out: 'static,
 {
-    iter: ::std::collections::btree_map::IntoIter<u64, (In, oneshot::Sender<Out>)>,
+    iter: ::alloc::collections::btree_map::IntoIter<u64, (In, oneshot::Sender<Out>)>,
 }
 
-impl<In, Out> ::std::iter::Iterator for Drain<In, Out>
+impl<In, Out> ::core::iter::Iterator for Drain<In, Out>
 where
     In: 'static,
     Out: 'static,

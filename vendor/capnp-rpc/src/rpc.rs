@@ -19,8 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use std::pin::Pin;
-use std::task::{Context, Poll};
+#[allow(unused_imports)]
+use crate::prelude::*;
+use crate::shared::SharedExt;
+
+use core::pin::Pin;
+use core::task::{Context, Poll};
 
 use capnp::any_pointer;
 use capnp::capability::Promise;
@@ -32,12 +36,12 @@ use capnp::Error;
 use futures::channel::oneshot;
 use futures::{future, Future, FutureExt, TryFutureExt};
 
-use std::cell::{Cell, RefCell};
-use std::cmp::Reverse;
-use std::collections::binary_heap::BinaryHeap;
-use std::collections::hash_map::{self, HashMap};
-use std::mem;
-use std::rc::{Rc, Weak};
+use core::cell::{Cell, RefCell};
+use core::cmp::Reverse;
+use alloc::collections::binary_heap::BinaryHeap;
+use alloc::collections::btree_map::{self, BTreeMap};
+use core::mem;
+use alloc::rc::{Rc, Weak};
 
 use crate::attach::Attach;
 use crate::local::ResultsDoneHook;
@@ -54,13 +58,13 @@ pub type ExportId = u32;
 pub type ImportId = ExportId;
 
 pub struct ImportTable<T> {
-    slots: HashMap<u32, T>,
+    slots: BTreeMap<u32, T>,
 }
 
 impl<T> ImportTable<T> {
     pub fn new() -> Self {
         Self {
-            slots: HashMap::new(),
+            slots: BTreeMap::new(),
         }
     }
 }
@@ -80,7 +84,7 @@ where
     idx: usize,
 }
 
-impl<'a, T> ::std::iter::Iterator for ExportTableIter<'a, T>
+impl<'a, T> ::core::iter::Iterator for ExportTableIter<'a, T>
 where
     T: 'a,
 {
@@ -436,15 +440,15 @@ where
     imports: RefCell<ImportTable<Import<VatId>>>,
 
     /// Exports keyed by ClientHook::get_ptr().
-    exports_by_cap: RefCell<HashMap<usize, ExportId>>,
+    exports_by_cap: RefCell<BTreeMap<usize, ExportId>>,
 
     embargoes: RefCell<ExportTable<Embargo>>,
 
     tasks: RefCell<Option<crate::task_set::TaskSetHandle<capnp::Error>>>,
-    connection: RefCell<::std::result::Result<Box<dyn crate::Connection<VatId>>, ::capnp::Error>>,
+    connection: RefCell<::core::result::Result<Box<dyn crate::Connection<VatId>>, ::capnp::Error>>,
     disconnect_fulfiller: RefCell<Option<oneshot::Sender<Promise<(), Error>>>>,
 
-    client_downcast_map: RefCell<HashMap<usize, WeakClient<VatId>>>,
+    client_downcast_map: RefCell<BTreeMap<usize, WeakClient<VatId>>>,
 }
 
 impl<VatId> ConnectionState<VatId> {
@@ -459,12 +463,12 @@ impl<VatId> ConnectionState<VatId> {
             questions: RefCell::new(ExportTable::new()),
             answers: RefCell::new(ImportTable::new()),
             imports: RefCell::new(ImportTable::new()),
-            exports_by_cap: RefCell::new(HashMap::new()),
+            exports_by_cap: RefCell::new(BTreeMap::new()),
             embargoes: RefCell::new(ExportTable::new()),
             tasks: RefCell::new(None),
             connection: RefCell::new(Ok(connection)),
             disconnect_fulfiller: RefCell::new(Some(disconnect_fulfiller)),
-            client_downcast_map: RefCell::new(HashMap::new()),
+            client_downcast_map: RefCell::new(BTreeMap::new()),
         });
         let (mut handle, tasks) =
             TaskSet::new(Box::new(ConnectionErrorHandler::new(Rc::downgrade(&state))));
@@ -776,7 +780,7 @@ impl<VatId> ConnectionState<VatId> {
         };
 
         let slots = &mut connection_state.answers.borrow_mut().slots;
-        let hash_map::Entry::Vacant(slot) = slots.entry(answer_id) else {
+        let btree_map::Entry::Vacant(slot) = slots.entry(answer_id) else {
             connection_state.release_exports(&result_exports)?;
             return Err(Error::failed("questionId is already in use".to_string()));
         };
@@ -798,18 +802,18 @@ impl<VatId> ConnectionState<VatId> {
 
         let answers_slots = &mut connection_state.answers.borrow_mut().slots;
         match answers_slots.entry(answer_id) {
-            hash_map::Entry::Vacant(_) => {
+            btree_map::Entry::Vacant(_) => {
                 // The `Finish` message targets a question ID that isn't present in our answer table.
                 // Probably, we sent a `Return` with `noFinishNeeded = true`, but the other side didn't
                 // recognize this hint and sent a `Finish` anyway, or the `Finish` was already in-flight at
                 // the time we sent the `Return`. We can silently ignore this.
             }
-            hash_map::Entry::Occupied(mut entry) => {
+            btree_map::Entry::Occupied(mut entry) => {
                 let answer = entry.get_mut();
                 answer.received_finish.set(true);
 
                 if finish.get_release_result_caps() {
-                    exports_to_release = ::std::mem::take(&mut answer.result_exports);
+                    exports_to_release = ::core::mem::take(&mut answer.result_exports);
                 }
 
                 // If the pipeline has not been cloned, the following two lines cancel the call.
@@ -1017,7 +1021,7 @@ impl<VatId> ConnectionState<VatId> {
 
                 {
                     let slots = &mut connection_state.answers.borrow_mut().slots;
-                    let hash_map::Entry::Vacant(slot) = slots.entry(question_id) else {
+                    let btree_map::Entry::Vacant(slot) = slots.entry(question_id) else {
                         return Err(Error::failed("questionId is already in use".to_string()));
                     };
                     slot.insert(answer);
@@ -1046,7 +1050,7 @@ impl<VatId> ConnectionState<VatId> {
                         Promise::ok(())
                     });
 
-                let fork = promise.shared();
+                let fork = promise.into_shared();
                 pipeline.drive(fork.clone());
 
                 {
@@ -1178,7 +1182,7 @@ impl<VatId> ConnectionState<VatId> {
 
     fn answer_has_sent_return(&self, id: AnswerId, result_exports: Vec<ExportId>) {
         let answers_slots = &mut self.answers.borrow_mut().slots;
-        let hash_map::Entry::Occupied(mut entry) = answers_slots.entry(id) else {
+        let btree_map::Entry::Occupied(mut entry) = answers_slots.entry(id) else {
             unreachable!()
         };
         let a = entry.get_mut();
@@ -1363,8 +1367,8 @@ impl<VatId> ConnectionState<VatId> {
 
                             let replacement_export_id =
                                 match exports_by_cap.entry(exp.client_hook.get_ptr()) {
-                                    hash_map::Entry::Occupied(occ) => *occ.get(),
-                                    hash_map::Entry::Vacant(vac) => {
+                                    btree_map::Entry::Occupied(occ) => *occ.get(),
+                                    btree_map::Entry::Vacant(vac) => {
                                         // The replacement capability isn't previously exported,
                                         // so assign it to the existing table entry.
                                         vac.insert(export_id);
@@ -1503,12 +1507,12 @@ impl<VatId> ConnectionState<VatId> {
     fn import(state: &Rc<Self>, import_id: ImportId, is_promise: bool) -> Box<dyn ClientHook> {
         let import_client = {
             match state.imports.borrow_mut().slots.entry(import_id) {
-                hash_map::Entry::Occupied(occ) => occ
+                btree_map::Entry::Occupied(occ) => occ
                     .get()
                     .import_client
                     .upgrade()
                     .expect("dangling ref to import client?"),
-                hash_map::Entry::Vacant(v) => {
+                btree_map::Entry::Vacant(v) => {
                     let import_client = ImportClient::new(state, import_id);
                     v.insert(Import::new(&import_client));
                     import_client
@@ -1970,7 +1974,7 @@ impl<VatId> RequestHook for Request<VatId> {
         }
         let (question_ref, promise) =
             Self::send_internal(&connection_state, message, &cap_table, false);
-        let forked_promise1 = promise.shared();
+        let forked_promise1 = promise.into_shared();
         let forked_promise2 = forked_promise1.clone();
 
         // The pipeline must get notified of resolution before the app does to maintain ordering.
@@ -2091,7 +2095,7 @@ where
     VatId: 'static,
 {
     variant: PipelineVariant<VatId>,
-    redirect_later: Option<RefCell<futures::future::Shared<Promise<Response<VatId>, Error>>>>,
+    redirect_later: Option<RefCell<crate::shared::Shared<Promise<Response<VatId>, Error>>>>,
     connection_state: Rc<ConnectionState<VatId>>,
 
     #[allow(dead_code)]
@@ -2164,7 +2168,7 @@ impl<VatId> Pipeline<VatId> {
             resolution_waiters: crate::sender_queue::SenderQueue::new(),
         }));
         if let Some(redirect_later_promise) = redirect_later {
-            let fork = redirect_later_promise.shared();
+            let fork = redirect_later_promise.into_shared();
             let this = Rc::downgrade(&state);
             let resolve_self_promise =
                 connection_state.eagerly_evaluate(fork.clone().then(move |response| {

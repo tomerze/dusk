@@ -19,6 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+
 use capnp::any_pointer;
 use capnp::private::capability::{
     ClientHook, ParamsHook, PipelineHook, PipelineOp, RequestHook, ResultsHook,
@@ -28,7 +31,7 @@ use capnp::Error;
 use capnp::capability::{Promise, RemotePromise};
 use capnp::traits::ImbueMut;
 
-use std::rc::Rc;
+use alloc::rc::Rc;
 
 pub struct Pipeline {
     error: Error,
