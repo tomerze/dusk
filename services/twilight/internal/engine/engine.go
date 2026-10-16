@@ -52,6 +52,7 @@ type Dependencies struct {
 	Validator    *kafka.Validator
 	NodeState    NodeStateProducer
 	Intended     IntendedProcessProducer
+	NodeStates   NodeStateChecker
 	Logger       *slog.Logger
 }
 
@@ -254,6 +255,9 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	start(operation, &running, "bulk revocations", engine.runRevocations)
 	start(operation, &running, "partitions", engine.runPartitionMaintenance)
 	start(operation, &running, "intents", engine.runIntentPublication)
+	if engine.NodeStates != nil {
+		start(operation, &running, "node_states", engine.runNodeStateCheck)
+	}
 	for operation.Err() == nil {
 		if !engine.partitioned.Load() {
 			sleep(operation, time.Second)

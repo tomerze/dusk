@@ -397,7 +397,7 @@ func nodeState(operation context.Context, arguments, environment []string, outpu
 	if stallSeconds > 0 {
 		rebuild.Stall = time.Duration(stallSeconds) * time.Second
 	}
-	report, failure := rebuild.Run(operation, false)
+	report, failure := rebuild.Force(operation)
 	if failure != nil {
 		return failure
 	}
@@ -483,11 +483,16 @@ func serve(operation context.Context, arguments, environment []string, output, d
 	if failure != nil {
 		return failure
 	}
+	inventoryStore := inventory.NewStore(pool)
+	nodeStates := kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState)
 	core := engine.New(engine.Dependencies{
-		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: alertStore,
+		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventoryStore, Alerts: alertStore,
 		Dawn: dawnClient, KafkaOptions: options, Validator: validator,
-		NodeState: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState),
-		Intended:  kafka.NewIntendedProcessProducer(producer, validator, settings.Kafka.Topics.IntendedProcesses), Logger: logger,
+		NodeState: nodeStates,
+		Intended:  kafka.NewIntendedProcessProducer(producer, validator, settings.Kafka.Topics.IntendedProcesses),
+		NodeStates: &nodestate.Rebuild{Options: options, Producer: nodeStates, Inventory: inventoryStore, Validator: validator,
+			Topic: settings.Kafka.Topics.NodeState, Actor: settings.Instance, Workers: 4, Stall: time.Duration(settings.Engine.NodeStateStallSeconds) * time.Second, Logger: logger},
+		Logger: logger,
 	})
 	apiConfiguration, failure := apiOptions(settings, development, pool, core.Service(), logger)
 	if failure != nil {

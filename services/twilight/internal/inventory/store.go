@@ -568,6 +568,21 @@ func (store *Store) ApplyLifecycle(operation context.Context, device, installati
 	})
 }
 
+func (store *Store) NodeStateCheck(operation context.Context, topic string) (string, error) {
+	var identity string
+	failure := store.pool.QueryRow(operation, `select identity from node_state_checks where topic = $1`, topic).Scan(&identity)
+	if errors.Is(failure, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return identity, failure
+}
+
+func (store *Store) RecordNodeStateCheck(operation context.Context, topic, identity string, at time.Time) error {
+	_, failure := store.pool.Exec(operation, `insert into node_state_checks (topic, identity, checked_at) values ($1, $2, $3)
+		on conflict (topic) do update set identity = excluded.identity, checked_at = excluded.checked_at`, topic, identity, at)
+	return failure
+}
+
 type Lifecycle struct {
 	Key
 	Lifecycle string

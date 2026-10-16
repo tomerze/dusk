@@ -42,6 +42,7 @@ type Rebuild struct {
 }
 
 type Report struct {
+	Skipped     bool
 	Checked     bool
 	Partitions  int32
 	Incomplete  []int32
@@ -341,6 +342,44 @@ func (rebuild Rebuild) Run(operation context.Context, onlyIfIncomplete bool) (Re
 		"in_sync", report.InSync, "published", report.Published, "written_back", report.WrittenBack, "unknown_nodes", report.Unknown,
 		"moved", report.Moved, "seconds", time.Since(started).Seconds(), "actor", rebuild.Actor)
 	return report, nil
+}
+
+func (rebuild Rebuild) Check(operation context.Context) (Report, error) {
+	identity, failure := rebuild.TopicIdentity(operation)
+	if failure != nil {
+		return Report{}, fmt.Errorf("describe %s: %w", rebuild.Topic, failure)
+	}
+	recorded, failure := rebuild.Inventory.NodeStateCheck(operation, rebuild.Topic)
+	if failure != nil {
+		return Report{}, fmt.Errorf("read the last check of %s: %w", rebuild.Topic, failure)
+	}
+	if recorded == identity {
+		return Report{Skipped: true}, nil
+	}
+	report, failure := rebuild.Run(operation, true)
+	if failure != nil {
+		return report, failure
+	}
+	return report, rebuild.remember(operation, identity)
+}
+
+func (rebuild Rebuild) Force(operation context.Context) (Report, error) {
+	identity, failure := rebuild.TopicIdentity(operation)
+	if failure != nil {
+		return Report{}, fmt.Errorf("describe %s: %w", rebuild.Topic, failure)
+	}
+	report, failure := rebuild.Run(operation, false)
+	if failure != nil {
+		return report, failure
+	}
+	return report, rebuild.remember(operation, identity)
+}
+
+func (rebuild Rebuild) remember(operation context.Context, identity string) error {
+	if failure := rebuild.Inventory.RecordNodeStateCheck(operation, rebuild.Topic, identity, time.Now()); failure != nil {
+		return fmt.Errorf("record the check of %s: %w", rebuild.Topic, failure)
+	}
+	return nil
 }
 
 func (rebuild Rebuild) republishMoved(operation context.Context, snapshot Snapshot) (int, error) {

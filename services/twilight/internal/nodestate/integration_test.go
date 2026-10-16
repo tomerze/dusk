@@ -265,3 +265,71 @@ func TestARebuildFailsAndWritesNoCompletionRecordWhenAPartitionStalls(test *test
 		test.Fatalf("partitions %v hold no completion record", missing)
 	}
 }
+
+func TestCheckReadsTheTopicOnlyWhenItIsNotTheOneLastFoundComplete(test *testing.T) {
+	operation, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	fixture := newFixture(test, operation)
+	partitioner := kgo.StickyKeyPartitioner(nil).ForTopic("")
+	partitionOf := func(key string, partitions int) int32 {
+		return int32(partitioner.Partition(&kgo.Record{Key: []byte(key)}, partitions))
+	}
+	var devices []string
+	moving := 0
+	for index := range 16 {
+		device := fmt.Sprintf("3%031x", index)
+		devices = append(devices, device)
+		fixture.node(operation, device)
+		fixture.setLifecycle(operation, device, "revoked", operatorPrincipal, time.Now())
+		if key := nodestate.Key(device, anyInstallation); partitionOf(key, 3) != partitionOf(key, 4) {
+			moving++
+		}
+	}
+	if moving == 0 {
+		test.Fatal("no key moves when a fourth partition is added")
+	}
+	rebuild := fixture.rebuild()
+	report, failure := rebuild.Check(operation)
+	if failure != nil || !report.Rebuilt || report.Published != len(devices) {
+		test.Fatalf("the first check of an empty topic: %+v, %v", report, failure)
+	}
+	report, failure = rebuild.Check(operation)
+	if failure != nil || !report.Skipped || report.Checked {
+		test.Fatalf("a check of the topic just rebuilt: %+v, %v", report, failure)
+	}
+	client, failure := kgo.NewClient(fixture.options...)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer client.Close()
+	if _, failure := kadm.NewClient(client).CreatePartitions(operation, 1, fixture.topic); failure != nil {
+		test.Fatal(failure)
+	}
+	deadline := time.Now().Add(time.Minute)
+	for {
+		report, failure = rebuild.Check(operation)
+		if failure == nil || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	if failure != nil || !report.Rebuilt || report.Partitions != 4 || len(report.Incomplete) != 1 || report.Incomplete[0] != 3 ||
+		report.Published != 0 || report.Moved != moving {
+		test.Fatalf("a check after a partition was added, with %d keys moving: %+v, %v", moving, report, failure)
+	}
+	snapshot := fixture.read(operation)
+	if missing := snapshot.Incomplete(); len(missing) != 0 {
+		test.Fatalf("partitions %v hold no completion record after the partition was added", missing)
+	}
+	for _, device := range devices {
+		key := nodestate.Key(device, anyInstallation)
+		entry := snapshot.States[key]
+		if entry == nil || entry.Lifecycle() != "revoked" || entry.Partition() != partitionOf(key, 4) {
+			test.Fatalf("%s is not revoked on the partition it hashes to: %+v", key, entry)
+		}
+	}
+	report, failure = rebuild.Check(operation)
+	if failure != nil || !report.Skipped {
+		test.Fatalf("a check of the four partitions just rebuilt: %+v, %v", report, failure)
+	}
+}
