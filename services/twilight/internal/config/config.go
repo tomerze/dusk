@@ -98,6 +98,7 @@ type Engine struct {
 	ReapIntervalSeconds          int `yaml:"reap_interval_seconds"`
 	ReapRetrySeconds             int `yaml:"reap_retry_seconds"`
 	RevocationsPerSecond         int `yaml:"revocations_per_second"`
+	NodeStateStallSeconds        int `yaml:"node_state_stall_seconds"`
 }
 
 type Floors struct {
@@ -267,6 +268,7 @@ func Default() Config {
 			ReapIntervalSeconds:          300,
 			ReapRetrySeconds:             600,
 			RevocationsPerSecond:         1000,
+			NodeStateStallSeconds:        120,
 			ProcessLifetimeSeconds:       900,
 			IntendedProcessRetentionDays: 31,
 		},
@@ -519,6 +521,7 @@ func (loaded Config) Validate() error {
 		"engine.reap_interval_seconds":                     loaded.Engine.ReapIntervalSeconds,
 		"engine.reap_retry_seconds":                        loaded.Engine.ReapRetrySeconds,
 		"engine.revocations_per_second":                    loaded.Engine.RevocationsPerSecond,
+		"engine.node_state_stall_seconds":                  loaded.Engine.NodeStateStallSeconds,
 		"engine.presence_flush_millis":                     loaded.Engine.PresenceFlushMillis,
 		"engine.last_seen_bucket_seconds":                  loaded.Engine.LastSeenBucketSeconds,
 		"engine.dispatch_attempts":                         loaded.Engine.DispatchAttempts,

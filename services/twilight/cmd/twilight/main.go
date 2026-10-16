@@ -35,6 +35,7 @@ import (
 	"dusk/services/twilight/internal/engine"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/kafka"
+	"dusk/services/twilight/internal/nodestate"
 	"dusk/services/twilight/internal/reconcile"
 	"dusk/services/twilight/internal/tokens"
 	"dusk/services/twilight/migrations"
@@ -53,6 +54,7 @@ Usage:
   twilight token create --name NAME --role viewer|operator|admin [--config FILE]
   twilight token revoke ID [--config FILE]
   twilight grafana-alerting [--config FILE] [--output FILE]
+  twilight node-state rebuild [--config FILE] [--stall-seconds N] [--memory-limit MIB]
   twilight version
 
 Configuration comes from FILE (default /etc/twilight/twilight.yaml) and from
@@ -86,6 +88,8 @@ func run(operation context.Context, arguments, environment []string, output, dia
 		failure = token(operation, arguments[1:], environment, output, diagnostics)
 	case "grafana-alerting":
 		failure = grafanaAlerting(arguments[1:], environment, output, diagnostics)
+	case "node-state":
+		failure = nodeState(operation, arguments[1:], environment, output, diagnostics)
 	case "version":
 		fmt.Fprintf(output, "twilight %s (%s, %s)\n", version, buildRevision(), runtime.Version())
 	case "help", "-h", "--help":
@@ -318,16 +322,92 @@ func token(operation context.Context, arguments, environment []string, output, d
 		fmt.Fprintf(diagnostics, "token %s (%s) is revoked since %s\n", revoked.ID, revoked.Name, revoked.RevokedAt.UTC().Format(time.RFC3339))
 		return nil
 	}
-	creator := "cli"
-	if current, failure := user.Current(); failure == nil && current.Username != "" {
-		creator = "cli:" + current.Username
-	}
-	created, secret, failure := store.Create(operation, name, role, creator, time.Now())
+	created, secret, failure := store.Create(operation, name, role, commandActor(), time.Now())
 	if failure != nil {
 		return failure
 	}
 	fmt.Fprintf(diagnostics, "token %s created for %q with role %s; this is the only time it is shown\n", created.ID, created.Name, created.Role)
 	fmt.Fprintln(output, secret)
+	return nil
+}
+
+func commandActor() string {
+	if current, failure := user.Current(); failure == nil && current.Username != "" {
+		return "cli:" + current.Username
+	}
+	return "cli"
+}
+
+func nodeState(operation context.Context, arguments, environment []string, output, diagnostics io.Writer) error {
+	if len(arguments) == 0 || arguments[0] != "rebuild" {
+		return usageError{"node-state needs rebuild"}
+	}
+	var stallSeconds, memoryMegabytes int
+	parsed, failure := parse("node-state rebuild", arguments[1:], diagnostics, func(flags *flag.FlagSet) {
+		flags.IntVar(&stallSeconds, "stall-seconds", 0, "seconds a partition may read nothing before the rebuild fails (default engine.node_state_stall_seconds)")
+		flags.IntVar(&memoryMegabytes, "memory-limit", 400, "the soft memory limit of this command, in MiB; it shares the container with the serving process")
+	})
+	if failure != nil {
+		return failure
+	}
+	if len(parsed.positional) > 0 {
+		return usageError{"node-state rebuild takes no arguments"}
+	}
+	if stallSeconds < 0 || memoryMegabytes <= 0 {
+		return usageError{"--stall-seconds must not be negative and --memory-limit must be positive"}
+	}
+	debug.SetMemoryLimit(int64(memoryMegabytes) << 20)
+	settings, failure := parsed.load(environment)
+	if failure != nil {
+		return failure
+	}
+	logger := newLogger(settings.LogLevel, diagnostics).With("instance", settings.Instance)
+	pool, failure := openDatabase(operation, settings)
+	if failure != nil {
+		return failure
+	}
+	defer pool.Close()
+	loaded, failure := database.LoadMigrations(migrations.Files)
+	if failure != nil {
+		return failure
+	}
+	status, failure := database.Status(operation, pool, loaded)
+	if failure != nil {
+		return failure
+	}
+	if len(status.Pending) > 0 {
+		return fmt.Errorf("%w (%d pending)", database.ErrPendingMigrations, len(status.Pending))
+	}
+	validator, failure := kafka.NewValidator()
+	if failure != nil {
+		return failure
+	}
+	options, failure := kafka.Options(settings.Kafka, settings.Instance)
+	if failure != nil {
+		return failure
+	}
+	producer, failure := kgo.NewClient(options...)
+	if failure != nil {
+		return failure
+	}
+	defer producer.Close()
+	rebuild := nodestate.Rebuild{Options: options, Producer: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState),
+		Inventory: inventory.NewStore(pool), Validator: validator, Topic: settings.Kafka.Topics.NodeState, Actor: commandActor(),
+		Workers: max(1, settings.Database.MaxConnections-2), Stall: time.Duration(settings.Engine.NodeStateStallSeconds) * time.Second, Logger: logger}
+	if stallSeconds > 0 {
+		rebuild.Stall = time.Duration(stallSeconds) * time.Second
+	}
+	report, failure := rebuild.Run(operation, false)
+	if failure != nil {
+		return failure
+	}
+	fmt.Fprintf(output, "%s partitions: %d, without a completion record before the rebuild: %d\n", settings.Kafka.Topics.NodeState, report.Partitions, len(report.Incomplete))
+	fmt.Fprintf(output, "lifecycles already on the topic: %d\n", report.InSync)
+	fmt.Fprintf(output, "published from the inventory: %d\n", report.Published)
+	fmt.Fprintf(output, "later on the topic, written into the inventory: %d\n", report.WrittenBack)
+	fmt.Fprintf(output, "republished onto the partition their key hashes to: %d\n", report.Moved)
+	fmt.Fprintf(output, "for nodes the inventory does not hold, kept on the topic: %d\n", report.Unknown)
+	fmt.Fprintf(output, "completion records written on every partition; nightfall serves nodes once it has read them\n")
 	return nil
 }
 

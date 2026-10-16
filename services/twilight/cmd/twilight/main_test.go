@@ -42,6 +42,12 @@ func TestUsageMistakesExitWithTwo(test *testing.T) {
 		{"serve", "now"},
 		{"token", "revoke", "0192f3a4-0000-7000-8000-000000000000", "--config"},
 		{"token", "revoke", "0192f3a4-0000-7000-8000-000000000000", "0192f3a4-0000-7000-8000-000000000001"},
+		{"node-state"},
+		{"node-state", "delete"},
+		{"node-state", "rebuild", "now"},
+		{"node-state", "rebuild", "--no-such-flag"},
+		{"node-state", "rebuild", "--stall-seconds", "-1"},
+		{"node-state", "rebuild", "--memory-limit", "0"},
 	} {
 		code, _, diagnostics := invoke(arguments...)
 		if code != 2 || !strings.Contains(diagnostics, "Usage:") {
@@ -52,8 +58,8 @@ func TestUsageMistakesExitWithTwo(test *testing.T) {
 
 func TestAnExplicitMissingConfigurationFails(test *testing.T) {
 	missing := filepath.Join(test.TempDir(), "twilight.yaml")
-	for _, command := range []string{"serve", "migrate"} {
-		code, _, diagnostics := invoke(command, "--config", missing)
+	for _, command := range [][]string{{"serve"}, {"migrate"}, {"node-state", "rebuild"}} {
+		code, _, diagnostics := invoke(append(command, "--config", missing)...)
 		if code != 1 || !strings.Contains(diagnostics, missing) {
 			test.Errorf("%s: exit %d, %q", command, code, diagnostics)
 		}
