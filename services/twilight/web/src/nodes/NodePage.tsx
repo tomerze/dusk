@@ -61,6 +61,13 @@ import classes from './NodePage.module.css'
 
 const byteUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
 
+const credentialKinds: Record<NonNullable<NodeDetail['credential_kind']>, string> = {
+  fleet_token: 'fleet token',
+  install_token: 'install token',
+  provision_token: 'provision token',
+  tpm_attestation: 'TPM attestation',
+}
+
 function formatBytes(value: number): string {
   let amount = value
   let unit = 0
@@ -451,7 +458,7 @@ export function NodePage() {
               <Field label="Enrolled with">
                 {node.credential_ref === null
                   ? maybe(null)
-                  : `${node.credential_kind === 'install_token' ? 'install token' : 'fleet token'} ${node.credential_ref}${node.credential_issuer === null ? '' : ` signed by ${node.credential_issuer}`}`}
+                  : `${node.credential_kind === null ? 'credential' : credentialKinds[node.credential_kind]} ${node.credential_ref}${node.credential_issuer === null ? '' : ` signed by ${node.credential_issuer}`}`}
               </Field>
               <Field label="Enrolled">
                 <RelativeTime value={node.enrolled_at} fallback="not recorded" />

@@ -117,3 +117,17 @@ describe("a node's facts", () => {
     expect(await navigator.clipboard.readText()).toBe('18446744073709551557')
   })
 })
+
+describe("a node's credential", () => {
+  it('names the provision token entry the node enrolled with', async () => {
+    const node = api.current().nodes[0]
+    if (node === undefined) {
+      throw new Error('the mock has no nodes')
+    }
+    node.credential_kind = 'provision_token'
+    node.credential_ref = 'retail-eu-2026-10'
+    node.credential_issuer = null
+    renderApp(`/nodes/${node.device_id}/${node.installation_id}`)
+    expect(await screen.findByText('provision token retail-eu-2026-10')).toBeVisible()
+  })
+})

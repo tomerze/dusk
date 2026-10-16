@@ -24,11 +24,11 @@ export const selectorFields: readonly SelectorField[] = [
   { name: 'tenant', description: 'Tenant bound to the enrollment credential' },
   {
     name: 'credential_kind',
-    description: 'fleet_token or install_token: what the node enrolled with',
+    description: 'fleet_token, install_token or provision_token: what the node enrolled with',
   },
   {
     name: 'credential_ref',
-    description: 'Fleet token name or install token subject it enrolled with',
+    description: 'Fleet token or provision token name, or install token subject, it enrolled with',
   },
   { name: 'credential_issuer', description: 'Key id that signed its install token' },
   { name: 'locale', description: 'Node locale, for example en_US' },
