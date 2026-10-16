@@ -21,12 +21,13 @@ use nightfall_membrane::limits::{InstanceLimits, Limits};
 use nightfall_membrane::permissions::Permissions;
 use nightfall_membrane::schema::SchemaRegistry;
 use nightfall_provisioning::config::{ProvisioningConfig, ProvisioningFiles, load_certificates};
+use nightfall_provisioning::credential::HashedTokens;
 use nightfall_provisioning::renew::{FleetClientTrust, RenewClientVerifier};
 use nightfall_provisioning::server::Provisioning;
 use nightfall_provisioning::step_ca::{StepCaClient, StepCaConfig};
 use rustls::ServerConfig;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
@@ -397,9 +398,12 @@ pub fn start(config: Config, services: Services) -> anyhow::Result<Instance> {
     )?);
 
     let credential_files_seen = credential_files_modified(&config);
+    let provision_tokens_file = &config.provision.provision_tokens_file;
     let mut provisioning_config = ProvisioningConfig::load(&ProvisioningFiles {
         instance: &config.instance,
         fleet_tokens_file: &config.provision.fleet_tokens_file,
+        provision_tokens_file: (!provision_tokens_file.as_os_str().is_empty())
+            .then_some(provision_tokens_file.as_path()),
         install_token_keys: &config.provision.install_token_keys,
         device_id_key_file: &config.provision.device_id_key_file,
         fleet_client_ca: &config.fleet.client_ca,
@@ -698,28 +702,51 @@ async fn reload_permissions(shared: Arc<Shared>, stop: CancellationToken) {
     }
 }
 
-pub fn credential_files_modified(config: &Config) -> [Option<SystemTime>; 2] {
+pub fn credential_files_modified(config: &Config) -> [Option<SystemTime>; 3] {
     [
         modified(&config.provision.fleet_tokens_file),
         modified(&config.provision.install_token_keys),
+        modified(&config.provision.provision_tokens_file),
     ]
 }
 
-pub fn reload_credentials_if_changed(shared: &Shared, seen: &mut [Option<SystemTime>; 2]) {
+type ReplaceTokens = fn(&Provisioning, HashedTokens) -> Result<(), String>;
+
+pub fn reload_credentials_if_changed(shared: &Shared, seen: &mut [Option<SystemTime>; 3]) {
     let now = credential_files_modified(&shared.config);
-    let tokens_path = &shared.config.provision.fleet_tokens_file;
-    if now[0] != seen[0] {
-        match nightfall_provisioning::credential::HashedTokens::load(tokens_path) {
-            Ok(tokens) => {
-                seen[0] = now[0];
-                shared.provisioning.replace_fleet_tokens(tokens);
-            }
+    let provision = &shared.config.provision;
+    let tables: [(usize, &PathBuf, &str, &str, ReplaceTokens); 2] = [
+        (
+            0,
+            &provision.fleet_tokens_file,
+            "fleet_tokens_file",
+            "fleet tokens",
+            Provisioning::replace_fleet_tokens,
+        ),
+        (
+            2,
+            &provision.provision_tokens_file,
+            "provision_tokens_file",
+            "provision tokens",
+            Provisioning::replace_provision_tokens,
+        ),
+    ];
+    for (index, path, file, label, replace) in tables {
+        if now[index] == seen[index] {
+            continue;
+        }
+        let replaced = HashedTokens::load(path)
+            .map_err(|error| error.to_string())
+            .and_then(|tokens| replace(&shared.provisioning, tokens));
+        match replaced {
+            Ok(()) => seen[index] = now[index],
             Err(error) => {
-                metrics::counter!("nightfall_credentials_reload_failures_total", "file" => "fleet_tokens_file").increment(1);
+                metrics::counter!("nightfall_credentials_reload_failures_total", "file" => file)
+                    .increment(1);
                 tracing::warn!(
-                    path = %tokens_path.display(),
+                    path = %path.display(),
                     %error,
-                    "the fleet tokens changed but could not be loaded; the previous ones stay in use"
+                    "the {label} changed but could not be loaded; the previous ones stay in use"
                 );
             }
         }
@@ -745,7 +772,7 @@ pub fn reload_credentials_if_changed(shared: &Shared, seen: &mut [Option<SystemT
 
 async fn reload_credentials(
     shared: Arc<Shared>,
-    mut seen: [Option<SystemTime>; 2],
+    mut seen: [Option<SystemTime>; 3],
     stop: CancellationToken,
 ) {
     loop {

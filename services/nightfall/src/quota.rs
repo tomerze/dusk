@@ -48,6 +48,7 @@ fn kind_named(name: &str) -> Option<CredentialKind> {
     match name {
         "fleet_token" => Some(CredentialKind::FleetToken),
         "install_token" => Some(CredentialKind::InstallToken),
+        "provision_token" => Some(CredentialKind::ProvisionToken),
         _ => None,
     }
 }
@@ -459,6 +460,30 @@ mod tests {
             }
         }
         assert!(parse(br#"{"schema":"dusk.credential-quota/v2"}"#).is_err());
+    }
+
+    #[test]
+    fn reads_and_writes_a_provision_token_reservation() {
+        let validator = Contract::CredentialQuota.validator().unwrap();
+        let example = include_str!(
+            "../../contracts/kafka/examples/dusk.credential-quota/reserve-provision-token.json"
+        );
+        let parsed = parse(example.as_bytes()).unwrap();
+        let provision_token = CredentialName {
+            kind: CredentialKind::ProvisionToken,
+            name: "retail-eu-2026-10".to_string(),
+        };
+        assert_eq!(parsed.operation, Operation::Reserve);
+        assert_eq!(parsed.credential, provision_token);
+        assert_eq!(parsed.limit, 50_000);
+        let reserved = Reservation {
+            credential: provision_token.clone(),
+            ..reservation("retail-eu-2026-10", 2, 50_000)
+        };
+        let (key, payload) = encode(Operation::Reserve, &reserved, "nightfall-0").unwrap();
+        validator.check(&payload).unwrap();
+        assert_eq!(parse(&payload).unwrap().credential, provision_token);
+        assert_eq!(key, format!("provision_token/retail-eu-2026-10/{:032x}", 2));
     }
 
     #[tokio::test]

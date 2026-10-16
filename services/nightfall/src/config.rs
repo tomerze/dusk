@@ -52,6 +52,7 @@ pub struct ProvisionConfig {
     pub certificate: PathBuf,
     pub key: PathBuf,
     pub fleet_tokens_file: PathBuf,
+    pub provision_tokens_file: PathBuf,
     pub install_token_keys: PathBuf,
     pub device_id_key_file: PathBuf,
     pub challenge_ttl_ms: u64,
@@ -193,6 +194,7 @@ impl Default for ProvisionConfig {
             certificate: PathBuf::from("/etc/nightfall/tls/provision.crt"),
             key: PathBuf::from("/etc/nightfall/tls/provision.key"),
             fleet_tokens_file: PathBuf::from("/etc/nightfall/secrets/fleet-tokens.toml"),
+            provision_tokens_file: PathBuf::new(),
             install_token_keys: PathBuf::from("/etc/nightfall/secrets/install-token-jwks.json"),
             device_id_key_file: PathBuf::from("/etc/nightfall/secrets/device-id.key"),
             challenge_ttl_ms: 300_000,
@@ -778,6 +780,7 @@ server_names = ["provision.dusk.example"]
 certificate = "/etc/nightfall/tls/provision.crt"
 key = "/etc/nightfall/tls/provision.key"
 fleet_tokens_file = "/etc/nightfall/secrets/fleet-tokens.toml"
+provision_tokens_file = ""
 install_token_keys = "/etc/nightfall/secrets/install-token-jwks.json"
 device_id_key_file = "/etc/nightfall/secrets/device-id.key"
 challenge_ttl_ms = 300000
