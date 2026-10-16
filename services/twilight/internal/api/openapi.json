@@ -755,6 +755,72 @@
         }
       }
     },
+    "/api/v1/devices/{device}/export": {
+      "post": {
+        "operationId": "exportDevice",
+        "summary": "Export what the stack holds about a device",
+        "x-required-role": "admin",
+        "description": "Streams every record the stack holds about the device as JSON lines: {\"store\", \"table\", \"record\"} for each record, {\"store\", \"table\", \"error\"} for a store that could not be read, and a last line {\"summary\": {...}} that counts the records, says whether the export is complete and names what it does not include. An export that ends without the summary line was cut short. One export runs at a time on each instance.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The device's records, one JSON document per line.",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "This instance is already exporting device data; Retry-After says when to try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
     "/api/v1/tenants/{tenant}/erasure": {
       "post": {
         "operationId": "eraseTenant",

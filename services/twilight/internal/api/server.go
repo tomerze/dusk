@@ -67,6 +67,7 @@ type Backend interface {
 	EraseDevice(operation context.Context, device, reason, actor string) (erasure.Erasure, bool, error)
 	EraseTenant(operation context.Context, tenant, reason, actor string) (erasure.Erasure, bool, error)
 	Erasure(operation context.Context, identifier uuid.UUID) (erasure.Erasure, error)
+	ExportDevice(operation context.Context, device, reason, actor string, output io.Writer, flush func()) error
 }
 
 type TokenAuthenticator interface {
@@ -98,6 +99,7 @@ type Server struct {
 	schemas   map[string]*jsonschema.Schema
 	streams   atomic.Int64
 	requests  chan struct{}
+	exports   chan struct{}
 	draining  chan struct{}
 	drainOnce sync.Once
 	oidc      *oidcClient
@@ -170,7 +172,7 @@ func New(options Options) (*Server, error) {
 	if options.RequestTimeout == 0 {
 		options.RequestTimeout = 15 * time.Second
 	}
-	server := &Server{Options: options, mux: http.NewServeMux(), routes: routeTable(), draining: make(chan struct{})}
+	server := &Server{Options: options, mux: http.NewServeMux(), routes: routeTable(), draining: make(chan struct{}), exports: make(chan struct{}, 1)}
 	if options.MaxRequests > 0 {
 		server.requests = make(chan struct{}, options.MaxRequests)
 	}
@@ -254,7 +256,7 @@ func (server *Server) wrap(current route) http.Handler {
 }
 
 func (server *Server) bounded(current route, call *exchange) error {
-	if current.Path == streamPath {
+	if current.Path == streamPath || current.Path == exportPath {
 		return server.serve(current, call)
 	}
 	operation, cancel := context.WithTimeout(call.request.Context(), server.RequestTimeout)

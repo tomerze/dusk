@@ -323,6 +323,20 @@ func (fake *fakeBackend) Erasure(operation context.Context, identifier uuid.UUID
 	return sampleErasure(erasure.ScopeDevice, deviceID), fake.record("Erasure", identifier)
 }
 
+func (fake *fakeBackend) ExportDevice(operation context.Context, device, reason, actor string, output io.Writer, flush func()) error {
+	if failure := fake.record("ExportDevice", device, reason, actor); failure != nil {
+		return failure
+	}
+	if fake.hold != nil {
+		fake.entered <- struct{}{}
+		<-fake.hold
+	}
+	io.WriteString(output, `{"store":"postgres","table":"nodes","record":{"device_id":"`+device+`"}}`+"\n")
+	flush()
+	io.WriteString(output, `{"summary":{"complete":true}}`+"\n")
+	return nil
+}
+
 type fakeTokens map[string]tokens.Token
 
 func (fake fakeTokens) Authenticate(operation context.Context, secret string) (tokens.Token, error) {

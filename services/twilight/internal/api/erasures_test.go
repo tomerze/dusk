@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -86,5 +87,36 @@ func TestFollowingAnErasure(test *testing.T) {
 	current.backend.failure = erasure.ErrNotFound
 	if missing := current.call(http.MethodGet, "/api/v1/erasures/"+uuid.NewString(), nil, adminToken); missing.Code != http.StatusNotFound {
 		test.Fatalf("an unknown erasure answered %d", missing.Code)
+	}
+}
+
+func TestExportingADeviceStreamsJSONLinesOneAtATime(test *testing.T) {
+	current := newHarness(test, func(options *Options) { options.RequestTimeout = 50 * time.Millisecond })
+	path := "/api/v1/devices/" + deviceID + "/export"
+	if refused := current.call(http.MethodPost, path, map[string]any{"reason": "subject access request"}, operatorToken); refused.Code != http.StatusForbidden {
+		test.Fatalf("an operator's export answered %d", refused.Code)
+	}
+	if blank := current.call(http.MethodPost, path, map[string]any{"reason": " "}, adminToken); blank.Code != http.StatusBadRequest {
+		test.Fatalf("an export without a reason answered %d", blank.Code)
+	}
+	current.backend.entered, current.backend.hold = make(chan struct{}, 1), make(chan struct{})
+	first := make(chan response, 1)
+	go func() {
+		first <- current.call(http.MethodPost, path, map[string]any{"reason": "subject access request"}, adminToken)
+	}()
+	<-current.backend.entered
+	busy := current.call(http.MethodPost, path, map[string]any{"reason": "subject access request"}, adminToken)
+	if busy.Code != http.StatusTooManyRequests || errorCode(busy) != "export_running" || busy.Header().Get("Retry-After") != "60" {
+		test.Fatalf("a second export answered %d %s", busy.Code, busy.Body.String())
+	}
+	time.Sleep(100 * time.Millisecond)
+	close(current.backend.hold)
+	exported := <-first
+	lines := strings.Split(strings.TrimSpace(exported.Body.String()), "\n")
+	if exported.Code != http.StatusOK || exported.Header().Get("Content-Type") != "application/x-ndjson" || len(lines) != 2 || !strings.HasPrefix(lines[1], `{"summary"`) {
+		test.Fatalf("the export answered %d %v %q", exported.Code, exported.Header(), exported.Body.String())
+	}
+	if arguments := current.backend.last("ExportDevice"); arguments[0] != deviceID || arguments[1] != "subject access request" {
+		test.Fatalf("the backend was asked %v", arguments)
 	}
 }

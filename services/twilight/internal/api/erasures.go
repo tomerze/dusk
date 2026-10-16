@@ -1,13 +1,17 @@
 package api
 
 import (
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/erasure"
 )
+
+const exportPath = "/api/v1/devices/{device}/export"
 
 func (server *Server) eraseDevice(call *exchange) error {
 	device := call.request.PathValue("device")
@@ -60,5 +64,46 @@ func (server *Server) erasure(call *exchange) error {
 		return failure
 	}
 	writeJSON(call, http.StatusOK, found)
+	return nil
+}
+
+func (server *Server) exportDevice(call *exchange) error {
+	device := call.request.PathValue("device")
+	if !identifierPattern.MatchString(device) {
+		return invalid("a device id is 32 lowercase hexadecimal digits")
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if failure := decodeBody(call, &body, true); failure != nil {
+		return failure
+	}
+	if _, failure := erasure.ValidReason(body.Reason); failure != nil {
+		return failure
+	}
+	select {
+	case server.exports <- struct{}{}:
+		defer func() { <-server.exports }()
+	default:
+		return newProblem(http.StatusTooManyRequests, "export_running", "this instance is already exporting device data; try again when that export ends").with("retry_after_seconds", 60)
+	}
+	controller := http.NewResponseController(call.writer)
+	if failure := controller.SetWriteDeadline(time.Time{}); failure != nil && !errors.Is(failure, http.ErrNotSupported) {
+		return failure
+	}
+	header := call.writer.Header()
+	header.Set("Content-Type", "application/x-ndjson")
+	header.Set("Content-Disposition", `attachment; filename="device-`+device+`.ndjson"`)
+	header.Set("X-Accel-Buffering", "no")
+	call.writer.WriteHeader(http.StatusOK)
+	flush := func() {
+		if failure := controller.Flush(); failure != nil && !errors.Is(failure, http.ErrNotSupported) {
+			server.Logger.Debug("an export flush failed", "request_id", call.requestID, "error", failure)
+		}
+	}
+	if failure := server.Backend.ExportDevice(call.request.Context(), device, body.Reason, call.actor(), call.writer, flush); failure != nil {
+		server.Logger.Error("a device data export ended early; the client received an incomplete export without its summary", "device_id", device,
+			"principal", call.actor(), "request_id", call.requestID, "error", failure)
+	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -693,4 +694,8 @@ func (service *Service) EraseTenant(operation context.Context, tenant, reason, a
 
 func (service *Service) Erasure(operation context.Context, identifier uuid.UUID) (erasure.Erasure, error) {
 	return service.engine.erasures.Get(operation, identifier)
+}
+
+func (service *Service) ExportDevice(operation context.Context, device, reason, actor string, output io.Writer, flush func()) error {
+	return service.engine.erasures.Export(operation, device, reason, actor, output, flush)
 }

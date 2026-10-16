@@ -31,6 +31,7 @@ func routeTable() []route {
 		{http.MethodPost, "/api/v1/nodes/{device}/{installation}/files", RoleOperator, (*Server).collectFile},
 		{http.MethodPost, "/api/v1/devices/{device}/lifecycle", RoleAdmin, (*Server).deviceLifecycle},
 		{http.MethodPost, "/api/v1/devices/{device}/erasure", RoleAdmin, (*Server).eraseDevice},
+		{http.MethodPost, exportPath, RoleAdmin, (*Server).exportDevice},
 		{http.MethodPost, "/api/v1/tenants/{tenant}/erasure", RoleAdmin, (*Server).eraseTenant},
 		{http.MethodGet, "/api/v1/erasures/{id}", RoleAdmin, (*Server).erasure},
 		{http.MethodGet, "/api/v1/revocations", RoleViewer, (*Server).revocations},
