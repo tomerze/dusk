@@ -93,3 +93,19 @@ spec:
       secretKeyRef:
         name: ceph-signoz
         key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: postgres-backup
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk postgres-backup
+  keys:
+    - accessKeyRef:
+        name: ceph-postgres-backup
+        key: access-key
+      secretKeyRef:
+        name: ceph-postgres-backup
+        key: secret-key

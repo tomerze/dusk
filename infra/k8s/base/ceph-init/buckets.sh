@@ -9,6 +9,7 @@ evidence_days=${EVIDENCE_RETENTION_DAYS:-400}
 lake_bucket=${LAKE_BUCKET:-dusk-lake}
 files_bucket=${FILES_BUCKET:-dusk-files}
 signoz_bucket=${SIGNOZ_BUCKET:-signoz-cold}
+backup_bucket=${POSTGRES_BACKUP_BUCKET:-dusk-postgres-backups}
 evidence_writer=${EVIDENCE_WRITER_USER:-ledger-writer}
 evidence_reader=${EVIDENCE_READER_USER:-admin}
 files_reader=${FILES_READER_USER:-admin}
@@ -16,6 +17,7 @@ lake_writer=${LAKE_WRITER_USER:-vector}
 lake_reader=${LAKE_READER_USER:-reader}
 files_writer=${FILES_WRITER_USER:-dawn}
 signoz_user=${SIGNOZ_USER:-signoz}
+backup_user=${POSTGRES_BACKUP_USER:-postgres-backup}
 
 AWS_ACCESS_KEY_ID=$(cat "${ADMIN_ACCESS_KEY_FILE:-$secrets/ceph-admin/access-key}")
 AWS_SECRET_ACCESS_KEY=$(cat "${ADMIN_SECRET_KEY_FILE:-$secrets/ceph-admin/secret-key}")
@@ -80,13 +82,14 @@ fi
 echo "bucket $evidence_bucket default retention $evidence_mode for $evidence_days days"
 put_policy "$evidence_bucket" "$(statement EvidenceWriter "$evidence_writer" '["s3:PutObject"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]"),$(statement EvidenceWriterOnly "$evidence_writer" "$write_only" "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]" Deny),$(statement EvidenceReader "$evidence_reader" '["s3:GetObject","s3:GetObjectVersion","s3:GetObjectRetention","s3:GetObjectLegalHold","s3:ListBucket","s3:ListBucketVersions","s3:GetBucketObjectLockConfiguration"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]")"
 
-for bucket in "$lake_bucket" "$files_bucket" "$signoz_bucket"; do
+for bucket in "$lake_bucket" "$files_bucket" "$signoz_bucket" "$backup_bucket"; do
     ensure_bucket "$bucket"
 done
 
 put_policy "$lake_bucket" "$(statement LakeWriter "$lake_writer" '["s3:PutObject","s3:GetObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]"),$(statement LakeReader "$lake_reader" '["s3:GetObject","s3:ListBucket"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]")"
 put_policy "$files_bucket" "$(statement FilesWriter "$files_writer" '["s3:PutObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]"),$(statement FilesWriterOnly "$files_writer" "$write_only" "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]" Deny),$(statement FilesReader "$files_reader" '["s3:GetObject","s3:DeleteObject","s3:ListBucket"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]")"
 put_policy "$signoz_bucket" "$(statement SignozCold "$signoz_user" '["s3:PutObject","s3:GetObject","s3:DeleteObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$signoz_bucket\",\"arn:aws:s3:::$signoz_bucket/*\"]")"
+put_policy "$backup_bucket" "$(statement PostgresBackups "$backup_user" '["s3:PutObject","s3:GetObject","s3:DeleteObject","s3:ListBucket","s3:GetBucketLocation","s3:AbortMultipartUpload","s3:ListMultipartUploadParts","s3:ListBucketMultipartUploads"]' "[\"arn:aws:s3:::$backup_bucket\",\"arn:aws:s3:::$backup_bucket/*\"]")"
 "${s3api[@]}" put-bucket-lifecycle-configuration --bucket "$files_bucket" \
     --lifecycle-configuration '{"Rules":[{"ID":"abort-incomplete-uploads","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}]}'
 echo "bucket $files_bucket aborts incomplete multipart uploads after one day"

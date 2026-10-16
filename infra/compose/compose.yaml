@@ -331,6 +331,7 @@ services:
       - { <<: *secret, target: /run/secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
       - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
       - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+      - { <<: *secret, target: /run/secrets/ceph-postgres-backup, volume: { subpath: ceph-postgres-backup } }
 
   ceph-init:
     image: amazon/aws-cli:2.37.9
@@ -828,6 +829,7 @@ services:
       - { <<: *secret, target: /secrets/ceph-reader, volume: { subpath: ceph-reader } }
       - { <<: *secret, target: /secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
       - { <<: *secret, target: /secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+      - { <<: *secret, target: /secrets/ceph-postgres-backup, volume: { subpath: ceph-postgres-backup } }
       - { <<: *secret, target: /secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
       - { <<: *secret, target: /secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
       - { <<: *secret, target: /secrets/postgres-signoz, volume: { subpath: postgres-signoz } }

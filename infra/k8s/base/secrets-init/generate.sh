@@ -107,7 +107,7 @@ create step-ca-password step_ca_password
 create nightfall-ledger ledger_keys
 create nightfall-ledger-verify ledger_verify_keys
 create dawn-output-key dawn_output_key
-for user in admin vector ledger-writer dawn reader signoz; do
+for user in admin vector ledger-writer dawn reader signoz postgres-backup; do
     create "ceph-$user" ceph_user
 done
 create postgres-superuser postgres_login postgres

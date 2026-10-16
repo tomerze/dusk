@@ -150,3 +150,10 @@ spec:
                       path: ceph-signoz/access-key
                     - key: secret-key
                       path: ceph-signoz/secret-key
+              - secret:
+                  name: ceph-postgres-backup
+                  items:
+                    - key: access-key
+                      path: ceph-postgres-backup/access-key
+                    - key: secret-key
+                      path: ceph-postgres-backup/secret-key

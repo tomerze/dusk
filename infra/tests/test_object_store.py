@@ -10,6 +10,7 @@ EVIDENCE = "dusk-ledger-evidence"
 LAKE = "dusk-lake"
 FILES = "dusk-files"
 SIGNOZ = "signoz-cold"
+BACKUPS = "dusk-postgres-backups"
 
 
 def refused(call: Callable[[], Any]) -> str:
@@ -22,7 +23,7 @@ def test_every_bucket_exists(object_store: Callable[[str], Any]) -> None:
     names = {
         bucket["Name"] for bucket in object_store("admin").list_buckets()["Buckets"]
     }
-    assert {EVIDENCE, LAKE, FILES, SIGNOZ} <= names
+    assert {EVIDENCE, LAKE, FILES, SIGNOZ, BACKUPS} <= names
 
 
 def test_the_evidence_bucket_locks_every_object_by_default(
@@ -69,7 +70,7 @@ def test_the_ledger_writer_may_only_put_evidence(
 
 
 def test_nobody_else_writes_evidence(object_store: Callable[[str], Any]) -> None:
-    for user in ["vector", "dawn", "reader", "signoz"]:
+    for user in ["vector", "dawn", "reader", "signoz", "postgres-backup"]:
         client = object_store(user)
         assert (
             refused(
@@ -136,3 +137,28 @@ def test_incomplete_uploads_of_collected_files_are_aborted_after_a_day(
     assert [
         rule["AbortIncompleteMultipartUpload"]["DaysAfterInitiation"] for rule in rules
     ] == [1]
+
+
+def test_postgres_backups_go_to_their_own_bucket_only(
+    object_store: Callable[[str], Any],
+) -> None:
+    backup = object_store("postgres-backup")
+    key = f"verify/{uuid.uuid4()}/wals/0000000100000000/000000010000000000000001.zst"
+    backup.put_object(Bucket=BACKUPS, Key=key, Body=b"wal")
+    assert backup.get_object(Bucket=BACKUPS, Key=key)["Body"].read() == b"wal"
+    assert any(
+        item["Key"] == key
+        for item in backup.list_objects_v2(Bucket=BACKUPS, Prefix="verify/")["Contents"]
+    )
+    backup.delete_object(Bucket=BACKUPS, Key=key)
+    for bucket in [LAKE, FILES, SIGNOZ]:
+        assert (
+            refused(lambda: backup.put_object(Bucket=bucket, Key=key, Body=b"x"))
+            == "AccessDenied"
+        )
+    for user in ["vector", "dawn", "reader", "signoz"]:
+        client = object_store(user)
+        assert (
+            refused(lambda: client.put_object(Bucket=BACKUPS, Key=key, Body=b"x"))
+            == "AccessDenied"
+        )
