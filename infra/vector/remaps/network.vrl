@@ -1,0 +1,21 @@
+address = string!(.remote_address)
+host = address
+parsed, failure = parse_regex(address, r'^\[(?P<host>[^\]]+)\]:\d+$')
+if failure == null {
+  host = string!(parsed.host)
+} else {
+  parsed, failure = parse_regex(address, r'^(?P<host>[^:\[\]]+):\d+$')
+  if failure == null {
+    host = string!(parsed.host)
+  }
+}
+if starts_with(host, "::ffff:") && is_ipv4(slice!(host, 7)) {
+  host = slice!(host, 7)
+}
+if is_ipv4(host) {
+  .remote_address = ip_subnet!(host, "/24") + "/24"
+} else if is_ipv6(host) {
+  .remote_address = ip_subnet!(host, "/48") + "/48"
+} else {
+  .remote_address = ""
+}

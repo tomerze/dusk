@@ -13,7 +13,7 @@ COPY infra/vector/lake /etc/vector/lake
 COPY --from=contracts /out/contracts /etc/vector/contracts
 
 FROM configured AS test
-COPY infra/vector/tests/sources.yaml infra/vector/tests/contracts.yaml infra/vector/tests/otel.yaml /etc/vector/tests/
+COPY infra/vector/tests/sources.yaml infra/vector/tests/contracts.yaml infra/vector/tests/otel.yaml infra/vector/tests/lake.yaml /etc/vector/tests/
 COPY --from=contracts /out/tests /etc/vector/tests/generated
 RUN vector test /etc/vector/transforms.yaml /etc/vector/tests/*.yaml /etc/vector/tests/generated/*.json \
     && touch /etc/vector/tested

@@ -494,7 +494,7 @@ sinks:
       enabled: true
   lake_connections:
     type: aws_s3
-    inputs: [connections]
+    inputs: [connections_for_lake]
     bucket: "${LAKE_BUCKET:-dusk-lake}"
     endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
     region: "${S3_REGION:-us-east-1}"
@@ -529,7 +529,7 @@ sinks:
       enabled: true
   lake_enrollments:
     type: aws_s3
-    inputs: [enrollments]
+    inputs: [enrollments_for_lake]
     bucket: "${LAKE_BUCKET:-dusk-lake}"
     endpoint: "${S3_ENDPOINT:-http://ceph:8080}"
     region: "${S3_REGION:-us-east-1}"

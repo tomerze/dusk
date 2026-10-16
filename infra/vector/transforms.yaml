@@ -13,12 +13,24 @@ transforms:
     drop_on_error: true
     drop_on_abort: true
     reroute_dropped: false
+  connections_for_lake:
+    type: remap
+    inputs: [connections]
+    file: /etc/vector/remaps/network.vrl
+    drop_on_error: true
+    reroute_dropped: false
   enrollments:
     type: remap
     inputs: [kafka_enrollments]
     files: [/etc/vector/remaps/contract.vrl, /etc/vector/remaps/enrollments.vrl]
     drop_on_error: true
     drop_on_abort: true
+    reroute_dropped: false
+  enrollments_for_lake:
+    type: remap
+    inputs: [enrollments]
+    file: /etc/vector/remaps/network.vrl
+    drop_on_error: true
     reroute_dropped: false
   process_results:
     type: remap

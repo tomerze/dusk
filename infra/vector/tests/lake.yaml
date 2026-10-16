@@ -1,0 +1,54 @@
+tests:
+  - name: the lake keeps an IPv4 node address as its /24
+    inputs:
+      - insert_at: connections_for_lake
+        type: log
+        log_fields:
+          device_id: 3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13
+          remote_address: 203.0.113.24:51734
+    outputs:
+      - extract_from: connections_for_lake
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.remote_address, "203.0.113.0/24")
+              assert_eq!(.device_id, "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13")
+
+  - name: the lake keeps an IPv6 node address as its /48
+    inputs:
+      - insert_at: connections_for_lake
+        type: log
+        log_fields:
+          remote_address: "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"
+    outputs:
+      - extract_from: connections_for_lake
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.remote_address, "2001:db8:85a3::/48")
+
+  - name: the lake keeps an IPv4-mapped IPv6 address as the IPv4 /24
+    inputs:
+      - insert_at: enrollments_for_lake
+        type: log
+        log_fields:
+          remote_address: "[::ffff:198.51.100.7]:40000"
+    outputs:
+      - extract_from: enrollments_for_lake
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.remote_address, "198.51.100.0/24")
+
+  - name: the lake keeps no part of an address it cannot read
+    inputs:
+      - insert_at: enrollments_for_lake
+        type: log
+        log_fields:
+          remote_address: not an address
+    outputs:
+      - extract_from: enrollments_for_lake
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.remote_address, "")
