@@ -9,7 +9,7 @@ default = ["hosted"]
 hosted = ["critical-section/std", "embassy-executor/platform-std"]
 
 [dependencies]
-embassy-executor = { version = "0.10.0", default-features = false, features = ["trace", "nightly", "executor-thread"] }
+embassy-executor = { version = "0.10.0", default-features = false, features = ["trace", "executor-thread"] }
 embassy-time = { version = "0.5", features = ["std"] }
 async-trait = "*"
 
