@@ -92,7 +92,8 @@ impls/std/     The std impl (Embassy executor, the StdDriver)
 impls/windows/ The Windows impl (Embassy executor, the WindowsDriver)
 artifacts/     Deliverables you ship: dusk_node (server), dusk (CLI), dusk_py
 docs/          The documentation site (MkDocs)
-vendor/        External libs submodules
+vendor/        Third-party code: the capnproto submodule, and capnp-rpc and
+               capnp-futures ported to build without std
 ```
 
 ## The crates
@@ -583,6 +584,15 @@ are `no_std`; impls and the client crates (`dusk_connection`, `dusk_cli`,
 `dusk_py`) are `std`. A quick sanity check:
 `grep -rn "std::\|use std" base/ --include="*.rs"` should only hit `client.rs`
 files, `client/` directories, or `#[cfg(feature = "client")]` modules.
+
+The check that holds is building them for a target that has no std. CI's
+`Rust (no_std, thumbv7em-none-eabihf)` job builds `dusk_capnp`, `dusk_program`,
+`dusk_core`, kvs's internal crate and every program but `nightfall` for
+`thumbv7em-none-eabihf`; a std dependency that slips into any of them fails
+there. The node's RPC is the `capnp-rpc` and `capnp-futures` ported under
+`vendor/`: their byte streams are `capnp_futures::io::AsyncRead` and `AsyncWrite`,
+which `dusk_core::session` takes, and a std caller holding a `futures-io` stream
+wraps it in `capnp_futures::io::FromFutures`, as `nightfall`'s listen mode does.
 
 ## Development
 
