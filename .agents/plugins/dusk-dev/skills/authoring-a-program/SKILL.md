@@ -486,23 +486,15 @@ async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
                 let (reader, writer) = stream.split();
 
                 let task_id = Rc::new(Cell::new(0));
-                let session_task = match dusk_core::session(
-                    task_id.clone(),
-                    self.namespace().clone(),
-                    Box::pin(reader),
-                    Box::pin(writer),
-                ) {
-                    Ok(session_task) => session_task,
-                    Err(error) => {
-                        tracing::error!(
-                            error = %error,
-                            "couldn't take a connection: every session slot is in use"
-                        );
-                        continue;
-                    }
-                };
-                task_id.set(session_task.id());
-                self.ctx.namespace.spawner.spawn(session_task);
+                task_id.set(dusk_core::task::spawn(
+                    self.ctx.namespace.spawner,
+                    dusk_core::session(
+                        task_id.clone(),
+                        self.namespace().clone(),
+                        Box::pin(reader),
+                        Box::pin(writer),
+                    ),
+                ));
             }
             signal = signal_receiver.receive().fuse() => {
                 if let Signal::Terminate = signal { return Ok(()) }
@@ -798,16 +790,17 @@ fn spawn_<work>_task(
     let completion = Rc::new(Signal::new());
 
     let task_id = Rc::new(Cell::new(0u32));
-    let token = <work>_task(
-        task_id.clone(),
-        ctx.pid,
-        /* … */,
-        stop,
-        state,
-        completion.clone(),
-    ).map_err(|e| capnp::Error::failed(format!("failed to spawn task: {e:?}")))?;
-    task_id.set(token.id());
-    ctx.namespace.spawner.spawn(token);
+    task_id.set(dusk_core::task::spawn(
+        ctx.namespace.spawner,
+        <work>_task(
+            task_id.clone(),
+            ctx.pid,
+            /* … */,
+            stop,
+            state,
+            completion.clone(),
+        ),
+    ));
     Ok(completion)
 }
 ```
@@ -815,7 +808,6 @@ fn spawn_<work>_task(
 ### 4. The Embassy task
 
 ```rust
-#[embassy_executor::task(pool_size = 16)]
 async fn <work>_task(
     task_id: Rc<Cell<u32>>,
     pid: u64,
@@ -840,7 +832,7 @@ async fn <work>_task(
 
 Three load-bearing points:
 
-- `task_id = Rc::new(Cell::new(0u32))` then `task_id.set(token.id())` after spawn - required for the span field. See **Tracing** below.
+- `task_id = Rc::new(Cell::new(0u32))` then `task_id.set(…)` with the id `dusk_core::task::spawn` returns - required for the span field. See **Tracing** below.
 - `state.borrow_mut().active_stops.retain(|s| !Rc::ptr_eq(s, &stop))` at the end - cleans up the stop entry so the vec doesn't grow forever.
 - `completion.signal(result)` - the only place the result of a detached task is captured. Awaited callers (e.g. `Portal::sh`) consume it via the returned completion `Rc<Signal>`; the detached `sh` watches it in its signal loop and logs it. A task nobody is left to watch - `sh`'s, for a detached script that is one program - is spawned with `logs_result` and logs its own result, with the same `log_detached_result` the loop uses.
 
@@ -1005,9 +997,10 @@ Every spawned Embassy task wraps its body in a span:
 ```rust
 use tracing::Instrument;
 let task_id = Rc::new(Cell::new(0u32));
-let token = some_task(task_id.clone(), /* … */)?;
-task_id.set(token.id());
-ctx.namespace.spawner.spawn(token);
+task_id.set(dusk_core::task::spawn(
+    ctx.namespace.spawner,
+    some_task(task_id.clone(), /* … */),
+));
 
 // Inside the task body:
 let span = tracing::info_span!("task_name", task_id = task_id.get(), /* domain fields */);

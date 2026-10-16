@@ -161,11 +161,7 @@ NODE_UNREACHABLE = {
 }
 COMMAND_FAILED = {
     "model": ErrorResponse,
-    "description": (
-        "The node could not run the command. Among other reasons, a node runs "
-        "each command in a shell task from a bounded pool, and answers `Busy` "
-        "once they are all taken."
-    ),
+    "description": "The node could not run the command.",
 }
 
 

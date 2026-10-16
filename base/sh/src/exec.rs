@@ -6,7 +6,6 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use dusk_capnp::capnp::message::HeapAllocator;
 use dusk_program::anyhow;
-use dusk_program::embassy_executor;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use dusk_program::process::ProcessContext;
 
@@ -41,7 +40,6 @@ pub(crate) fn log_detached_result(pid: u64, result: &anyhow::Result<()>) {
     }
 }
 
-#[embassy_executor::task(pool_size = 16)]
 async fn sh_exec_task(
     task_id: Rc<Cell<u32>>,
     pid: u64,
@@ -108,20 +106,20 @@ pub(crate) fn spawn_sh_exec_task(
     > = Rc::new(dusk_program::embassy_sync::signal::Signal::new());
 
     let task_id = Rc::new(Cell::new(0u32));
-    let token = sh_exec_task(
-        task_id.clone(),
-        ctx.pid,
-        ctx.namespace.id,
-        interpreter,
-        owned_script,
-        output,
-        stop,
-        state,
-        completion.clone(),
-        logs_result,
-    )
-    .map_err(|e| capnp::Error::failed(format!("failed to spawn sh exec task: {e:?}")))?;
-    task_id.set(token.id());
-    ctx.namespace.spawner.spawn(token);
+    task_id.set(dusk_core::task::spawn(
+        ctx.namespace.spawner,
+        sh_exec_task(
+            task_id.clone(),
+            ctx.pid,
+            ctx.namespace.id,
+            interpreter,
+            owned_script,
+            output,
+            stop,
+            state,
+            completion.clone(),
+            logs_result,
+        ),
+    ));
     Ok(completion)
 }
