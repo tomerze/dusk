@@ -103,6 +103,9 @@ spec:
     spec:
       containers:
         - name: twilight
+          env:
+            - name: GOMEMLIMIT
+              value: 900MiB
           resources:
             requests:
               cpu: 100m

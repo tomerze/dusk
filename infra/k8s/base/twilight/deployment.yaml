@@ -69,6 +69,8 @@ spec:
                   fieldPath: metadata.name
             - name: TWILIGHT__INSTANCE
               value: $(POD_NAME)
+            - name: GOMEMLIMIT
+              value: 3600MiB
           args: ["serve"]
           ports:
             - name: http
