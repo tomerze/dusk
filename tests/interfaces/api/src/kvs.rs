@@ -31,7 +31,7 @@ impl StreamMixin for CaptureStream {
 }
 
 /// `Dusk.process`, then `Dusk.run`, then `Process.portal` - as the shell does.
-async fn start(
+pub(crate) async fn start(
     client: &dusk::Client,
     program_args: Rc<ProgramArgs>,
 ) -> (u64, dusk_capnp::dusk_capnp::portal::Client) {
