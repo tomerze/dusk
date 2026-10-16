@@ -1,3 +1,7 @@
+#![no_std]
+#![allow(internal_features)]
+#![feature(prelude_import)]
+
 #[allow(clippy::all)]
 extern crate alloc;
 
@@ -12,6 +16,10 @@ pub extern crate capnp;
 pub extern crate capnp_rpc;
 
 pub mod prelude;
+
+#[allow(unused)]
+#[prelude_import]
+use crate::prelude::*;
 
 pub mod stream_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/stream_capnp.rs"));
