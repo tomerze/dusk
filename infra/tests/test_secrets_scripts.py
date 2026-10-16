@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -114,6 +115,34 @@ def test_generate_keeps_every_secret_that_exists(
     assert snapshot(output) == before
     assert "created" not in second
     assert second.count("exists, kept") == len(groups)
+
+
+def test_generate_writes_each_hashed_token_beside_the_entry_of_its_digest(
+    tmp_path: Path, step: dict[str, str]
+) -> None:
+    output = tmp_path / "secrets"
+    generate(
+        output,
+        step
+        | {
+            "FLEET_TOKEN_NAME": "compose",
+            "FLEET_TOKEN_TENANT": "dev",
+            "PROVISION_TOKEN_NAME": "compose-provision",
+        },
+    )
+    tokens = {}
+    for group, file, name, tenant in [
+        ("fleet-token", "fleet-token", "compose", 'tenant = "dev"\n'),
+        ("fleet-provision-token", "provision-token", "compose-provision", ""),
+    ]:
+        token = (output / group / file).read_text()
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        assert len(token) == 48
+        assert (output / group / f"{file}s.toml").read_text() == (
+            f'[[token]]\nname = "{name}"\nvalue_sha256 = "{digest}"\n{tenant}'
+        )
+        tokens[group] = token
+    assert tokens["fleet-token"] != tokens["fleet-provision-token"]
 
 
 def test_generate_gives_signoz_a_password_its_policy_accepts(

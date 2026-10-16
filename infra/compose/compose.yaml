@@ -55,6 +55,8 @@ services:
     environment:
       FLEET_TOKEN_NAME: compose
       FLEET_TOKEN_TENANT: dev
+      PROVISION_TOKEN_NAME: compose
+      PROVISION_TOKEN_TENANT: dev
     network_mode: none
     volumes:
       - secrets:/secrets
@@ -522,6 +524,7 @@ services:
       - { <<: *pki, target: /etc/nightfall/pki/fleet-client-root.crt, volume: { subpath: trust-anchors/fleet-client-ca.crt } }
       - { <<: *pki, target: /etc/nightfall/pki/internal-ca.crt, volume: { subpath: trust-anchors/internal-ca.crt } }
       - { <<: *secret, target: /etc/nightfall/secrets/fleet-tokens.toml, volume: { subpath: fleet-token/fleet-tokens.toml } }
+      - { <<: *secret, target: /etc/nightfall/secrets/provision-tokens.toml, volume: { subpath: fleet-provision-token/provision-tokens.toml } }
       - { <<: *secret, target: /etc/nightfall/secrets/install-token-jwks.json, volume: { subpath: fleet-install-token-keys/install-token-jwks.json } }
       - { <<: *secret, target: /etc/nightfall/secrets/device-id.key, volume: { subpath: fleet-device-id/device-id.key } }
       - { <<: *secret, target: /etc/nightfall/secrets/provisioner.jwk, volume: { subpath: fleet-provisioner/provisioner.jwk } }
@@ -652,6 +655,7 @@ services:
         FLEET: fleet.${DUSK_DOMAIN:-dusk.test}:8443
         PROVISION: provision.${DUSK_DOMAIN:-dusk.test}:8443
         FLEET_SHA256: ${DUSK_FLEET_SHA256:-}
+        PROVISION_TOKEN_FILE: /etc/dusk/provision-token
       secrets: [fleet-token]
     networks: [stack]
     deploy:
@@ -662,6 +666,7 @@ services:
     volumes:
       - /var/lib/dusk
       - { <<: *pki, target: /etc/dusk/fleet-server-ca.pem, volume: { subpath: trust-anchors/fleet-server-ca.crt } }
+      - { <<: *secret, target: /etc/dusk/provision-token, volume: { subpath: fleet-provision-token/provision-token } }
 
   signoz-migrate:
     profiles: [signoz]

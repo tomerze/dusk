@@ -12,8 +12,9 @@ ARG CPUSET=
 ARG FLEET
 ARG PROVISION
 ARG FLEET_SHA256
+ARG PROVISION_TOKEN_FILE=
 ENV DUSK_GIT_REV=$GIT_REV \
-    DUSK_NODE_INIT_SCRIPT="nightfall -c ${FLEET} --provision ${PROVISION} --ca /etc/dusk/fleet-server-ca.pem" \
+    DUSK_NODE_INIT_SCRIPT="nightfall -c ${FLEET} --provision ${PROVISION} --ca /etc/dusk/fleet-server-ca.pem${PROVISION_TOKEN_FILE:+ --provision-token-file }${PROVISION_TOKEN_FILE}" \
     DUSK_NODE_KVS_PERSISTENT=/var/lib/dusk/kvs
 RUN --mount=type=secret,id=fleet-token,env=DUSK_FLEET_TOKEN \
     --mount=type=cache,target=/usr/local/cargo/registry \

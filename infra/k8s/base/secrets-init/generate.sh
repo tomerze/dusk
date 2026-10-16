@@ -17,18 +17,18 @@ device_id_key() {
     hex_key > "$1/device-id.key"
 }
 
-fleet_token() {
+hashed_token() {
     token=$(step crypto rand --format alphanumeric 48)
-    printf '%s' "$token" > "$1/fleet-token"
+    printf '%s' "$token" > "$4/$1"
     digest=$(printf '%s' "$token" | sha256sum | cut -d ' ' -f 1)
     {
         printf '[[token]]\n'
-        printf 'name = "%s"\n' "${FLEET_TOKEN_NAME:-default}"
+        printf 'name = "%s"\n' "$2"
         printf 'value_sha256 = "%s"\n' "$digest"
-        if [ -n "${FLEET_TOKEN_TENANT:-}" ]; then
-            printf 'tenant = "%s"\n' "$FLEET_TOKEN_TENANT"
+        if [ -n "$3" ]; then
+            printf 'tenant = "%s"\n' "$3"
         fi
-    } > "$1/fleet-tokens.toml"
+    } > "$4/$1s.toml"
 }
 
 install_token_keys() {
@@ -99,7 +99,8 @@ create() {
 }
 
 create fleet-device-id device_id_key
-create fleet-token fleet_token
+create fleet-token hashed_token fleet-token "${FLEET_TOKEN_NAME:-default}" "${FLEET_TOKEN_TENANT:-}"
+create fleet-provision-token hashed_token provision-token "${PROVISION_TOKEN_NAME:-default}" "${PROVISION_TOKEN_TENANT:-}"
 create fleet-install-token-keys install_token_keys
 create fleet-provisioner provisioner
 create step-ca-password step_ca_password

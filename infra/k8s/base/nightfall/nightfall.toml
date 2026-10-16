@@ -21,6 +21,7 @@ server_names = ["provision.dusk.test"]
 certificate = "/etc/nightfall/tls/provision.crt"
 key = "/etc/nightfall/tls/provision.key"
 fleet_tokens_file = "/etc/nightfall/secrets/fleet-tokens.toml"
+provision_tokens_file = "/etc/nightfall/secrets/provision-tokens.toml"
 install_token_keys = "/etc/nightfall/secrets/install-token-jwks.json"
 device_id_key_file = "/etc/nightfall/secrets/device-id.key"
 challenge_ttl_ms = 300000

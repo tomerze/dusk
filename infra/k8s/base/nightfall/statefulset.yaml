@@ -151,6 +151,11 @@ spec:
                     - key: fleet-tokens.toml
                       path: secrets/fleet-tokens.toml
               - secret:
+                  name: fleet-provision-token
+                  items:
+                    - key: provision-tokens.toml
+                      path: secrets/provision-tokens.toml
+              - secret:
                   name: fleet-install-token-keys
                   items:
                     - key: install-token-jwks.json
