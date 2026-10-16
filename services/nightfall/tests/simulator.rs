@@ -136,7 +136,7 @@ fn nightfall_admits_links_signed_by_a_ca_in_its_fleet_client_bundle_and_no_other
             .issuer
             .mint(&device, &installation_id(&device))
             .unwrap();
-        let node = Node::new(1, device);
+        let node = Node::new(1, device, "simulated".to_string());
         let served = serve(&untrusted, &node, &identity, 0).await;
         assert!(!matches!(served, Ok((Ended::Silent, _))), "{served:?}");
         assert_eq!(

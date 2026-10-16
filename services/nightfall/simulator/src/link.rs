@@ -153,7 +153,11 @@ pub async fn run(settings: Arc<Settings>, link: u64, start_at: Instant) {
     sleep_until(start_at).await;
     let device_id = identity::device_id(settings.simulator, link);
     let installation_id = identity::installation_id(&device_id);
-    let node = Node::new(rand::random(), device_id);
+    let node = Node::new(
+        rand::random(),
+        device_id,
+        format!("simulated-{}-{link}", settings.simulator),
+    );
     let mut identity: Option<Identity> = None;
     let mut attempt = 0u32;
     loop {
@@ -236,7 +240,7 @@ mod tests {
             heartbeat_timeout: Duration::from_millis(300),
         };
         let device_id = identity::device_id(0, 1);
-        let node = Node::new(0x5eed, device_id.clone());
+        let node = Node::new(0x5eed, device_id.clone(), "simulated-0-1".to_string());
         let identity = settings
             .issuer
             .mint(&device_id, &identity::installation_id(&device_id))
