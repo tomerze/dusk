@@ -1,5 +1,6 @@
-use capnpc::CompilerCommand;
-use std::path::Path;
+#![no_std]
+#![allow(internal_features)]
+#![feature(prelude_import)]
 
 #[allow(clippy::all)]
 extern crate alloc;
@@ -13,9 +14,12 @@ pub const GIT_REV: &str = env!("GIT_REV");
 // Re-export Cap'n Proto crates for all dependent crates
 pub extern crate capnp;
 pub extern crate capnp_rpc;
-pub extern crate capnpc;
 
 pub mod prelude;
+
+#[allow(unused)]
+#[prelude_import]
+use crate::prelude::*;
 
 pub mod stream_capnp {
     include!(concat!(env!("OUT_DIR"), "/capnp/stream_capnp.rs"));
@@ -68,56 +72,3 @@ pub const STREAM_CAPNP: CapnpDep = CapnpDep {
     crate_name: "dusk_capnp",
     schema_ids: &[0x86c366a91393f3f8],
 };
-
-/// Compile a `.capnp` schema file into Rust code.
-pub fn build_capnp(path: &str, deps: &[CapnpDep]) {
-    println!("cargo:rerun-if-changed={path}");
-
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    let capnp_dir = Path::new(&out_dir).join("capnp");
-    std::fs::create_dir_all(&capnp_dir).unwrap();
-
-    let capnp_path = Path::new(capnp_bin_path());
-    if !capnp_path.exists() {
-        panic!(
-            "Expected capnp compiler built by dusk_capnp at {}",
-            capnp_path.display()
-        );
-    }
-
-    // Always include the core schemas
-    let builtins: &[CapnpDep] = &[DUSK_CAPNP, STREAM_CAPNP];
-
-    let mut cmd = CompilerCommand::new();
-    cmd.capnp_executable(capnp_path);
-    cmd.import_path(&out_dir);
-
-    for dep in builtins.iter().chain(deps.iter()) {
-        println!("cargo:rerun-if-changed={}", dep.schema);
-
-        // Copy schema into the import directory so `import "/capnp/foo.capnp"` resolves
-        let src = Path::new(dep.schema);
-        let file_name = src
-            .file_name()
-            .expect("CapnpDep schema path must have a filename");
-        let dest = capnp_dir.join(file_name);
-        std::fs::copy(src, &dest).unwrap_or_else(|e| {
-            panic!(
-                "Failed to copy {} to {}: {}",
-                src.display(),
-                dest.display(),
-                e
-            )
-        });
-
-        // Register crate_provides for each schema ID
-        cmd.crate_provides(dep.crate_name, dep.schema_ids.iter().copied());
-    }
-
-    cmd.file(path).run().unwrap();
-}
-
-/// Backwards-compatible wrapper - compiles a capnp file with only the default dusk deps.
-pub fn build_capnp_file(path: &str) {
-    build_capnp(path, &[]);
-}
