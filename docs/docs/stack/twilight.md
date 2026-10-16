@@ -49,6 +49,34 @@ migration already applied never changes: if the checksum recorded for an
 applied migration differs from the one the binary carries, `migrate` and
 `serve` stop and name it.
 
+Every row of `nodes`, `node_presence` and `campaign_nodes` carries the
+partition of `topics.process_results` its node's results go to: the
+murmur2 hash of `<device id>/<installation id>`, modulo the topic's partition
+count, which is how Kafka's default partitioner, and with it dawn's producer,
+places them. The migration that adds that column (`0018_node_partitions`)
+needs the partition count, so while it is pending `migrate` and `serve
+--migrate` read it from Kafka, waiting up to 5 minutes for the topic to exist:
+run them where Kafka is reachable, after the topics are created. No other
+migration needs Kafka.
+
+That migration rewrites `nodes`, `node_presence` and `campaign_nodes` to compute
+every row's partition, and holds an exclusive lock on the three tables until it
+commits, so every query a running instance makes on them waits for it.
+Computing a partition took about 18 µs a row on a test host under a load
+average near 90: for 1,000,000 nodes and one campaign of 1,000,000 rows, about a
+minute of hashing, besides rewriting the tables and building their indexes. On
+a large inventory, run it with twilight scaled to zero or in a maintenance
+window.
+
+The partition count is fixed from then on. While the topic has another number
+of partitions, every instance logs it at `error` on each topic check, every 30
+seconds, and sets `twilight_process_results_partitions_mismatched` to 1, and
+the leader writes no campaign row, advances no phase and dispatches nothing;
+the API keeps answering. Kafka cannot take partitions away from a topic, so
+the way back from a grown topic is to recreate it with the count the inventory
+was migrated with, which loses the results still on it. twilight has no way to
+change the count once migrated.
+
 ### Shutting down
 
 On `SIGTERM` an instance reports itself not ready, ends every live-update
@@ -953,6 +981,7 @@ On `health_listen`:
 |--------|----------------|
 | `twilight_leader`, `twilight_leader_term` | 1 and the term while this instance leads. |
 | `twilight_online_nodes` | Nodes the online view holds as online. |
+| `twilight_process_results_partitions_mismatched` | 1 while `topics.process_results` has another partition count than the inventory was migrated with; the leader writes no campaign row, advances no phase and dispatches nothing then. |
 | `twilight_view_degraded` | 1 while the online view is degraded (below). |
 | `twilight_connections_skips_total` | Times the connection stream skipped to its latest offsets. |
 | `twilight_evaluation_queue`, `twilight_evaluation_dropped_total` | Nodes waiting for evaluation, and connect hints dropped because the queue was full. |
