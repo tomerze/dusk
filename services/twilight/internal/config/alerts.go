@@ -18,8 +18,14 @@ type Alerts struct {
 }
 
 type Receiver struct {
-	Name          string `yaml:"name"`
-	RatePerMinute int    `yaml:"rate_per_minute"`
+	Name          string           `yaml:"name"`
+	RatePerMinute int              `yaml:"rate_per_minute"`
+	Webhook       *WebhookReceiver `yaml:"webhook"`
+}
+
+type WebhookReceiver struct {
+	URL        string `yaml:"url"`
+	SecretFile string `yaml:"secret_file"`
 }
 
 type Route struct {
@@ -36,7 +42,9 @@ const (
 var (
 	Severities    = []string{"critical", "high", "medium", "low"}
 	receiverName  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
-	receiverTypes = []string{}
+	receiverTypes = []string{
+		"webhook",
+	}
 )
 
 func (route Route) Matches(severity, kind string, tenant *string) bool {
@@ -78,7 +86,9 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 			problem("%s.rate_per_minute must be positive, or left out for the receiver's default", where)
 		}
 		types := 0
-		for _, set := range []bool{} {
+		for _, set := range []bool{
+			receiver.Webhook != nil,
+		} {
 			if set {
 				types++
 			}
@@ -86,6 +96,15 @@ func (alerts Alerts) validate(problem func(format string, arguments ...any)) {
 		if types != 1 {
 			problem("%s needs exactly one of %s", where, strings.Join(receiverTypes, ", "))
 			continue
+		}
+		switch {
+		case receiver.Webhook != nil:
+			if !webURL(receiver.Webhook.URL) {
+				problem("%s.webhook.url must be an http or https URL", where)
+			}
+			if receiver.Webhook.SecretFile == "" {
+				problem("%s.webhook.secret_file is required", where)
+			}
 		}
 	}
 	routed := map[string]bool{}

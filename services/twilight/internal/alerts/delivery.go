@@ -106,11 +106,18 @@ func readSecret(path string) (string, error) {
 }
 
 func newNotifier(settings config.Alerts, instance string) (*notifier, error) {
+	client := &http.Client{
+		Timeout:       requestTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	built := &notifier{settings: settings, instance: instance, senders: map[string]sender{}, queues: map[string]*queue{},
 		horizon: time.Duration(settings.DeliveryHorizonSeconds) * time.Second}
 	for _, receiver := range settings.Receivers {
 		var secretFile string
 		switch {
+		case receiver.Webhook != nil:
+			secretFile = receiver.Webhook.SecretFile
+			built.senders[receiver.Name] = webhookSender{client: client, url: receiver.Webhook.URL, secretFile: secretFile}
 		}
 		if secretFile != "" {
 			if _, failure := readSecret(secretFile); failure != nil {
