@@ -22,6 +22,22 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -ldflags "-s -w -X main.version=${VERSION} -X main.revision=${GIT_REV}" \
         -o /out/twilight ./cmd/twilight
 
+FROM golang:1.27.1-trixie AS scale-build
+WORKDIR /build/twilight
+COPY services/twilight/go.mod services/twilight/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY services/twilight ./
+ARG CPUSET=
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 go build -trimpath -ldflags "-s -w" \
+        -o /out/twilight-scale ./cmd/twilight-scale
+
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3 AS scale
+COPY --from=scale-build /out/twilight-scale /usr/local/bin/twilight-scale
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/twilight-scale"]
+
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
 COPY --from=build /out/twilight /usr/local/bin/twilight
 USER 65532:65532
