@@ -15,7 +15,7 @@ them follows the online view and the ledger.
 
 ## Commands
 
-The `twilight` binary has five commands:
+The `twilight` binary has these commands:
 
 | Command | What it does |
 |---------|--------------|
@@ -23,6 +23,7 @@ The `twilight` binary has five commands:
 | `twilight migrate [--config FILE]` | Brings the database schema up to date and exits. |
 | `twilight token create --name NAME --role ROLE [--config FILE]` | Creates an API token and prints it once. `ROLE` is `viewer`, `operator` or `admin`. |
 | `twilight token revoke ID [--config FILE]` | Revokes the API token with that id. |
+| `twilight node-state rebuild [--config FILE] [--stall-seconds N] [--memory-limit MIB]` | Writes `dusk.node-state` again from the inventory and prints what it did ([Rebuilding the node-state topic](#rebuilding-the-node-state-topic)). |
 | `twilight version` | Prints the version and the git revision it was built from. |
 
 A command exits with 0 when it succeeds, 2 when it was called wrongly (an
@@ -241,6 +242,7 @@ is skipped for 30 seconds.
 | `reaps_per_second` | `20` | Reap requests sent to dawn per second, across the fleet. |
 | `reap_retry_seconds` | `600` | How long a pid dawn was asked to reap waits before it is asked again, when dawn never reported it reaped. |
 | `revocations_per_second` | `1000` | Installations a [revocation](#revocations) revokes per second, across every running revocation. |
+| `node_state_stall_seconds` | `120` | How long a partition of `dusk.node-state` may read nothing, short of its end, before a [rebuild](#rebuilding-the-node-state-topic) fails. |
 
 ### `alerts`
 
@@ -986,6 +988,7 @@ On `health_listen`:
 | `twilight_online_nodes` | Nodes the online view holds as online. |
 | `twilight_process_results_partitions_mismatched` | 1 while `topics.process_results` has another partition count than the inventory was migrated with; the leader writes no campaign row, advances no phase and dispatches nothing then. |
 | `twilight_view_degraded` | 1 while the online view is degraded (below). |
+| `twilight_node_state_rebuilds_total` | Times this instance wrote `dusk.node-state` again from the inventory. |
 | `twilight_connections_skips_total` | Times the connection stream skipped to its latest offsets. |
 | `twilight_evaluation_queue`, `twilight_evaluation_dropped_total` | Nodes waiting for evaluation, and connect hints dropped because the queue was full. |
 | `twilight_row_transitions_total{state}` | Campaign node state changes, by the state entered. |
@@ -1184,6 +1187,41 @@ heads and the alerts of one batch are written in one transaction, so a restart
 neither skips nor repeats an entry. Watch `twilight_reconcile_lag_seconds`:
 `result_without_ledger` is only judged once every partition has been reconciled
 ten minutes past a result.
+
+### Rebuilding the node-state topic
+
+`dusk.node-state` is how nightfall learns every revocation, retirement and
+quarantine, and twilight's inventory is its system of record. Once the topic
+carries every lifecycle of the inventory, twilight writes a completion record
+on each of its partitions; nightfall serves no node from a topic that lacks
+one ([Readiness](nightfall.md#readiness)).
+
+The leader looks at the topic's id and partition count when it is elected and
+every minute after, and reads the topic only when they differ from those of
+the last check that found it complete, which the table `node_state_checks`
+records. When a partition has no completion record - the first start of a new
+stack, a topic Kafka lost, partitions added - it rebuilds the topic from the
+inventory, logs at `warn` how many lifecycles it published, and counts it in
+`twilight_node_state_rebuilds_total`; a check or rebuild that fails is tried
+again after a backoff of at most five minutes. `twilight node-state rebuild`
+does the same at once, whatever the topic holds, and prints what it did; run it
+after restoring the inventory's database, so that lifecycle changes the topic
+holds that are later than the restore point go back into the inventory. Both
+read every partition to its end offset first. A partition that reads nothing
+for `engine.node_state_stall_seconds` (`--stall-seconds` for the command)
+before it gets there fails the rebuild before anything is written, and the
+command exits with 1; a read that keeps moving is never cut short, however
+large the topic. After partitions are added, both write each key whose latest
+state sits on the partition it hashed to before again on the partition it
+hashes to now.
+
+The command runs beside the serving process, in its container, so it lowers its
+own soft memory limit to 400 MiB (`--memory-limit`, in MiB): with the serving
+process's 3600 MiB (`GOMEMLIMIT`) that stays within the container's 4 GiB. The
+read holds every key of the topic in memory; for a topic of millions of keys,
+raise the Deployment's memory limit and `--memory-limit` together before
+running it. How the two are brought in line, and the drills, are in
+[Backups and disaster recovery](disaster-recovery.md#the-rebuild).
 
 ### Revocations
 
