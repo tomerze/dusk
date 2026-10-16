@@ -20,6 +20,11 @@ impl Driver for WindowsDriver {
         Ok(String::from_utf16(&name[..length as usize])?)
     }
 
+    fn random(&self, buffer: &mut [u8]) -> Result<()> {
+        getrandom::getrandom(buffer)
+            .map_err(|error| anyhow!("the operating system's random source failed: {error}"))
+    }
+
     fn tid(&self) -> u64 {
         u64::from(unsafe { GetCurrentThreadId() })
     }

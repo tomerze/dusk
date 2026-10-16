@@ -20,8 +20,8 @@ node built on it.
 
 ## Implement the `Driver`
 
-Provide the platform primitives Dusk asks for - `hostname()`, `tid()` and
-`exit(exit_code)` - and register them once with `dusk_driver_impl!`. The
+Provide the platform primitives Dusk asks for - `hostname()`, `random(buffer)`,
+`tid()` and `exit(exit_code)` - and register them once with `dusk_driver_impl!`. The
 macro defines the `#[no_mangle]` extern symbols `dusk_core` calls through; the
 linker connects the two.
 
