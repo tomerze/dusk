@@ -159,3 +159,39 @@ jobs:
       # vendor/capnproto submodule nor a target directory.
       - name: cargo fmt
         run: cargo fmt --all -- --check
+
+  rust-no-std:
+    name: Rust (no_std, thumbv7em-none-eabihf)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Add the thumbv7em-none-eabihf target
+        run: rustup target add thumbv7em-none-eabihf
+
+      - name: cargo build --target thumbv7em-none-eabihf
+        run: >
+          cargo build --target thumbv7em-none-eabihf
+          -p dusk_capnp
+          -p dusk_program
+          -p dusk_core
+          -p dusk_program_kvs_internal
+          -p dusk_program_date
+          -p dusk_program_echo
+          -p dusk_program_false
+          -p dusk_program_hostname
+          -p dusk_program_init
+          -p dusk_program_kill
+          -p dusk_program_kvs
+          -p dusk_program_logs
+          -p dusk_program_programs
+          -p dusk_program_ps
+          -p dusk_program_sh
+          -p dusk_program_sleep
+          -p dusk_program_true
