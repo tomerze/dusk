@@ -123,7 +123,7 @@ func (engine *Engine) sweep(operation context.Context, term int64, target *campa
 				reachable = append(reachable, key)
 			}
 		}
-		unevaluated, failure := engine.evaluateBatch(operation, term, reachable)
+		unevaluated, failure := engine.evaluateBatch(operation, reachable)
 		if failure != nil {
 			return failure
 		}

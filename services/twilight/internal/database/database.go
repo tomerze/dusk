@@ -17,6 +17,7 @@ const (
 	partitionLockKey    int64 = 0x7477696c69677002
 	LeaderLockKey       int64 = 0x7477696c69676c03
 	AlertRoutingLockKey int64 = 0x7477696c69676104
+	SliceLockKey        int64 = 0x7477696c69730000
 )
 
 func Open(operation context.Context, url string, maximumConnections int32) (*pgxpool.Pool, error) {

@@ -275,12 +275,18 @@ func (service *Service) RetryNodes(operation context.Context, identifier uuid.UU
 		return 0, failure
 	}
 	retried := 0
+	var interrupted error
 	for _, row := range rows {
 		next, changed := row.Retry(time.Now())
 		if !changed {
 			continue
 		}
-		if written, applied, _ := service.engine.write(operation, term, &row, next, "operator retry"); applied {
+		lease, failure := service.engine.Campaigns.CurrentLease(operation, row.DeviceID, row.InstallationID)
+		if failure != nil {
+			interrupted = fmt.Errorf("read the lease of node %s/%s: %w", row.DeviceID, row.InstallationID, failure)
+			break
+		}
+		if written, applied, _ := service.engine.writeUnder(operation, term, lease, &row, next, "operator retry"); applied {
 			retried++
 			service.engine.hint(inventory.Key{DeviceID: written.DeviceID, InstallationID: written.InstallationID})
 		}
@@ -289,7 +295,7 @@ func (service *Service) RetryNodes(operation context.Context, identifier uuid.UU
 		service.engine.Logger.Warn("the retry event was not written", "campaign_id", identifier, "error", failure)
 	}
 	service.engine.Logger.Info("campaign nodes retried", "campaign_id", identifier, "principal", actor, "count", retried)
-	return retried, nil
+	return retried, interrupted
 }
 
 func (service *Service) ResolveNodes(operation context.Context, identifier uuid.UUID, selection NodeSelection, outcome string, actor string) (int, error) {
@@ -313,19 +319,25 @@ func (service *Service) ResolveNodes(operation context.Context, identifier uuid.
 		return 0, failure
 	}
 	resolved := 0
+	var interrupted error
 	for _, row := range rows {
 		next, changed := row.Resolve(current, outcome == "succeeded", selection.Reason, time.Now())
 		if !changed {
 			continue
 		}
-		if _, applied, _ := service.engine.write(operation, term, &row, next, "operator resolve"); applied {
+		lease, failure := service.engine.Campaigns.CurrentLease(operation, row.DeviceID, row.InstallationID)
+		if failure != nil {
+			interrupted = fmt.Errorf("read the lease of node %s/%s: %w", row.DeviceID, row.InstallationID, failure)
+			break
+		}
+		if _, applied, _ := service.engine.writeUnder(operation, term, lease, &row, next, "operator resolve"); applied {
 			resolved++
 		}
 	}
 	if failure := service.engine.Campaigns.AddEvent(operation, identifier, "nodes_resolved", actor, map[string]any{"count": resolved, "outcome": outcome, "reason": selection.Reason}); failure != nil {
 		service.engine.Logger.Warn("the resolve event was not written", "campaign_id", identifier, "error", failure)
 	}
-	return resolved, nil
+	return resolved, interrupted
 }
 
 type SelectorValidation struct {

@@ -110,10 +110,7 @@ func TestGatesKeepWatchingAPausedCampaign(test *testing.T) {
 	operation := context.Background()
 	store := campaign.NewStore(pool)
 	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Alerts: testsupport.AlertStore(test, pool), Logger: testsupport.Logger()})
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
+	term := currentTerm(test, pool)
 	created := time.Now().Add(-2 * time.Hour)
 	for _, onFailure := range []campaign.GateAction{campaign.GateActionPause, campaign.GateActionAbort} {
 		policy := campaign.Policy{Phases: []campaign.Phase{{Name: "canary", Percent: 10, BakeSeconds: 60}, {Name: "all", Percent: 100, BakeSeconds: 60}},
@@ -174,10 +171,7 @@ func TestAGateThatPausesOrFailsACampaignRaisesAnAlert(test *testing.T) {
 	store := campaign.NewStore(pool)
 	alertStore := testsupport.AlertStore(test, pool)
 	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Alerts: alertStore, Logger: testsupport.Logger()})
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
+	term := currentTerm(test, pool)
 	created := time.Now().Add(-2 * time.Hour)
 	tenant := "acme"
 	for _, scenario := range []struct {
@@ -254,10 +248,7 @@ func TestGatesOpenTheNextPhaseOverAnEmptyOneAndWaitForEveryNodeOfASmallOne(test 
 	operation := context.Background()
 	store := campaign.NewStore(pool)
 	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Logger: testsupport.Logger()})
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
+	term := currentTerm(test, pool)
 	created := time.Now().Add(-30 * time.Minute)
 	policy := campaign.Policy{Phases: []campaign.Phase{{Name: "half", Percent: 50, BakeSeconds: 3600}, {Name: "all", Percent: 100, BakeSeconds: 3600}},
 		NodeTimeoutSeconds: 60, Gates: campaign.Gates{MinSample: 5, MaxFailureRate: 0.1, MaxSilentRate: 1}}

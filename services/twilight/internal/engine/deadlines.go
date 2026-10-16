@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func (engine *Engine) runDeadlines(operation context.Context, term int64) {
+func (engine *Engine) runDeadlines(operation context.Context, _ int64) {
 	for sleep(operation, 5*time.Second) {
 		now := time.Now()
 		engine.dispatcher.expire(now)
@@ -25,7 +25,7 @@ func (engine *Engine) runDeadlines(operation context.Context, term int64) {
 			if !changed {
 				continue
 			}
-			if _, written, _ := engine.write(operation, term, &row, next, "deadline"); written {
+			if _, written, _ := engine.write(operation, &row, next, "deadline"); written {
 				engine.dispatcher.complete(NodeKey{DeviceID: row.DeviceID, InstallationID: row.InstallationID}, row.Pid)
 			}
 		}

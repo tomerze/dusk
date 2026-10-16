@@ -104,6 +104,7 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 	store := campaign.NewStore(pool)
 	fake := &recordingDawn{}
 	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Inventory: inventory.NewStore(pool), Dawn: fake, Intended: &recordingIntended{}, Logger: testsupport.Logger()})
+	ownEverySlice(test, engine)
 	key := NodeKey{DeviceID: "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13", InstallationID: "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70"}
 	policy := campaign.Policy{Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 900}}, NodeTimeoutSeconds: 30, Gates: campaign.Gates{MinSample: 1}}
 	started := time.Now().Add(-time.Hour)
@@ -117,10 +118,7 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 		{"late script", campaign.Action{Kind: campaign.KindRunScript, Script: "date"}},
 		{"isolate", campaign.Action{Kind: campaign.KindQuarantine, Script: "isolate"}},
 	}
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
+	term := currentTerm(test, pool)
 	names := map[uuid.UUID]string{}
 	for index, definition := range definitions {
 		created, failure := store.Create(operation, campaign.Definition{Name: definition.name, Selector: "has(device_id)", Action: definition.action, Policy: policy}, "operator@example.org", started)
@@ -130,7 +128,7 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 		if _, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: started.Add(time.Duration(index) * time.Minute)}); failure != nil {
 			test.Fatal(failure)
 		}
-		if _, applied, failure := store.InsertRow(operation, term, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending)); failure != nil || !applied {
+		if _, applied, failure := engine.write(operation, nil, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending), "test"); failure != nil || !applied {
 			test.Fatalf("row of %s: %v %v", definition.name, applied, failure)
 		}
 		names[created.ID] = definition.name
@@ -148,7 +146,7 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 	if !chosen.found || len(chosen.campaigns) != len(definitions) {
 		test.Fatalf("the node due in %d campaigns went out with %+v", len(definitions), chosen)
 	}
-	engine.dispatcher.dispatch(operation, term, chosen)
+	engine.dispatcher.dispatch(operation, chosen)
 	if len(fake.dispatches) != 1 {
 		test.Fatalf("%d dispatch calls for one node", len(fake.dispatches))
 	}
@@ -200,10 +198,7 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 	pool, _ := testsupport.Database(test)
 	operation := context.Background()
 	store := campaign.NewStore(pool)
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
+	term := currentTerm(test, pool)
 	policy := campaign.Policy{Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 900}}, NodeTimeoutSeconds: 30, Gates: campaign.Gates{MinSample: 1}}
 	cases := []struct {
 		name      string
@@ -220,6 +215,7 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 	for index, scenario := range cases {
 		fake := &refusingDawn{refusal: scenario.refusal}
 		engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Inventory: inventory.NewStore(pool), Dawn: fake, Intended: &recordingIntended{}, Logger: testsupport.Logger()})
+		ownEverySlice(test, engine)
 		key := NodeKey{DeviceID: fmt.Sprintf("%032x", 0xe000+index), InstallationID: fmt.Sprintf("%032x", 0xf000+index)}
 		created, failure := store.Create(operation, campaign.Definition{Name: scenario.name, Selector: "has(device_id)", Action: campaign.Action{Kind: campaign.KindRunScript, Script: "ps"}, Policy: policy}, "operator@example.org", time.Now())
 		if failure != nil {
@@ -228,7 +224,7 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 		if _, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: time.Now()}); failure != nil {
 			test.Fatal(failure)
 		}
-		if _, applied, failure := store.InsertRow(operation, term, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending)); failure != nil || !applied {
+		if _, applied, failure := engine.write(operation, nil, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending), "test"); failure != nil || !applied {
 			test.Fatalf("%s: row %v %v", scenario.name, applied, failure)
 		}
 		if _, failure := pool.Exec(operation, `update campaign_nodes set unreached = $2 where campaign_id = $1`, created.ID, scenario.unreached); failure != nil {
@@ -245,7 +241,7 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 		if !chosen.found {
 			test.Fatalf("%s: nothing went out", scenario.name)
 		}
-		engine.dispatcher.dispatch(operation, term, chosen)
+		engine.dispatcher.dispatch(operation, chosen)
 		after, failure := store.Row(operation, created.ID, key.DeviceID, key.InstallationID)
 		if failure != nil || after.State != scenario.state {
 			test.Fatalf("%s: row %+v %v, want %s", scenario.name, after, failure, scenario.state)
@@ -273,10 +269,8 @@ func TestDawnIsAskedOnlyForIntendedProcessesPublishedToNightfall(test *testing.T
 	intended := &recordingIntended{failure: errors.New("the broker is down")}
 	fake := &recordingDawn{intended: intended}
 	engine := New(Dependencies{Config: config.Default(), Pool: pool, Campaigns: store, Inventory: inventory.NewStore(pool), Dawn: fake, Intended: intended, Logger: testsupport.Logger()})
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
+	ownEverySlice(test, engine)
+	term := currentTerm(test, pool)
 	key := NodeKey{DeviceID: "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a14", InstallationID: "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c71"}
 	policy := campaign.Policy{Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 900}}, NodeTimeoutSeconds: 30, Gates: campaign.Gates{MinSample: 1}}
 	created, failure := store.Create(operation, campaign.Definition{Name: "published first", Selector: "has(device_id)", Action: campaign.Action{Kind: campaign.KindRunScript, Script: "ps"}, Policy: policy}, "operator@example.org", time.Now())
@@ -286,7 +280,7 @@ func TestDawnIsAskedOnlyForIntendedProcessesPublishedToNightfall(test *testing.T
 	if _, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: time.Now()}); failure != nil {
 		test.Fatal(failure)
 	}
-	if _, applied, failure := store.InsertRow(operation, term, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending)); failure != nil || !applied {
+	if _, applied, failure := engine.write(operation, nil, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending), "test"); failure != nil || !applied {
 		test.Fatalf("row: %v %v", applied, failure)
 	}
 	if failure := engine.registry.load(operation, term); failure != nil {
@@ -305,7 +299,7 @@ func TestDawnIsAskedOnlyForIntendedProcessesPublishedToNightfall(test *testing.T
 		if !chosen.found {
 			test.Fatal("nothing went out")
 		}
-		engine.dispatcher.dispatch(operation, term, chosen)
+		engine.dispatcher.dispatch(operation, chosen)
 	}
 
 	dispatchOnce()

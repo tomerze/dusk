@@ -68,6 +68,7 @@ type Engine struct {
 	Dependencies
 	view        *View
 	leadership  *Leadership
+	ownership   *ownership
 	registry    *registry
 	evaluations *evaluationQueue
 	dispatcher  *dispatcher
@@ -95,6 +96,7 @@ func New(dependencies Dependencies) *Engine {
 	}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	engine.ownership = newOwnership(engine)
 	engine.presence = newPresenceWriter(engine)
 	engine.feed = newFeed(engine)
 	engine.leadership = NewLeadership(dependencies.Config.Database.LeaderURL, dependencies.Config.Instance, dependencies.Logger, engine.lead)
@@ -259,17 +261,23 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 		}
 		writing, stopWriting := context.WithCancel(operation)
 		var writers sync.WaitGroup
+		start(writing, &writers, "slices", engine.ownership.run)
 		start(writing, &writers, "presence", engine.presence.run)
 		start(writing, &writers, "gates", engine.runGates)
-		start(writing, &writers, "evaluations", engine.runEvaluations)
-		start(writing, &writers, "dispatcher", engine.dispatcher.run)
-		start(writing, &writers, "facts", engine.runFacts)
-		start(writing, &writers, "results", engine.runResults)
-		start(writing, &writers, "deadlines", engine.runDeadlines)
-		start(writing, &writers, "sweeps", engine.runSweeps)
-		start(writing, &writers, "due", engine.runDueScan)
-		start(writing, &writers, "quarantine", engine.runQuarantineFlips)
-		engine.requestSweep(sweepRequest{all: true})
+		assigned := engine.ownership.owning()
+		for !assigned && engine.partitioned.Load() && sleep(operation, 200*time.Millisecond) {
+			assigned = engine.ownership.owning()
+		}
+		if assigned {
+			start(writing, &writers, "evaluations", engine.runEvaluations)
+			start(writing, &writers, "dispatcher", engine.dispatcher.run)
+			start(writing, &writers, "facts", engine.runFacts)
+			start(writing, &writers, "deadlines", engine.runDeadlines)
+			start(writing, &writers, "sweeps", engine.runSweeps)
+			start(writing, &writers, "due", engine.runDueScan)
+			start(writing, &writers, "quarantine", engine.runQuarantineFlips)
+			engine.requestSweep(sweepRequest{all: true})
+		}
 		for engine.partitioned.Load() && sleep(operation, time.Second) {
 		}
 		stopWriting()

@@ -10,7 +10,7 @@ import (
 	"dusk/services/twilight/internal/kafka"
 )
 
-func (engine *Engine) runQuarantineFlips(operation context.Context, term int64) {
+func (engine *Engine) runQuarantineFlips(operation context.Context, _ int64) {
 	for sleep(operation, 2*time.Second) {
 		for _, target := range engine.registry.targets() {
 			if target.Campaign.Kind != campaign.KindQuarantine || target.Campaign.Status != campaign.StatusRunning {
@@ -24,7 +24,7 @@ func (engine *Engine) runQuarantineFlips(operation context.Context, term int64) 
 				continue
 			}
 			for _, row := range rows {
-				engine.flip(operation, term, target.Campaign, row)
+				engine.flip(operation, target.Campaign, row)
 			}
 		}
 	}
@@ -32,8 +32,11 @@ func (engine *Engine) runQuarantineFlips(operation context.Context, term int64) 
 
 var errWithdrawnNode = errors.New("the node is revoked or retired")
 
-func (engine *Engine) flip(operation context.Context, term int64, target *campaign.Campaign, row campaign.Row) {
+func (engine *Engine) flip(operation context.Context, target *campaign.Campaign, row campaign.Row) {
 	key := NodeKey{DeviceID: row.DeviceID, InstallationID: row.InstallationID}
+	if !engine.ownership.owns(key) {
+		return
+	}
 	reason := "quarantine campaign " + target.Name
 	now := time.Now()
 	previous, failure := engine.Inventory.SetLifecycle(operation, key, "quarantined", reason, now, func(previous string) error {
@@ -48,7 +51,7 @@ func (engine *Engine) flip(operation context.Context, term int64, target *campai
 	case errors.Is(failure, errWithdrawnNode):
 		engine.Logger.Info("a quarantine campaign left a withdrawn node as it is", "campaign_id", target.ID, "device_id", key.DeviceID, "installation_id", key.InstallationID, "lifecycle", previous)
 		if next, changed := row.Withdrawn(now, previous); changed {
-			engine.write(operation, term, &row, next, "node withdrawn")
+			engine.write(operation, &row, next, "node withdrawn")
 		}
 		return
 	case errors.Is(failure, inventory.ErrNotFound):
@@ -62,6 +65,6 @@ func (engine *Engine) flip(operation context.Context, term int64, target *campai
 	}
 	engine.Logger.Info("node quarantined", "campaign_id", target.ID, "device_id", key.DeviceID, "installation_id", key.InstallationID, "from", previous)
 	if next, changed := row.Flipped(now); changed {
-		engine.write(operation, term, &row, next, "node-state acknowledged")
+		engine.write(operation, &row, next, "node-state acknowledged")
 	}
 }

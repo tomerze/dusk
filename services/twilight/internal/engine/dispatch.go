@@ -17,6 +17,7 @@ import (
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/dawn"
 	"dusk/services/twilight/internal/inventory"
+	"dusk/services/twilight/internal/kafka"
 )
 
 var dispatchedProcesses = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -90,6 +91,45 @@ func (current *dispatcher) offer(identifier uuid.UUID, key NodeKey) {
 	select {
 	case current.wake <- struct{}{}:
 	default:
+	}
+}
+
+func (current *dispatcher) restore(key NodeKey, pid campaign.Pid, deadline time.Time) {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	entry := current.inFlight[key]
+	if entry == nil {
+		entry = &batch{pids: map[campaign.Pid]bool{}}
+		current.inFlight[key] = entry
+	}
+	entry.pids[pid] = true
+	if deadline.After(entry.deadline) {
+		entry.deadline = deadline
+	}
+}
+
+func (current *dispatcher) dropPartition(partition, partitions int32) {
+	inPartition := func(key NodeKey) bool { return kafka.KeyPartition(key.String(), partitions) == partition }
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	for key := range current.inFlight {
+		if inPartition(key) {
+			delete(current.inFlight, key)
+		}
+	}
+	for key := range current.ready {
+		if inPartition(key) {
+			delete(current.ready, key)
+		}
+	}
+	for identifier, queue := range current.queues {
+		kept := queue[:0]
+		for _, key := range queue {
+			if !inPartition(key) {
+				kept = append(kept, key)
+			}
+		}
+		current.queues[identifier] = kept
 	}
 }
 
@@ -218,7 +258,7 @@ func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
 	return pick{}, wait
 }
 
-func (current *dispatcher) run(operation context.Context, term int64) {
+func (current *dispatcher) run(operation context.Context, _ int64) {
 	var running sync.WaitGroup
 	defer running.Wait()
 	for operation.Err() == nil {
@@ -248,7 +288,7 @@ func (current *dispatcher) run(operation context.Context, term int64) {
 				current.reap(operation, chosen.key)
 				return
 			}
-			current.dispatch(operation, term, chosen)
+			current.dispatch(operation, chosen)
 		}()
 	}
 }
@@ -313,9 +353,16 @@ func (current *dispatcher) release(key NodeKey) {
 	current.mutex.Unlock()
 }
 
-func (current *dispatcher) dispatch(operation context.Context, term int64, chosen pick) {
+func (current *dispatcher) dispatch(operation context.Context, chosen pick) {
 	engine := current.engine
 	key := chosen.key
+	if !engine.ownership.owns(key) {
+		for _, identifier := range chosen.campaigns {
+			engine.registry.returnTokens(identifier, 1)
+		}
+		current.release(key)
+		return
+	}
 	now := time.Now()
 	session, online := engine.view.Target(key)
 	var items []prepared
@@ -352,7 +399,7 @@ func (current *dispatcher) dispatch(operation context.Context, term int64, chose
 		if target.Kind == campaign.KindQuarantine && (target.Action.Script == "" || (!online && !target.Action.RequireScriptSuccess)) {
 			next, changed := item.row.QuarantineWithoutScript(now)
 			if changed {
-				engine.write(operation, term, &item.row, next, "quarantine without script")
+				engine.write(operation, &item.row, next, "quarantine without script")
 			}
 			continue
 		}
@@ -371,7 +418,13 @@ func (current *dispatcher) dispatch(operation context.Context, term int64, chose
 		intended := campaign.IntendedProcess{Pid: next.Pid, CampaignID: &target.ID, Attempt: &attempt, DeviceID: key.DeviceID, InstallationID: key.InstallationID,
 			ActionKind: string(target.Kind), Principal: target.CreatedBy, Subject: target.Subject(), ExpiresAt: deadline.Add(5 * time.Minute),
 			MaxCommands: engine.campaignCommands(target), DefaultShellCommands: engine.Config.Reconcile.DefaultShell.Commands(string(target.Kind), 0), At: now}
-		written, applied, failure := engine.Campaigns.Dispatching(operation, term, item.row, next, intended)
+		lease, release, owned := engine.ownership.hold(key)
+		if !owned {
+			engine.registry.returnTokens(target.ID, 1)
+			continue
+		}
+		written, applied, failure := engine.Campaigns.Dispatching(operation, engine.leadership.Term(), lease, item.row, next, intended)
+		release()
 		if failure != nil || !applied {
 			if failure != nil && operation.Err() == nil {
 				engine.Logger.Warn("a dispatch was not recorded", "campaign_id", target.ID, "device_id", key.DeviceID, "installation_id", key.InstallationID, "error", failure)
@@ -393,7 +446,7 @@ func (current *dispatcher) dispatch(operation context.Context, term int64, chose
 	var published []prepared
 	for index, item := range sent {
 		if failure := engine.publishIntended(operation, key, item.row.Pid); failure != nil {
-			engine.unpublished(operation, term, item, failure)
+			engine.unpublished(operation, item, failure)
 			continue
 		}
 		publishedWork, published = append(publishedWork, work[index]), append(published, item)
@@ -458,7 +511,7 @@ attempts:
 		switch {
 		case outcome == dawn.Accepted && acceptedSet[item.row.Pid]:
 			if next, changed := item.row.Accepted(item.row.Pid); changed {
-				engine.write(operation, term, &item.row, next, "dawn accepted")
+				engine.write(operation, &item.row, next, "dawn accepted")
 			}
 		case outcome == dawn.Ambiguous:
 			engine.Logger.Warn("dispatch left ambiguous; the row waits for a result or its deadline", "campaign_id", item.campaign.ID, "pid", item.row.Pid, "error", failure)
@@ -478,7 +531,7 @@ attempts:
 				var dawnError *dawn.Error
 				refused := errors.As(failure, &dawnError) && (dawnError.Status == http.StatusUnauthorized || dawnError.Status == http.StatusForbidden)
 				if refused || item.row.Unreached+1 >= rejectedDispatches {
-					engine.refuseDispatch(operation, term, item, message)
+					engine.refuseDispatch(operation, item, message)
 					current.complete(key, item.row.Pid)
 					continue
 				}
@@ -488,7 +541,7 @@ attempts:
 				if current, failure := engine.campaignFor(operation, item.campaign.ID); failure == nil {
 					latest = current
 				}
-				engine.write(operation, term, &item.row, next.Settle(latest, time.Now()), status)
+				engine.write(operation, &item.row, next.Settle(latest, time.Now()), status)
 			}
 			current.complete(key, item.row.Pid)
 		}
@@ -504,7 +557,7 @@ attempts:
 
 const rejectedDispatches = 3
 
-func (engine *Engine) unpublished(operation context.Context, term int64, item prepared, failure error) {
+func (engine *Engine) unpublished(operation context.Context, item prepared, failure error) {
 	engine.registry.returnTokens(item.campaign.ID, 1)
 	if operation.Err() != nil {
 		return
@@ -512,14 +565,14 @@ func (engine *Engine) unpublished(operation context.Context, term int64, item pr
 	engine.Logger.Warn("the intended process was not published to nightfall; dawn is not asked for it", "campaign_id", item.campaign.ID,
 		"device_id", item.row.DeviceID, "installation_id", item.row.InstallationID, "pid", item.row.Pid.String(), "error", failure)
 	if next, changed := item.row.Undelivered("intent_unpublished", failure.Error(), time.Now(), busyDelay(item.row.Unreached+1, engine.randomFloat())); changed {
-		engine.write(operation, term, &item.row, next, "intent unpublished")
+		engine.write(operation, &item.row, next, "intent unpublished")
 	}
 }
 
-func (engine *Engine) refuseDispatch(operation context.Context, term int64, item prepared, message string) {
+func (engine *Engine) refuseDispatch(operation context.Context, item prepared, message string) {
 	refused := campaign.Result{Pid: item.row.Pid, Status: campaign.ResultDenied, Error: message}
 	if next, _, changed := item.row.ApplyResult(item.campaign, refused, time.Now(), engine.randomFloat()); changed {
-		engine.write(operation, term, &item.row, next, "dawn refused")
+		engine.write(operation, &item.row, next, "dawn refused")
 	}
 	engine.pauseForPermission(operation, item.campaign, "dawn refused the dispatch: "+message,
 		map[string]any{"pid": item.row.Pid.String(), "device_id": item.row.DeviceID, "installation_id": item.row.InstallationID})

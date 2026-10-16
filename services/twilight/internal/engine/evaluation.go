@@ -92,7 +92,7 @@ func (engine *Engine) hint(key NodeKey) {
 	}
 }
 
-func (engine *Engine) runEvaluations(operation context.Context, term int64) {
+func (engine *Engine) runEvaluations(operation context.Context, _ int64) {
 	for {
 		select {
 		case <-operation.Done():
@@ -106,14 +106,14 @@ func (engine *Engine) runEvaluations(operation context.Context, term int64) {
 			if len(batch) == 0 {
 				break
 			}
-			if _, failure := engine.evaluateBatch(operation, term, batch); failure != nil && operation.Err() == nil {
+			if _, failure := engine.evaluateBatch(operation, batch); failure != nil && operation.Err() == nil {
 				engine.Logger.Warn("an evaluation batch failed; its nodes return with the next hint or sweep", "nodes", len(batch), "error", failure)
 			}
 		}
 	}
 }
 
-func (engine *Engine) evaluateBatch(operation context.Context, term int64, keys []NodeKey) (int, error) {
+func (engine *Engine) evaluateBatch(operation context.Context, keys []NodeKey) (int, error) {
 	if len(keys) == 0 {
 		return 0, nil
 	}
@@ -173,7 +173,7 @@ func (engine *Engine) evaluateBatch(operation context.Context, term int64, keys 
 		}
 		failed, dispatching := false, false
 		for _, decision := range Evaluate(targets, nodes[key], rows[key], session, now, engine.randomFloat()) {
-			dispatch, failure := engine.apply(operation, term, decision)
+			dispatch, failure := engine.apply(operation, decision)
 			dispatching = dispatching || dispatch
 			failed = failed || failure != nil
 		}
@@ -197,14 +197,25 @@ func (engine *Engine) logTransition(previous *campaign.Row, next campaign.Row, r
 		"pid", next.Pid.String(), "attempt", next.Attempt, "from", from, "to", next.State, "reason", reason, "last_status", next.LastStatus)
 }
 
-func (engine *Engine) write(operation context.Context, term int64, previous *campaign.Row, next campaign.Row, reason string) (campaign.Row, bool, error) {
+func (engine *Engine) write(operation context.Context, previous *campaign.Row, next campaign.Row, reason string) (campaign.Row, bool, error) {
+	lease, release, owned := engine.ownership.hold(NodeKey{DeviceID: next.DeviceID, InstallationID: next.InstallationID})
+	if !owned {
+		engine.Logger.Debug("a campaign node write is left to the owner of the node's slice", "campaign_id", next.CampaignID, "device_id", next.DeviceID,
+			"installation_id", next.InstallationID, "reason", reason)
+		return next, false, nil
+	}
+	defer release()
+	return engine.writeUnder(operation, engine.leadership.Term(), lease, previous, next, reason)
+}
+
+func (engine *Engine) writeUnder(operation context.Context, term int64, lease campaign.Lease, previous *campaign.Row, next campaign.Row, reason string) (campaign.Row, bool, error) {
 	var written campaign.Row
 	var applied bool
 	var failure error
 	if previous == nil {
-		written, applied, failure = engine.Campaigns.InsertRow(operation, term, next)
+		written, applied, failure = engine.Campaigns.InsertRow(operation, term, lease, next)
 	} else {
-		written, applied, failure = engine.Campaigns.UpdateRow(operation, term, *previous, next)
+		written, applied, failure = engine.Campaigns.UpdateRow(operation, term, lease, *previous, next)
 	}
 	if failure != nil {
 		if operation.Err() == nil {
@@ -220,10 +231,10 @@ func (engine *Engine) write(operation context.Context, term int64, previous *cam
 	return written, true, nil
 }
 
-func (engine *Engine) apply(operation context.Context, term int64, decision Decision) (bool, error) {
+func (engine *Engine) apply(operation context.Context, decision Decision) (bool, error) {
 	row := decision.Next
 	if decision.Write {
-		written, applied, failure := engine.write(operation, term, decision.Previous, decision.Next, "evaluate")
+		written, applied, failure := engine.write(operation, decision.Previous, decision.Next, "evaluate")
 		if !applied {
 			return false, failure
 		}

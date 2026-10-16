@@ -5,6 +5,7 @@ package campaign_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"dusk/services/twilight/internal/campaign"
+	"dusk/services/twilight/internal/database"
+	"dusk/services/twilight/internal/kafka"
 	"dusk/services/twilight/internal/testsupport"
 )
 
@@ -32,6 +35,15 @@ func definition() campaign.Definition {
 		Action:   campaign.Action{Kind: campaign.KindEnsureVersion, Version: "0.2.0", Script: "upgrade"},
 		Policy:   campaign.Policy{Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 900}}, Gates: campaign.Gates{MinSample: 1}},
 	}
+}
+
+func leaseFor(test *testing.T, store *campaign.Store, device, installation string) campaign.Lease {
+	test.Helper()
+	lease, failure := store.BumpLease(context.Background(), kafka.KeyPartition(device+"/"+installation, testsupport.NodePartitions), "twilight-test")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	return lease
 }
 
 func TestCampaignLifecycleInPostgres(test *testing.T) {
@@ -77,29 +89,31 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 	if failure != nil {
 		test.Fatal(failure)
 	}
+	lease := leaseFor(test, store, device, installation)
 	row := campaign.NewRow(created.ID, device, installation, 0, campaign.StatePending)
-	inserted, applied, failure := store.InsertRow(operation, term, row)
+	inserted, applied, failure := store.InsertRow(operation, term, lease, row)
 	if failure != nil || !applied {
 		test.Fatalf("insert %v %v", applied, failure)
 	}
-	if _, applied, _ := store.InsertRow(operation, term, row); applied {
+	if _, applied, _ := store.InsertRow(operation, term, lease, row); applied {
 		test.Fatal("inserted a row twice")
 	}
-	if _, applied, _ := store.InsertRow(operation, term+1, campaign.NewRow(created.ID, device, "b"+installation[1:], 0, campaign.StatePending)); applied {
+	stranger := "b" + installation[1:]
+	if _, applied, _ := store.InsertRow(operation, term+1, leaseFor(test, store, device, stranger), campaign.NewRow(created.ID, device, stranger, 0, campaign.StatePending)); applied {
 		test.Fatal("a stale term inserted a row")
 	}
 	next, _ := inserted.Dispatch(created.ID, campaign.Session{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 9}, now, now.Add(time.Hour), map[string]string{"os_build": "13"})
 	attempt := 1
 	intended := campaign.IntendedProcess{Pid: next.Pid, CampaignID: &created.ID, Attempt: &attempt, DeviceID: device, InstallationID: installation, ActionKind: "ensure_version",
 		Principal: "operator@example.org", Subject: created.Subject(), ExpiresAt: now.Add(2 * time.Hour), MaxCommands: 3, DefaultShellCommands: 8, At: now}
-	if _, applied, failure := store.Dispatching(operation, term+1, inserted, next, intended); failure != nil || applied {
+	if _, applied, failure := store.Dispatching(operation, term+1, lease, inserted, next, intended); failure != nil || applied {
 		test.Fatalf("a stale term dispatched: %v %v", applied, failure)
 	}
-	dispatching, applied, failure := store.Dispatching(operation, term, inserted, next, intended)
+	dispatching, applied, failure := store.Dispatching(operation, term, lease, inserted, next, intended)
 	if failure != nil || !applied || dispatching.Revision != 2 {
 		test.Fatalf("dispatching %+v %v %v", dispatching, applied, failure)
 	}
-	if _, applied, _ := store.UpdateRow(operation, term, inserted, next); applied {
+	if _, applied, _ := store.UpdateRow(operation, term, lease, inserted, next); applied {
 		test.Fatal("a stale revision applied")
 	}
 	stored, failure := store.Row(operation, created.ID, device, installation)
@@ -119,10 +133,10 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 		test.Fatal(failure)
 	}
 	undelivered, _ := stored.Undelivered("unreachable", "", now, 0)
-	undelivered, _, _ = store.UpdateRow(operation, term, stored, undelivered)
+	undelivered, _, _ = store.UpdateRow(operation, term, lease, stored, undelivered)
 	again, _ := undelivered.Dispatch(created.ID, campaign.Session{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 10}, now, now.Add(time.Hour), nil)
 	intended.ExpiresAt, intended.At = now.Add(3*time.Hour), now.Add(time.Minute)
-	if _, applied, failure := store.Dispatching(operation, term, undelivered, again, intended); failure != nil || !applied {
+	if _, applied, failure := store.Dispatching(operation, term, lease, undelivered, again, intended); failure != nil || !applied {
 		test.Fatalf("resend %v %v", applied, failure)
 	}
 	var recorded, maxCommands, defaultShellCommands int
@@ -135,7 +149,7 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 		test.Fatalf("a resend must add its own command budget: max_commands %d, default_shell_commands %d", maxCommands, defaultShellCommands)
 	}
 	pending := campaign.NewRow(created.ID, device, "c"+installation[1:], 0, campaign.StatePending)
-	if _, applied, _ := store.InsertRow(operation, term, pending); !applied {
+	if _, applied, _ := store.InsertRow(operation, term, leaseFor(test, store, device, pending.InstallationID), pending); !applied {
 		test.Fatal("second row")
 	}
 	counts, failure := store.CountRows(operation, created.ID)
@@ -309,7 +323,7 @@ func TestReapablePids(test *testing.T) {
 	}
 	retried.Pid = campaign.DerivePid(finished.ID, device, installation, retried.Attempt)
 	term, _ := store.Term(operation)
-	written, applied, failure := store.UpdateRow(operation, term, row, retried)
+	written, applied, failure := store.UpdateRow(operation, term, leaseFor(test, store, device, installation), row, retried)
 	if failure != nil || !applied || written.ReapedAt != nil {
 		test.Fatalf("a new attempt's pid kept the old pid's reaped_at: %+v %v %v", written, applied, failure)
 	}
@@ -321,5 +335,178 @@ func TestReapablePids(test *testing.T) {
 	}
 	if found, _ := store.Reapable(operation, []string{device}, []string{installation}, now.Add(time.Hour), 10*time.Minute, 256); len(found) != 3 {
 		test.Fatalf("a row that turned terminal releases its pid: %v", found)
+	}
+}
+
+func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := campaign.NewStore(pool)
+	operation := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	created, failure := store.Create(operation, definition(), "operator@example.org", now)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	term, failure := store.Term(operation)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	partition := kafka.KeyPartition(device+"/"+installation, testsupport.NodePartitions)
+	var neighbour, stranger string
+	for index := 0; neighbour == "" || stranger == ""; index++ {
+		candidate := fmt.Sprintf("%032x", index)
+		switch kafka.KeyPartition(device+"/"+candidate, testsupport.NodePartitions) {
+		case partition:
+			if neighbour == "" {
+				neighbour = candidate
+			}
+		default:
+			if stranger == "" {
+				stranger = candidate
+			}
+		}
+	}
+	if _, failure := store.BumpLease(operation, testsupport.NodePartitions, "twilight-test"); !errors.Is(failure, campaign.ErrNoLease) {
+		test.Fatalf("a partition past the inventory's count was leased: %v", failure)
+	}
+	first, failure := store.BumpLease(operation, partition, "twilight-first")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	row, applied, failure := store.InsertRow(operation, term, first, campaign.NewRow(created.ID, device, installation, 0, campaign.StatePending))
+	if failure != nil || !applied {
+		test.Fatalf("the owner's insert: %v %v", applied, failure)
+	}
+	other, failure := store.BumpLease(operation, kafka.KeyPartition(device+"/"+stranger, testsupport.NodePartitions), "twilight-first")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	misdirected := campaign.Lease{Partition: other.Partition, Epoch: first.Epoch}
+	if _, failure := pool.Exec(operation, `update node_partition_leases set epoch = $2 where partition = $1`, other.Partition, first.Epoch); failure != nil {
+		test.Fatal(failure)
+	}
+	if _, applied, failure := store.InsertRow(operation, term, misdirected, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || applied {
+		test.Fatalf("a lease of another slice inserted a row: %v %v", applied, failure)
+	}
+	retried := row
+	retried.LastError = "under another slice's lease"
+	if _, applied, failure := store.UpdateRow(operation, term, misdirected, row, retried); failure != nil || applied {
+		test.Fatalf("a lease of another slice updated a row: %v %v", applied, failure)
+	}
+
+	second, failure := store.BumpLease(operation, partition, "twilight-second")
+	if failure != nil || second.Epoch != first.Epoch+1 {
+		test.Fatalf("the second owner's lease %+v (%v)", second, failure)
+	}
+	if held, failure := store.LeaseHeld(operation, first); failure != nil || held {
+		test.Fatalf("the replaced lease is still held: %v %v", held, failure)
+	}
+	if held, failure := store.LeaseHeld(operation, second); failure != nil || !held {
+		test.Fatalf("the new lease is not held: %v %v", held, failure)
+	}
+	if current, failure := store.CurrentLease(operation, device, neighbour); failure != nil || current != second {
+		test.Fatalf("the current lease of a node in the slice is %+v (%v), want %+v", current, failure, second)
+	}
+	if _, applied, failure := store.InsertRow(operation, term, first, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || applied {
+		test.Fatalf("a stale lease inserted a row: %v %v", applied, failure)
+	}
+	if _, applied, failure := store.UpdateRow(operation, term, first, row, retried); failure != nil || applied {
+		test.Fatalf("a stale lease updated a row: %v %v", applied, failure)
+	}
+	next, _ := row.Dispatch(created.ID, campaign.Session{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 9}, now, now.Add(time.Hour), nil)
+	attempt := 1
+	intended := campaign.IntendedProcess{Pid: next.Pid, CampaignID: &created.ID, Attempt: &attempt, DeviceID: device, InstallationID: installation, ActionKind: "ensure_version",
+		Principal: "operator@example.org", Subject: created.Subject(), ExpiresAt: now.Add(2 * time.Hour), MaxCommands: 1, DefaultShellCommands: 1, At: now}
+	if _, applied, failure := store.Dispatching(operation, term, first, row, next, intended); failure != nil || applied {
+		test.Fatalf("a stale lease dispatched: %v %v", applied, failure)
+	}
+	var recorded int
+	if failure := pool.QueryRow(operation, `select count(*) from intended_processes where pid = $1::text::numeric`, next.Pid.String()).Scan(&recorded); failure != nil || recorded != 0 {
+		test.Fatalf("a refused dispatch recorded %d intended processes (%v)", recorded, failure)
+	}
+	stored, failure := store.Row(operation, created.ID, device, installation)
+	if failure != nil || stored.Revision != row.Revision || stored.State != campaign.StatePending || stored.LastError != "" {
+		test.Fatalf("the row after the refused writes: %+v %v", stored, failure)
+	}
+	dispatched, applied, failure := store.Dispatching(operation, term, second, row, next, intended)
+	if failure != nil || !applied || dispatched.Revision != row.Revision+1 {
+		test.Fatalf("the current owner's dispatch: %+v %v %v", dispatched, applied, failure)
+	}
+	if inserted, applied, failure := store.InsertRow(operation, term, second, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || !applied || inserted.Revision != 1 {
+		test.Fatalf("the current owner's insert: %+v %v %v", inserted, applied, failure)
+	}
+	inFlight, failure := store.InFlightRows(operation, partition, now)
+	if failure != nil || len(inFlight) != 1 || inFlight[0].InstallationID != installation || inFlight[0].Pid != next.Pid {
+		test.Fatalf("the slice's in-flight rows %+v (%v), want the dispatched row alone", inFlight, failure)
+	}
+	if expired, failure := store.InFlightRows(operation, partition, now.Add(2*time.Hour)); failure != nil || len(expired) != 0 {
+		test.Fatalf("rows past their deadline count as in flight: %+v (%v)", expired, failure)
+	}
+
+	writing, failure := pool.Begin(operation)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := writing.Exec(operation, `select pg_advisory_xact_lock_shared($1)`, database.SliceLockKey+int64(partition)); failure != nil {
+		test.Fatal(failure)
+	}
+	bumped := make(chan campaign.Lease, 1)
+	go func() {
+		lease, failure := store.BumpLease(operation, partition, "twilight-third")
+		if failure != nil {
+			test.Error(failure)
+		}
+		bumped <- lease
+	}()
+	select {
+	case <-bumped:
+		test.Fatal("the lease changed hands while a write under it was still running")
+	case <-time.After(500 * time.Millisecond):
+	}
+	if failure := writing.Commit(operation); failure != nil {
+		test.Fatal(failure)
+	}
+	var third campaign.Lease
+	select {
+	case third = <-bumped:
+	case <-time.After(30 * time.Second):
+		test.Fatal("the lease did not change hands once the write committed")
+	}
+
+	taking, failure := pool.Begin(operation)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := taking.Exec(operation, `select pg_advisory_xact_lock($1)`, database.SliceLockKey+int64(partition)); failure != nil {
+		test.Fatal(failure)
+	}
+	late := dispatched
+	late.LastError = "written while the lease changed hands"
+	refused := make(chan bool, 1)
+	go func() {
+		_, applied, failure := store.UpdateRow(operation, term, third, dispatched, late)
+		if failure != nil {
+			test.Error(failure)
+		}
+		refused <- !applied
+	}()
+	select {
+	case <-refused:
+		test.Fatal("a write went ahead while the lease was changing hands")
+	case <-time.After(500 * time.Millisecond):
+	}
+	if _, failure := taking.Exec(operation, `update node_partition_leases set epoch = epoch + 1 where partition = $1`, partition); failure != nil {
+		test.Fatal(failure)
+	}
+	if failure := taking.Commit(operation); failure != nil {
+		test.Fatal(failure)
+	}
+	select {
+	case wasRefused := <-refused:
+		if !wasRefused {
+			test.Fatal("a write that waited for the lease to change hands committed under the epoch it replaced")
+		}
+	case <-time.After(30 * time.Second):
+		test.Fatal("the write waiting for the lease never finished")
 	}
 }

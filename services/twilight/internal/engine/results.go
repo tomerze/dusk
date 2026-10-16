@@ -10,7 +10,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/twmb/franz-go/pkg/kgo"
 
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/inventory"
@@ -21,25 +20,6 @@ var resultsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "twilight_process_results_total",
 	Help: "dusk.process-results messages applied, by action kind and status.",
 }, []string{"action_kind", "status"})
-
-func (engine *Engine) runResults(operation context.Context, term int64) {
-	kafka.ConsumeGroup(operation, engine.KafkaOptions, "results", engine.Config.Kafka.ResultsGroup, engine.Config.Kafka.Topics.ProcessResults, engine.Logger.With("term", term), func(operation context.Context, record *kgo.Record) error {
-		if record.Value == nil {
-			return nil
-		}
-		result, valid := kafka.Decode[kafka.ProcessResult](engine.Validator, kafka.ContractProcessResults, record, engine.Logger)
-		if !valid {
-			return nil
-		}
-		pid, failure := campaign.ParsePid(result.Pid)
-		if failure != nil || pid == 0 {
-			kafka.CountInvalid(record.Topic)
-			engine.Logger.Warn("dropped a process result whose pid names no process", "topic", record.Topic, "partition", record.Partition, "offset", record.Offset, "pid", result.Pid)
-			return nil
-		}
-		return engine.applyResult(operation, term, pid, result)
-	})
-}
 
 func reportOf(reported *kafka.Reported) inventory.Reported {
 	report := inventory.Reported{VersionKey: reported.VersionKey, Version: reported.Version, ConfigHash: reported.ConfigHash, Services: reported.Services}
@@ -80,8 +60,14 @@ func (engine *Engine) campaignFor(operation context.Context, identifier uuid.UUI
 
 const resultRaces = 20
 
-func (engine *Engine) applyResult(operation context.Context, term int64, pid campaign.Pid, result kafka.ProcessResult) error {
+func (engine *Engine) applyResult(operation context.Context, pid campaign.Pid, result kafka.ProcessResult) error {
 	key := NodeKey{DeviceID: result.DeviceID, InstallationID: result.InstallationID}
+	lease, release, owned := engine.ownership.hold(key)
+	if !owned {
+		return errNotOwned
+	}
+	defer release()
+	term := engine.leadership.Term()
 	at, failure := kafka.ParseTime(result.Time)
 	if failure != nil {
 		at = time.Now()
@@ -153,11 +139,19 @@ func (engine *Engine) applyResult(operation context.Context, term int64, pid cam
 			engine.finishInFlight(key, pid, result)
 			return nil
 		}
-		_, written, failure := engine.write(operation, term, &row, next, "result "+result.Status)
+		_, written, failure := engine.writeUnder(operation, term, lease, &row, next, "result "+result.Status)
 		if failure != nil {
 			return fmt.Errorf("write the row of pid %s: %w", pid, failure)
 		}
 		if !written {
+			held, failure := engine.Campaigns.LeaseHeld(operation, lease)
+			if failure != nil {
+				return fmt.Errorf("read the lease of slice %d: %w", lease.Partition, failure)
+			}
+			if !held {
+				engine.ownership.fenced(lease)
+				return fmt.Errorf("slice %d at epoch %d: %w", lease.Partition, lease.Epoch, errNotOwned)
+			}
 			current, failure := engine.Campaigns.Term(operation)
 			if failure != nil {
 				return fmt.Errorf("read the leadership term: %w", failure)
