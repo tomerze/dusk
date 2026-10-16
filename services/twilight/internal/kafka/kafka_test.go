@@ -344,3 +344,39 @@ func TestRecordsTheDatabaseRefusesAreSkipped(test *testing.T) {
 		test.Fatalf("a record the database refuses as data blocked its partition: applied %v, handled %v", applied, handled)
 	}
 }
+
+func TestAStoppedPartitionIsNeitherRetriedNorCommittedPastWhatItApplied(test *testing.T) {
+	records := func(partition int32, count int) []*kgo.Record {
+		var made []*kgo.Record
+		for offset := range count {
+			made = append(made, &kgo.Record{Topic: "dusk.process-results", Partition: partition, Offset: int64(offset)})
+		}
+		return made
+	}
+	fetches := kgo.Fetches{{Topics: []kgo.FetchTopic{{Topic: "dusk.process-results", Partitions: []kgo.FetchPartition{
+		{Partition: 0, Records: records(0, 4), HighWatermark: 4},
+		{Partition: 1, Records: records(1, 3), HighWatermark: 3},
+	}}}}}
+	var mutex sync.Mutex
+	handled := map[int32][]int64{}
+	handle := func(_ context.Context, record *kgo.Record) error {
+		mutex.Lock()
+		handled[record.Partition] = append(handled[record.Partition], record.Offset)
+		mutex.Unlock()
+		if record.Partition == 0 && record.Offset == 2 {
+			return fmt.Errorf("the slice was taken over: %w", ErrStopPartition)
+		}
+		return nil
+	}
+	applied := applyPartitions(context.Background(), "test", slog.New(slog.NewJSONHandler(io.Discard, nil)), fetches, handle)
+	last := map[int32]int64{}
+	for _, record := range applied {
+		last[record.Partition] = record.Offset
+	}
+	if len(applied) != 2 || last[0] != 1 || last[1] != 2 {
+		test.Fatalf("committed up to %v, want offset 1 of the stopped partition and 2 of the other", last)
+	}
+	if fmt.Sprint(handled[0]) != "[0 1 2]" || fmt.Sprint(handled[1]) != "[0 1 2]" {
+		test.Fatalf("handled %v: the stopped partition's record must be tried once and nothing after it", handled)
+	}
+}

@@ -118,6 +118,8 @@ func applyPartitions(operation context.Context, name string, logger *slog.Logger
 	return applied
 }
 
+var ErrStopPartition = errors.New("the partition's records are not this member's to apply")
+
 func applyRecord(operation context.Context, name string, logger *slog.Logger, record *kgo.Record, handle func(context.Context, *kgo.Record) error) bool {
 	backoff := time.Second
 	for {
@@ -126,6 +128,11 @@ func applyRecord(operation context.Context, name string, logger *slog.Logger, re
 			return true
 		}
 		if operation.Err() != nil {
+			return false
+		}
+		if errors.Is(failure, ErrStopPartition) {
+			logger.Debug("a partition's records are left for the member that owns it", "consumer", name, "topic", record.Topic,
+				"partition", record.Partition, "offset", record.Offset, "error", failure)
 			return false
 		}
 		var refused *pgconn.PgError
