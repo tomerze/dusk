@@ -22,7 +22,7 @@ resources:
   - kafka.yaml
   - topics.yaml
   - kafka-users.yaml
-  - postgres.yaml
+  - postgres
   - object-store-users.yaml
   - network-policies.yaml
   - dawn-ingress.yaml

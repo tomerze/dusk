@@ -69,13 +69,3 @@ spec:
     enablePodAntiAffinity: true
     podAntiAffinityType: required
     topologyKey: kubernetes.io/hostname
----
-apiVersion: postgresql.cnpg.io/v1
-kind: Database
-metadata:
-  name: signoz
-spec:
-  name: signoz
-  owner: signoz
-  cluster:
-    name: postgres
