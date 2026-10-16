@@ -175,6 +175,9 @@ Every setting is an environment variable read by `docker compose`:
 | `DUSK_SIGNOZ_PORT` | `8081` | Host port for SigNoz. Set it empty for a random port. |
 | `DUSK_MAILPIT_PORT` | `8025` | Host port for Mailpit. Set it empty for a random port. |
 | `DUSK_ALERT_SINK_PORT` | `8089` | Host port for the alert sink. Set it empty for a random port. |
+| `DUSK_SIMULATED_LINKS` | `1000` | How many links the [node-link simulator](simulator.md) holds, with `-f simulator.yaml`. |
+| `DUSK_SIMULATED_LINKS_PER_SECOND` | `200` | How many of its links start each second. |
+| `DUSK_SIMULATOR_METRICS_PORT` | `9103` | Host port for the simulator's metrics. Set it empty for a random port. |
 
 ### Alerts
 
@@ -312,13 +315,17 @@ id.
 ## Kubernetes
 
 `infra/k8s/base/` holds one directory per component; `infra/k8s/overlays/`
-assembles them. Both overlays put the Dusk stack in the namespace `dusk`. Build them
+assembles them. The overlays put the Dusk stack in the namespace `dusk`. Build them
 with `kubectl kustomize` (kubectl 1.37.1 was used, with kustomize v5.8.1):
 
 ```bash
 kubectl kustomize infra/k8s/overlays/dev
 kubectl kustomize infra/k8s/overlays/prod
 ```
+
+A third overlay, `scale`, is the dev overlay plus the
+[node-link simulator](simulator.md#on-kubernetes) and the CA nightfall trusts
+its links by; it is for load runs, never production.
 
 Every component has a NetworkPolicy, and the namespace starts from a policy
 that denies everything but DNS. Each component then allows exactly its own

@@ -97,6 +97,7 @@ nav:
       - Nodes that dial out: stack/nodes.md
       - Provisioning: stack/provisioning.md
       - nightfall: stack/nightfall.md
+      - Simulating node links: stack/simulator.md
       - The membrane: stack/membrane.md
       - The ledger: stack/ledger.md
       - dawn: stack/dawn.md
