@@ -543,7 +543,11 @@ func (store *Store) loadDigest(operation context.Context, claimed group, message
 
 func (store *Store) deliver(operation context.Context, target *queue, claimed group) {
 	message, failure := store.load(operation, target, claimed)
+	heldBack := false
 	if failure == nil {
+		failure = store.pool.QueryRow(operation, `select coalesce(paused_until > now(), false) from alert_receivers where name = $1`, target.name).Scan(&heldBack)
+	}
+	if failure == nil && !heldBack {
 		attempt, cancel := context.WithTimeout(operation, deliveryLease/2)
 		failure = target.sender.send(attempt, message)
 		cancel()
@@ -553,6 +557,15 @@ func (store *Store) deliver(operation context.Context, target *queue, claimed gr
 	fields := []any{"receiver", target.name, "kind", claimed.kind, "transition", claimed.transition, "attempts", claimed.attempts}
 	if claimed.count == 1 {
 		fields = append(fields, "alert_id", message.alert.ID)
+	}
+	if heldBack {
+		if _, released := store.pool.Exec(recording, `update alert_deliveries set lease = null, leased_by = null, leased_until = null, attempts = attempts - 1
+			where lease = $1`, claimed.lease); released != nil {
+			store.logger.Warn("an alert notification held back by its receiver's pause was not released; it is retried when its lease ends", append(fields, "error", released)...)
+		} else {
+			store.logger.Info("alert notification held back until its receiver's pause ends", fields...)
+		}
+		return
 	}
 	if operation.Err() != nil {
 		if _, released := store.pool.Exec(recording, `update alert_deliveries set lease = null, leased_by = null, leased_until = null, next_attempt_at = now()
