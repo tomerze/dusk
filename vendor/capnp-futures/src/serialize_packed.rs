@@ -23,6 +23,7 @@
 //! [packed stream encoding](https://capnproto.org/encoding.html#packing).
 
 use std::pin::Pin;
+use std::string::ToString;
 use std::task::{Context, Poll};
 
 use capnp::serialize::OwnedSegments;
@@ -223,7 +224,7 @@ where
     R: AsyncRead + Unpin,
 {
     let packed_read = PackedRead::new(read);
-    crate::serialize::try_read_message(packed_read, options).await
+    crate::serialize::try_read_message(crate::io::FromFutures(packed_read), options).await
 }
 
 /// Asynchronously reads a message from `reader`.
@@ -303,7 +304,7 @@ where
     M: AsOutputSegments,
 {
     let mut packed_write = PackedWrite::new(writer);
-    crate::serialize::write_message(&mut packed_write, message).await?;
+    crate::serialize::write_message(crate::io::FromFutures(&mut packed_write), message).await?;
 
     // Finish any pending work, so that nothing gets lost when we drop
     // the `PackedWrite`.
@@ -536,6 +537,9 @@ where
 #[cfg(test)]
 pub mod test {
     use crate::serialize::test::{BlockingRead, BlockingWrite};
+    use std::boxed::Box;
+    use std::vec;
+    use std::vec::Vec;
     use crate::serialize_packed::{try_read_message, PackedRead, PackedWrite};
     use capnp::message::ReaderSegments;
     use futures::{AsyncReadExt, AsyncWriteExt};

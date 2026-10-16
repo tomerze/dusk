@@ -25,7 +25,10 @@
 
 use capnp::serialize::{OwnedSegments, SegmentLengthsBuilder};
 use capnp::{message, Error, OutputSegments, Result};
-use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use crate::io::{AsyncRead, AsyncWrite};
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec;
 
 /// Asynchronously reads a message from `reader`.
 pub async fn read_message<R>(
@@ -75,11 +78,11 @@ where
 {
     let mut buf: [u8; 8] = [0; 8];
     {
-        let n = reader.read(&mut buf[..]).await?;
+        let n = crate::io::read(&mut reader, &mut buf[..]).await?;
         if n == 0 {
             return Ok(None);
         } else if n < 8 {
-            reader.read_exact(&mut buf[n..]).await?;
+            crate::io::read_exact(&mut reader, &mut buf[n..]).await?;
         }
     }
     let (segment_count, first_segment_length) = parse_segment_table_first(&buf[..])?;
@@ -89,7 +92,7 @@ where
     if segment_count > 1 {
         if segment_count < 4 {
             // small enough that we can reuse our existing buffer
-            reader.read_exact(&mut buf).await?;
+            crate::io::read_exact(&mut reader, &mut buf).await?;
             for idx in 0..(segment_count - 1) {
                 let segment_len =
                     u32::from_le_bytes(buf[(idx * 4)..(idx + 1) * 4].try_into().unwrap()) as usize;
@@ -97,7 +100,7 @@ where
             }
         } else {
             let mut segment_sizes = vec![0u8; (segment_count & !1) * 4];
-            reader.read_exact(&mut segment_sizes[..]).await?;
+            crate::io::read_exact(&mut reader, &mut segment_sizes[..]).await?;
             for idx in 0..(segment_count - 1) {
                 let segment_len =
                     u32::from_le_bytes(segment_sizes[(idx * 4)..(idx + 1) * 4].try_into().unwrap())
@@ -132,7 +135,7 @@ async fn read_segments<R>(
 where
     R: AsyncRead + Unpin,
 {
-    read.read_exact(&mut owned_segments[..]).await?;
+    crate::io::read_exact(&mut read, &mut owned_segments[..]).await?;
     Ok(message::Reader::new(owned_segments, options))
 }
 
@@ -178,7 +181,7 @@ where
     }
 }
 
-impl<A> AsOutputSegments for ::std::rc::Rc<message::Builder<A>>
+impl<A> AsOutputSegments for alloc::rc::Rc<message::Builder<A>>
 where
     A: message::Allocator,
 {
@@ -187,7 +190,7 @@ where
     }
 }
 
-impl<A> AsOutputSegments for ::std::sync::Arc<message::Builder<A>>
+impl<A> AsOutputSegments for alloc::sync::Arc<message::Builder<A>>
 where
     A: message::Allocator,
 {
@@ -208,7 +211,7 @@ where
     Ok(())
 }
 
-async fn write_segment_table<W>(mut write: W, segments: &[&[u8]]) -> ::std::io::Result<()>
+async fn write_segment_table<W>(mut write: W, segments: &[&[u8]]) -> Result<()>
 where
     W: AsyncWrite + Unpin,
 {
@@ -218,7 +221,7 @@ where
     // write the first Word, which contains segment_count and the 1st segment length
     buf[0..4].copy_from_slice(&(segment_count as u32 - 1).to_le_bytes());
     buf[4..8].copy_from_slice(&((segments[0].len() / 8) as u32).to_le_bytes());
-    write.write_all(&buf).await?;
+    crate::io::write_all(&mut write, &buf).await?;
 
     if segment_count > 1 {
         if segment_count < 4 {
@@ -231,7 +234,7 @@ where
                     *value = 0;
                 }
             }
-            write.write_all(&buf).await?;
+            crate::io::write_all(&mut write, &buf).await?;
         } else {
             let mut buf = vec![0; (segment_count & !1) * 4];
             for idx in 1..segment_count {
@@ -243,7 +246,7 @@ where
                     buf[idx] = 0
                 }
             }
-            write.write_all(&buf).await?;
+            crate::io::write_all(&mut write, &buf).await?;
         }
     }
     Ok(())
@@ -255,17 +258,20 @@ where
     W: AsyncWrite + Unpin,
 {
     for segment in segments {
-        write.write_all(segment).await?;
+        crate::io::write_all(&mut write, segment).await?;
     }
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 pub mod test {
+    use std::boxed::Box;
     use std::cmp;
     use std::io::{self, Read, Write};
     use std::pin::Pin;
     use std::task::{Context, Poll};
+    use std::vec;
+    use std::vec::Vec;
 
     use futures::io::Cursor;
     use futures::{AsyncRead, AsyncWrite};
@@ -276,6 +282,7 @@ pub mod test {
     use capnp::{message, OutputSegments};
 
     use super::{read_segment_table, try_read_message, write_message, AsOutputSegments};
+    use crate::io::FromFutures;
 
     #[test]
     fn test_read_segment_table() {
@@ -290,7 +297,7 @@ pub mod test {
         );
         let segment_lengths = exec
             .run_until(read_segment_table(
-                Cursor::new(&buf[..]),
+                FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new(),
             ))
             .unwrap()
@@ -308,7 +315,7 @@ pub mod test {
 
         let segment_lengths = exec
             .run_until(read_segment_table(
-                &mut Cursor::new(&buf[..]),
+                &mut FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new(),
             ))
             .unwrap()
@@ -327,7 +334,7 @@ pub mod test {
         );
         let segment_lengths = exec
             .run_until(read_segment_table(
-                &mut Cursor::new(&buf[..]),
+                &mut FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new(),
             ))
             .unwrap()
@@ -346,7 +353,7 @@ pub mod test {
         );
         let segment_lengths = exec
             .run_until(read_segment_table(
-                &mut Cursor::new(&buf[..]),
+                &mut FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new(),
             ))
             .unwrap()
@@ -370,7 +377,7 @@ pub mod test {
         );
         let segment_lengths = exec
             .run_until(read_segment_table(
-                &mut Cursor::new(&buf[..]),
+                &mut FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new(),
             ))
             .unwrap()
@@ -392,7 +399,7 @@ pub mod test {
         buf.extend([0; 513 * 4]);
         assert!(exec
             .run_until(read_segment_table(
-                Cursor::new(&buf[..]),
+                FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new()
             ))
             .is_err());
@@ -401,7 +408,7 @@ pub mod test {
         buf.extend([0, 0, 0, 0]); // 1 segments
         assert!(exec
             .run_until(read_segment_table(
-                Cursor::new(&buf[..]),
+                FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new()
             ))
             .is_err());
@@ -412,7 +419,7 @@ pub mod test {
         buf.extend([0; 3]);
         assert!(exec
             .run_until(read_segment_table(
-                Cursor::new(&buf[..]),
+                FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new()
             ))
             .is_err());
@@ -421,7 +428,7 @@ pub mod test {
         buf.extend([255, 255, 255, 255]); // 0 segments
         assert!(exec
             .run_until(read_segment_table(
-                Cursor::new(&buf[..]),
+                FromFutures(Cursor::new(&buf[..])),
                 message::ReaderOptions::new()
             ))
             .is_err());
@@ -431,7 +438,7 @@ pub mod test {
     fn construct_segment_table(segments: &[&[u8]]) -> Vec<u8> {
         let mut exec = futures::executor::LocalPool::new();
         let mut buf = vec![];
-        exec.run_until(super::write_segment_table(&mut buf, segments))
+        exec.run_until(super::write_segment_table(FromFutures(&mut buf), segments))
             .unwrap();
         buf
     }
@@ -659,7 +666,7 @@ pub mod test {
             let (mut read, segments) = {
                 let cursor = std::io::Cursor::new(Vec::new());
                 let mut writer = BlockingWrite::new(cursor, write_blocking_period);
-                futures::executor::block_on(Box::pin(write_message(&mut writer, &segments)))
+                futures::executor::block_on(Box::pin(write_message(FromFutures(&mut writer), &segments)))
                     .expect("writing");
 
                 let mut cursor = writer.into_writer();
@@ -668,7 +675,7 @@ pub mod test {
             };
 
             let message = futures::executor::block_on(Box::pin(try_read_message(
-                &mut read,
+                FromFutures(&mut read),
                 Default::default(),
             )))
             .expect("reading")
