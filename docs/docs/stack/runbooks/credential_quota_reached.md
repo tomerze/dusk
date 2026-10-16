@@ -6,7 +6,8 @@ of refusals doubles. The twilight leader raises it from `dusk.enrollments`, one 
 
 ## What it means
 
-A fleet token entry or an install token key enrolled its `max_installations`,
+A fleet token entry, a provision token entry or an install token key enrolled
+its `max_installations`,
 and nightfall refused an enrollment with it as `credential_quota_reached`. No
 installation beyond the cap got a certificate. The detail names the credential
 (`credential_kind`, `credential`, `tenant`), how many refusals came in the last
@@ -22,7 +23,7 @@ leaked credential that used the cap up.
 
     ```sh
     curl -sS -H "Authorization: Bearer $TOKEN" -G \
-      --data-urlencode 'selector=credential_kind == "fleet_token" and credential_ref == "<credential>"' \
+      --data-urlencode 'selector=credential_kind == "<credential_kind>" and credential_ref == "<credential>"' \
       --data-urlencode 'limit=500' "$TWILIGHT/api/v1/nodes"
     ```
 
@@ -35,7 +36,8 @@ leaked credential that used the cap up.
     SELECT toStartOfHour(time) AS hour, count() AS installations, uniq(remote_address) AS addresses
     FROM dusk.enrollments
     WHERE operation = 'enroll' AND outcome = 'issued'
-      AND credential_ref = '<credential>' AND time > now() - INTERVAL 7 DAY
+      AND credential_kind = '<credential_kind>' AND credential_ref = '<credential>'
+      AND time > now() - INTERVAL 7 DAY
     GROUP BY hour ORDER BY hour
     ```
 
@@ -46,13 +48,14 @@ leaked credential that used the cap up.
 3. Whether an `enrollment_rate`, `enrollment_from_new_network_burst` or
     `denied_enrollments_spike` alert for the same credential is open. Together
     they point to a leak.
-4. `nightfall_credential_installations_remaining{credential="<credential>"}` is
+4. `nightfall_credential_installations_remaining{credential_kind="<credential_kind>", credential="<credential>"}` is
     0 on every nightfall instance.
 
 ## What to do
 
 **The batch is larger than its cap.** Raise `max_installations` on the entry in
-`fleet_tokens_file`, or on the key in `install_token_keys`. nightfall loads the
+`fleet_tokens_file` or `provision_tokens_file`, or on the key in
+`install_token_keys`. nightfall loads the
 change within 30 seconds, plus the Secret's propagation in Kubernetes; the
 refused nodes retry and enroll.
 

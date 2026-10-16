@@ -504,7 +504,8 @@ The leader reads `dusk.enrollments` and counts new enrollments only: an
 `enroll` that was `issued` is a new installation, and an `assign` or `enroll`
 that was `denied` or `rate_limited` is a refusal. Renewals and errors are never
 counted. Each is counted for the whole fleet, for its credential - a fleet token
-entry by `credential_ref`, an install token key by `credential_issuer` - and for
+or provision token entry by `credential_ref`, an install token key by
+`credential_issuer` - and for
 its network, the /24 of an IPv4 address or the /48 of an IPv6 one. An
 installation from a network no installation came from in the `baseline_days`
 before also counts as one from a new network, while that network is no older
@@ -1106,8 +1107,9 @@ ten minutes past a result.
 
 A revocation revokes every installation one credential enrolled, as twilight's
 inventory recorded it: for a fleet token entry the nodes whose
-`credential_kind` is `fleet_token` and whose `credential_ref` is the entry's
-name, for an install token key those whose `credential_issuer` is the key id,
+`credential_kind` is `fleet_token`, and for a provision token entry those whose
+`credential_kind` is `provision_token`, whose `credential_ref` is the entry's
+name; for an install token key those whose `credential_issuer` is the key id,
 optionally only those whose `enrolled_at` is at or after `enrolled_after` and
 before `enrolled_before`, and never one that is already `revoked`. `matched` is
 how many matched when it started. The leader revokes them in the order of their

@@ -92,7 +92,8 @@ ceph-init creates the buckets. `docker compose ps -a` shows the one-shot
 services as exited with code 0 when they are done.
 
 Three nodes start with the stack. Each dials out to nightfall, enrolls with the
-fleet token compiled into its image and keeps its identity in its kvs
+dev provision token compose mounts at `/etc/dusk/provision-token` - never with
+the fleet token compiled into its image - and keeps its identity in its kvs
 persistent store on a volume of its own. Run more with:
 
 ```bash
@@ -593,7 +594,8 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | Secret | Holds | Read by |
 |--------|-------|---------|
 | `fleet-device-id` | `device-id.key`, the key every device id is derived from | nightfall |
-| `fleet-token` | `fleet-token`, the token nodes enroll with; `fleet-tokens.toml`, its SHA-256 for nightfall | node image builds, nightfall |
+| `fleet-token` | `fleet-token`, the token compiled into nodes; `fleet-tokens.toml`, its SHA-256 for nightfall | node image builds, nightfall |
+| `fleet-provision-token` | `provision-token`, a provision token nodes enroll with; `provision-tokens.toml`, its SHA-256 for nightfall | the nodes given it, nightfall |
 | `fleet-install-token-keys` | `install-token-jwks.json`, keys of per-install tokens (empty) | nightfall |
 | `fleet-provisioner` | `provisioner.jwk`, the key nightfall signs step-ca tokens with; `provisioner.pub.jwk`, its public half | nightfall; pki-init gives step-ca the public half |
 | `step-ca-password` | `password`, the password step-ca's keys are encrypted with | step-ca, pki-init |

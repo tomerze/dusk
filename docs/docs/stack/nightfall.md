@@ -72,7 +72,7 @@ ledger topic has fewer partitions than the ledger partition + 1.
 | fleet server certificate and key (fleet-server CA) | `/etc/nightfall/tls/fleet.crt`, `fleet.key` | `fleet.certificate`, `fleet.key` |
 | fleet-client CA bundle, the CA that signs node certificates | `/etc/nightfall/pki/fleet-client-ca.crt` | `fleet.client_ca` |
 | provision server certificate and key (fleet-server CA) | `/etc/nightfall/tls/provision.crt`, `provision.key` | `provision.certificate`, `provision.key` |
-| fleet tokens, install token keys, device id key | `/etc/nightfall/secrets/` | `[provision]`, see [provisioning](provisioning.md) |
+| fleet tokens, provision tokens, install token keys, device id key | `/etc/nightfall/secrets/` | `[provision]`, see [provisioning](provisioning.md) |
 | inner server certificate and key (internal CA, DNS `*.<suffix>`) | `/etc/nightfall/tls/inner.crt`, `inner.key` | `inner.certificate`, `inner.key` |
 | internal CA bundle, the CA that signs principals | `/etc/nightfall/pki/internal-ca.crt` | `inner.client_ca` |
 | step-ca root and nightfall's provisioner JWK | `/etc/nightfall/pki/fleet-client-root.crt`, `/etc/nightfall/secrets/provisioner.jwk` | `[step_ca]` |
@@ -187,6 +187,7 @@ A Kafka property name holds dots, so it can only be set through the whole
 | `server_names` | `["provision.dusk.example"]` | Names nodes provision through; distinct from `fleet.server_names`. |
 | `certificate`, `key` | `/etc/nightfall/tls/provision.crt`, `/etc/nightfall/tls/provision.key` | Server certificate chain and key, PEM. |
 | `fleet_tokens_file` | `/etc/nightfall/secrets/fleet-tokens.toml` | See [fleet tokens](provisioning.md#fleet-tokens). |
+| `provision_tokens_file` | `""` | No provision tokens when empty. See [provision tokens](provisioning.md#provision-tokens). |
 | `install_token_keys` | `/etc/nightfall/secrets/install-token-jwks.json` | See [install tokens](provisioning.md#install-tokens). |
 | `device_id_key_file` | `/etc/nightfall/secrets/device-id.key` | See [the device id key](provisioning.md#the-device-id-key). |
 | `challenge_ttl_ms` | `300000` | Lifetime of an assign challenge, and the longest a provisioning connection stays open. A provisioning connection that sends and receives nothing for 30 seconds is closed sooner, and its messages may be at most 64 KiB. |
@@ -265,7 +266,7 @@ These act before or around them:
 |-----|---------|---------|
 | `handshakes_per_second` | `2000` | TLS handshakes the instance starts per second, on every listener. Beyond it connections are closed before TLS. |
 | `handshake_failures_per_ip_per_minute` | `30` | Failed handshakes from one address before it is refused for `penalty_seconds`. |
-| `credential_failures_per_ip_per_hour` | `20` | Failed credentials (certificates without a valid identity, refused fleet or install tokens) from one address before it is refused. |
+| `credential_failures_per_ip_per_hour` | `20` | Failed credentials (certificates without a valid identity, refused fleet, provision or install tokens) from one address before it is refused. |
 | `penalty_seconds` | `60` | How long a penalized address is refused. |
 | `session_setups_per_identity_per_5s` | `1` | Node sessions one device and installation may start in 5 seconds. |
 | `enrollments_per_second`, `enrollments_per_second_per_credential`, `enrollment_alert_per_minute` | `50`, `10`, `600` | See [provisioning limits](provisioning.md#limits). |
@@ -312,12 +313,14 @@ client CA bundle) keeps the previous material, is logged at `warn` and counted i
 changed, whose principal lost its roles or whose certificate is now denied is
 disconnected, and the rest keep their connections.
 
-`fleet_tokens_file` and `install_token_keys` are checked the same way and a
-changed file is loaded without a restart and without touching a session: new
-enrollments see added, retired, removed, re-tenanted and re-capped credentials
-at once, and nightfall logs which entries were added, removed, retired or
-changed. A file that does not load keeps the previous credentials, is logged at
-`warn` and counted in `nightfall_credentials_reload_failures_total{file}`.
+`fleet_tokens_file`, `provision_tokens_file` and `install_token_keys` are
+checked the same way and a changed file is loaded without a restart and without
+touching a session: new enrollments see added, retired, removed, re-tenanted and
+re-capped credentials at once, and nightfall logs which entries were added,
+removed, retired or changed. A file that does not load, or a fleet tokens or
+provision tokens file that would give an entry of one the value of an entry of
+the other, keeps the previous credentials, is logged at `warn` and counted in
+`nightfall_credentials_reload_failures_total{file}`.
 
 The device id key, the ledger keys, the step-ca settings and every other key of
 `nightfall.toml` are read at start; change them with a restart.
@@ -395,7 +398,7 @@ roles = ["admin"]
 | `nightfall_census_failures_total`, `nightfall_event_delivery_failures_total` | `topic` on the second | Census writes and events Kafka did not take. |
 | `nightfall_dead_instances_total` | | Instances whose census stopped. |
 | `nightfall_tls_reload_failures_total`, `nightfall_permissions_reload_failures_total` | | Changed files that did not load. |
-| `nightfall_credentials_reload_failures_total` | `file` (`fleet_tokens_file`, `install_token_keys`) | Changed credential files that did not load. |
+| `nightfall_credentials_reload_failures_total` | `file` (`fleet_tokens_file`, `provision_tokens_file`, `install_token_keys`) | Changed credential files that did not load. |
 | `nightfall_credential_installations_remaining` | `credential_kind`, `credential` | What is left of each credential's `max_installations`. |
 | `nightfall_credential_quota_reservations_total` | `outcome` (`granted`, `refused`, `unconfirmed`, `unwritten`) | Installation reservations of capped credentials. |
 | `nightfall_credential_quota_release_failures_total` | | Reservations nightfall could not give back; each leaves an installation counted. |

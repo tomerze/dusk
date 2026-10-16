@@ -39,18 +39,20 @@ The detail holds the `count`, the `baseline`, the `threshold`, and the
 1. The reasons, in ClickHouse ([where to run SQL](index.md#sql)):
 
     ```sql
-    SELECT reason, credential_ref, credential_issuer, count() AS refusals, uniq(remote_address) AS addresses
+    SELECT reason, credential_kind, credential_ref, credential_issuer, count() AS refusals, uniq(remote_address) AS addresses
     FROM dusk.enrollments
     WHERE operation IN ('assign', 'enroll') AND outcome IN ('denied', 'rate_limited')
       AND time > now() - INTERVAL 1 HOUR
-    GROUP BY reason, credential_ref, credential_issuer ORDER BY refusals DESC LIMIT 20
+    GROUP BY reason, credential_kind, credential_ref, credential_issuer ORDER BY refusals DESC LIMIT 20
     ```
 
     Add `AND remote_address LIKE '203.0.113.%'` to look at one network.
 2. The reasons mean, in [the provisioning reference](../provisioning.md#what-is-recorded):
     * `invalid_credential`, `invalid_install_token`, `malformed_request`: wrong
       credentials, which also fill the penalty box (`nightfall_penalty_box_ips`).
-    * `credential_retired`: a retired token is still presented.
+    * `credential_retired`: a retired token is still presented - by a leak in
+      use, or, after a provision token was rotated, by nodes whose file never
+      got the new token.
     * `credential_quota_reached`: see
       [`credential_quota_reached`](credential_quota_reached.md).
     * `credential_rate`, `enrollment_rate`, `network_enrollment_rate`: a burst

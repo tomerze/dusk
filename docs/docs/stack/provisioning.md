@@ -82,8 +82,15 @@ A fleet token is a shared secret baked into the nodes you ship. Anyone who
 extracts it from one node can enroll as many fake nodes as they like until you
 retire it, and limiting enrollments per address does not stop an enrollment
 spread over many addresses. Use one token per product or batch so that you can
-retire one without the others, watch the enrollment rate, and prefer install
-tokens where your installer can carry one per machine.
+retire one without the others, watch the enrollment rate, and prefer
+[provision tokens](#provision-tokens) or install tokens.
+
+A node's fleet token can never be replaced: the key of the node's persistent kvs
+file derives from it. Retiring a fleet token's entry stops it enrolling anything
+new, and changes nothing on the nodes built with it. Nodes that may have to
+enroll again - their persistent kvs file deleted, their certificate expired
+beyond the renew grace - need a provision token or an install token once their
+fleet token is retired.
 
 nightfall never stores a fleet token, only its SHA-256. `[provision]
 fleet_tokens_file` is a TOML file with one `[[token]]` table per token:
@@ -148,11 +155,90 @@ cache delay.
 
 To retire a token, set `retired = true` on its entry, or remove the entry.
 Keeping the entry keeps naming the token in enrollment events, so twilight can
-alert on nodes that still present it, and keeps it unpenalized; a removed
-token is an unknown credential, which counts against the address that presents
-it. Either way, nodes that already hold certificates keep them, keep their
+alert on nodes that still present it, keeps it unpenalized, and keeps nightfall
+refusing a provision token with its value; a removed token is an unknown
+credential, which counts against the address that presents it. Either way, nodes that already hold certificates keep them, keep their
 sessions and keep renewing, since renewal needs only the certificate; to cut
 those nodes off, revoke them (see [Revoking what a credential enrolled](#revoking-what-a-credential-enrolled)).
+
+## Provision tokens
+
+A provision token is a shared secret like a fleet token, but it is not compiled
+into the node: the node reads it from the file `--provision-token-file` names, at
+every enrollment attempt (see
+[Provision tokens](../getting-started/guides/connect-to-nightfall.md#provision-tokens)
+in the node's guide). Replacing the token in that file replaces it, with no
+rebuild, and leaves the node's persistent kvs file alone. A node given a
+provision token enrolls with it the first time and every time it has to enroll
+again, and never with its fleet token, so provision tokens are how you replace
+the credential your nodes enroll with, and how you stop the fleet token from
+enrolling anything.
+
+`[provision] provision_tokens_file` names a TOML file in the
+[fleet tokens file](#fleet-tokens)'s format: one `[[token]]` table per token,
+whose `name`, `value_sha256`, `tenant`, `max_installations` and `retired` mean
+what they mean there. It is empty by default, which accepts no provision tokens.
+
+```toml
+[[token]]
+name = "retail-eu-2026-10"
+value_sha256 = "4c1d8e2a9b7f3e5d0a6c8b1e3f5a7d9c2b4e6f8a0c1d3e5f7a9b2c4d6e8f0a1b"
+tenant = "retail-eu"
+max_installations = 50000
+```
+
+nightfall looks a provision token up among these entries only, and a fleet token
+among the fleet tokens file's only: a provision token presented as a fleet token,
+or a fleet token presented as a provision token, is an unknown credential. No
+entry of one file may have the value of an entry of the other. nightfall refuses
+to start when they share one, and refuses a reload of either file that would
+make them share one, the way it refuses a file that does not load. So a retired
+fleet token cannot be registered as a provision token for as long as its entry
+stays in `fleet_tokens_file`; nightfall compares only the entries the files hold,
+and knows nothing of a token whose entry was removed. Enrollment events name a
+provision token's enrollments `credential_kind: "provision_token"`, with the
+entry's name as `credential_ref`. Rate limits, caps, reloads, retirement and
+bulk revocation work per entry, as for fleet tokens.
+
+Create a token and its entry the same way as a fleet token's:
+
+```sh
+token=$(openssl rand -hex 32)
+printf '%s' "$token" > provision-token
+printf '%s' "$token" | sha256sum | cut -d ' ' -f 1
+```
+
+and install `provision-token` on every node that should use it, at the path its
+`--provision-token-file` names, readable by the account the node runs as.
+
+### Rotating a provision token
+
+1. Create the new token and add its entry beside the old one. Every nightfall
+   instance accepts both within 30 seconds.
+2. Put the new token in the provision token file of every node that may still
+   have to enroll, with whatever already manages those files. A node reads it
+   at its next enrollment. Enrolled nodes are not affected: they renew with
+   their certificates.
+3. When no node that may still have to enroll holds the old token, set
+   `retired = true` on its entry. New enrollments with it are refused at once;
+   the nodes it enrolled keep their certificates and sessions. The time between
+   steps 1 and 3 is the overlap window, and its length is yours to choose:
+   enrollment events and the inventory's `credential_ref` show which entry each
+   enrollment used.
+
+A node that still holds only a retired token is refused until its file holds the
+new one: it logs the refusal at `error` and tries again every 5 to 10 minutes.
+
+### Stopping the fleet token
+
+Once every node that may still have to enroll has a provision token or an
+install token, set `retired = true` on every entry of `fleet_tokens_file` and
+keep the entries. The fleet token then enrolls nothing, and while its entries
+stay nightfall refuses a provision token with its value. A file with no entries
+also stops every fleet token, but then nothing stops one of their values from
+being added to `provision_tokens_file`. The nodes keep their fleet token, since
+the key of their persistent kvs files derives from it; nightfall only stops
+accepting it.
 
 ## Install tokens
 
@@ -225,8 +311,8 @@ remove the key from the JWKS; its tokens are then refused as
 
 ## Capping installations
 
-A fleet token entry or an install token key with `max_installations` enrolls at
-most that many installations, ever. The installation that would go beyond it is
+A fleet token entry, a provision token entry or an install token key with
+`max_installations` enrolls at most that many installations, ever. The installation that would go beyond it is
 refused with `denied: credential quota reached` and the reason
 `credential_quota_reached`, at assign and at enroll, on every nightfall
 instance. Renewals do not count and are never refused for it; revoking an
@@ -272,8 +358,8 @@ reports what is left of each cap, and
 ## TPM attestation
 
 A node whose key lives in its TPM 2.0 can prove that the key was created in a
-genuine TPM and never leaves it. Attestation comes on top of a fleet token or an
-install token, never instead of one: nightfall checks the token first and the
+genuine TPM and never leaves it. Attestation comes on top of a fleet token, a
+provision token or an install token, never instead of one: nightfall checks the token first and the
 TPM's evidence after it. A fleet token taken from one machine then enrolls only
 as many attesting nodes as whoever took it has TPMs. nightfall still enrolls a
 node that does not attest, so a copied token still enrolls nodes without a TPM;
@@ -501,18 +587,20 @@ has instead: that key cannot leave its TPM, so nightfall refuses a CSR for any
 other key, and the new certificate carries `urn:dusk:attestation:tpm` again.
 
 Renewal is not an enrollment: it does not count against the enrollment limits and
-needs no fleet token.
+needs no token.
 
 A node whose certificate expired more than `renew_grace` ago is refused with
 `renew refused: the certificate expired beyond the renew grace` and enrolls again
-with its fleet token. That enrollment creates a new installation id, so the node
+with its token: its provision token or install token when it has one, its fleet
+token otherwise. That enrollment creates a new installation id, so the node
 appears in the fleet as a new installation of the same device.
 
 ## Limits
 
 * `[limits] enrollments_per_second` (default 50) for the whole nightfall instance
   and `enrollments_per_second_per_credential` (default 10) per credential - one
-  fleet token entry, or every install token one key signed - and as many again
+  fleet token or provision token entry, or every install token one key signed -
+  and as many again
   per TPM endorsement key for a node that attests. Each install token also has
   6 calls a minute of its own, so one token - even one already used - cannot
   use up the rate of every token its key signed. assign and enroll each take
@@ -542,8 +630,8 @@ Every assign, enroll and renew, whatever its outcome, produces one message on th
 Kafka topic `dusk.enrollments` (defined by
 `services/contracts/kafka/dusk.enrollments.schema.json` in the Dusk repository) with the operation, the outcome (`assigned`, `issued`, `denied`,
 `rate_limited` or `error`), the device and installation ids when known, the
-tenant, the credential kind and `credential_ref` (a fleet token's `name` or an
-install token's `sub`, never the secret), `credential_issuer` (the key id of an
+tenant, the credential kind and `credential_ref` (a fleet token's or a provision
+token's `name`, or an install token's `sub`, never the secret), `credential_issuer` (the key id of an
 install token's key), the SHA-256 of the hardware fingerprint,
 the address the call came from, the issued certificate's serial, fingerprint and
 expiry, what the node reported about itself, and the nightfall instance.
@@ -558,9 +646,9 @@ expiry, what the node reported about itself, and the nightfall instance.
 | `credential_rate` | `rate_limited` | This credential's enrollment rate is exhausted. |
 | `endorsement_key_rate` | `rate_limited` | This TPM endorsement key's enrollment rate is exhausted. |
 | `install_token_rate` | `rate_limited` | This install token made 6 calls in the last minute. |
-| `invalid_credential` | `denied` | No fleet token entry matches. |
-| `credential_retired` | `denied` | The fleet token entry is `retired`. |
-| `credential_quota_reached` | `denied` | The fleet token entry or the install token key enrolled its `max_installations`. |
+| `invalid_credential` | `denied` | No fleet token entry, or no provision token entry, matches. |
+| `credential_retired` | `denied` | The fleet token or provision token entry is `retired`. |
+| `credential_quota_reached` | `denied` | The fleet token entry, the provision token entry or the install token key enrolled its `max_installations`. |
 | `credential_quota_unavailable` | `error` | The credential has a cap and the instance could not count against it: it has not read `dusk.credential-quota` to its end yet, or Kafka did not take or return the reservation within 10 seconds. |
 | `invalid_install_token` | `denied` | The install token's signature, claims or validity period is wrong. |
 | `certificate_credential` | `denied` | assign or enroll was called with the certificate credential, which only renew takes. |
@@ -596,9 +684,9 @@ nightfall's log holds the detail of every refusal under the same reason.
 
 ### What whoever holds it can do
 
-A fleet token is in every binary built with it, and an install token key is
-wherever tokens are minted. Whoever extracts either one can, until it is
-retired:
+A fleet token is in every binary built with it, a provision token on every node
+given it, and an install token key wherever tokens are minted. Whoever extracts
+one can, until it is retired:
 
 * **Enroll new installations.** Each gets a certificate, a new installation id
   and the token's tenant, and a device id derived from whatever hardware
@@ -667,23 +755,29 @@ enrollments only.
 
 ### Rotating and retiring a token
 
-1. Create a new token and add its entry, with a cap, beside the old one;
-   nightfall takes it within 30 seconds. Build the nodes you ship from then on
-   with it.
+A leaked fleet token cannot be rotated on the nodes built with it. Set
+`retired = true` on its entry; nodes built with it that have to enroll again then
+need a provision token or an install token (see
+[Stopping the fleet token](#stopping-the-fleet-token)). A node rebuilt with
+another fleet token cannot read the persistent store the earlier build wrote,
+since the token keys its encryption (see
+[the security model](security.md#the-fleet-token)): such a node enrolls again as
+a new installation of the same device.
+
+A leaked provision token is rotated:
+
+1. Create a new provision token, add its entry with a cap beside the old one, and
+   put it on the nodes, as in [Rotating a provision token](#rotating-a-provision-token).
 2. Set `retired = true` on the old entry. New enrollments with it are refused at
    once; the nodes it enrolled keep their certificates and sessions.
-3. If the old token leaked, revoke what it enrolled since the leak, as below.
-
-A node rebuilt with another fleet token cannot read the persistent store the
-earlier build wrote, since the token keys its encryption (see
-[the security model](security.md#the-fleet-token)): such a node enrolls again
-as a new installation of the same device.
+3. Revoke what the old token enrolled since the leak, as below.
 
 ### Revoking what a credential enrolled
 
 twilight keeps the credential every node enrolled with: `credential_kind`,
-`credential_ref` (the fleet token entry, or the install token's subject) and
-`credential_issuer` (the install token's key), all selector fields. List the
+`credential_ref` (the fleet token or provision token entry, or the install
+token's subject) and `credential_issuer` (the install token's key), all selector
+fields. List the
 nodes first:
 
 ```sh
@@ -693,7 +787,8 @@ curl -sS -H "Authorization: Bearer $TWILIGHT_TOKEN" -G \
 ```
 
 Then count, and revoke, every installation one fleet token entry
-(`"credential_kind": "fleet_token"` and its name) or one install token key
+(`"credential_kind": "fleet_token"` and its name), one provision token entry
+(`"credential_kind": "provision_token"` and its name) or one install token key
 (`"credential_kind": "install_token"` and its key id) enrolled, optionally only
 within `enrolled_after` and `enrolled_before`. Every `POST` to
 `/api/v1/revocations` needs the admin role, a dry run too. `dry_run` counts

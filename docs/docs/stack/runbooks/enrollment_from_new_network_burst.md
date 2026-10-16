@@ -27,10 +27,10 @@ how many distinct ones there were.
 1. Which credentials and networks, in ClickHouse ([where to run SQL](index.md#sql)):
 
     ```sql
-    SELECT credential_ref, credential_issuer, IPv4CIDRToRange(toIPv4OrZero(splitByChar(':', remote_address)[1]), 24).1 AS network, count() AS installations
+    SELECT credential_kind, credential_ref, credential_issuer, IPv4CIDRToRange(toIPv4OrZero(splitByChar(':', remote_address)[1]), 24).1 AS network, count() AS installations
     FROM dusk.enrollments
     WHERE operation = 'enroll' AND outcome = 'issued' AND time > now() - INTERVAL 1 HOUR
-    GROUP BY credential_ref, credential_issuer, network ORDER BY installations DESC LIMIT 50
+    GROUP BY credential_kind, credential_ref, credential_issuer, network ORDER BY installations DESC LIMIT 50
     ```
 
     (IPv6 addresses are written `[address]:port` and show as `0.0.0.0` in this
@@ -42,7 +42,7 @@ how many distinct ones there were.
 
     ```sh
     curl -sS -H "Authorization: Bearer $TOKEN" -G \
-      --data-urlencode 'selector=credential_ref == "<credential>" and lifecycle == "enrolled"' \
+      --data-urlencode 'selector=credential_kind == "<credential_kind>" and credential_ref == "<credential>" and lifecycle == "enrolled"' \
       "$TWILIGHT/api/v1/nodes"
     ```
 

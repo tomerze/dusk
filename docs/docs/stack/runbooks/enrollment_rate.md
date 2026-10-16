@@ -19,8 +19,8 @@ network, and the networks and credentials the count came from.
 ## What it means
 
 Many new installations at once, with one credential, from one network, or
-across the fleet. A fleet token or an install token key extracted from one node
-enrolls as many nodes as its holder likes, from as many addresses as they like,
+across the fleet. A fleet token, a provision token or an install token key
+extracted from one node enrolls as many nodes as its holder likes, from as many addresses as they like,
 up to the credential's `max_installations`
 ([the fleet token](../security.md#the-fleet-token)); a large rollout looks the
 same in the count. Refused attempts raise
@@ -35,13 +35,15 @@ curl -fsS -H "Authorization: Bearer $TOKEN" "$TWILIGHT/api/v1/alerts/<id>"
 ```
 
 Where one credential's installations came from, in ClickHouse
-([where to run SQL](index.md#sql)); `credential_ref` names a fleet token by its
-entry's `name`, and `credential_issuer` an install token key by its id:
+([where to run SQL](index.md#sql)); `credential_ref` names a fleet token or a
+provision token by its entry's `name`, and `credential_issuer` an install token
+key by its id:
 
 ```sql
 SELECT remote_address, count() AS installations, uniqExact(hardware_fingerprint_hash) AS fingerprints, min(time) AS first_installation, max(time) AS last_installation
 FROM dusk.enrollments
-WHERE credential_ref = '<credential>' AND operation = 'enroll' AND outcome = 'issued'
+WHERE credential_kind = '<credential_kind>' AND credential_ref = '<credential>'
+  AND operation = 'enroll' AND outcome = 'issued'
   AND time > now() - INTERVAL 1 DAY
 GROUP BY remote_address
 ORDER BY installations DESC
@@ -59,19 +61,22 @@ LIMIT 50
 For a leaked credential, follow
 [When a credential leaks](../provisioning.md#when-a-credential-leaks):
 
-1. Retire it: `retired = true` on its entry in `fleet_tokens_file`, or remove
-   the key from `install_token_keys`. Every nightfall instance refuses it within
+1. Retire it: `retired = true` on its entry in `fleet_tokens_file` or
+   `provision_tokens_file`, or remove the key from `install_token_keys`. Every nightfall instance refuses it within
    30 seconds of the file changing, with no restart.
 2. Revoke what it enrolled since the leak, in one request (`admin`). Count first:
 
     ```sh
     curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-      -d '{"credential_kind": "fleet_token", "credential": "<credential>", "enrolled_after": "<first suspicious enrollment>", "reason": "leaked fleet token", "dry_run": true}' \
+      -d '{"credential_kind": "<credential_kind>", "credential": "<credential>", "enrolled_after": "<first suspicious enrollment>", "reason": "leaked token", "dry_run": true}' \
       "$TWILIGHT/api/v1/revocations"
     ```
 
     then send the same request without `dry_run`.
-3. Ship nodes built with a new token, with a `max_installations`.
+3. Give the nodes that may still have to enroll a new provision token, with a
+   `max_installations` (see
+   [Rotating a provision token](../provisioning.md#rotating-a-provision-token)).
+   A fleet token cannot be replaced on the nodes built with it.
 
 Until they are revoked, nodes enrolled with it join campaigns their reported
 facts match and count in those campaigns' health gates: pause campaigns whose

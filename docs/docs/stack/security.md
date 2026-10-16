@@ -85,10 +85,12 @@ What bounds and reveals it:
 
 * Every assign and enroll takes a token from a bucket for the nightfall
   instance (50 per second by default) and one for the credential - the fleet
-  token entry, or every install token one key signed (10 per second) - and one
+  token or provision token entry, or every install token one key signed (10 per
+  second) - and one
   install token makes at most 6 calls a minute; beyond any of them the node is
   told `overloaded`.
-* `max_installations` on a fleet token entry or an install token key caps the
+* `max_installations` on a fleet token entry, a provision token entry or an
+  install token key caps the
   installations it ever enrolls, across every instance and restart; beyond it
   nightfall refuses with `credential_quota_reached`.
 * A retired or removed token is refused by every instance within 30 seconds of
@@ -107,8 +109,9 @@ What bounds and reveals it:
   device id enrolls more than 20 installations through it from more than 5
   addresses within 24 hours. It counts in memory, so enrollments spread over
   instances or across a restart are not counted together.
-* Every outcome is a message on `dusk.enrollments`, naming a fleet token by
-  its entry name and an install token by its subject, never by its value.
+* Every outcome is a message on `dusk.enrollments`, naming a fleet token or a
+  provision token by its entry name and an install token by its subject, never
+  by its value.
 
 The token is in the binary because the node needs it, so treat every binary as
 holding it: pass it to container builds as a build secret, so no image layer
@@ -122,7 +125,24 @@ allows `Dusk.fleetToken`.
 The fleet token also keys the encryption of each node's persistent kvs store,
 together with the machine's `dusk.device.id`. Whoever holds the binary and can
 read a machine's id can decrypt that machine's store, the node's private key
-included.
+included. For the same reason a node's fleet token can never be replaced: a
+retired fleet token stops enrolling, and the nodes built with it keep it.
+
+### Provision tokens
+
+A provision token is a shared secret like the fleet token, held in a file on
+every node given it instead of in the binary, and nightfall keeps only its
+SHA-256. Whoever reads it from one node can enroll nodes with it, exactly as
+with a leaked fleet token, until its entry is retired or reaches its cap. What
+it adds is that it can be replaced: a new token is put on the nodes and the old
+one retired, with no rebuild, and once every node that may still enroll has a
+provision token the fleet token's entry can be retired, so that a token
+extracted from any binary enrolls nothing. A provision token is looked up only as
+a provision token, and nightfall refuses one with the value of a fleet token entry
+in `fleet_tokens_file`, so a retired fleet token cannot come back as a provision
+token while its entry is kept; retire fleet tokens rather than remove their
+entries. See
+[Provision tokens](provisioning.md#provision-tokens).
 
 ### Install tokens
 
