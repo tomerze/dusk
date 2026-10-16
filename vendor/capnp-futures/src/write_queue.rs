@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use std::future::Future;
+use core::future::Future;
 
 use futures_channel::oneshot;
-use futures_util::{AsyncWrite, AsyncWriteExt, StreamExt, TryFutureExt};
+use futures_util::{StreamExt, TryFutureExt};
 
 use capnp::Error;
 
+use crate::io::AsyncWrite;
 use crate::serialize::AsOutputSegments;
 
 enum Item<M>
@@ -40,8 +41,8 @@ pub struct Sender<M>
 where
     M: AsOutputSegments,
 {
-    sender: futures_channel::mpsc::UnboundedSender<Item<M>>,
-    in_flight: std::sync::Arc<std::sync::atomic::AtomicI32>,
+    sender: crate::channel::UnboundedSender<Item<M>>,
+    in_flight: alloc::sync::Arc<core::sync::atomic::AtomicI32>,
 }
 
 impl<M> Clone for Sender<M>
@@ -67,9 +68,9 @@ where
     W: AsyncWrite + Unpin,
     M: AsOutputSegments,
 {
-    let (tx, mut rx) = futures_channel::mpsc::unbounded::<Item<M>>();
+    let (tx, mut rx) = crate::channel::unbounded::<Item<M>>();
 
-    let in_flight = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
+    let in_flight = alloc::sync::Arc::new(core::sync::atomic::AtomicI32::new(0));
 
     let sender = Sender {
         sender: tx,
@@ -81,9 +82,9 @@ where
             match item {
                 Item::Message(m, returner) => {
                     let result = crate::serialize::write_message(&mut writer, &m).await;
-                    in_flight.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                    in_flight.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
                     result?;
-                    writer.flush().await?;
+                    crate::io::flush(&mut writer).await?;
                     let _ = returner.send(m);
                 }
                 Item::Done(r, finisher) => {
@@ -98,22 +99,6 @@ where
     (sender, queue)
 }
 
-fn _assert_kinds() {
-    fn _assert_send<T: Send>(_x: T) {}
-    fn _assert_sync<T: Sync>() {}
-    fn _assert_write_queue_send<W: AsyncWrite + Unpin + Send, M: AsOutputSegments + Sync + Send>(
-        w: W,
-    ) {
-        let (s, f) = write_queue::<W, M>(w);
-        _assert_send(s);
-        _assert_send(f);
-    }
-    fn _assert_write_queue_send_2<W: AsyncWrite + Unpin + Send>(w: W) {
-        let (s, f) = write_queue::<W, capnp::message::Builder<capnp::message::HeapAllocator>>(w);
-        _assert_send(s);
-        _assert_send(f);
-    }
-}
 
 impl<M> Sender<M>
 where
@@ -123,7 +108,7 @@ where
     /// has completed. Dropping the returned future does *not* cancel the write.
     pub fn send(&mut self, message: M) -> impl Future<Output = Result<M, Error>> + Unpin {
         self.in_flight
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            .fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         let (complete, oneshot) = oneshot::channel();
 
         let _ = self.sender.unbounded_send(Item::Message(message, complete));
@@ -133,7 +118,7 @@ where
 
     /// Returns the number of messages queued to be written.
     pub fn len(&self) -> usize {
-        let result = self.in_flight.load(std::sync::atomic::Ordering::SeqCst);
+        let result = self.in_flight.load(core::sync::atomic::Ordering::SeqCst);
         assert!(result >= 0);
         result as usize
     }

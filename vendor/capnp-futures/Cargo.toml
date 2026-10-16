@@ -31,20 +31,37 @@ repository = "https://github.com/dwrensha/capnproto-rust"
 name = "capnp_futures"
 path = "src/lib.rs"
 
+[features]
+std = [
+    "capnp/std",
+    "dep:futures-io",
+    "futures-util/io",
+    "futures-util/std",
+]
+
 [dependencies.capnp]
 version = "0.21.0"
+features = ["alloc"]
+default-features = false
 
 [dependencies.futures-channel]
 version = "0.3.0"
+features = ["alloc"]
+default-features = false
+
+[dependencies.futures-core]
+version = "0.3.0"
+default-features = false
+
+[dependencies.futures-io]
+version = "0.3.0"
 features = ["std"]
+optional = true
 default-features = false
 
 [dependencies.futures-util]
 version = "0.3.0"
-features = [
-    "io",
-    "std",
-]
+features = ["alloc"]
 default-features = false
 
 [dev-dependencies.capnp]
