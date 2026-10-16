@@ -324,6 +324,7 @@ jobs:
           --package nightfall_membrane
           --package nightfall_ledger
           --package nightfall_provisioning
+          --package nightfall_simulator
           --package dusk_program_nightfall
           --package dusk_connection
           --package dusk_capnp
@@ -339,6 +340,7 @@ jobs:
           --package nightfall_membrane
           --package nightfall_ledger
           --package nightfall_provisioning
+          --package nightfall_simulator
           --package dusk_program_nightfall
           --package dusk_connection
           --package dusk_capnp
@@ -363,6 +365,9 @@ jobs:
 
       - name: prod overlay
         run: kubectl kustomize infra/k8s/overlays/prod > /dev/null
+
+      - name: scale overlay
+        run: kubectl kustomize infra/k8s/overlays/scale > /dev/null
 
   docker:
     name: Docker (${{ matrix.image }})
@@ -413,4 +418,15 @@ jobs:
           --build-arg GIT_REV=${{ github.sha }}
           ${{ matrix.arguments }}
           --tag ${{ matrix.image }}:ci
+          .
+
+      - name: docker build (dusk-nightfall-simulator, from the nightfall builder)
+        if: matrix.image == 'dusk-nightfall'
+        run: >
+          docker build
+          --file services/nightfall/Dockerfile
+          --target simulator
+          --build-arg GIT_REV=${{ github.sha }}
+          --build-arg CPUSET=
+          --tag dusk-nightfall-simulator:ci
           .
