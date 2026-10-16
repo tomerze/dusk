@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 
@@ -767,5 +768,96 @@ func TestWithdrawnNodesKeepTheirLifecycle(test *testing.T) {
 	}
 	if latest["installation/"+stolen.device+"/"+stolen.installation] != "revoked" || latest["installation/"+suspect.device+"/"+suspect.installation] != "quarantined" {
 		test.Fatalf("the node-state records %v", latest)
+	}
+}
+
+func gauge(test *testing.T, name string) float64 {
+	test.Helper()
+	families, failure := prometheus.DefaultGatherer.Gather()
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	for _, family := range families {
+		if family.GetName() == name && len(family.GetMetric()) == 1 {
+			return family.GetMetric()[0].GetGauge().GetValue()
+		}
+	}
+	test.Fatalf("no gauge %s", name)
+	return 0
+}
+
+func TestTheLeaderDispatchesNothingWhileTheResultsTopicIsPartitionedUnlikeTheInventory(test *testing.T) {
+	current := newHarness(test)
+	narrow := current.settings.Kafka.Topics.ProcessResults + ".narrow"
+	admin := kadm.NewClient(current.producer)
+	if _, failure := admin.CreateTopic(context.Background(), testsupport.NodePartitions-1, 1, map[string]*string{"cleanup.policy": new("delete")}, narrow); failure != nil {
+		test.Fatal(failure)
+	}
+	current.settings.Kafka.Topics.ProcessResults = narrow
+	target := identity(51)
+	copied := target
+	current.fake.nodes[target.device] = &copied
+	current.enroll(target)
+	current.census(target)
+	current.start()
+	service := current.engine.Service()
+	current.eventually("the mismatch is noticed while the instance stays ready", time.Minute, func() (bool, string) {
+		mismatched := gauge(test, "twilight_process_results_partitions_mismatched")
+		return current.engine.Ready() && mismatched == 1, fmt.Sprintf("ready %v mismatched %v", current.engine.Ready(), mismatched)
+	})
+	script := campaign.Definition{
+		Name:     "held back",
+		Selector: fmt.Sprintf(`device_id == "%s"`, target.device),
+		Action:   campaign.Action{Kind: campaign.KindRunScript, Script: "ps"},
+		Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: 50, Burst: 50}, Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 5}},
+			NodeTimeoutSeconds: 5, Gates: campaign.Gates{MinSample: 1}},
+	}
+	held, failure := service.CreateCampaign(context.Background(), script, "operator@example.org")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := service.StartCampaign(context.Background(), held.ID, "operator@example.org"); failure != nil {
+		test.Fatal(failure)
+	}
+	time.Sleep(3 * time.Duration(current.settings.Engine.SweepIntervalSeconds) * time.Second)
+	current.fake.mutex.Lock()
+	dispatched := len(current.fake.dispatches)
+	current.fake.mutex.Unlock()
+	if counts := current.rows(held.ID); len(counts) != 0 || dispatched != 0 {
+		test.Fatalf("the leader wrote rows %v and made %d dispatches while the partition counts differ", counts, dispatched)
+	}
+	if _, failure := admin.CreatePartitions(context.Background(), 1, narrow); failure != nil {
+		test.Fatal(failure)
+	}
+	current.eventually("the campaign runs once the topic is partitioned like the inventory", 2*time.Minute, func() (bool, string) {
+		counts := current.rows(held.ID)
+		return counts[campaign.StateSucceeded] == 1 && gauge(test, "twilight_process_results_partitions_mismatched") == 0, fmt.Sprint(counts)
+	})
+
+	if _, failure := admin.CreatePartitions(context.Background(), 1, narrow); failure != nil {
+		test.Fatal(failure)
+	}
+	current.eventually("a topic grown under a running leader is noticed while the instance stays ready", 2*time.Minute, func() (bool, string) {
+		mismatched := gauge(test, "twilight_process_results_partitions_mismatched")
+		return current.engine.Ready() && mismatched == 1, fmt.Sprintf("ready %v mismatched %v", current.engine.Ready(), mismatched)
+	})
+	time.Sleep(3 * time.Second)
+	current.fake.mutex.Lock()
+	before := len(current.fake.dispatches)
+	current.fake.mutex.Unlock()
+	script.Name = "held back again"
+	again, failure := service.CreateCampaign(context.Background(), script, "operator@example.org")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := service.StartCampaign(context.Background(), again.ID, "operator@example.org"); failure != nil {
+		test.Fatal(failure)
+	}
+	time.Sleep(3 * time.Duration(current.settings.Engine.SweepIntervalSeconds) * time.Second)
+	current.fake.mutex.Lock()
+	after := len(current.fake.dispatches)
+	current.fake.mutex.Unlock()
+	if counts := current.rows(again.ID); len(counts) != 0 || after != before || !current.engine.Ready() {
+		test.Fatalf("after the topic grew under the running leader it wrote rows %v and made %d dispatches; ready %v", counts, after-before, current.engine.Ready())
 	}
 }

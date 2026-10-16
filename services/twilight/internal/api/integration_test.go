@@ -179,7 +179,11 @@ func newStack(test *testing.T) *stack {
 		settings.Kafka.Topics.Enrollments: &remove, settings.Kafka.Topics.NodeState: &compact, settings.Kafka.Topics.ProcessResults: &remove,
 		settings.Kafka.Topics.IntendedProcesses: &compact,
 	} {
-		if _, failure := kadm.NewClient(current.producer).CreateTopic(context.Background(), 1, 1, map[string]*string{"cleanup.policy": policy}, topic); failure != nil {
+		partitions := int32(1)
+		if topic == settings.Kafka.Topics.ProcessResults {
+			partitions = testsupport.NodePartitions
+		}
+		if _, failure := kadm.NewClient(current.producer).CreateTopic(context.Background(), partitions, 1, map[string]*string{"cleanup.policy": policy}, topic); failure != nil {
 			test.Fatal(failure)
 		}
 	}

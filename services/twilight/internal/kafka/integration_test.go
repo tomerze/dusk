@@ -64,6 +64,12 @@ func TestNodeStateRoundTripAndTopicCheck(test *testing.T) {
 	if failure := eventually(func() error { return kafka.CheckTopics(operation, producerClient, requirements) }, ""); failure != nil {
 		test.Fatalf("topics as required: %v", failure)
 	}
+	if partitions, failure := kafka.TopicPartitions(operation, producerClient, ledgerTopic); failure != nil || partitions != 3 {
+		test.Fatalf("the partitions of %s: %d %v", ledgerTopic, partitions, failure)
+	}
+	if _, failure := kafka.TopicPartitions(operation, producerClient, ledgerTopic+".absent"); failure == nil {
+		test.Fatal("a missing topic has a partition count")
+	}
 	validator, failure := kafka.NewValidator()
 	if failure != nil {
 		test.Fatal(failure)

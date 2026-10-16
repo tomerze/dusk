@@ -16,6 +16,7 @@ import (
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
+	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/dawn"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/kafka"
@@ -55,8 +56,12 @@ type Dependencies struct {
 }
 
 var (
-	onlineGauge   = promauto.NewGauge(prometheus.GaugeOpts{Name: "twilight_online_nodes", Help: "Nodes the online view holds as online."})
-	degradedGauge = promauto.NewGauge(prometheus.GaugeOpts{Name: "twilight_view_degraded", Help: "1 while the online view is degraded."})
+	onlineGauge             = promauto.NewGauge(prometheus.GaugeOpts{Name: "twilight_online_nodes", Help: "Nodes the online view holds as online."})
+	degradedGauge           = promauto.NewGauge(prometheus.GaugeOpts{Name: "twilight_view_degraded", Help: "1 while the online view is degraded."})
+	partitionsMismatchGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "twilight_process_results_partitions_mismatched",
+		Help: "1 while the process results topic has another partition count than the inventory was migrated with; the leader writes no campaign row, advances no phase and dispatches nothing then.",
+	})
 )
 
 type Engine struct {
@@ -72,6 +77,7 @@ type Engine struct {
 	sweeps      chan sweepRequest
 	presenceUp  atomic.Bool
 	topicsOK    atomic.Bool
+	partitioned atomic.Bool
 	random      *rand.Rand
 	randomMutex sync.Mutex
 	factsTried  *attemptLog
@@ -143,10 +149,10 @@ func (engine *Engine) runTopicCheck(operation context.Context) {
 		return
 	}
 	defer client.Close()
-	required := kafka.RequiredTopics(engine.Config.Kafka.Topics)
 	for {
 		checking, cancel := context.WithTimeout(operation, 15*time.Second)
-		failure := kafka.CheckTopics(checking, client, required)
+		failure := kafka.CheckTopics(checking, client, kafka.RequiredTopics(engine.Config.Kafka.Topics))
+		engine.checkPartitions(checking, client)
 		cancel()
 		if failure != nil && operation.Err() == nil {
 			if engine.topicsOK.Swap(false) {
@@ -161,6 +167,32 @@ func (engine *Engine) runTopicCheck(operation context.Context) {
 			return
 		}
 	}
+}
+
+func (engine *Engine) checkPartitions(operation context.Context, client *kgo.Client) {
+	topic := engine.Config.Kafka.Topics.ProcessResults
+	inventory, failure := database.NodePartitionCount(operation, engine.Pool)
+	var partitions int32
+	if failure == nil {
+		partitions, failure = kafka.TopicPartitions(operation, client, topic)
+	}
+	if failure != nil {
+		if operation.Err() == nil {
+			engine.Logger.Warn("the partition counts of the process results topic and the inventory were not compared", "topic", topic, "error", failure)
+		}
+		return
+	}
+	if partitions == inventory {
+		partitionsMismatchGauge.Set(0)
+		if !engine.partitioned.Swap(true) {
+			engine.Logger.Info("the process results topic is partitioned like the inventory", "topic", topic, "partitions", partitions)
+		}
+		return
+	}
+	engine.partitioned.Store(false)
+	partitionsMismatchGauge.Set(1)
+	engine.Logger.Error("the process results topic has another partition count than the inventory was migrated with; the leader writes no campaign row, advances no phase and dispatches nothing until they match",
+		"topic", topic, "partitions", partitions, "inventory_partitions", inventory)
 }
 
 func (engine *Engine) runExpiry(operation context.Context) {
@@ -202,35 +234,47 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	if failure := engine.registry.load(operation, term); failure != nil {
 		engine.Logger.Error("loading the campaigns at election failed", "term", term, "error", failure)
 	}
-	var running sync.WaitGroup
-	start := func(name string, task func(context.Context, int64)) {
-		running.Add(1)
+	start := func(scope context.Context, group *sync.WaitGroup, name string, task func(context.Context, int64)) {
+		group.Add(1)
 		go func() {
-			defer running.Done()
-			task(operation, term)
+			defer group.Done()
+			task(scope, term)
 			engine.Logger.Debug("leader task stopped", "task", name, "term", term)
 		}()
 	}
-	start("presence", engine.presence.run)
-	start("last_seen", engine.presence.runLastSeen)
-	start("registry", engine.registry.run)
-	start("counters", engine.registry.runFlush)
-	start("evaluations", engine.runEvaluations)
-	start("dispatcher", engine.dispatcher.run)
-	start("facts", engine.runFacts)
-	start("results", engine.runResults)
-	start("deadlines", engine.runDeadlines)
-	start("reaps", engine.runReapSweep)
-	start("gates", engine.runGates)
-	start("sweeps", engine.runSweeps)
-	start("due", engine.runDueScan)
-	start("quarantine", engine.runQuarantineFlips)
-	start("enrollments", engine.runEnrollments)
-	start("revocations", engine.runRevocationCheck)
-	start("bulk revocations", engine.runRevocations)
-	start("partitions", engine.runPartitionMaintenance)
-	start("intents", engine.runIntentPublication)
-	engine.requestSweep(sweepRequest{all: true})
+	var running sync.WaitGroup
+	start(operation, &running, "last_seen", engine.presence.runLastSeen)
+	start(operation, &running, "registry", engine.registry.run)
+	start(operation, &running, "counters", engine.registry.runFlush)
+	start(operation, &running, "reaps", engine.runReapSweep)
+	start(operation, &running, "enrollments", engine.runEnrollments)
+	start(operation, &running, "revocations", engine.runRevocationCheck)
+	start(operation, &running, "bulk revocations", engine.runRevocations)
+	start(operation, &running, "partitions", engine.runPartitionMaintenance)
+	start(operation, &running, "intents", engine.runIntentPublication)
+	for operation.Err() == nil {
+		if !engine.partitioned.Load() {
+			sleep(operation, time.Second)
+			continue
+		}
+		writing, stopWriting := context.WithCancel(operation)
+		var writers sync.WaitGroup
+		start(writing, &writers, "presence", engine.presence.run)
+		start(writing, &writers, "gates", engine.runGates)
+		start(writing, &writers, "evaluations", engine.runEvaluations)
+		start(writing, &writers, "dispatcher", engine.dispatcher.run)
+		start(writing, &writers, "facts", engine.runFacts)
+		start(writing, &writers, "results", engine.runResults)
+		start(writing, &writers, "deadlines", engine.runDeadlines)
+		start(writing, &writers, "sweeps", engine.runSweeps)
+		start(writing, &writers, "due", engine.runDueScan)
+		start(writing, &writers, "quarantine", engine.runQuarantineFlips)
+		engine.requestSweep(sweepRequest{all: true})
+		for engine.partitioned.Load() && sleep(operation, time.Second) {
+		}
+		stopWriting()
+		writers.Wait()
+	}
 	running.Wait()
 	engine.dispatcher.reset()
 	engine.registry.reset()
