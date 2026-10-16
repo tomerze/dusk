@@ -1,0 +1,44 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: postgres-backups
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: s3://dusk-postgres-backups/
+    endpointURL: http://rook-ceph-rgw-dusk.rook-ceph.svc
+    s3Credentials:
+      accessKeyId:
+        name: ceph-postgres-backup
+        key: access-key
+      secretAccessKey:
+        name: ceph-postgres-backup
+        key: secret-key
+    wal:
+      compression: zstd
+      maxParallel: 4
+    data:
+      compression: snappy
+      jobs: 2
+  instanceSidecarConfiguration:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: postgres-daily
+spec:
+  schedule: "0 30 2 * * *"
+  immediate: true
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  target: prefer-standby
+  cluster:
+    name: postgres
