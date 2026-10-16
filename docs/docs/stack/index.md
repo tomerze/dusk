@@ -216,5 +216,7 @@ details).
 * [Deploying the Dusk stack](deploy.md) - the local stack and Kubernetes.
 * [Simulating node links](simulator.md) - loading the stack with many
   simulated nodes.
+* [Scale runs](scale.md) - driving campaigns at scale, judging the run, and
+  the stack's measured baseline.
 * [The security model](security.md) - what each part defends, and what an
   attacker who holds one of them can and cannot do.

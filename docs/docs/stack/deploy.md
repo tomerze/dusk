@@ -325,8 +325,9 @@ kubectl kustomize infra/k8s/overlays/prod
 ```
 
 A third overlay, `scale`, is the dev overlay plus the
-[node-link simulator](simulator.md#on-kubernetes) and the CA nightfall trusts
-its links by; it is for load runs, never production.
+[node-link simulator](simulator.md#on-kubernetes), the CA nightfall trusts
+its links by and the [scale run](scale.md#on-kubernetes) Jobs and dashboard;
+it is for load runs, never production.
 
 Every component has a NetworkPolicy, and the namespace starts from a policy
 that denies everything but DNS. Each component then allows exactly its own
@@ -603,7 +604,7 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | `nightfall-ledger-verify` | `ledger-verify-jwks.json`, the public key of `nightfall-ledger`, alone | twilight and verifiers |
 | `dawn-output-key` | `output.key`, the HMAC key of process output digests | dawn |
 | `ceph-admin`, `ceph-vector`, `ceph-ledger-writer`, `ceph-dawn`, `ceph-reader`, `ceph-signoz` | `access-key`, `secret-key` of each object store user | ceph-init; Vector (`vector`, `ledger-writer`), dawn, ClickHouse (`reader`, `signoz`), SigNoz |
-| `postgres-superuser`, `postgres-twilight`, `postgres-grafana`, `postgres-signoz` | `username`, `password`, `pgpass` | Postgres; twilight, Grafana, SigNoz |
+| `postgres-superuser`, `postgres-twilight`, `postgres-grafana`, `postgres-signoz`, `postgres-scale` | `username`, `password`, `pgpass` | Postgres; twilight, Grafana, SigNoz, the [scale run](scale.md#the-report) report (the local stack and the scale overlay only) |
 | `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz |
 | `grafana-admin` | `password` | Grafana |
 | `signoz-admin` | `password`, the password of SigNoz's root account | SigNoz, signoz-dashboards |

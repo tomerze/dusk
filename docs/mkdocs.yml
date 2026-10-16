@@ -98,6 +98,7 @@ nav:
       - Provisioning: stack/provisioning.md
       - nightfall: stack/nightfall.md
       - Simulating node links: stack/simulator.md
+      - Scale runs: stack/scale.md
       - The membrane: stack/membrane.md
       - The ledger: stack/ledger.md
       - dawn: stack/dawn.md
