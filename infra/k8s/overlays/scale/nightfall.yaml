@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nightfall
+spec:
+  template:
+    spec:
+      containers:
+        - name: nightfall
+          env:
+            - name: NIGHTFALL__FLEET__CLIENT_CA
+              value: /etc/nightfall-simulator/fleet-client-ca.crt
+          volumeMounts:
+            - name: simulator-trust
+              mountPath: /etc/nightfall-simulator
+              readOnly: true
+      volumes:
+        - name: simulator-trust
+          configMap:
+            name: nightfall-simulator-trust
+            defaultMode: 0444

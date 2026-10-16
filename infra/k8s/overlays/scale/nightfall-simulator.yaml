@@ -1,0 +1,111 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nightfall-simulator
+  labels:
+    app.kubernetes.io/name: nightfall-simulator
+spec:
+  completionMode: Indexed
+  completions: 1
+  parallelism: 1
+  backoffLimitPerIndex: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nightfall-simulator
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+        sysctls:
+          - name: net.ipv4.ip_local_port_range
+            value: "1024 65535"
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: nightfall-simulator
+      containers:
+        - name: simulator
+          image: dusk-nightfall-simulator:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SIMULATOR_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+          args:
+            - --fleet
+            - nightfall:443
+            - --server-name
+            - fleet.dusk.test
+            - --fleet-server-ca
+            - /etc/nightfall-simulator/pki/fleet-server-ca.crt
+            - --issuer-certificate
+            - /etc/nightfall-simulator/issuer/tls.crt
+            - --issuer-key
+            - /etc/nightfall-simulator/issuer/tls.key
+            - --links
+            - "50000"
+            - --simulator
+            - $(SIMULATOR_INDEX)
+            - --links-per-second
+            - "500"
+          ports:
+            - name: metrics
+              containerPort: 9103
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1280Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: issuer
+              mountPath: /etc/nightfall-simulator/issuer
+              readOnly: true
+            - name: trust-anchors
+              mountPath: /etc/nightfall-simulator/pki
+              readOnly: true
+      volumes:
+        - name: issuer
+          secret:
+            secretName: nightfall-simulator-ca
+            defaultMode: 0440
+        - name: trust-anchors
+          configMap:
+            name: dusk-trust-anchors
+            items:
+              - key: fleet-server-ca.crt
+                path: fleet-server-ca.crt
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nightfall-simulator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nightfall-simulator
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nightfall
+      ports:
+        - protocol: TCP
+          port: 8443
