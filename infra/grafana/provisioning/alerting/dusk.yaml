@@ -76,3 +76,31 @@ groups:
         labels:
           severity: high
           kind: alert_delivery_failing
+      - uid: dusk-postgres-backup-failing
+        title: "Postgres backup failing"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-clickhouse", "model": {"refId": "A", "rawSql": "SELECT if(count() > 0 AND (max(available) < toUnixTimestamp(now() - INTERVAL 26 HOUR) OR max(failed) > max(available)), 1, 0) AS failing FROM (SELECT argMaxIf(value, time, metric_name = 'barman_cloud_cloudnative_pg_io_last_available_backup_timestamp') AS available, argMaxIf(value, time, metric_name = 'barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp') AS failed FROM dusk.otel_metrics WHERE service_name = 'postgres' AND metric_name IN ('barman_cloud_cloudnative_pg_io_last_available_backup_timestamp', 'barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp') AND time > now() - INTERVAL 15 MINUTE GROUP BY resource_attributes['service.instance.id'])", "format": 1, "editorType": "sql", "pluginVersion": "4.22.1"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "The inventory's Postgres has no base backup from the last 26 hours, or its last backup failed after its last good one."
+          description: "List the Backup resources (kubectl -n dusk get backups) and read the failed one's error."
+        labels:
+          severity: high
+          kind: postgres_backup_failing
+      - uid: dusk-postgres-wal-archiving-lagging
+        title: "Postgres WAL archiving lagging"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-clickhouse", "model": {"refId": "A", "rawSql": "SELECT if(max(ready) > 10 OR max(failing) > 0, 1, 0) AS lagging FROM (SELECT argMaxIf(value, time, metric_name = 'cnpg_collector_pg_wal_archive_status' AND attributes['value'] = 'ready') AS ready, if(argMaxIf(value, time, metric_name = 'cnpg_pg_stat_archiver_last_failed_time') > argMaxIf(value, time, metric_name = 'cnpg_pg_stat_archiver_last_archived_time'), 1, 0) AS failing FROM dusk.otel_metrics WHERE service_name = 'postgres' AND metric_name IN ('cnpg_collector_pg_wal_archive_status', 'cnpg_pg_stat_archiver_last_failed_time', 'cnpg_pg_stat_archiver_last_archived_time') AND time > now() - INTERVAL 10 MINUTE GROUP BY resource_attributes['service.instance.id'])", "format": 1, "editorType": "sql", "pluginVersion": "4.22.1"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "The inventory's Postgres primary failed to archive its latest WAL file, or holds more than ten WAL files it has not archived."
+          description: "Every minute that WAL archiving stays behind is a minute of inventory changes a restore cannot bring back, and unarchived WAL fills the primary's volume. Read the plugin-barman-cloud container's log on the primary."
+        labels:
+          severity: high
+          kind: postgres_wal_archiving_lagging

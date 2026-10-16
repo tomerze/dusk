@@ -20,12 +20,23 @@ SCALE_DASHBOARD = (
     / "scale"
     / "grafana-scale.json"
 )
+PROD_ALERTS = (
+    Path(__file__).resolve().parents[1]
+    / "k8s"
+    / "overlays"
+    / "prod"
+    / "dusk"
+    / "configuration"
+    / "grafana-postgres-alerts.yaml"
+)
 ALERT_RULES = {
     "dusk-open-critical-alert",
     "dusk-ledger-chain-broken",
     "dusk-ledger-evidence-stalled",
     "dusk-contract-messages-dropped",
     "dusk-alert-delivery-failing",
+    "dusk-postgres-backup-failing",
+    "dusk-postgres-wal-archiving-lagging",
 }
 RECEIVERS = {
     "on-call": "pagerduty",
@@ -240,3 +251,150 @@ def test_the_chain_alert_counts_each_broken_chain(
     )
     query = rule_query("dusk-ledger-chain-broken", scratch)
     assert int(clickhouse(query)[0]["broken"]) == 1
+
+
+def postgres_metric(
+    instance: str, seconds_ago: int, name: str, value: float, label: str = ""
+) -> str:
+    attributes = f"map('value', '{label}')" if label else "map()"
+    return (
+        f"(now64(9) - INTERVAL {seconds_ago} SECOND, 'postgres', '{name}', {value}, "
+        f"{attributes}, map('service.instance.id', '{instance}'))"
+    )
+
+
+def insert_postgres_metrics(
+    clickhouse: Callable[[str], list[dict[str, Any]]], scratch: str, rows: list[str]
+) -> None:
+    clickhouse(
+        f"INSERT INTO {scratch}.otel_metrics "
+        "(time, service_name, metric_name, value, attributes, resource_attributes) VALUES "
+        + ", ".join(rows)
+    )
+
+
+def test_the_backup_alert_fires_without_a_recent_good_backup(
+    clickhouse: Callable[[str], list[dict[str, Any]]], scratch: str
+) -> None:
+    query = rule_query("dusk-postgres-backup-failing", scratch)
+    assert int(clickhouse(query)[0]["failing"]) == 0
+    now = int(datetime.datetime.now(datetime.UTC).timestamp())
+    available = "barman_cloud_cloudnative_pg_io_last_available_backup_timestamp"
+    failed = "barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp"
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [postgres_metric("postgres-1", 1200, available, now - 3600)],
+    )
+    assert int(clickhouse(query)[0]["failing"]) == 0
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [
+            postgres_metric("postgres-1", 120, available, now - 3600),
+            postgres_metric("postgres-1", 120, failed, 0),
+            postgres_metric("postgres-2", 120, available, now - 3600),
+        ],
+    )
+    assert int(clickhouse(query)[0]["failing"]) == 0
+    insert_postgres_metrics(
+        clickhouse, scratch, [postgres_metric("postgres-1", 60, failed, now - 60)]
+    )
+    assert int(clickhouse(query)[0]["failing"]) == 1
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [
+            postgres_metric("postgres-1", 30, available, now - 30),
+            postgres_metric("postgres-2", 30, available, now - 30),
+        ],
+    )
+    assert int(clickhouse(query)[0]["failing"]) == 0
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [
+            postgres_metric("postgres-1", 10, available, now - 27 * 3600),
+            postgres_metric("postgres-1", 10, failed, 0),
+            postgres_metric("postgres-2", 10, available, now - 27 * 3600),
+        ],
+    )
+    assert int(clickhouse(query)[0]["failing"]) == 1
+
+
+def test_the_archiving_alert_fires_on_a_failed_attempt_or_a_backlog(
+    clickhouse: Callable[[str], list[dict[str, Any]]], scratch: str
+) -> None:
+    query = rule_query("dusk-postgres-wal-archiving-lagging", scratch)
+    assert int(clickhouse(query)[0]["lagging"]) == 0
+    now = int(datetime.datetime.now(datetime.UTC).timestamp())
+    status = "cnpg_collector_pg_wal_archive_status"
+    archived = "cnpg_pg_stat_archiver_last_archived_time"
+    failed = "cnpg_pg_stat_archiver_last_failed_time"
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [postgres_metric("postgres-1", 900, status, 20, "ready")],
+    )
+    assert int(clickhouse(query)[0]["lagging"]) == 0
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [
+            postgres_metric("postgres-1", 120, status, 2, "ready"),
+            postgres_metric("postgres-1", 120, status, 40, "done"),
+            postgres_metric("postgres-1", 120, archived, now - 130),
+            postgres_metric("postgres-1", 120, failed, now - 900),
+            postgres_metric("postgres-2", 120, status, 0, "ready"),
+        ],
+    )
+    assert int(clickhouse(query)[0]["lagging"]) == 0
+    insert_postgres_metrics(
+        clickhouse, scratch, [postgres_metric("postgres-1", 60, failed, now - 65)]
+    )
+    assert int(clickhouse(query)[0]["lagging"]) == 1
+    insert_postgres_metrics(
+        clickhouse, scratch, [postgres_metric("postgres-1", 30, archived, now - 35)]
+    )
+    assert int(clickhouse(query)[0]["lagging"]) == 0
+    insert_postgres_metrics(
+        clickhouse, scratch, [postgres_metric("postgres-1", 10, status, 11, "ready")]
+    )
+    assert int(clickhouse(query)[0]["lagging"]) == 1
+
+
+def prod_rule_query(uid: str, database: str) -> str:
+    lines = PROD_ALERTS.read_text().splitlines()
+    start = lines.index(f"      - uid: {uid}")
+    data = next(line for line in lines[start:] if line.lstrip().startswith("data: "))
+    query = next(
+        item for item in json.loads(data.split("data: ", 1)[1]) if item["refId"] == "A"
+    )
+    return query["model"]["rawSql"].replace("dusk.", f"{database}.")
+
+
+def test_the_prod_metrics_alert_fires_while_either_postgres_metric_is_missing(
+    clickhouse: Callable[[str], list[dict[str, Any]]], scratch: str
+) -> None:
+    query = prod_rule_query("dusk-postgres-metrics-missing", scratch)
+    assert int(clickhouse(query)[0]["missing"]) == 1
+    now = int(datetime.datetime.now(datetime.UTC).timestamp())
+    available = "barman_cloud_cloudnative_pg_io_last_available_backup_timestamp"
+    status = "cnpg_collector_pg_wal_archive_status"
+    insert_postgres_metrics(
+        clickhouse,
+        scratch,
+        [
+            postgres_metric("postgres-1", 1200, available, now - 3600),
+            postgres_metric("postgres-1", 1200, status, 0, "ready"),
+        ],
+    )
+    assert int(clickhouse(query)[0]["missing"]) == 1
+    insert_postgres_metrics(
+        clickhouse, scratch, [postgres_metric("postgres-1", 60, available, now - 3600)]
+    )
+    assert int(clickhouse(query)[0]["missing"]) == 1
+    insert_postgres_metrics(
+        clickhouse, scratch, [postgres_metric("postgres-2", 30, status, 0, "ready")]
+    )
+    assert int(clickhouse(query)[0]["missing"]) == 0

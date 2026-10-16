@@ -9,3 +9,19 @@
       items:
         - key: ca.crt
           path: postgres-ca/ca.crt
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: postgres-alerts
+    configMap:
+      name: grafana-postgres-alerts
+- op: test
+  path: /spec/template/spec/containers/0/name
+  value: grafana
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: postgres-alerts
+    mountPath: /etc/grafana/provisioning/alerting/postgres.yaml
+    subPath: postgres.yaml
+    readOnly: true

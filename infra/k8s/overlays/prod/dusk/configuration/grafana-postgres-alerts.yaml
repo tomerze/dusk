@@ -1,0 +1,22 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: postgres
+    folder: Dusk
+    interval: 1m
+    rules:
+      - uid: dusk-postgres-metrics-missing
+        title: "Postgres backup metrics missing"
+        condition: C
+        data: [{"refId": "A", "relativeTimeRange": {"from": 900, "to": 0}, "datasourceUid": "dusk-clickhouse", "model": {"refId": "A", "rawSql": "SELECT if(countIf(metric_name = 'barman_cloud_cloudnative_pg_io_last_available_backup_timestamp') = 0 OR countIf(metric_name = 'cnpg_collector_pg_wal_archive_status') = 0, 1, 0) AS missing FROM dusk.otel_metrics WHERE service_name = 'postgres' AND metric_name IN ('barman_cloud_cloudnative_pg_io_last_available_backup_timestamp', 'cnpg_collector_pg_wal_archive_status') AND time > now() - INTERVAL 15 MINUTE", "format": 1, "editorType": "sql", "pluginVersion": "4.22.1"}}, {"refId": "B", "datasourceUid": "__expr__", "model": {"refId": "B", "type": "reduce", "expression": "A", "reducer": "last", "settings": {"mode": "replaceNN", "replaceWithValue": 0}}}, {"refId": "C", "datasourceUid": "__expr__", "model": {"refId": "C", "type": "threshold", "expression": "B", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}}]
+        noDataState: Alerting
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "No Postgres instance has sent its backup or WAL archiving metrics for 15 minutes, so nothing watches the inventory's backups."
+          description: "The collector stopped scraping the Postgres instances' port 9187, or no instance runs: check the scraper's postgres job, the Service postgres-metrics and the network policies on port 9187."
+        labels:
+          severity: high
+          kind: postgres_backup_failing

@@ -62,6 +62,9 @@ configMapGenerator:
     behavior: merge
     files:
       - otel-collector-config.yaml=configuration/signoz-collector.yaml
+  - name: grafana-postgres-alerts
+    files:
+      - postgres.yaml=configuration/grafana-postgres-alerts.yaml
 images:
   - name: dusk-nightfall
     newName: registry.dusk.example/dusk-nightfall
