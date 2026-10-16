@@ -70,6 +70,14 @@ spec:
           port: 5432
         - protocol: TCP
           port: 8000
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+              app.kubernetes.io/component: scraper
+      ports:
+        - protocol: TCP
+          port: 9187
   egress:
     - to:
         - podSelector:
@@ -110,3 +118,22 @@ spec:
           port: 8080
         - protocol: TCP
           port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otel-collector-postgres
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+      app.kubernetes.io/component: scraper
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres
+      ports:
+        - protocol: TCP
+          port: 9187

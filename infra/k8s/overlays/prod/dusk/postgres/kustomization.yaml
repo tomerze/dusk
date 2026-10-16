@@ -4,3 +4,4 @@ resources:
   - cluster.yaml
   - databases.yaml
   - backups.yaml
+  - metrics-service.yaml

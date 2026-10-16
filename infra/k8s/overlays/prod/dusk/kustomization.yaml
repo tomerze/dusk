@@ -46,6 +46,7 @@ configMapGenerator:
     behavior: merge
     files:
       - configuration/config.yaml
+      - configuration/postgres-scrape.yaml
   - name: clickhouse-keeper
     behavior: merge
     files:
@@ -182,6 +183,16 @@ patches:
       kind: Deployment
       name: otel-collector|otel-collector-scraper
     path: patches/otel-collector.yaml
+  - target:
+      kind: Deployment
+      name: otel-collector-scraper
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --config
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: /etc/otelcol-contrib/postgres-scrape.yaml
   - path: patches/signoz.yaml
   - target:
       kind: StatefulSet
