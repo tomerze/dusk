@@ -11,6 +11,7 @@ ARG CARGO_BUILD_JOBS=default
 ARG CPUSET=
 ARG FLEET
 ARG PROVISION
+ARG FLEET_SHA256
 ENV DUSK_GIT_REV=$GIT_REV \
     DUSK_NODE_INIT_SCRIPT="nightfall -c ${FLEET} --provision ${PROVISION} --ca /etc/dusk/fleet-server-ca.pem" \
     DUSK_NODE_KVS_PERSISTENT=/var/lib/dusk/kvs
@@ -21,6 +22,7 @@ RUN --mount=type=secret,id=fleet-token,env=DUSK_FLEET_TOKEN \
     test -n "$GIT_REV" || { echo "pass --build-arg GIT_REV=\$(git rev-parse HEAD)" >&2; exit 1; }; \
     test -n "$FLEET" && test -n "$PROVISION" || { echo "pass --build-arg FLEET=<host:port> and --build-arg PROVISION=<host:port>" >&2; exit 1; }; \
     test -n "$DUSK_FLEET_TOKEN" || { echo "pass the fleet token as a build secret: --secret id=fleet-token,env=DUSK_FLEET_TOKEN" >&2; exit 1; }; \
+    test "$(printf '%s' "$DUSK_FLEET_TOKEN" | sha256sum | cut -d ' ' -f 1)" = "$FLEET_SHA256" || { echo "pass the SHA-256 of the fleet token: --build-arg FLEET_SHA256=\$(printf %s \"\$DUSK_FLEET_TOKEN\" | sha256sum | cut -d ' ' -f 1)" >&2; exit 1; }; \
     find . -path ./target -prune -o -type f -exec touch {} + \
     && ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 cargo build --locked --release --package dusk_node_bin --bin dusk_node \
     && cp target/release/dusk_node /dusk_node

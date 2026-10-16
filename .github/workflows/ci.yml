@@ -386,6 +386,7 @@ jobs:
               --build-arg CPUSET=
               --build-arg FLEET=fleet.dusk.test:8443
               --build-arg PROVISION=provision.dusk.test:8443
+              --build-arg FLEET_SHA256
               --secret id=fleet-token,env=DUSK_FLEET_TOKEN
           - image: dusk-vector
             dockerfile: infra/vector/Dockerfile
@@ -403,6 +404,7 @@ jobs:
           token=$(openssl rand -hex 32)
           echo "::add-mask::$token"
           echo "DUSK_FLEET_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "FLEET_SHA256=$(printf '%s' "$token" | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
 
       - name: docker build
         run: >

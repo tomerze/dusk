@@ -651,6 +651,7 @@ services:
         CPUSET: ${DUSK_BUILD_CPUSET:-}
         FLEET: fleet.${DUSK_DOMAIN:-dusk.test}:8443
         PROVISION: provision.${DUSK_DOMAIN:-dusk.test}:8443
+        FLEET_SHA256: ${DUSK_FLEET_SHA256:-}
       secrets: [fleet-token]
     networks: [stack]
     deploy:

@@ -13,7 +13,7 @@ cd infra/compose
 export GIT_REV=$(git rev-parse HEAD)
 docker compose run --rm secrets-init
 export DUSK_FLEET_TOKEN=$(docker compose run --rm --no-deps --entrypoint cat secrets-init /secrets/fleet-token/fleet-token)
-docker compose build
+DUSK_FLEET_SHA256=$(printf '%s' "$DUSK_FLEET_TOKEN" | sha256sum | cut -d ' ' -f 1) docker compose build
 docker compose up -d
 ```
 
