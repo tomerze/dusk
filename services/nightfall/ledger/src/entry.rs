@@ -649,8 +649,8 @@ pub mod fixtures {
     pub fn session_open() -> EntryContent {
         let mut detail = Map::new();
         detail.insert(
-            String::from("remote_address"),
-            Value::from("203.0.113.24:51734"),
+            String::from("schema_bundle"),
+            Value::from("0.1.0-23a4afae1c0d9e88"),
         );
         EntryContent {
             device_id: Some(String::from(DEVICE)),

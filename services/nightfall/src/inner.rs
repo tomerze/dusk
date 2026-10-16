@@ -1,4 +1,4 @@
-use crate::audit::{SessionFacts, detail, session_event};
+use crate::audit::{SessionFacts, address_detail, detail, session_event};
 use crate::directory::namespace_hex;
 use crate::events::now;
 use crate::peer::PrincipalCertificate;
@@ -90,6 +90,7 @@ pub async fn serve_not_connected<Stream>(
         "a client asked for a node nobody holds"
     );
     let audit = shard.audit.clone();
+    let param_key = shard.param_key.clone();
     let system = crate::rpc::system(
         stream,
         Side::Server,
@@ -105,9 +106,11 @@ pub async fn serve_not_connected<Stream>(
             );
             let mut content = EntryContent::event(Event::RpcRejected, &principal);
             content.namespace_id = Some(namespace_id);
+            let [network, address_hash] = address_detail(&param_key, remote);
             content.event_detail = Some(detail(&[
                 ("kind", Value::String(kind.to_string())),
-                ("remote_address", Value::String(remote.to_string())),
+                network,
+                address_hash,
             ]));
             audit.record_event(content);
         },

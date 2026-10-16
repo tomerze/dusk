@@ -32,7 +32,6 @@
   "result_cap_ids": [],
   "event": null,
   "event_detail": {
-    "remote_address": "203.0.113.24:51734",
     "schema_bundle": "0.1.0-23a4afae1c0d9e88"
   },
   "key_id": null,

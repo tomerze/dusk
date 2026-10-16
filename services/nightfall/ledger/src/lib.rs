@@ -1,3 +1,4 @@
+pub mod address;
 mod builder;
 pub mod canonical;
 pub mod chain;

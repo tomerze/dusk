@@ -9,6 +9,7 @@ use nightfall_membrane::audit::{
     EntryKind, ResultCode,
 };
 use serde_json::{Map, Value};
+use std::net::SocketAddr;
 
 fn kind(kind: EntryKind) -> Kind {
     match kind {
@@ -210,6 +211,22 @@ pub fn detail(members: &[(&str, Value)]) -> Map<String, Value> {
         .collect()
 }
 
+pub fn address_detail(param_key: &[u8], remote: SocketAddr) -> [(&'static str, Value); 2] {
+    [
+        (
+            "remote_network",
+            Value::String(nightfall_ledger::address::network(remote.ip())),
+        ),
+        (
+            "remote_address_hash",
+            Value::String(nightfall_ledger::address::keyed_hash(
+                param_key,
+                remote.ip(),
+            )),
+        ),
+    ]
+}
+
 pub fn session_event(
     event: Event,
     facts: &SessionFacts<'_>,
@@ -245,6 +262,22 @@ mod tests {
     use nightfall_ledger::signing::CheckpointSigner;
     use nightfall_ledger::writer::{LedgerConfig, NoObserver};
     use std::sync::Arc;
+
+    #[test]
+    fn an_address_detail_keeps_the_network_and_a_keyed_hash() {
+        let key = [0x0b; 32];
+        let [network, address_hash] = address_detail(&key, "203.0.113.24:51734".parse().unwrap());
+        assert_eq!(network, ("remote_network", Value::from("203.0.113.0/24")));
+        assert_eq!(
+            address_hash,
+            (
+                "remote_address_hash",
+                Value::from("665b3fceda8816d568b2a986d9e083dbf9a96b81244d6f553425bfd9bde7f88b")
+            )
+        );
+        let detail = Value::Object(detail(&[network, address_hash])).to_string();
+        assert!(!detail.contains("203.0.113.24") && !detail.contains("51734"));
+    }
 
     pub(crate) fn signer() -> CheckpointSigner {
         let document =

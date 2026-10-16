@@ -169,7 +169,7 @@
       ]
     },
     "event_detail": {
-      "description": "Open object on an event entry. session_refused: {reason: revoked, retired or setup_timeout}. rpc_rejected: {kind: the RPC message kind the filter aborted the connection on}. admission_override: {role: the exempt role, rule: the admission rule the call broke}. A denied call entry carries {rule} when admission refused it, otherwise null; every other entry carries null.",
+      "description": "Open object on an event entry. session_refused: {reason: revoked, retired or setup_timeout}. rpc_rejected: {kind: the RPC message kind the filter aborted the connection on}, and where no node identity is known yet (the provisioning listener, which adds listener: provision, and a client asking for a node nobody holds) remote_network (the client's IPv4 /24 or IPv6 /48) and remote_address_hash (hex HMAC-SHA256 with the param key over \"dusk-remote-address-v1:\" and the client's address). admission_override: {role: the exempt role, rule: the admission rule the call broke}. A denied call entry carries {rule} when admission refused it, otherwise null; every other entry carries null. nightfall writes no full client address into any entry.",
       "type": ["object", "null"]
     },
     "key_id": { "type": ["string", "null"], "minLength": 1 },

@@ -467,6 +467,7 @@ async fn serve_provisioning(shard: Rc<Shard>, tls: TlsStream<TcpStream>, remote:
     let client = shard.shared.provisioning.client(connection);
     let activity = Rc::new(Cell::new(tokio::time::Instant::now()));
     let audit = shard.audit.clone();
+    let param_key = shard.param_key.clone();
     let system = crate::rpc::system(
         Watched {
             stream: tls,
@@ -481,16 +482,15 @@ async fn serve_provisioning(shard: Rc<Shard>, tls: TlsStream<TcpStream>, remote:
                 nightfall_ledger::entry::Event::RpcRejected,
                 nightfall_ledger::entry::NIGHTFALL_PRINCIPAL,
             );
+            let [network, address_hash] = crate::audit::address_detail(&param_key, remote);
             content.event_detail = Some(crate::audit::detail(&[
                 ("kind", serde_json::Value::String(kind.to_string())),
                 (
                     "listener",
                     serde_json::Value::String("provision".to_string()),
                 ),
-                (
-                    "remote_address",
-                    serde_json::Value::String(remote.to_string()),
-                ),
+                network,
+                address_hash,
             ]));
             audit.record_event(content);
         },
