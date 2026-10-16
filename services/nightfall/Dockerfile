@@ -22,6 +22,22 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && CAPNP=$(find target/release/build -path '*/out/capnproto/bin/capnp' -type f -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d ' ' -f 2-) \
        sh services/nightfall/schemas/build.sh /out/schemas
 
+FROM builder AS simulator-builder
+ARG CARGO_BUILD_JOBS=default
+ARG CPUSET=
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target,sharing=locked \
+    find . -path ./target -prune -o -type f -exec touch {} + \
+    && ${CPUSET:+taskset --cpu-list "$CPUSET"} chrt -i 0 nice -n 19 cargo build --locked --release --package nightfall_simulator --bin nightfall_simulator \
+    && cp target/release/nightfall_simulator /out/nightfall_simulator
+
+FROM debian:trixie-20261005-slim AS simulator
+RUN useradd --system --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin simulator
+COPY --from=simulator-builder /out/nightfall_simulator /usr/local/bin/nightfall_simulator
+USER 10001:10001
+EXPOSE 9103
+ENTRYPOINT ["/usr/local/bin/nightfall_simulator"]
+
 FROM debian:trixie-20261005-slim
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
