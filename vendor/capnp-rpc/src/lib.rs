@@ -120,6 +120,12 @@ mod split;
 mod task_set;
 pub mod twoparty;
 
+pub const FIRST_SEGMENT_WORDS: u32 = 32;
+
+pub fn heap_allocator() -> capnp::message::HeapAllocator {
+    capnp::message::HeapAllocator::new().first_segment_words(FIRST_SEGMENT_WORDS)
+}
+
 use capnp::message;
 
 /// A message to be sent by a [`VatNetwork`].

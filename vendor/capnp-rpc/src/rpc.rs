@@ -559,7 +559,7 @@ impl<VatId> ConnectionState<VatId> {
 
         match *self.connection.borrow_mut() {
             Ok(ref mut c) => {
-                let mut message = c.new_outgoing_message(100); // TODO estimate size
+                let mut message = c.new_outgoing_message(crate::FIRST_SEGMENT_WORDS); // TODO estimate size
                 {
                     let builder = message
                         .get_body()
@@ -701,7 +701,7 @@ impl<VatId> ConnectionState<VatId> {
         connection_state: &Rc<Self>,
         message: &dyn crate::IncomingMessage,
     ) -> capnp::Result<()> {
-        let mut out_message = connection_state.new_outgoing_message(50)?; // XXX size hint
+        let mut out_message = connection_state.new_outgoing_message(crate::FIRST_SEGMENT_WORDS)?; // XXX size hint
         {
             let mut root: message::Builder = out_message.get_body()?.get_as()?;
             root.set_unimplemented(message.get_body()?.get_as()?)?;
@@ -890,7 +890,7 @@ impl<VatId> ConnectionState<VatId> {
                 let connection_state_ref1 = connection_state.clone();
                 let task = async move {
                     if let Ok(ref mut c) = *connection_state_ref.connection.borrow_mut() {
-                        let mut message = c.new_outgoing_message(100); // TODO estimate size
+                        let mut message = c.new_outgoing_message(crate::FIRST_SEGMENT_WORDS); // TODO estimate size
                         {
                             let root: message::Builder = message.get_body()?.init_as();
                             let mut disembargo = root.init_disembargo();
@@ -1791,7 +1791,7 @@ where
         _size_hint: Option<::capnp::MessageSize>,
         target: Client<VatId>,
     ) -> ::capnp::Result<Self> {
-        let message = connection_state.new_outgoing_message(1024)?;
+        let message = connection_state.new_outgoing_message(crate::FIRST_SEGMENT_WORDS)?;
         Ok(Self {
             connection_state,
             target,
@@ -2320,7 +2320,7 @@ where
                 self.connection_state.connection.borrow_mut().as_mut(),
             ) {
                 (false, Ok(c)) => {
-                    let mut message = c.new_outgoing_message(100); // size hint?
+                    let mut message = c.new_outgoing_message(crate::FIRST_SEGMENT_WORDS); // size hint?
 
                     {
                         let root: message::Builder = message.get_body().unwrap().init_as();
@@ -2332,7 +2332,7 @@ where
                 }
                 _ => {
                     self.variant = Some(ResultsVariant::LocallyRedirected(
-                        ::capnp::message::Builder::new_default(),
+                        ::capnp::message::Builder::new(crate::heap_allocator()),
                         Vec::new(),
                     ));
                 }
@@ -2456,7 +2456,7 @@ impl<VatId> ResultsHook for Results<VatId> {
                 // The tail call is headed towards the peer that called us in the first place, so we can
                 // optimize out the return trip.
                 if let Some((question_id, promise, pipeline)) = request.tail_send() {
-                    let mut message = state.new_outgoing_message(100).expect("no connection?"); // size hint?
+                    let mut message = state.new_outgoing_message(crate::FIRST_SEGMENT_WORDS).expect("no connection?"); // size hint?
 
                     {
                         let root: message::Builder = message.get_body().unwrap().init_as();
@@ -2588,7 +2588,7 @@ impl ResultsDone {
                                 if let Ok(connection) =
                                     connection_state.connection.borrow_mut().as_mut()
                                 {
-                                    let mut message = connection.new_outgoing_message(50); // XXX size hint
+                                    let mut message = connection.new_outgoing_message(crate::FIRST_SEGMENT_WORDS); // XXX size hint
                                     {
                                         let root: message::Builder =
                                             message.get_body()?.get_as()?;
@@ -2899,7 +2899,7 @@ impl<VatId> PromiseClient<VatId> {
             let embargo_id = connection_state.embargoes.borrow_mut().push(embargo);
 
             let mut message = connection_state
-                .new_outgoing_message(50)
+                .new_outgoing_message(crate::FIRST_SEGMENT_WORDS)
                 .expect("no connection?"); // XXX size hint
             {
                 let root: message::Builder = message.get_body().unwrap().init_as();
