@@ -146,9 +146,10 @@ Every setting is an environment variable read by `docker compose`:
 | `CARGO_BUILD_JOBS` | `default` | Rust build parallelism. |
 | `DUSK_BUILD_CPUSET` | none | The CPUs the compiles run on, as a list such as `0-11`. |
 | `DUSK_DOMAIN` | `dusk.test` | The domain in nightfall's names: `fleet.<domain>`, `provision.<domain>`, `<namespace>.fleet.<domain>`. Set before the first start; the certificates are issued once. |
-| `DUSK_NODES` | `3` | How many nodes run. |
-| `DUSK_SUBNET` | `10.231.64.0/24` | The stack network. Change it when it overlaps a network you use. |
-| `DUSK_CEPH_IP` | `10.231.64.10` | Ceph's fixed address, inside `DUSK_SUBNET`. |
+| `DUSK_NODES` | `3` | How many nodes run: at most 115 with the default `DUSK_IP_RANGE`. |
+| `DUSK_SUBNET` | `10.231.64.0/24` | The stack network. Change it when it overlaps a network you use, and move `DUSK_CEPH_IP` and `DUSK_IP_RANGE` into the new subnet with it: with `DUSK_SUBNET` changed alone, the network cannot be created and nothing starts. |
+| `DUSK_CEPH_IP` | `10.231.64.10` | Ceph's fixed address, inside `DUSK_SUBNET` and outside `DUSK_IP_RANGE`. |
+| `DUSK_IP_RANGE` | `10.231.64.128/25` | The addresses inside `DUSK_SUBNET` that every other container is given. The default's 126 addresses hold the services and 115 nodes, 113 with SigNoz. For more nodes, set a larger subnet and range, such as `DUSK_SUBNET=10.231.66.0/23`, `DUSK_IP_RANGE=10.231.67.0/24` and `DUSK_CEPH_IP=10.231.66.10`. |
 | `DUSK_FLEET_PORT` | `8443` | Host port for nightfall. Set it empty for a random port. |
 | `DUSK_TWILIGHT_PORT` | `8080` | Host port for twilight. Set it empty for a random port. |
 | `DUSK_DAWN_PORT` | `9443` | Host port for dawn's API. Set it empty for a random port. |
@@ -192,7 +193,8 @@ docker compose -p dusk-verify down --volumes
 The third command also waits for the Parquet lake, which Vector writes in
 batches of up to five minutes. While the stack itself runs on the same
 machine, give the verify project its own network and Grafana port by setting
-`DUSK_SUBNET=10.231.65.0/24`, `DUSK_CEPH_IP=10.231.65.10` and
+`DUSK_SUBNET=10.231.65.0/24`, `DUSK_CEPH_IP=10.231.65.10`,
+`DUSK_IP_RANGE=10.231.65.128/25` and
 `DUSK_GRAFANA_PORT=` (empty for a random port) for every command above.
 
 ### SigNoz
