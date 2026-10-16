@@ -14,6 +14,7 @@ func TestARevocationNamesOneCredentialAndAReason(test *testing.T) {
 		{CredentialKind: "fleet_token", Credential: "retail-eu-2026", Reason: "leaked token"},
 		{CredentialKind: "install_token", Credential: "factory-2026", EnrolledAfter: &after, EnrolledBefore: &before, Reason: "signing key leaked"},
 		{CredentialKind: "fleet_token", Credential: "retail-eu-2026", DryRun: true},
+		{CredentialKind: "provision_token", Credential: "retail-eu-2026-10", Reason: "rotated after a leak"},
 	}
 	for _, request := range valid {
 		scope, failure := request.scope()

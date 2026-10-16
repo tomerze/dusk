@@ -186,6 +186,8 @@ func TestOnlyNewEnrollmentsAreCountedAndRenewalsNever(test *testing.T) {
 		{enrollment("enroll", "rate_limited", text("credential_rate"), "fleet_token", text("lab"), nil, "203.0.113.1:1"), true, signalRefused, false, "fleet_token:lab"},
 		{enrollment("assign", "denied", quota, "install_token", text("unit-7"), text("factory-2026"), "203.0.113.1:1"), true, signalRefused, true, "install_token:factory-2026"},
 		{enrollment("enroll", "issued", nil, "install_token", text("unit-8"), nil, "203.0.113.1:1"), true, signalIssued, false, ""},
+		{enrollment("enroll", "issued", nil, "provision_token", text("october"), nil, "203.0.113.1:1"), true, signalIssued, false, "provision_token:october"},
+		{enrollment("assign", "denied", text("credential_retired"), "provision_token", text("september"), nil, "203.0.113.1:1"), true, signalRefused, false, "provision_token:september"},
 	}
 	for index, current := range cases {
 		observed, counted := observe(current.enrollment, watchStart)

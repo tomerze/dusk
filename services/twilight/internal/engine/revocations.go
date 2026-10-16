@@ -31,11 +31,11 @@ type RevocationStarted struct {
 func (request RevocationRequest) scope() (inventory.RevocationScope, error) {
 	scope := inventory.RevocationScope{CredentialKind: request.CredentialKind, Credential: request.Credential,
 		EnrolledAfter: request.EnrolledAfter, EnrolledBefore: request.EnrolledBefore}
-	if request.CredentialKind != "fleet_token" && request.CredentialKind != "install_token" {
-		return scope, invalidArgument("credential_kind must be fleet_token or install_token")
+	if request.CredentialKind != "fleet_token" && request.CredentialKind != "install_token" && request.CredentialKind != "provision_token" {
+		return scope, invalidArgument("credential_kind must be fleet_token, install_token or provision_token")
 	}
 	if strings.TrimSpace(request.Credential) == "" || len(request.Credential) > 256 {
-		return scope, invalidArgument("credential must name a fleet token entry or an install token key in 1 to 256 bytes")
+		return scope, invalidArgument("credential must name a fleet token entry, a provision token entry or an install token key in 1 to 256 bytes")
 	}
 	if request.EnrolledAfter != nil && request.EnrolledBefore != nil && !request.EnrolledAfter.Before(*request.EnrolledBefore) {
 		return scope, invalidArgument("enrolled_after must be before enrolled_before")

@@ -298,3 +298,29 @@ func TestAnEnrollmentWithoutACredentialKindIsRecordedWithoutOne(test *testing.T)
 		test.Fatalf("node %+v %v", node, failure)
 	}
 }
+
+func TestANodeEnrolledWithAProvisionTokenIsRevocableByTheEntryName(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := inventory.NewStore(pool)
+	operation := context.Background()
+	at := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+	reference := "october"
+	if failure := store.RecordEnrollment(operation, inventory.Enrollment{Key: key, Operation: "enroll", CredentialKind: "provision_token", CredentialRef: &reference, At: at}); failure != nil {
+		test.Fatal(failure)
+	}
+	node, failure := store.Get(operation, key)
+	if failure != nil || node.CredentialKind == nil || *node.CredentialKind != "provision_token" || *node.CredentialRef != reference || node.CredentialIssuer != nil {
+		test.Fatalf("node %+v %v", node, failure)
+	}
+	scope := inventory.RevocationScope{CredentialKind: "provision_token", Credential: reference}
+	if count, failure := store.CountRevocable(operation, scope); failure != nil || count != 1 {
+		test.Fatalf("revocable %d %v", count, failure)
+	}
+	revocation, failure := store.CreateRevocation(operation, scope, "rotated after a leak", "token:admin", at)
+	if failure != nil || revocation.CredentialKind != "provision_token" || revocation.Matched != 1 {
+		test.Fatalf("revocation %+v %v", revocation, failure)
+	}
+	if count, _ := store.CountRevocable(operation, inventory.RevocationScope{CredentialKind: "fleet_token", Credential: reference}); count != 0 {
+		test.Fatalf("a fleet token entry of the same name matched %d nodes", count)
+	}
+}

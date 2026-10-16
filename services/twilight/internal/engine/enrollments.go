@@ -158,6 +158,8 @@ func observe(enrollment kafka.Enrollment, at time.Time) (observation, bool) {
 		observed.credential = "fleet_token:" + *enrollment.CredentialRef
 	case enrollment.CredentialKind == "install_token" && enrollment.CredentialIssuer != nil:
 		observed.credential = "install_token:" + *enrollment.CredentialIssuer
+	case enrollment.CredentialKind == "provision_token" && enrollment.CredentialRef != nil:
+		observed.credential = "provision_token:" + *enrollment.CredentialRef
 	}
 	if enrollment.Tenant != nil {
 		observed.tenant = *enrollment.Tenant

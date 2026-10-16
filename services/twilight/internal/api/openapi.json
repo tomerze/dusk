@@ -2367,6 +2367,7 @@
             "enum": [
               "fleet_token",
               "install_token",
+              "provision_token",
               "tpm_attestation",
               null
             ],
@@ -2377,7 +2378,7 @@
               "string",
               "null"
             ],
-            "description": "The fleet token entry's name, or the install token's subject, the node enrolled with."
+            "description": "The fleet token or provision token entry's name, or the install token's subject, the node enrolled with."
           },
           "credential_issuer": {
             "type": [
@@ -2817,6 +2818,7 @@
             "enum": [
               "fleet_token",
               "install_token",
+              "provision_token",
               "tpm_attestation",
               null
             ],
@@ -2827,7 +2829,7 @@
               "string",
               "null"
             ],
-            "description": "The fleet token entry's name, or the install token's subject, the node enrolled with."
+            "description": "The fleet token or provision token entry's name, or the install token's subject, the node enrolled with."
           },
           "credential_issuer": {
             "type": [
@@ -4595,14 +4597,15 @@
             "type": "string",
             "enum": [
               "fleet_token",
-              "install_token"
+              "install_token",
+              "provision_token"
             ]
           },
           "credential": {
             "type": "string",
             "minLength": 1,
             "maxLength": 256,
-            "description": "The fleet token entry's name, or the id of the key that signed the install tokens."
+            "description": "The fleet token or provision token entry's name, or the id of the key that signed the install tokens."
           },
           "enrolled_after": {
             "type": [
@@ -4646,7 +4649,8 @@
             "type": "string",
             "enum": [
               "fleet_token",
-              "install_token"
+              "install_token",
+              "provision_token"
             ]
           },
           "credential": {
