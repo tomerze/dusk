@@ -183,7 +183,7 @@ func (reconciler *Reconciler) followLedger(operation context.Context) error {
 }
 
 func (reconciler *Reconciler) adjustOffsets(operation context.Context, offsets map[string]map[int32]kgo.Offset) (map[string]map[int32]kgo.Offset, error) {
-	for _, partitions := range offsets {
+	for topic, partitions := range offsets {
 		identifiers := make([]int32, 0, len(partitions))
 		for partition := range partitions {
 			identifiers = append(identifiers, partition)
@@ -191,6 +191,10 @@ func (reconciler *Reconciler) adjustOffsets(operation context.Context, offsets m
 		stored, failure := storedOffsets(operation, reconciler.Pool, identifiers)
 		if failure != nil {
 			reconciler.Logger.Error("the stored ledger offsets could not be read", "error", failure)
+			return nil, failure
+		}
+		if failure := reconciler.forgetLost(operation, topic, stored); failure != nil {
+			reconciler.Logger.Error("the ledger's end offsets could not be checked against the stored offsets", "error", failure)
 			return nil, failure
 		}
 		for _, partition := range identifiers {
@@ -203,6 +207,55 @@ func (reconciler *Reconciler) adjustOffsets(operation context.Context, offsets m
 		}
 	}
 	return offsets, nil
+}
+
+func (reconciler *Reconciler) forgetLost(operation context.Context, topic string, stored map[int32]int64) error {
+	client, failure := kgo.NewClient(reconciler.KafkaOptions...)
+	if failure != nil {
+		return failure
+	}
+	defer client.Close()
+	admin := kadm.NewClient(client)
+	details, failure := admin.ListTopics(operation, topic)
+	if failure != nil {
+		return failure
+	}
+	identifier := ""
+	if detail, found := details[topic]; found && detail.Err == nil && detail.ID != (kadm.TopicID{}) {
+		identifier = fmt.Sprintf("%x", detail.ID)
+	}
+	ends, failure := admin.ListEndOffsets(operation, topic)
+	if failure != nil {
+		return failure
+	}
+	partitions := make([]int32, 0, len(stored))
+	for partition := range stored {
+		partitions = append(partitions, partition)
+	}
+	recorded, failure := storedTopicIdentifiers(operation, reconciler.Pool, partitions)
+	if failure != nil {
+		return failure
+	}
+	for partition, offset := range stored {
+		end, listed := ends.Lookup(topic, partition)
+		endOffset := int64(-1)
+		if listed && end.Err == nil {
+			endOffset = end.Offset
+		}
+		if !partitionLost(offset, endOffset, recorded[partition], identifier) {
+			continue
+		}
+		if failure := forgetOffset(operation, reconciler.Pool, partition, offset); failure != nil {
+			return failure
+		}
+		stored[partition] = -1
+		reconciler.Logger.Error("a ledger partition is not the one whose offset reconcile stored: Kafka lost it or it was created again, so reconcile reads it again from its start",
+			"topic", topic, "partition", partition, "stored_offset", offset, "end_offset", endOffset, "stored_topic_id", recorded[partition], "topic_id", identifier)
+	}
+	if identifier == "" {
+		return nil
+	}
+	return recordTopicIdentifier(operation, reconciler.Pool, partitions, identifier)
 }
 
 func (reconciler *Reconciler) assign(_ context.Context, _ *kgo.Client, assigned map[string][]int32) {
@@ -702,4 +755,14 @@ func (reconciler *Reconciler) runPrune(operation context.Context) {
 			reconciler.Logger.Info("pruned reconcile process state past the intended process retention", "processes", removed, "default_shell_windows", windows)
 		}
 	}
+}
+
+func partitionLost(storedOffset, endOffset int64, storedTopic, topic string) bool {
+	if storedOffset < 0 {
+		return false
+	}
+	if endOffset >= 0 && endOffset <= storedOffset {
+		return true
+	}
+	return topic != "" && storedTopic != "" && storedTopic != topic
 }

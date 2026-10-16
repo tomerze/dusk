@@ -53,6 +53,38 @@ func storedOffsets(operation context.Context, target querier, partitions []int32
 	return offsets, rows.Err()
 }
 
+func forgetOffset(operation context.Context, target querier, partition int32, offset int64) error {
+	if _, failure := target.Exec(operation, `update reconcile_offsets set "offset" = -1, updated_at = now() where partition = $1 and "offset" = $2`, partition, offset); failure != nil {
+		return fmt.Errorf("forget ledger offset %d of partition %d: %w", offset, partition, failure)
+	}
+	return nil
+}
+
+func storedTopicIdentifiers(operation context.Context, target querier, partitions []int32) (map[int32]string, error) {
+	rows, failure := target.Query(operation, `select partition, coalesce(topic_id, '') from reconcile_offsets where partition = any($1)`, partitions)
+	if failure != nil {
+		return nil, fmt.Errorf("read the ledger topic ids: %w", failure)
+	}
+	defer rows.Close()
+	identifiers := map[int32]string{}
+	for rows.Next() {
+		var partition int32
+		var identifier string
+		if failure := rows.Scan(&partition, &identifier); failure != nil {
+			return nil, failure
+		}
+		identifiers[partition] = identifier
+	}
+	return identifiers, rows.Err()
+}
+
+func recordTopicIdentifier(operation context.Context, target querier, partitions []int32, identifier string) error {
+	if _, failure := target.Exec(operation, `update reconcile_offsets set topic_id = $2 where partition = any($1) and topic_id is distinct from $2`, partitions, identifier); failure != nil {
+		return fmt.Errorf("record the ledger topic id: %w", failure)
+	}
+	return nil
+}
+
 func loadPartition(operation context.Context, target querier, partition int32) (partitionState, *PartitionTail, map[ChainKey]*ChainHead, error) {
 	if _, failure := storedOffsets(operation, target, []int32{partition}); failure != nil {
 		return partitionState{}, nil, nil, failure

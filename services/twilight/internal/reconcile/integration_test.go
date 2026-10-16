@@ -427,3 +427,31 @@ func unattributed(test *testing.T, principal string) float64 {
 	}
 	return 0
 }
+
+func TestReconcileReadsAgainALedgerPartitionKafkaLost(test *testing.T) {
+	private, _ := signingKey(7)
+	harness := newReconcileHarness(test, keySet(test, private))
+	operation := context.Background()
+	if _, failure := harness.pool.Exec(operation, `insert into reconcile_offsets (partition, "offset") values (0, 5000)`); failure != nil {
+		test.Fatal(failure)
+	}
+	now := time.Now().UTC()
+	unknown := campaign.Pid(65701)
+	writer := newWriter("nightfall-0", 0, now.Add(-time.Minute), private)
+	call, _ := writer.seal(writer.call("dawn-0", unknown.String(), fixtureSession, "Dusk.process", 3))
+	checkpoint, _ := writer.checkpoint()
+	harness.produceLedger(0, call, checkpoint)
+
+	harness.start()
+	eventually(test, "the entry of the lost partition to be reconciled", time.Minute, func() (bool, string) {
+		open := harness.openAlerts()
+		return len(open[alerts.KindProcessWithoutIntent]) == 1, fmt.Sprintf("%d process_without_intent alerts", len(open[alerts.KindProcessWithoutIntent]))
+	})
+	var stored int64
+	if failure := harness.pool.QueryRow(operation, `select "offset" from reconcile_offsets where partition = 0`).Scan(&stored); failure != nil {
+		test.Fatal(failure)
+	}
+	if stored >= 5000 {
+		test.Errorf("the stored offset is still %d, beyond the partition's end", stored)
+	}
+}
