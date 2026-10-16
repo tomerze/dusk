@@ -112,15 +112,16 @@ SQL, shell, Go and TypeScript exactly as in Rust.
 |------|------|-------------------|
 | Node that dials out | `base/nightfall` (`nightfall -c`, #174), `artifacts/dusk_node` - node code, changed only by pull requests on `master` | Rust, `dusk_program_nightfall` |
 | nightfall | `services/nightfall/` with `membrane/`, `ledger/`, `provisioning/`, `schemas/` | Rust, `nightfall`, `nightfall_membrane`, `nightfall_ledger`, `nightfall_provisioning` |
+| Node-link simulator | `services/nightfall/simulator/` - many simulated nodes' fleet links in one process, for load (`docs/docs/stack/simulator.md`) | Rust, `nightfall_simulator` (library and binary) |
 | TLS client | `dusk/src/dusk_connection`, `dusk/src/dusk_py` - node-side code too | Rust, Python extension `dusk` |
 | dawn | `services/dawn/` | Python 3.14, uv project `dawn` |
 | twilight | `services/twilight/` | Go, module `dusk/services/twilight` |
 | twilight UI | `services/twilight/web/` | TypeScript, React, Vite, npm |
 | Kafka contracts | `services/contracts/kafka/` | JSON Schema draft 2020-12 |
-| Images | `services/{nightfall,dawn,twilight}/Dockerfile`, `infra/{node,vector,grafana}/Dockerfile` | build context: the repository root |
+| Images | `services/{nightfall,dawn,twilight}/Dockerfile`, `infra/{node,vector,grafana}/Dockerfile`; the simulator is nightfall's Dockerfile's `simulator` target | build context: the repository root |
 | Alert runbooks | `docs/docs/stack/runbooks/<kind>.md`, one per alert kind and Grafana rule `kind` label; a new kind needs its page | Markdown |
-| Compose stack | `infra/compose/` | |
-| Kubernetes | `infra/k8s/base/`, `infra/k8s/overlays/{dev,prod}` | kustomize |
+| Compose stack | `infra/compose/`; `simulator.yaml` adds the simulator and its CA | |
+| Kubernetes | `infra/k8s/base/`, `infra/k8s/overlays/{dev,prod,scale}`; `scale` is dev plus the simulator's CA and Job, never prod | kustomize |
 | Vector, Grafana, ClickHouse schema | `infra/vector/`, `infra/grafana/`, `infra/k8s/base/clickhouse/schema/` | |
 | Docs | `docs/docs/stack/` | Markdown, mkdocs |
 
@@ -145,6 +146,7 @@ From the repository root unless a directory is named. A fresh worktree needs
 |------|---------|
 | Contracts | `uv run --no-project --with jsonschema --with referencing python services/contracts/validate.py`; `uv run --no-project --with pytest --with jsonschema --with referencing pytest services/contracts/tests -q` |
 | nightfall | `cargo check -p nightfall`; `cargo nextest run -p nightfall -p nightfall_membrane -p nightfall_ledger -p nightfall_provisioning`; `cargo run -p nightfall -- --config <file>`; `nightfall verify-ledger`, `nightfall ledger-hash` |
+| Node-link simulator | `cargo nextest run -p nightfall_simulator`; `cargo nextest run -p nightfall --test simulator` runs it against nightfall in process; image: `docker build -f services/nightfall/Dockerfile --target simulator ...`; compose: `docker compose -f compose.yaml -f simulator.yaml up -d nightfall-simulator` in `infra/compose` (`DUSK_SIMULATED_LINKS`, `DUSK_SIMULATED_LINKS_PER_SECOND`); kind: `kubectl apply -k infra/k8s/overlays/scale` |
 | nightfall, gated tests | Kafka: `NIGHTFALL_KAFKA_TEST_BROKERS=<host:port>` with `--run-ignored ignored-only`; step-ca: `NIGHTFALL_STEP_CA_TEST_URL`, `NIGHTFALL_STEP_CA_TEST_ROOT`, `NIGHTFALL_STEP_CA_TEST_PROVISIONER_KEY` (see `services/nightfall/provisioning/tests/step_ca.rs`) |
 | Node that dials out | `DUSK_FLEET_TOKEN=<token> DUSK_NODE_KVS_PERSISTENT=<file> DUSK_NODE_INIT_SCRIPT="nightfall -c <host:port> --provision <host:port> --ca <pem>" cargo build -p dusk_node_bin`; it keeps its identity in persistent kvs keys, in the file `DUSK_NODE_KVS_PERSISTENT` names (`docs/docs/stack/nodes.md`). Needs pull request #174 and the node pull requests it is stacked on |
 | dawn | in `services/dawn`: `uv run pytest` (builds the `dusk` extension through maturin first; `uv sync --locked --no-install-package dusk` then `.venv/bin/python -m pytest -q` skips it, as CI does); `uvx pyright -p services/dawn` from the root; markers `load` and `integration` are off by default |
@@ -161,7 +163,7 @@ From the repository root unless a directory is named. A fresh worktree needs
 - **CI** (`.github/workflows/ci.yml`): `go` (gofmt, vet, `go test -short`),
   `go-integration`, `ui` (lint, typecheck, vitest, build, `go build -tags ui`),
   `contracts`, `rust` (clippy `-D warnings` and nextest, both `--locked`, on the
-  nightfall crates, `dusk_program_nightfall`, `dusk_connection`, `dusk_capnp`,
+  nightfall crates (the simulator among them), `dusk_program_nightfall`, `dusk_connection`, `dusk_capnp`,
   `dusk_py`, `dusk_api_tests`, `dusk_py_tests`), `kustomize`, `docker` (every
   image, no push; the node image with a throwaway fleet token as its build
   secret), and dawn's own job. CI runs on pull requests and on pushes to
