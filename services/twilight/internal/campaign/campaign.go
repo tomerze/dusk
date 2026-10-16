@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/selector"
 )
 
@@ -102,7 +103,7 @@ func (definition Definition) Validate(now time.Time) error {
 	if len(definition.Description) > 10000 {
 		return invalid("description", "is at most 10000 characters")
 	}
-	if definition.Tenant != nil && !tenantPattern.MatchString(*definition.Tenant) {
+	if definition.Tenant != nil && !config.TenantPattern.MatchString(*definition.Tenant) {
 		return invalid("tenant", "must be 1 to 63 lowercase letters, digits or dashes")
 	}
 	parsed, failure := selector.Parse(definition.Selector)

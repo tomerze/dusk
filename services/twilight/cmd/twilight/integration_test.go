@@ -70,9 +70,16 @@ func TestMigrateTokenAndServe(test *testing.T) {
 	suffix := strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	ledgerPath := writeLedgerKeys(test)
 	healthAddress, apiAddress := freeAddress(test), freeAddress(test)
-	configPath := filepath.Join(test.TempDir(), "twilight.yaml")
+	directory := test.TempDir()
+	configPath := filepath.Join(directory, "twilight.yaml")
 	if failure := os.WriteFile(configPath, []byte("instance: twilight-command-test\n"), 0o600); failure != nil {
 		test.Fatal(failure)
+	}
+	secrets := map[string]string{"clickhouse-password": "password", "access-key": "ACCESS", "secret-key": "secret"}
+	for name, secret := range secrets {
+		if failure := os.WriteFile(filepath.Join(directory, name), []byte(secret+"\n"), 0o600); failure != nil {
+			test.Fatal(failure)
+		}
 	}
 	topics := map[string]string{
 		"CONNECTIONS": "delete", "CENSUS": "compact", "LEDGER": "delete", "ENROLLMENTS": "delete", "NODE_STATE": "compact", "PROCESS_RESULTS": "delete",
@@ -92,6 +99,9 @@ func TestMigrateTokenAndServe(test *testing.T) {
 		"TWILIGHT__HEALTH_LISTEN=" + healthAddress,
 		"TWILIGHT__LISTEN=" + apiAddress,
 		"TWILIGHT__DRAIN_SECONDS=30",
+		"TWILIGHT__CLICKHOUSE__PASSWORD_FILE=" + filepath.Join(directory, "clickhouse-password"),
+		"TWILIGHT__OBJECT_STORE__ACCESS_KEY_FILE=" + filepath.Join(directory, "access-key"),
+		"TWILIGHT__OBJECT_STORE__SECRET_KEY_FILE=" + filepath.Join(directory, "secret-key"),
 	}
 	client, failure := kgo.NewClient(kgo.SeedBrokers(brokers))
 	if failure != nil {

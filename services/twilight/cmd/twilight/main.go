@@ -14,6 +14,7 @@ import (
 	"os/user"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -27,12 +28,14 @@ import (
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/api"
 	"dusk/services/twilight/internal/campaign"
+	"dusk/services/twilight/internal/clickhouse"
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/dawn"
 	"dusk/services/twilight/internal/engine"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/kafka"
+	"dusk/services/twilight/internal/objectstore"
 	"dusk/services/twilight/internal/reconcile"
 	"dusk/services/twilight/internal/tokens"
 	"dusk/services/twilight/migrations"
@@ -294,6 +297,38 @@ func token(operation context.Context, arguments, environment []string, output, d
 	return nil
 }
 
+func readSecret(path, what string) (string, error) {
+	content, failure := os.ReadFile(path)
+	if failure != nil {
+		return "", fmt.Errorf("read the %s: %w", what, failure)
+	}
+	secret := strings.TrimSpace(string(content))
+	if secret == "" {
+		return "", fmt.Errorf("the %s in %s is empty", what, path)
+	}
+	return secret, nil
+}
+
+func clickHouseClient(settings config.ClickHouse) (*clickhouse.Client, error) {
+	password, failure := readSecret(settings.PasswordFile, "clickhouse password")
+	if failure != nil {
+		return nil, failure
+	}
+	return clickhouse.New(clickhouse.Settings{URL: settings.URL, User: settings.User, Password: password, CA: settings.CA})
+}
+
+func objectStoreClient(settings config.ObjectStore) (*objectstore.Client, error) {
+	accessKey, failure := readSecret(settings.AccessKeyFile, "object store access key")
+	if failure != nil {
+		return nil, failure
+	}
+	secretKey, failure := readSecret(settings.SecretKeyFile, "object store secret key")
+	if failure != nil {
+		return nil, failure
+	}
+	return objectstore.New(objectstore.Settings{Endpoint: settings.Endpoint, Region: settings.Region, AccessKey: accessKey, SecretKey: secretKey, CA: settings.CA})
+}
+
 func serve(operation context.Context, arguments, environment []string, output, diagnostics io.Writer) error {
 	var applyMigrations bool
 	parsed, failure := parse("serve", arguments, diagnostics, func(flags *flag.FlagSet) {
@@ -366,11 +401,20 @@ func serve(operation context.Context, arguments, environment []string, output, d
 	if failure != nil {
 		return failure
 	}
+	events, failure := clickHouseClient(settings.ClickHouse)
+	if failure != nil {
+		return failure
+	}
+	objects, failure := objectStoreClient(settings.ObjectStore)
+	if failure != nil {
+		return failure
+	}
 	core := engine.New(engine.Dependencies{
 		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: alertStore,
 		Dawn: dawnClient, KafkaOptions: options, Validator: validator,
-		NodeState: kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState),
-		Intended:  kafka.NewIntendedProcessProducer(producer, validator, settings.Kafka.Topics.IntendedProcesses), Logger: logger,
+		NodeState:  kafka.NewNodeStateProducer(producer, validator, settings.Kafka.Topics.NodeState),
+		Intended:   kafka.NewIntendedProcessProducer(producer, validator, settings.Kafka.Topics.IntendedProcesses),
+		ClickHouse: events, ObjectStore: objects, Logger: logger,
 	})
 	apiConfiguration, failure := apiOptions(settings, development, pool, core.Service(), logger)
 	if failure != nil {

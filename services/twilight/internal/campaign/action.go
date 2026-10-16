@@ -70,7 +70,6 @@ func invalid(field, format string, arguments ...any) *ValidationError {
 
 var (
 	factKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,254}$`)
-	tenantPattern  = regexp.MustCompile(`^[a-z0-9-]{1,63}$`)
 	logLevels      = map[string]bool{"trace": true, "debug": true, "info": true, "warn": true, "error": true}
 )
 

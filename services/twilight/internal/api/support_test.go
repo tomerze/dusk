@@ -22,6 +22,7 @@ import (
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/dawn"
 	"dusk/services/twilight/internal/engine"
+	"dusk/services/twilight/internal/erasure"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/tokens"
 )
@@ -31,7 +32,10 @@ const (
 	installationID = "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70"
 )
 
-var campaignIdentifier = uuid.MustParse("0192f0c4-4c1a-7b8e-9d2f-3a4b5c6d7e8f")
+var (
+	campaignIdentifier = uuid.MustParse("0192f0c4-4c1a-7b8e-9d2f-3a4b5c6d7e8f")
+	erasureIdentifier  = uuid.MustParse("0192f0c4-9e1a-7b8e-9d2f-3a4b5c6d7e8f")
+)
 
 type recordedCall struct {
 	method    string
@@ -47,6 +51,7 @@ type fakeBackend struct {
 	entered   chan struct{}
 	hold      chan struct{}
 	deadline  time.Time
+	existing  bool
 }
 
 func (fake *fakeBackend) record(method string, arguments ...any) error {
@@ -293,6 +298,29 @@ func (fake *fakeBackend) Subscribe(operation context.Context) <-chan engine.Feed
 		return closed
 	}
 	return events
+}
+
+func sampleErasure(scope erasure.Scope, subject string) erasure.Erasure {
+	requested := erasure.Erasure{ID: erasureIdentifier, Scope: scope, Reason: "erasure request 4711", RequestedBy: "token:break glass", RequestedAt: sampleTime(),
+		Status: erasure.StatusRunning, Steps: []erasure.Step{{Name: erasure.StepScope, State: erasure.StepPending, Counts: map[string]int64{}}}, Retained: []erasure.Retained{}}
+	if scope == erasure.ScopeDevice {
+		requested.DeviceID = &subject
+	} else {
+		requested.Tenant = &subject
+	}
+	return requested
+}
+
+func (fake *fakeBackend) EraseDevice(operation context.Context, device, reason, actor string) (erasure.Erasure, bool, error) {
+	return sampleErasure(erasure.ScopeDevice, device), !fake.existing, fake.record("EraseDevice", device, reason, actor)
+}
+
+func (fake *fakeBackend) EraseTenant(operation context.Context, tenant, reason, actor string) (erasure.Erasure, bool, error) {
+	return sampleErasure(erasure.ScopeTenant, tenant), !fake.existing, fake.record("EraseTenant", tenant, reason, actor)
+}
+
+func (fake *fakeBackend) Erasure(operation context.Context, identifier uuid.UUID) (erasure.Erasure, error) {
+	return sampleErasure(erasure.ScopeDevice, deviceID), fake.record("Erasure", identifier)
 }
 
 type fakeTokens map[string]tokens.Token

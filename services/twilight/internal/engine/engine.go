@@ -15,10 +15,13 @@ import (
 
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
+	"dusk/services/twilight/internal/clickhouse"
 	"dusk/services/twilight/internal/config"
 	"dusk/services/twilight/internal/dawn"
+	"dusk/services/twilight/internal/erasure"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/kafka"
+	"dusk/services/twilight/internal/objectstore"
 )
 
 type Dawn interface {
@@ -51,6 +54,8 @@ type Dependencies struct {
 	Validator    *kafka.Validator
 	NodeState    NodeStateProducer
 	Intended     IntendedProcessProducer
+	ClickHouse   *clickhouse.Client
+	ObjectStore  *objectstore.Client
 	Logger       *slog.Logger
 }
 
@@ -75,6 +80,7 @@ type Engine struct {
 	random      *rand.Rand
 	randomMutex sync.Mutex
 	factsTried  *attemptLog
+	erasures    *erasure.Manager
 }
 
 func New(dependencies Dependencies) *Engine {
@@ -92,7 +98,20 @@ func New(dependencies Dependencies) *Engine {
 	engine.presence = newPresenceWriter(engine)
 	engine.feed = newFeed(engine)
 	engine.leadership = NewLeadership(dependencies.Config.Database.LeaderURL, dependencies.Config.Instance, dependencies.Logger, engine.lead)
+	engine.erasures = erasure.New(erasure.Dependencies{Pool: dependencies.Pool, ClickHouse: dependencies.ClickHouse, ObjectStore: dependencies.ObjectStore,
+		Alerts: dependencies.Alerts, Topics: engine.describeTopics, Online: engine.view.Online, Config: dependencies.Config, Logger: dependencies.Logger})
 	return engine
+}
+
+func (engine *Engine) describeTopics(operation context.Context) ([]kafka.TopicRetention, error) {
+	client, failure := kgo.NewClient(engine.KafkaOptions...)
+	if failure != nil {
+		return nil, failure
+	}
+	defer client.Close()
+	describing, cancel := context.WithTimeout(operation, 15*time.Second)
+	defer cancel()
+	return kafka.DescribeRetention(describing, client, "dusk.")
 }
 
 func (engine *Engine) View() *View {
@@ -230,6 +249,7 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	start("bulk revocations", engine.runRevocations)
 	start("partitions", engine.runPartitionMaintenance)
 	start("intents", engine.runIntentPublication)
+	start("erasures", engine.erasures.Run)
 	start("retention", engine.runRetention)
 	engine.requestSweep(sweepRequest{all: true})
 	running.Wait()

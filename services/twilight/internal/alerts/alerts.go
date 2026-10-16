@@ -48,6 +48,7 @@ const (
 	KindLedgerChainBroken         = "ledger_chain_broken"
 	KindCampaignPausedByGate      = "campaign_paused_by_gate"
 	KindCampaignFailedByPolicy    = "campaign_failed_by_policy"
+	KindErasureStalled            = "erasure_stalled"
 )
 
 type Alert struct {

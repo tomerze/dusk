@@ -25,6 +25,7 @@ import (
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/engine"
+	"dusk/services/twilight/internal/erasure"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/tokens"
 )
@@ -63,6 +64,9 @@ type Backend interface {
 	AcknowledgeAlert(operation context.Context, identifier int64, actor string) (alerts.Alert, error)
 	ResolveAlert(operation context.Context, identifier int64, actor string) (alerts.Alert, error)
 	Subscribe(operation context.Context) <-chan engine.FeedEvent
+	EraseDevice(operation context.Context, device, reason, actor string) (erasure.Erasure, bool, error)
+	EraseTenant(operation context.Context, tenant, reason, actor string) (erasure.Erasure, bool, error)
+	Erasure(operation context.Context, identifier uuid.UUID) (erasure.Erasure, error)
 }
 
 type TokenAuthenticator interface {

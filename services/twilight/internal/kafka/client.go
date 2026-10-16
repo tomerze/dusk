@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -135,6 +137,60 @@ func CheckTopics(operation context.Context, client *kgo.Client, requirements []T
 		return errors.New(strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+type TopicRetention struct {
+	Topic         string
+	CleanupPolicy string
+	Retention     time.Duration
+	Segment       time.Duration
+}
+
+func DescribeRetention(operation context.Context, client *kgo.Client, prefix string) ([]TopicRetention, error) {
+	admin := kadm.NewClient(client)
+	listed, failure := admin.ListTopics(operation)
+	if failure != nil {
+		return nil, fmt.Errorf("list topics: %w", failure)
+	}
+	var names []string
+	for _, name := range listed.Names() {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	described, failure := admin.DescribeTopicConfigs(operation, names...)
+	if failure != nil {
+		return nil, fmt.Errorf("describe topics: %w", failure)
+	}
+	var topics []TopicRetention
+	for _, name := range names {
+		found, failure := described.On(name, nil)
+		if failure != nil || found.Err != nil {
+			return nil, fmt.Errorf("describe %s: %w", name, errors.Join(failure, found.Err))
+		}
+		topic := TopicRetention{Topic: name}
+		for _, entry := range found.Configs {
+			milliseconds, parsed := strconv.ParseInt(entry.MaybeValue(), 10, 64)
+			switch entry.Key {
+			case "cleanup.policy":
+				topic.CleanupPolicy = entry.MaybeValue()
+			case "retention.ms":
+				if parsed == nil {
+					topic.Retention = time.Duration(milliseconds) * time.Millisecond
+				}
+			case "segment.ms":
+				if parsed == nil {
+					topic.Segment = time.Duration(milliseconds) * time.Millisecond
+				}
+			}
+		}
+		topics = append(topics, topic)
+	}
+	sort.Slice(topics, func(left, right int) bool { return topics[left].Topic < topics[right].Topic })
+	return topics, nil
 }
 
 type Producer struct {

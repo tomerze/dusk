@@ -61,6 +61,7 @@ var kindLabels = map[string]string{
 	KindCampaignConflict:          "Campaign conflict",
 	KindCampaignPausedByGate:      "Campaign paused by its gate",
 	KindCampaignFailedByPolicy:    "Campaign failed by its policy",
+	KindErasureStalled:            "Erasure stalled",
 }
 
 var kindSummaries = map[string]string{

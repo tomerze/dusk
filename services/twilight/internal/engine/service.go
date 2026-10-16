@@ -12,6 +12,7 @@ import (
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/dawn"
+	"dusk/services/twilight/internal/erasure"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/kafka"
 	"dusk/services/twilight/internal/selector"
@@ -680,4 +681,16 @@ func (service *Service) ResolveAlert(operation context.Context, identifier int64
 
 func (service *Service) Subscribe(operation context.Context) <-chan FeedEvent {
 	return service.engine.feed.Subscribe(operation)
+}
+
+func (service *Service) EraseDevice(operation context.Context, device, reason, actor string) (erasure.Erasure, bool, error) {
+	return service.engine.erasures.RequestDevice(operation, device, reason, actor)
+}
+
+func (service *Service) EraseTenant(operation context.Context, tenant, reason, actor string) (erasure.Erasure, bool, error) {
+	return service.engine.erasures.RequestTenant(operation, tenant, reason, actor)
+}
+
+func (service *Service) Erasure(operation context.Context, identifier uuid.UUID) (erasure.Erasure, error) {
+	return service.engine.erasures.Get(operation, identifier)
 }

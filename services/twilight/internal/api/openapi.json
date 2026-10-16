@@ -693,6 +693,173 @@
         }
       }
     },
+    "/api/v1/devices/{device}/erasure": {
+      "post": {
+        "operationId": "eraseDevice",
+        "summary": "Erase a device's data",
+        "x-required-role": "admin",
+        "description": "Erases what the stack holds about every installation of the device: its inventory rows, campaign rows and intended processes, its rows in ClickHouse and in the lake, and its collected files. The device must be retired or revoked and offline, so that nothing new about it is stored while it is erased. The erasure runs in the background; follow it with GET /api/v1/erasures/{id}. When it finishes, retained lists what it could not delete, until when, and why.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Device"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The erasure, already running for the same subject or started by this request; Location names it when this request started it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erasure"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant}/erasure": {
+      "post": {
+        "operationId": "eraseTenant",
+        "summary": "Erase a tenant's data",
+        "x-required-role": "admin",
+        "description": "Offboards a tenant: erases what the stack holds about every device of the tenant, as a device erasure does, and deletes the tenant's campaigns. Every node of the tenant must be retired or revoked and offline, and none of its campaigns running or paused. Follow it with GET /api/v1/erasures/{id}.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Tenant"
+          },
+          {
+            "$ref": "#/components/parameters/CSRF"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The erasure, already running for the same subject or started by this request; Location names it when this request started it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erasure"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/api/v1/erasures/{id}": {
+      "get": {
+        "operationId": "getErasure",
+        "summary": "Follow an erasure",
+        "x-required-role": "admin",
+        "description": "An erasure's progress: each step's state, what it did, and, once it finished, what it retained.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ErasureID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The erasure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erasure"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
     "/api/v1/selectors/validate": {
       "post": {
         "operationId": "validateSelector",
@@ -4754,6 +4921,212 @@
           "items",
           "next_cursor"
         ]
+      },
+      "ErasureRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "Why the data is erased or exported, such as the request it answers. It is kept with the erasure and logged."
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "ErasureStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "scope",
+              "clickhouse",
+              "lake",
+              "files",
+              "inventory"
+            ],
+            "description": "scope finds the devices and node namespaces to erase; clickhouse deletes their rows in ClickHouse; lake rewrites the lake files that hold their rows; files deletes their collected files; inventory deletes their inventory rows, campaign rows and intended processes."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "done"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "What the step did, or what it waits for."
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "What the step counted, by name."
+          },
+          "issued": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The tables the step has finished with."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "The last device the step finished with."
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "state",
+          "detail",
+          "counts",
+          "started_at",
+          "finished_at"
+        ]
+      },
+      "ErasureRetained": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "store": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string",
+            "description": "What the store keeps."
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the store deletes it at the latest; null when it keeps it until something else removes it."
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "store",
+          "data",
+          "until",
+          "why"
+        ]
+      },
+      "Erasure": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "device",
+              "tenant"
+            ]
+          },
+          "device_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "tenant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requested_by": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErasureStep"
+            }
+          },
+          "retained": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErasureRetained"
+            },
+            "description": "What the stack keeps after the erasure, filled when it finishes."
+          },
+          "attempts": {
+            "type": "integer",
+            "description": "Failed attempts of the current step; the step is tried again with a growing delay."
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "device_id",
+          "tenant",
+          "reason",
+          "requested_by",
+          "requested_at",
+          "status",
+          "steps",
+          "retained",
+          "attempts",
+          "last_error",
+          "completed_at"
+        ]
       }
     },
     "responses": {
@@ -4929,6 +5302,24 @@
         "description": "Required with a session cookie: the value of the twilight_csrf cookie.",
         "schema": {
           "type": "string"
+        }
+      },
+      "Tenant": {
+        "name": "tenant",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]{1,63}$"
+        }
+      },
+      "ErasureID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
         }
       }
     },

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -154,9 +155,30 @@ func (shell DefaultShell) Commands(actionKind string, reapedPids int) int {
 	return shell.Kill + shell.ReapRounds
 }
 
+type ClickHouse struct {
+	URL            string `yaml:"url"`
+	User           string `yaml:"user"`
+	PasswordFile   string `yaml:"password_file"`
+	CA             string `yaml:"ca"`
+	Cluster        string `yaml:"cluster"`
+	LakeCollection string `yaml:"lake_collection"`
+}
+
+type ObjectStore struct {
+	Endpoint       string `yaml:"endpoint"`
+	Region         string `yaml:"region"`
+	AccessKeyFile  string `yaml:"access_key_file"`
+	SecretKeyFile  string `yaml:"secret_key_file"`
+	CA             string `yaml:"ca"`
+	LakeBucket     string `yaml:"lake_bucket"`
+	FilesBucket    string `yaml:"files_bucket"`
+	EvidenceBucket string `yaml:"evidence_bucket"`
+}
+
 type Retention struct {
-	InstallationDays int `yaml:"installation_days"`
-	AlertDays        int `yaml:"alert_days"`
+	InstallationDays   int `yaml:"installation_days"`
+	AlertDays          int `yaml:"alert_days"`
+	ErasureOverdueDays int `yaml:"erasure_overdue_days"`
 }
 
 const MinimumInstallationDays = 98
@@ -201,6 +223,8 @@ type Config struct {
 	Engine                Engine            `yaml:"engine"`
 	Alerts                Alerts            `yaml:"alerts"`
 	Reconcile             Reconcile         `yaml:"reconcile"`
+	ClickHouse            ClickHouse        `yaml:"clickhouse"`
+	ObjectStore           ObjectStore       `yaml:"object_store"`
 	Retention             Retention         `yaml:"retention"`
 }
 
@@ -286,7 +310,11 @@ func Default() Config {
 		Reconcile: Reconcile{Enabled: true, LedgerKeys: "/etc/twilight/pki/ledger-keys.json", CheckpointIntervalMS: 1000,
 			CommandsPerSession: 10000, IntendedProcessCacheEntries: 1000000,
 			DefaultShell: DefaultShell{Ps: 1, StateReads: 1, LogsDump: 1, Kill: 1, ReapRounds: 3}},
-		Retention: Retention{InstallationDays: 120, AlertDays: 400},
+		ClickHouse: ClickHouse{URL: "http://clickhouse:8123", User: "twilight", PasswordFile: "/etc/twilight/secrets/clickhouse/password",
+			Cluster: "dusk", LakeCollection: "lake_writer"},
+		ObjectStore: ObjectStore{Endpoint: "http://ceph:8080", Region: "us-east-1", AccessKeyFile: "/etc/twilight/secrets/s3/access-key",
+			SecretKeyFile: "/etc/twilight/secrets/s3/secret-key", LakeBucket: "dusk-lake", FilesBucket: "dusk-files", EvidenceBucket: "dusk-ledger-evidence"},
+		Retention: Retention{InstallationDays: 120, AlertDays: 400, ErasureOverdueDays: 20},
 	}
 }
 
@@ -549,6 +577,7 @@ func (loaded Config) Validate() error {
 		"reconcile.commands_per_session":                   loaded.Reconcile.CommandsPerSession,
 		"reconcile.intended_process_cache_entries":         loaded.Reconcile.IntendedProcessCacheEntries,
 		"retention.alert_days":                             loaded.Retention.AlertDays,
+		"retention.erasure_overdue_days":                   loaded.Retention.ErasureOverdueDays,
 	}
 	names := make([]string, 0, len(positive))
 	for name := range positive {
@@ -580,6 +609,30 @@ func (loaded Config) Validate() error {
 			problem("%s is required", group.name)
 		}
 	}
+	if parsed, failure := url.Parse(loaded.ClickHouse.URL); failure != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		problem("clickhouse.url must be an http or https URL")
+	}
+	if loaded.ClickHouse.User == "" || loaded.ClickHouse.PasswordFile == "" {
+		problem("clickhouse.user and clickhouse.password_file are required")
+	}
+	if !identifier.MatchString(loaded.ClickHouse.Cluster) || !identifier.MatchString(loaded.ClickHouse.LakeCollection) {
+		problem("clickhouse.cluster and clickhouse.lake_collection must be names of letters, digits and underscores")
+	}
+	if parsed, failure := url.Parse(loaded.ObjectStore.Endpoint); failure != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		problem("object_store.endpoint must be an http or https URL")
+	}
+	for _, required := range []struct{ name, value string }{
+		{"object_store.region", loaded.ObjectStore.Region},
+		{"object_store.access_key_file", loaded.ObjectStore.AccessKeyFile},
+		{"object_store.secret_key_file", loaded.ObjectStore.SecretKeyFile},
+		{"object_store.lake_bucket", loaded.ObjectStore.LakeBucket},
+		{"object_store.files_bucket", loaded.ObjectStore.FilesBucket},
+		{"object_store.evidence_bucket", loaded.ObjectStore.EvidenceBucket},
+	} {
+		if required.value == "" {
+			problem("%s is required", required.name)
+		}
+	}
 	if loaded.Retention.InstallationDays < MinimumInstallationDays {
 		problem("retention.installation_days must be at least %d, longer than a node certificate's lifetime plus nightfall's renew_grace, so that no installation it removes can come back", MinimumInstallationDays)
 	}
@@ -593,6 +646,11 @@ func (loaded Config) Validate() error {
 	}
 	return nil
 }
+
+var (
+	identifier    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	TenantPattern = regexp.MustCompile(`^[a-z0-9-]{1,63}$`)
+)
 
 func sortedKeys(entries map[string]string) []string {
 	keys := make([]string, 0, len(entries))

@@ -11,6 +11,7 @@ import (
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/dawn"
 	"dusk/services/twilight/internal/engine"
+	"dusk/services/twilight/internal/erasure"
 	"dusk/services/twilight/internal/inventory"
 	"dusk/services/twilight/internal/selector"
 )
@@ -50,6 +51,7 @@ func classify(failure error) *Problem {
 	var selectorError *selector.Error
 	var overlap *engine.OverlapError
 	var dawnError *dawn.Error
+	var notReady *erasure.NotReadyError
 	switch {
 	case errors.As(failure, &problem):
 		return problem
@@ -78,6 +80,13 @@ func classify(failure error) *Problem {
 		return newProblem(http.StatusConflict, "not_archivable", failure.Error())
 	case errors.Is(failure, campaign.ErrInvalidTransition):
 		return newProblem(http.StatusConflict, "invalid_transition", failure.Error())
+	case errors.Is(failure, erasure.ErrNotFound):
+		return newProblem(http.StatusNotFound, "not_found", failure.Error())
+	case errors.Is(failure, erasure.ErrInvalidReason):
+		return invalid(failure.Error())
+	case errors.As(failure, &notReady):
+		return newProblem(http.StatusConflict, "not_ready", notReady.Error()).with("not_withdrawn", notReady.NotWithdrawn).
+			with("online", notReady.Online).with("running_campaigns", notReady.RunningCampaigns)
 	case errors.Is(failure, engine.ErrNodeOffline):
 		return newProblem(http.StatusConflict, "node_offline", failure.Error())
 	case errors.As(failure, &dawnError):
