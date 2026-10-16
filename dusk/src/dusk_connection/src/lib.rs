@@ -1,4 +1,5 @@
 use anyhow::Result;
+use capnp_futures::io::FromFutures;
 use capnp_rpc::{Disconnector, RpcSystem, rpc_twoparty_capnp, twoparty};
 use dusk_capnp::dusk_capnp::dusk::Client;
 use futures::io::AsyncReadExt;
@@ -24,8 +25,8 @@ impl Connection {
             let stream = tokio_util::compat::TokioAsyncReadCompatExt::compat(stream);
             let (reader, writer) = stream.split();
             let rpc_network = Box::new(twoparty::VatNetwork::new(
-                reader,
-                writer,
+                FromFutures(reader),
+                FromFutures(writer),
                 rpc_twoparty_capnp::Side::Client,
                 Default::default(),
             ));

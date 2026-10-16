@@ -11,6 +11,7 @@ extern crate alloc;
 #[prelude_import]
 use dusk_capnp::prelude::*;
 
+use dusk_capnp::capnp_futures::io::{AsyncRead, AsyncWrite};
 use dusk_capnp::capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
 
 use alloc::rc::Rc;
@@ -19,7 +20,6 @@ use tracing::{error, info};
 use core::cell::Cell;
 use core::pin::Pin;
 use core::sync::atomic::Ordering;
-use futures_io::{AsyncRead, AsyncWrite};
 use portable_atomic::AtomicU64;
 use tracing::Instrument;
 
