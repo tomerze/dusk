@@ -29,6 +29,7 @@ pub mod ffi;
 pub mod init;
 pub mod launchers;
 pub mod server;
+pub mod task;
 pub mod trace;
 pub use dusk_capnp;
 
