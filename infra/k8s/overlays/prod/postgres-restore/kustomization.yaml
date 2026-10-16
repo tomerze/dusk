@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dusk
+resources:
+  - ../dusk/postgres
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: dusk-stack
+patches:
+  - target:
+      kind: Cluster
+      name: postgres
+    path: recovery.yaml

@@ -1,0 +1,23 @@
+- op: add
+  path: /metadata/annotations
+  value:
+    cnpg.io/skipEmptyWalArchiveCheck: enabled
+- op: remove
+  path: /spec/bootstrap/initdb
+- op: add
+  path: /spec/bootstrap/recovery
+  value:
+    source: origin
+    database: inventory
+    owner: twilight
+    secret:
+      name: postgres-twilight
+- op: add
+  path: /spec/externalClusters
+  value:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: postgres-backups
+          serverName: postgres
