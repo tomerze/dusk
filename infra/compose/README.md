@@ -55,6 +55,16 @@ DUSK_SIMULATED_LINKS=5000 docker compose -f compose.yaml -f simulator.yaml up -d
 `docker compose up -d nightfall`, without `simulator.yaml`, takes that trust
 away again.
 
+`simulator.yaml` also adds the *Scale run* Grafana dashboard and, under the
+`scale` profile, `scale-load`, which drives campaigns over the simulated nodes,
+and `scale-report`, which judges the run (see `docs/docs/stack/scale.md`):
+
+```bash
+export DUSK_SCALE_TOKEN=$(docker compose exec -T twilight twilight token create --name scale --role operator)
+docker compose -f compose.yaml -f simulator.yaml --profile scale run --rm scale-load --run scale-1 --nodes-per-campaign 5000
+docker compose -f compose.yaml -f simulator.yaml --profile scale run --rm scale-report --run scale-1
+```
+
 Stop it, keeping every secret, all data and the nodes' identities:
 
 ```bash

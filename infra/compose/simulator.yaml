@@ -1,6 +1,10 @@
 volumes:
   simulator-ca: {}
 
+secrets:
+  scale-token:
+    environment: DUSK_SCALE_TOKEN
+
 services:
   simulator-ca:
     image: smallstep/step-cli:0.31.0
@@ -31,6 +35,11 @@ services:
         condition: service_completed_successfully
     volumes:
       - { type: volume, source: simulator-ca, target: /etc/nightfall/pki/fleet-client-ca.crt, read_only: true, volume: { subpath: fleet-client-ca.crt } }
+
+  postgres:
+    volumes:
+      - ../k8s/overlays/scale/postgres-scale.sh:/docker-entrypoint-initdb.d/20-scale.sh:ro
+      - { type: volume, source: secrets, target: /run/secrets/postgres-scale, read_only: true, volume: { subpath: postgres-scale } }
 
   grafana:
     volumes:
@@ -86,3 +95,39 @@ services:
       - { type: volume, source: simulator-ca, target: /etc/nightfall-simulator/ca.crt, read_only: true, volume: { subpath: ca.crt } }
       - { type: volume, source: simulator-ca, target: /etc/nightfall-simulator/ca.key, read_only: true, volume: { subpath: ca.key } }
       - { type: volume, source: pki, target: /etc/nightfall-simulator/fleet-server-ca.crt, read_only: true, volume: { subpath: trust-anchors/fleet-server-ca.crt } }
+
+  scale-load:
+    profiles: [scale]
+    image: dusk-twilight-scale:dev
+    build: &scale-build
+      context: ../..
+      dockerfile: services/twilight/Dockerfile
+      target: scale
+      args:
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    entrypoint:
+      - /usr/local/bin/twilight-scale
+      - load
+      - --token-file
+      - /run/secrets/scale-token
+      - --links-per-simulator
+      - ${DUSK_SIMULATED_LINKS:-1000}
+      - --real-nodes
+    networks: [stack]
+    secrets: [scale-token]
+
+  scale-report:
+    profiles: [scale]
+    image: dusk-twilight-scale:dev
+    build: *scale-build
+    entrypoint:
+      - /usr/local/bin/twilight-scale
+      - report
+      - --postgres
+      - postgres://scale@postgres:5432/inventory?sslmode=disable&passfile=/run/secrets/postgres-scale/pgpass
+      - --clickhouse-password-file
+      - /run/secrets/clickhouse-grafana/password
+    networks: [stack]
+    volumes:
+      - { type: volume, source: secrets, target: /run/secrets/postgres-scale, read_only: true, volume: { subpath: postgres-scale } }
+      - { type: volume, source: secrets, target: /run/secrets/clickhouse-grafana, read_only: true, volume: { subpath: clickhouse-grafana } }
