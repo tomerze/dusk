@@ -558,6 +558,17 @@ func (store *Store) deliver(operation context.Context, target *queue, claimed gr
 	if claimed.count == 1 {
 		fields = append(fields, "alert_id", message.alert.ID)
 	}
+	var deliveryFailure deliveryError
+	limited := errors.As(failure, &deliveryFailure) && deliveryFailure.limited
+	delay := max(backoff(claimed.attempts), deliveryFailure.after)
+	if limited {
+		if _, paused := store.pool.Exec(recording, `update alert_receivers set paused_until = greatest(paused_until, now() + make_interval(secs => $2)) where name = $1`,
+			target.name, delay.Seconds()); paused != nil {
+			store.logger.Warn("a receiver that answered 429 was not paused", "receiver", target.name, "error", paused)
+		} else {
+			store.logger.Warn("alert receiver answered 429; pausing it", "receiver", target.name, "pause_seconds", int(delay.Seconds()))
+		}
+	}
 	if heldBack {
 		if _, released := store.pool.Exec(recording, `update alert_deliveries set lease = null, leased_by = null, leased_until = null, attempts = attempts - 1
 			where lease = $1`, claimed.lease); released != nil {
@@ -574,20 +585,17 @@ func (store *Store) deliver(operation context.Context, target *queue, claimed gr
 		}
 		return
 	}
-	var deliveryFailure deliveryError
 	var rows pgx.Rows
 	var record error
-	var delay time.Duration
 	switch {
 	case failure == nil:
 		rows, record = store.pool.Query(recording, `update alert_deliveries set state = 'delivered', delivered_at = now(), last_error = null,
 			lease = null, leased_by = null, leased_until = null where lease = $1 returning state`, claimed.lease)
-	case errors.As(failure, &deliveryFailure) && deliveryFailure.permanent:
+	case deliveryFailure.permanent:
 		fields = append(fields, "error", deliveryFailure.message)
 		rows, record = store.pool.Query(recording, `update alert_deliveries set state = 'failed', last_error = $2, lease = null, leased_by = null, leased_until = null
 			where lease = $1 returning state`, claimed.lease, deliveryFailure.message)
 	default:
-		delay = max(backoff(claimed.attempts), deliveryFailure.after)
 		reason := printable(failure.Error())
 		fields = append(fields, "error", reason, "retry_in_seconds", int(delay.Seconds()))
 		rows, record = store.pool.Query(recording, `update alert_deliveries set last_error = $2, lease = null, leased_by = null, leased_until = null,
@@ -602,14 +610,6 @@ func (store *Store) deliver(operation context.Context, target *queue, claimed gr
 			outcomes[state]++
 			return nil
 		})
-	}
-	if deliveryFailure.limited && record == nil {
-		if _, paused := store.pool.Exec(recording, `update alert_receivers set paused_until = greatest(paused_until, now() + make_interval(secs => $2)) where name = $1`,
-			target.name, delay.Seconds()); paused != nil {
-			store.logger.Warn("a receiver that answered 429 was not paused", "receiver", target.name, "error", paused)
-		} else {
-			store.logger.Warn("alert receiver answered 429; pausing it", "receiver", target.name, "pause_seconds", int(delay.Seconds()))
-		}
 	}
 	switch {
 	case record != nil:
