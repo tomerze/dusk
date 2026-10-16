@@ -51,7 +51,7 @@ cd infra/compose
 export GIT_REV=$(git rev-parse HEAD)
 docker compose run --rm secrets-init
 export DUSK_FLEET_TOKEN=$(docker compose run --rm --no-deps --entrypoint cat secrets-init /secrets/fleet-token/fleet-token)
-docker compose build
+DUSK_FLEET_SHA256=$(printf '%s' "$DUSK_FLEET_TOKEN" | sha256sum | cut -d ' ' -f 1) docker compose build
 docker compose up -d
 ```
 
@@ -62,6 +62,21 @@ among them, and the node image compiles that token in: compose hands
 never a build argument, an environment variable or part of the image's history.
 The node binary in the image carries it, so whoever holds the image holds the
 token. The node build stops when the token is missing.
+
+Docker's build cache does not record the value of a build secret, so the node
+build also takes the token's SHA-256 as the build argument `FLEET_SHA256`,
+from `DUSK_FLEET_SHA256`: a build with another token compiles a new node
+instead of reusing the one compiled with the previous token, and a build with
+the same token reuses it. The digest decides which compiled node Docker reuses,
+so compute it from the token on the `docker compose build` line, as above, and
+do not export it, where it can outlive the token it was computed from. A build
+that compiles the node stops when the digest is not the token's.
+
+Compose tags the node image after the compose project, `dusk-node:<project>`
+(`dusk-node:dusk-stack` by default), since the image carries that project's
+fleet token and nightfall addresses: a second project on the same machine,
+`docker compose -p <name>`, builds and runs its own node image,
+`dusk-node:<name>`, never one another project built.
 
 On a machine you share, `CARGO_BUILD_JOBS` limits the Rust builds'
 parallelism and `DUSK_BUILD_CPUSET` (a CPU list such as `0-11`) keeps the
@@ -145,6 +160,7 @@ Every setting is an environment variable read by `docker compose`:
 |----------|---------|--------------|
 | `GIT_REV` | none | The revision the images are built from. Required to build. |
 | `DUSK_FLEET_TOKEN` | none | The fleet token compiled into the node image. Required to build the node image. |
+| `DUSK_FLEET_SHA256` | none | The SHA-256 of `DUSK_FLEET_TOKEN`, as 64 lowercase hex digits, set on the `docker compose build` line. Required to build the node image. |
 | `CARGO_BUILD_JOBS` | `default` | Rust build parallelism. |
 | `DUSK_BUILD_CPUSET` | none | The CPUs the compiles run on, as a list such as `0-11`. |
 | `DUSK_DOMAIN` | `dusk.test` | The domain in nightfall's names: `fleet.<domain>`, `provision.<domain>`, `<namespace>.fleet.<domain>`. Set before the first start; the certificates are issued once. |
@@ -352,21 +368,25 @@ reached through its node port. Nodes outside the cluster dial that port on
 the kind node that runs `nightfall-0` (the Service keeps
 `externalTrafficPolicy: Local`, so only that node answers). Find both, then
 build the node image with `FLEET` and `PROVISION` set to names that resolve
-to that node, and run the nodes on the `kind` Docker network:
+to that node, tagged after the cluster, and run the nodes on the `kind` Docker
+network:
 
 ```bash
 kubectl -n dusk get service nightfall -o jsonpath='{.spec.ports[0].nodePort}'
 kubectl -n dusk get pod nightfall-0 -o jsonpath='{.status.hostIP}'
-docker build -f infra/node/Dockerfile --build-arg GIT_REV=$(git rev-parse HEAD) \
+fleet_token=$(kubectl -n dusk get secret fleet-token -o jsonpath='{.data.fleet-token}' | base64 --decode)
+DUSK_FLEET_TOKEN=$fleet_token docker build -f infra/node/Dockerfile --build-arg GIT_REV=$(git rev-parse HEAD) \
   --build-arg FLEET=fleet.dusk.test:<node port> --build-arg PROVISION=provision.dusk.test:<node port> \
-  --secret id=fleet-token,env=DUSK_FLEET_TOKEN -t dusk-node:dev .
+  --build-arg FLEET_SHA256=$(printf '%s' "$fleet_token" | sha256sum | cut -d ' ' -f 1) \
+  --secret id=fleet-token,env=DUSK_FLEET_TOKEN -t dusk-node:kind-dusk .
 docker run -d --network kind --add-host fleet.dusk.test:<host ip> \
-  --add-host provision.dusk.test:<host ip> dusk-node:dev
+  --add-host provision.dusk.test:<host ip> dusk-node:kind-dusk
 ```
 
-The fleet token is the one in the cluster's `fleet-token` Secret, and the
-node's `--ca` is the fleet-server CA in the `dusk-trust-anchors` ConfigMap
-(see Node images below).
+The fleet token is the one in the cluster's `fleet-token` Secret, set for
+this one build so that a `DUSK_FLEET_TOKEN` exported for a compose project is
+neither used here nor replaced, and the node's `--ca` is the fleet-server CA in
+the `dusk-trust-anchors` ConfigMap (see Node images below).
 
 If `kind load docker-image` fails on an image with `content digest ... not
 found` (Docker's containerd image store with a multi-platform image), import
@@ -628,12 +648,15 @@ A node that dials out is built for one Dusk stack: its init script names
 nightfall's fleet and provisioning addresses, and dusk_core compiles in the
 fleet token it enrolls with. Build it from the repository root with the token
 from the `fleet-token` Secret, passed as a build secret so that it is never a
-build argument or recorded in the image's history:
+build argument or recorded in the image's history, and with its SHA-256 as the
+build argument `FLEET_SHA256`, so that a build with another token
+compiles a new node instead of reusing one compiled with the previous token:
 
 ```bash
 export DUSK_FLEET_TOKEN=$(kubectl -n dusk get secret fleet-token -o jsonpath='{.data.fleet-token}' | base64 --decode)
 docker build -f infra/node/Dockerfile --build-arg GIT_REV=$(git rev-parse HEAD) \
   --build-arg FLEET=fleet.dusk.example:443 --build-arg PROVISION=provision.dusk.example:443 \
+  --build-arg FLEET_SHA256=$(printf '%s' "$DUSK_FLEET_TOKEN" | sha256sum | cut -d ' ' -f 1) \
   --secret id=fleet-token,env=DUSK_FLEET_TOKEN -t dusk-node .
 ```
 
