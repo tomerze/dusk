@@ -21,7 +21,10 @@ rule, whose notifications link the page.
 | `process_after_result` | high | twilight reconcile | [Calls after the result](process_after_result.md) |
 | `process_shape` | high | twilight reconcile | [Unexpected process shape](process_shape.md) |
 | `quarantine_override` | high | twilight reconcile | [Quarantine override](quarantine_override.md) |
-| `enrollment_rate` | high | twilight leader | [Enrollment spike](enrollment_rate.md) |
+| `enrollment_rate` | high, then critical | twilight leader | [Enrollment spike](enrollment_rate.md) |
+| `denied_enrollments_spike` | high, then critical | twilight leader | [Refused enrollment spike](denied_enrollments_spike.md) |
+| `enrollment_from_new_network_burst` | high, then critical | twilight leader | [Enrollments from new networks](enrollment_from_new_network_burst.md) |
+| `credential_quota_reached` | high, then critical | twilight leader | [Credential cap reached](credential_quota_reached.md) |
 | `campaign_paused_by_gate` | high | twilight leader | [Campaign paused by its gate](campaign_paused_by_gate.md) |
 | `campaign_failed_by_policy` | high | twilight leader | [Campaign failed by its policy](campaign_failed_by_policy.md) |
 | `campaign_conflict` | medium | twilight leader | [Campaign conflict](campaign_conflict.md) |

@@ -119,6 +119,9 @@ nav:
           - Unexpected process shape: stack/runbooks/process_shape.md
           - Quarantine override: stack/runbooks/quarantine_override.md
           - Enrollment spike: stack/runbooks/enrollment_rate.md
+          - Refused enrollment spike: stack/runbooks/denied_enrollments_spike.md
+          - Enrollments from new networks: stack/runbooks/enrollment_from_new_network_burst.md
+          - Credential cap reached: stack/runbooks/credential_quota_reached.md
           - Campaign paused by its gate: stack/runbooks/campaign_paused_by_gate.md
           - Campaign failed by its policy: stack/runbooks/campaign_failed_by_policy.md
           - Campaign conflict: stack/runbooks/campaign_conflict.md

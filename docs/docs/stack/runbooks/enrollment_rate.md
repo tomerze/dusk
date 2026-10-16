@@ -1,20 +1,30 @@
 # Enrollment spike
 
-Kind `enrollment_rate`, severity `high`. The twilight leader counts the records
-nightfall writes to `dusk.enrollments` per minute - every assign, enroll and
-renew, whatever its outcome - and raises this alert when one minute holds more
-than `alerts.enrollment_rate_per_minute` (600 by default). The detail carries
-`message`, `minute` (the first minute over the threshold) and `threshold`. One
-alert stays open at a time: a later minute over the threshold counts in
-`occurrences` and moves `last_seen_at`, and leaves `minute` as it was. It never
-resolves by itself.
+Kind `enrollment_rate`, severity `high`, then `critical` once its count doubles.
+The twilight leader counts the new
+installations nightfall issues - an `enroll` that was `issued`, never a renewal
+or a refusal - over the last five minutes (`alerts.enrollments.window_seconds`),
+for the whole fleet, for each credential and for each /24 or /48 network, and
+raises this alert when a count passes its threshold: the larger of its floor
+(`alerts.enrollments.issued_floors`: 100, 30 and 20) and four times
+(`baseline_factor`) the average for the same hour over the last seven days. Each
+has its own fingerprint: `enrollment_rate:fleet`,
+`enrollment_rate:credential:<credential_kind>:<credential>`,
+`enrollment_rate:network:<network>`, and `enrollment_rate:network` for the
+networks beyond the 10 that have an alert of their own (see
+[enrollment alerts](../twilight.md#enrollment-alerts)). The detail carries the
+`scope`, the `count`, the `threshold`, the `baseline`, the credential or the
+network, and the networks and credentials the count came from.
 
 ## What it means
 
-Many enrollment calls at once. A fleet token extracted from one node enrolls as
-many nodes as its holder likes, from as many addresses as they like
-([the fleet token](../security.md#the-fleet-token)); a large rollout, a burst of
-renewals or a flood of refused attempts looks the same in the count.
+Many new installations at once, with one credential, from one network, or
+across the fleet. A fleet token or an install token key extracted from one node
+enrolls as many nodes as its holder likes, from as many addresses as they like,
+up to the credential's `max_installations`
+([the fleet token](../security.md#the-fleet-token)); a large rollout looks the
+same in the count. Refused attempts raise
+[Refused enrollment spike](denied_enrollments_spike.md) instead.
 
 ## How to confirm
 
@@ -24,72 +34,44 @@ Read the alert:
 curl -fsS -H "Authorization: Bearer $TOKEN" "$TWILIGHT/api/v1/alerts/<id>"
 ```
 
-What the calls were, minute by minute, in ClickHouse
+Where one credential's installations came from, in ClickHouse
 ([where to run SQL](index.md#sql)); `credential_ref` names a fleet token by its
-entry's `name` and an install token by its subject:
+entry's `name`, and `credential_issuer` an install token key by its id:
 
 ```sql
-SELECT toStartOfMinute(time) AS minute, operation, outcome, credential_kind, credential_ref, count() AS calls
+SELECT remote_address, count() AS installations, uniqExact(hardware_fingerprint_hash) AS fingerprints, min(time) AS first_installation, max(time) AS last_installation
 FROM dusk.enrollments
-WHERE time > now() - INTERVAL 2 HOUR
-GROUP BY minute, operation, outcome, credential_kind, credential_ref
-ORDER BY minute, calls DESC
-```
-
-Where they came from, for one credential:
-
-```sql
-SELECT remote_address, count() AS calls, uniqExact(hardware_fingerprint_hash) AS fingerprints, min(time) AS first_call, max(time) AS last_call
-FROM dusk.enrollments
-WHERE credential_ref = '<credential_ref>' AND operation = 'enroll' AND outcome = 'issued'
+WHERE credential_ref = '<credential>' AND operation = 'enroll' AND outcome = 'issued'
   AND time > now() - INTERVAL 1 DAY
 GROUP BY remote_address
-ORDER BY calls DESC
+ORDER BY installations DESC
 LIMIT 50
 ```
 
-* Mostly `renew`: nodes renewing their certificates together. Nothing new
-  joined.
-* Mostly `denied` or `rate_limited`: refused attempts; `reason` says why
-  ([what is recorded](../provisioning.md#what-is-recorded)).
-* `enroll` with `issued` for one fleet token, from addresses and fingerprints
-  that match no rollout you know of: a leaked token.
+* Installations from the networks and at the pace a rollout explains: the
+  rollout. Nothing to do; the alert resolves itself.
+* Installations nobody can account for, often from hosting providers'
+  networks, beside an `enrollment_from_new_network_burst` or
+  `credential_quota_reached` alert for the same credential: a leaked credential.
 
 ## What to do
 
-For a leaked fleet token, contain first:
+For a leaked credential, follow
+[When a credential leaks](../provisioning.md#when-a-credential-leaks):
 
-1. Retire the token: remove its entry from `fleet-tokens.toml` in the Secret
-   `fleet-token` and restart nightfall one instance at a time
-   ([fleet tokens](../provisioning.md#fleet-tokens)):
-
-    ```sh
-    kubectl -n dusk rollout restart statefulset nightfall
-    ```
-
-    This stops new enrollments with it, also those of the genuine nodes built
-    with it; each instance drains for up to `drain_seconds` (300) before it
-    stops.
-
-2. Revoke the installations it enrolled since the leak, which keep renewing
-   otherwise, leaving out the ones you can account for. List them:
-
-    ```sql
-    SELECT DISTINCT device_id, installation_id
-    FROM dusk.enrollments
-    WHERE credential_ref = '<credential_ref>' AND operation = 'enroll' AND outcome = 'issued'
-      AND time > parseDateTime64BestEffort('<first suspicious enrollment>', 9, 'UTC')
-    ```
-
-    and revoke each (`admin`):
+1. Retire it: `retired = true` on its entry in `fleet_tokens_file`, or remove
+   the key from `install_token_keys`. Every nightfall instance refuses it within
+   30 seconds of the file changing, with no restart.
+2. Revoke what it enrolled since the leak, in one request (`admin`). Count first:
 
     ```sh
     curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-      -d '{"lifecycle": "revoked", "reason": "enrolled with leaked fleet token <credential_ref>"}' \
-      "$TWILIGHT/api/v1/nodes/<device_id>/<installation_id>/lifecycle"
+      -d '{"credential_kind": "fleet_token", "credential": "<credential>", "enrolled_after": "<first suspicious enrollment>", "reason": "leaked fleet token", "dry_run": true}' \
+      "$TWILIGHT/api/v1/revocations"
     ```
 
-3. Ship nodes built with a new token ([node images](../deploy.md#node-images)).
+    then send the same request without `dry_run`.
+3. Ship nodes built with a new token, with a `max_installations`.
 
 Until they are revoked, nodes enrolled with it join campaigns their reported
 facts match and count in those campaigns' health gates: pause campaigns whose
@@ -97,7 +79,12 @@ gates they could sway.
 
 ## How to resolve
 
-Resolve it by hand once the burst is explained, or the token retired and its
-nodes revoked: *Resolve* on the UI's Alerts page, or
-`POST /api/v1/alerts/<id>/resolve`. The next minute over the threshold after
-that opens a new alert.
+twilight resolves the alert itself once the count stays at or below its
+threshold for `alerts.enrollments.resolve_after_seconds` (15 minutes by
+default). The first time the count reaches `escalation_factor` (2) times the
+count the alert opened with, twilight raises it to `critical`: receivers get it
+again as `re_escalated`, PagerDuty pages again, and its acknowledgement is
+cleared. Each later time the count doubles again, its detail takes the new
+count, which sends nothing. Resolved by hand - *Resolve* on the UI's Alerts page, or
+`POST /api/v1/alerts/<id>/resolve` - it is noticed within 15 seconds; twilight
+then counts from zero, and the next count above the threshold opens a new alert.
