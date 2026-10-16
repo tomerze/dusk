@@ -430,3 +430,13 @@ jobs:
           --build-arg CPUSET=
           --tag dusk-nightfall-simulator:ci
           .
+
+      - name: docker build (dusk-twilight-scale)
+        if: matrix.image == 'dusk-twilight'
+        run: >
+          docker build
+          --file services/twilight/Dockerfile
+          --target scale
+          --build-arg CPUSET=
+          --tag dusk-twilight-scale:ci
+          .
