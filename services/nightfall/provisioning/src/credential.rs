@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use serde::Deserialize;
@@ -16,6 +16,7 @@ const MAXIMUM_CLAIM_BYTES: usize = 256;
 pub enum CredentialKind {
     FleetToken,
     InstallToken,
+    ProvisionToken,
     Certificate,
 }
 
@@ -24,6 +25,7 @@ impl CredentialKind {
         match self {
             CredentialKind::FleetToken => "fleet_token",
             CredentialKind::InstallToken => "install_token",
+            CredentialKind::ProvisionToken => "provision_token",
             CredentialKind::Certificate => "certificate",
         }
     }
@@ -179,6 +181,22 @@ impl HashedTokens {
             found = if matches { Some(token) } else { found };
         }
         found
+    }
+
+    pub fn shared_value<'tokens>(
+        &'tokens self,
+        other: &'tokens HashedTokens,
+    ) -> Option<(&'tokens str, &'tokens str)> {
+        let names: HashMap<&[u8; 32], &str> = other
+            .tokens
+            .iter()
+            .map(|token| (&token.value_sha256, token.name.as_str()))
+            .collect();
+        self.tokens.iter().find_map(|token| {
+            names
+                .get(&token.value_sha256)
+                .map(|other_name| (token.name.as_str(), *other_name))
+        })
     }
 }
 
@@ -369,6 +387,26 @@ mod tests {
         for text in refused {
             assert!(HashedTokens::from_toml(&text).is_err(), "accepted {text}");
         }
+    }
+
+    #[test]
+    fn names_the_entries_two_tables_share_a_value_between() {
+        let fleet = HashedTokens::from_toml(&tokens_file()).unwrap();
+        let provision = HashedTokens::from_toml(&format!(
+            "[[token]]\nname = \"provision-2026-10\"\nvalue_sha256 = \"{}\"\n\n[[token]]\nname = \"kept-lab\"\nvalue_sha256 = \"{}\"\n",
+            hex::encode(sha256(b"provision secret")),
+            hex::encode(sha256(b"lab secret"))
+        ))
+        .unwrap();
+        assert_eq!(provision.shared_value(&fleet), Some(("kept-lab", "lab")));
+        assert_eq!(fleet.shared_value(&provision), Some(("lab", "kept-lab")));
+        assert_eq!(fleet.shared_value(&HashedTokens::default()), None);
+        let disjoint = HashedTokens::from_toml(&format!(
+            "[[token]]\nname = \"provision-2026-10\"\nvalue_sha256 = \"{}\"\n",
+            hex::encode(sha256(b"provision secret"))
+        ))
+        .unwrap();
+        assert_eq!(disjoint.shared_value(&fleet), None);
     }
 
     #[test]

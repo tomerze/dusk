@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -81,6 +81,7 @@ impl Refusal {
 enum Presented {
     FleetToken(String),
     InstallToken(String),
+    ProvisionToken(String),
     Certificate,
 }
 
@@ -102,12 +103,18 @@ impl Presented {
                 *kind = CredentialKind::Certificate;
                 Presented::Certificate
             }
+            credential::ProvisionToken(token) => {
+                *kind = CredentialKind::ProvisionToken;
+                Presented::ProvisionToken(String::from(token?.to_str()?))
+            }
         })
     }
 
     fn secret(&self) -> &[u8] {
         match self {
-            Presented::FleetToken(token) | Presented::InstallToken(token) => token.as_bytes(),
+            Presented::FleetToken(token)
+            | Presented::InstallToken(token)
+            | Presented::ProvisionToken(token) => token.as_bytes(),
             Presented::Certificate => &[],
         }
     }
@@ -265,6 +272,7 @@ struct Assigned {
 pub struct Provisioning {
     instance: String,
     fleet_tokens: RwLock<Arc<HashedTokens>>,
+    provision_tokens: RwLock<Arc<HashedTokens>>,
     install_token_keys: RwLock<Arc<InstallTokenKeys>>,
     device_id_key: DeviceIdKey,
     endorsement_roots: Vec<TrustAnchor<'static>>,
@@ -298,13 +306,28 @@ fn current<T>(shared: &RwLock<Arc<T>>) -> Arc<T> {
         .clone()
 }
 
+fn write<T>(shared: &RwLock<Arc<T>>) -> std::sync::RwLockWriteGuard<'_, Arc<T>> {
+    shared
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn replace<T>(shared: &RwLock<Arc<T>>, value: T) -> Arc<T> {
-    std::mem::replace(
-        &mut *shared
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()),
-        Arc::new(value),
-    )
+    std::mem::replace(&mut *write(shared), Arc::new(value))
+}
+
+fn overlap(tokens: &HashedTokens, kind: CredentialKind, other: &HashedTokens) -> Option<String> {
+    let other_kind = match kind {
+        CredentialKind::FleetToken => CredentialKind::ProvisionToken,
+        _ => CredentialKind::FleetToken,
+    };
+    tokens.shared_value(other).map(|(name, other_name)| {
+        format!(
+            "{} entry {name} has the value of {} entry {other_name}",
+            kind.name(),
+            other_kind.name()
+        )
+    })
 }
 
 fn quota_unavailable(unavailable: QuotaUnavailable) -> Refusal {
@@ -364,11 +387,20 @@ impl Provisioning {
                 config.certificate_lifetime
             ));
         }
+        if let Some(overlap) = overlap(
+            &config.provision_tokens,
+            CredentialKind::ProvisionToken,
+            &config.fleet_tokens,
+        ) {
+            return Err(overlap);
+        }
         let now = Instant::now();
         info!(
             instance = %config.instance,
             fleet_tokens = config.fleet_tokens.len(),
             retired_fleet_tokens = config.fleet_tokens.retired(),
+            provision_tokens = config.provision_tokens.len(),
+            retired_provision_tokens = config.provision_tokens.retired(),
             install_token_keys = config.install_token_keys.len(),
             tpm_endorsement_roots = endorsement_roots.len(),
             "provisioning ready"
@@ -376,6 +408,7 @@ impl Provisioning {
         Ok(Arc::new(Provisioning {
             instance: config.instance,
             fleet_tokens: RwLock::new(Arc::new(config.fleet_tokens)),
+            provision_tokens: RwLock::new(Arc::new(config.provision_tokens)),
             install_token_keys: RwLock::new(Arc::new(config.install_token_keys)),
             device_id_key: config.device_id_key,
             endorsement_roots,
@@ -406,7 +439,15 @@ impl Provisioning {
         self.trust.clone()
     }
 
-    pub fn replace_fleet_tokens(&self, tokens: HashedTokens) {
+    pub fn replace_fleet_tokens(&self, tokens: HashedTokens) -> Result<(), String> {
+        self.replace_tokens(CredentialKind::FleetToken, tokens)
+    }
+
+    pub fn replace_provision_tokens(&self, tokens: HashedTokens) -> Result<(), String> {
+        self.replace_tokens(CredentialKind::ProvisionToken, tokens)
+    }
+
+    fn replace_tokens(&self, kind: CredentialKind, tokens: HashedTokens) -> Result<(), String> {
         let named = |tokens: &HashedTokens| -> std::collections::BTreeMap<String, (Option<String>, Option<u64>, bool)> {
             tokens
                 .iter()
@@ -421,7 +462,18 @@ impl Provisioning {
         let after = named(&tokens);
         let count = tokens.len();
         let retired_count = tokens.retired();
-        let before = named(&replace(&self.fleet_tokens, tokens));
+        let mut fleet_tokens = write(&self.fleet_tokens);
+        let mut provision_tokens = write(&self.provision_tokens);
+        let (table, other) = match kind {
+            CredentialKind::FleetToken => (&mut *fleet_tokens, &*provision_tokens),
+            _ => (&mut *provision_tokens, &*fleet_tokens),
+        };
+        if let Some(overlap) = overlap(&tokens, kind, other) {
+            return Err(overlap);
+        }
+        let previous = std::mem::replace(table, Arc::new(tokens));
+        drop((fleet_tokens, provision_tokens));
+        let before = named(&previous);
         let added: Vec<&String> = after
             .keys()
             .filter(|name| !before.contains_key(*name))
@@ -441,14 +493,16 @@ impl Provisioning {
             .map(|(name, _)| name)
             .collect();
         info!(
-            fleet_tokens = count,
-            retired_fleet_tokens = retired_count,
+            credential_kind = kind.name(),
+            entries = count,
+            retired_entries = retired_count,
             ?added,
             ?removed,
             ?retired,
             ?changed,
-            "fleet tokens reloaded"
+            "token entries reloaded"
         );
+        Ok(())
     }
 
     pub fn replace_install_token_keys(&self, keys: InstallTokenKeys) {
@@ -465,20 +519,31 @@ impl Provisioning {
     }
 
     pub fn quota_limits(&self) -> Vec<(CredentialName, u64)> {
-        let mut limits: Vec<(CredentialName, u64)> = current(&self.fleet_tokens)
-            .iter()
-            .filter_map(|token| {
-                token.max_installations.map(|limit| {
-                    (
-                        CredentialName {
-                            kind: CredentialKind::FleetToken,
-                            name: token.name.clone(),
-                        },
-                        limit,
-                    )
+        let mut limits: Vec<(CredentialName, u64)> = [
+            (CredentialKind::FleetToken, current(&self.fleet_tokens)),
+            (
+                CredentialKind::ProvisionToken,
+                current(&self.provision_tokens),
+            ),
+        ]
+        .iter()
+        .flat_map(|(kind, tokens)| {
+            tokens
+                .iter()
+                .filter_map(|token| {
+                    token.max_installations.map(|limit| {
+                        (
+                            CredentialName {
+                                kind: *kind,
+                                name: token.name.clone(),
+                            },
+                            limit,
+                        )
+                    })
                 })
-            })
-            .collect();
+                .collect::<Vec<_>>()
+        })
+        .collect();
         limits.extend(
             current(&self.install_token_keys)
                 .limits()
@@ -641,6 +706,45 @@ impl Provisioning {
             })
     }
 
+    fn verify_hashed_token(
+        &self,
+        tokens: &HashedTokens,
+        kind: CredentialKind,
+        label: &str,
+        token: &str,
+        address: IpAddr,
+        attempt: &mut Attempt,
+    ) -> Result<Verified, Refusal> {
+        match tokens.find(token) {
+            Some(entry) if entry.retired => {
+                attempt.event.credential_ref = Some(entry.name.clone());
+                attempt.event.tenant = entry.tenant.clone();
+                Err(Refusal::denied(
+                    "credential_retired",
+                    format!("{label} {} is retired", entry.name),
+                    "credential retired",
+                ))
+            }
+            Some(entry) => Ok(Verified {
+                credential: CredentialName {
+                    kind,
+                    name: entry.name.clone(),
+                },
+                max_installations: entry.max_installations,
+                tenant: entry.tenant.clone(),
+                install_token: None,
+            }),
+            None => {
+                self.penalty_box.credential_failed(address);
+                Err(Refusal::denied(
+                    "invalid_credential",
+                    format!("no {label} entry matches"),
+                    "invalid credential",
+                ))
+            }
+        }
+    }
+
     fn verify_credential(
         &self,
         connection: &ConnectionInfo,
@@ -649,34 +753,22 @@ impl Provisioning {
     ) -> Result<Verified, Refusal> {
         let address = connection.remote_address.ip();
         let verified = match presented {
-            Presented::FleetToken(token) => match current(&self.fleet_tokens).find(token) {
-                Some(entry) if entry.retired => {
-                    attempt.event.credential_ref = Some(entry.name.clone());
-                    attempt.event.tenant = entry.tenant.clone();
-                    return Err(Refusal::denied(
-                        "credential_retired",
-                        format!("fleet token {} is retired", entry.name),
-                        "credential retired",
-                    ));
-                }
-                Some(entry) => Verified {
-                    credential: CredentialName {
-                        kind: CredentialKind::FleetToken,
-                        name: entry.name.clone(),
-                    },
-                    max_installations: entry.max_installations,
-                    tenant: entry.tenant.clone(),
-                    install_token: None,
-                },
-                None => {
-                    self.penalty_box.credential_failed(address);
-                    return Err(Refusal::denied(
-                        "invalid_credential",
-                        "no fleet token entry matches",
-                        "invalid credential",
-                    ));
-                }
-            },
+            Presented::FleetToken(token) => self.verify_hashed_token(
+                &current(&self.fleet_tokens),
+                CredentialKind::FleetToken,
+                "fleet token",
+                token,
+                address,
+                attempt,
+            )?,
+            Presented::ProvisionToken(token) => self.verify_hashed_token(
+                &current(&self.provision_tokens),
+                CredentialKind::ProvisionToken,
+                "provision token",
+                token,
+                address,
+                attempt,
+            )?,
             Presented::InstallToken(token) => {
                 match current(&self.install_token_keys).verify(token, unix_now()) {
                     Ok(install_token) => Verified {
@@ -701,7 +793,7 @@ impl Provisioning {
             Presented::Certificate => {
                 return Err(Refusal::denied(
                     "certificate_credential",
-                    "assign and enroll need a fleet token or an install token",
+                    "assign and enroll need a fleet token, a provision token or an install token",
                     "a certificate is accepted by renew only",
                 ));
             }

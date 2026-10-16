@@ -197,13 +197,16 @@ fn fleet_tokens() -> HashedTokens {
     .unwrap()
 }
 
-async fn harness_with(adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaConfig)) -> Harness {
+async fn configured(
+    adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaConfig),
+) -> (ProvisioningConfig, StepCaConfig, FakeStepCa, EdwardsSigner) {
     let key = SigningKey::from_jwk(&private_jwk()).unwrap();
     let step_ca = FakeStepCa::start(key.public_jwk()).await;
     let installer = EdwardsSigner::new("factory-2026");
     let mut config = ProvisioningConfig {
         instance: String::from("nightfall-0"),
         fleet_tokens: fleet_tokens(),
+        provision_tokens: HashedTokens::default(),
         install_token_keys: InstallTokenKeys::from_json(
             &json!({ "keys": [installer.public_jwk()] }).to_string(),
         )
@@ -229,6 +232,11 @@ async fn harness_with(adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaCo
         timeout: Duration::from_secs(5),
     };
     adjust(&mut config, &mut step_ca_config);
+    (config, step_ca_config, step_ca, installer)
+}
+
+async fn harness_with(adjust: impl FnOnce(&mut ProvisioningConfig, &mut StepCaConfig)) -> Harness {
+    let (config, step_ca_config, step_ca, installer) = configured(adjust).await;
     let events = Arc::new(Recorder::default());
     let states = Arc::new(States::default());
     let penalties = Arc::new(Penalties::default());
@@ -262,6 +270,7 @@ async fn harness() -> Harness {
 enum Credential<'a> {
     Fleet(&'a str),
     Install(&'a str),
+    Provision(&'a str),
     Certificate,
 }
 
@@ -312,6 +321,7 @@ fn set_credential(
     match credential {
         Credential::Fleet(token) => builder.set_fleet_token(token),
         Credential::Install(token) => builder.set_install_token(token),
+        Credential::Provision(token) => builder.set_provision_token(token),
         Credential::Certificate => builder.set_certificate(()),
     }
 }
@@ -1548,14 +1558,17 @@ async fn refuses_a_retired_fleet_token_at_once_and_without_a_penalty() {
     let assigned = assign(&client, Credential::Fleet("retail secret"), &fingerprint)
         .await
         .unwrap();
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[
-        (
-            "retail-eu-2026",
-            "retail secret",
-            "tenant = \"retail-eu\"\nretired = true",
-        ),
-        ("lab", "lab secret", ""),
-    ]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[
+            (
+                "retail-eu-2026",
+                "retail secret",
+                "tenant = \"retail-eu\"\nretired = true",
+            ),
+            ("lab", "lab secret", ""),
+        ]))
+        .unwrap();
     let request = csr(
         &p256(),
         None,
@@ -1592,10 +1605,13 @@ async fn refuses_a_retired_fleet_token_at_once_and_without_a_penalty() {
 async fn takes_added_removed_and_re_tenanted_fleet_tokens_without_a_restart() {
     let harness = harness().await;
     let client = harness.client(ADDRESS, Vec::new());
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[
-        ("retail-eu-2026", "retail secret", "tenant = \"retail-us\""),
-        ("batch-7", "batch secret", "tenant = \"acme\""),
-    ]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[
+            ("retail-eu-2026", "retail secret", "tenant = \"retail-us\""),
+            ("batch-7", "batch secret", "tenant = \"acme\""),
+        ]))
+        .unwrap();
     let issued = enroll_new(&client, Credential::Fleet("batch secret"), [23u8; 32])
         .await
         .unwrap();
@@ -1640,11 +1656,14 @@ async fn counts_what_an_uncapped_token_enrolls_toward_a_cap_set_later() {
     );
     assert_eq!(recorded[0].limit, crate::quota::UNCAPPED);
     assert!(harness.quota.reservations.lock().unwrap().is_empty());
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[(
-        "lab",
-        "lab secret",
-        "max_installations = 1",
-    )]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[(
+            "lab",
+            "lab secret",
+            "max_installations = 1",
+        )]))
+        .unwrap();
     denied_with(
         assign(&client, Credential::Fleet("lab secret"), &[28u8; 32]).await,
         "denied: credential quota reached",
@@ -1655,10 +1674,13 @@ async fn counts_what_an_uncapped_token_enrolls_toward_a_cap_set_later() {
 #[tokio::test]
 async fn caps_the_installations_a_fleet_token_enrolls() {
     let harness = harness().await;
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[
-        ("retail-eu-2026", "retail secret", "tenant = \"retail-eu\""),
-        ("lab", "lab secret", "max_installations = 3"),
-    ]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[
+            ("retail-eu-2026", "retail secret", "tenant = \"retail-eu\""),
+            ("lab", "lab secret", "max_installations = 3"),
+        ]))
+        .unwrap();
     let client = harness.client(ADDRESS, Vec::new());
     for number in 0..2u8 {
         enroll_new(&client, Credential::Fleet("lab secret"), [30 + number; 32])
@@ -1726,11 +1748,14 @@ async fn caps_the_installations_a_fleet_token_enrolls() {
 #[tokio::test]
 async fn gives_back_the_reserved_installation_when_signing_fails() {
     let harness = harness().await;
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[(
-        "lab",
-        "lab secret",
-        "max_installations = 1",
-    )]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[(
+            "lab",
+            "lab secret",
+            "max_installations = 1",
+        )]))
+        .unwrap();
     let client = harness.client(ADDRESS, Vec::new());
     harness.step_ca.behaviour.lock().unwrap().status = Some(500);
     denied_with(
@@ -1752,11 +1777,14 @@ async fn gives_back_the_reserved_installation_when_signing_fails() {
 #[tokio::test]
 async fn gives_back_the_reserved_installation_of_an_enrollment_abandoned_while_signing() {
     let harness = harness().await;
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[(
-        "lab",
-        "lab secret",
-        "max_installations = 1",
-    )]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[(
+            "lab",
+            "lab secret",
+            "max_installations = 1",
+        )]))
+        .unwrap();
     let client = harness.client(ADDRESS, Vec::new());
     harness.step_ca.behaviour.lock().unwrap().delay = Some(Duration::from_secs(5));
     let abandoned = tokio::time::timeout(
@@ -1945,10 +1973,13 @@ async fn caps_the_installations_of_an_install_token_key() {
 #[tokio::test]
 async fn refuses_a_capped_credential_while_its_installations_cannot_be_counted() {
     let harness = harness().await;
-    harness.provisioning.replace_fleet_tokens(tokens_file(&[
-        ("lab", "lab secret", "max_installations = 5"),
-        ("open", "open secret", ""),
-    ]));
+    harness
+        .provisioning
+        .replace_fleet_tokens(tokens_file(&[
+            ("lab", "lab secret", "max_installations = 5"),
+            ("open", "open secret", ""),
+        ]))
+        .unwrap();
     *harness.quota.unavailable.lock().unwrap() = true;
     let client = harness.client(ADDRESS, Vec::new());
     let refused = assign(&client, Credential::Fleet("lab secret"), &[40u8; 32])
@@ -1964,5 +1995,242 @@ async fn refuses_a_capped_credential_while_its_installations_cannot_be_counted()
     enroll_new(&client, Credential::Fleet("open secret"), [41u8; 32])
         .await
         .unwrap();
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn enrolls_a_node_with_a_provision_token() {
+    let harness = harness_with(|config, _| {
+        config.provision_tokens = tokens_file(&[(
+            "retail-eu-2026-10",
+            "provision secret",
+            "tenant = \"retail-eu\"",
+        )]);
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let issued = enroll_new(
+        &client,
+        Credential::Provision("provision secret"),
+        [51u8; 32],
+    )
+    .await
+    .unwrap();
+    assert!(leaf_uris(&issued.chain[0]).contains(&tenant_uri("retail-eu")));
+    let enrolled = harness.events.last();
+    assert_eq!(enrolled.outcome, Outcome::Issued);
+    assert_eq!(enrolled.credential_kind, CredentialKind::ProvisionToken);
+    assert_eq!(
+        enrolled.credential_ref.as_deref(),
+        Some("retail-eu-2026-10")
+    );
+    assert_eq!(enrolled.credential_issuer, None);
+    assert_eq!(enrolled.tenant.as_deref(), Some("retail-eu"));
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn takes_a_provision_token_only_as_a_provision_token() {
+    let harness = harness_with(|config, _| {
+        config.provision_tokens = tokens_file(&[("retail-eu-2026-10", "provision secret", "")]);
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    denied_with(
+        assign(&client, Credential::Fleet("provision secret"), &[52u8; 32]).await,
+        "denied: invalid credential",
+    );
+    assert_eq!(
+        harness.events.last().credential_kind,
+        CredentialKind::FleetToken
+    );
+    denied_with(
+        assign(&client, Credential::Provision("retail secret"), &[53u8; 32]).await,
+        "denied: invalid credential",
+    );
+    let refused = harness.events.last();
+    assert_eq!(refused.credential_kind, CredentialKind::ProvisionToken);
+    assert_eq!(refused.reason.as_deref(), Some("invalid_credential"));
+    assert_eq!(refused.credential_ref, None);
+    assert_eq!(harness.penalties.failures.lock().unwrap().len(), 2);
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn rotates_and_retires_provision_tokens_without_a_restart() {
+    let harness = harness_with(|config, _| {
+        config.provision_tokens = tokens_file(&[("october", "october secret", "")]);
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    let fingerprint = [54u8; 32];
+    let assigned = assign(
+        &client,
+        Credential::Provision("october secret"),
+        &fingerprint,
+    )
+    .await
+    .unwrap();
+    harness
+        .provisioning
+        .replace_provision_tokens(tokens_file(&[
+            ("october", "october secret", ""),
+            ("november", "november secret", ""),
+        ]))
+        .unwrap();
+    enroll_new(
+        &client,
+        Credential::Provision("november secret"),
+        [55u8; 32],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        harness.events.last().credential_ref.as_deref(),
+        Some("november")
+    );
+    enroll_new(&client, Credential::Provision("october secret"), [56u8; 32])
+        .await
+        .unwrap();
+    harness
+        .provisioning
+        .replace_provision_tokens(tokens_file(&[
+            ("october", "october secret", "retired = true"),
+            ("november", "november secret", ""),
+        ]))
+        .unwrap();
+    let request = csr(
+        &p256(),
+        None,
+        &uris(&assigned.device_id, &assigned.installation_id),
+    );
+    denied_with(
+        enroll(
+            &client,
+            Credential::Provision("october secret"),
+            &fingerprint,
+            &assigned.challenge,
+            &request,
+        )
+        .await,
+        "denied: credential retired",
+    );
+    denied_with(
+        assign(
+            &client,
+            Credential::Provision("october secret"),
+            &[57u8; 32],
+        )
+        .await,
+        "denied: credential retired",
+    );
+    let refused = harness.events.last();
+    assert_eq!(refused.reason.as_deref(), Some("credential_retired"));
+    assert_eq!(refused.credential_ref.as_deref(), Some("october"));
+    assert!(harness.penalties.failures.lock().unwrap().is_empty());
+    enroll_new(
+        &client,
+        Credential::Provision("november secret"),
+        [58u8; 32],
+    )
+    .await
+    .unwrap();
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn refuses_provision_tokens_that_share_a_value_with_a_fleet_token() {
+    let (config, step_ca_config, _step_ca, _installer) = configured(|config, _| {
+        config.provision_tokens = tokens_file(&[("copied", "lab secret", "")]);
+    })
+    .await;
+    let refused = Provisioning::new(
+        config,
+        StepCaClient::new(step_ca_config).unwrap(),
+        Arc::new(Recorder::default()),
+        Arc::new(States::default()),
+        Arc::new(Penalties::default()),
+        Arc::new(Quota::default()),
+    );
+    assert_eq!(
+        refused.err().as_deref(),
+        Some("provision_token entry copied has the value of fleet_token entry lab")
+    );
+
+    let harness = harness_with(|config, _| {
+        config.provision_tokens = tokens_file(&[("october", "october secret", "")]);
+    })
+    .await;
+    assert_eq!(
+        harness
+            .provisioning
+            .replace_provision_tokens(tokens_file(&[
+                ("october", "october secret", ""),
+                ("copied", "retail secret", ""),
+            ]))
+            .err()
+            .as_deref(),
+        Some("provision_token entry copied has the value of fleet_token entry retail-eu-2026")
+    );
+    assert_eq!(
+        harness
+            .provisioning
+            .replace_fleet_tokens(tokens_file(&[
+                ("lab", "lab secret", ""),
+                ("copied", "october secret", ""),
+            ]))
+            .err()
+            .as_deref(),
+        Some("fleet_token entry copied has the value of provision_token entry october")
+    );
+    let client = harness.client(ADDRESS, Vec::new());
+    enroll_new(&client, Credential::Provision("october secret"), [59u8; 32])
+        .await
+        .unwrap();
+    enroll_new(&client, Credential::Fleet("retail secret"), [60u8; 32])
+        .await
+        .unwrap();
+    denied_with(
+        assign(&client, Credential::Fleet("october secret"), &[61u8; 32]).await,
+        "denied: invalid credential",
+    );
+    assert_contract(&harness.events);
+}
+
+#[tokio::test]
+async fn caps_each_provision_token_entry_on_its_own() {
+    let harness = harness_with(|config, _| {
+        config.provision_tokens = tokens_file(&[
+            ("october", "october secret", "max_installations = 1"),
+            ("november", "november secret", ""),
+        ]);
+    })
+    .await;
+    let client = harness.client(ADDRESS, Vec::new());
+    enroll_new(&client, Credential::Provision("october secret"), [62u8; 32])
+        .await
+        .unwrap();
+    denied_with(
+        assign(
+            &client,
+            Credential::Provision("october secret"),
+            &[63u8; 32],
+        )
+        .await,
+        "denied: credential quota reached",
+    );
+    enroll_new(
+        &client,
+        Credential::Provision("november secret"),
+        [64u8; 32],
+    )
+    .await
+    .unwrap();
+    let october = CredentialName {
+        kind: CredentialKind::ProvisionToken,
+        name: String::from("october"),
+    };
+    assert_eq!(harness.quota.used(&october), Ok(1));
+    assert_eq!(harness.provisioning.quota_limits(), vec![(october, 1)]);
     assert_contract(&harness.events);
 }

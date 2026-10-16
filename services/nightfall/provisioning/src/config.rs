@@ -50,6 +50,7 @@ pub fn load_certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>, Co
 pub struct ProvisioningConfig {
     pub instance: String,
     pub fleet_tokens: HashedTokens,
+    pub provision_tokens: HashedTokens,
     pub install_token_keys: InstallTokenKeys,
     pub device_id_key: DeviceIdKey,
     pub fleet_client_roots: Vec<CertificateDer<'static>>,
@@ -66,6 +67,7 @@ pub struct ProvisioningConfig {
 pub struct ProvisioningFiles<'a> {
     pub instance: &'a str,
     pub fleet_tokens_file: &'a Path,
+    pub provision_tokens_file: Option<&'a Path>,
     pub install_token_keys: &'a Path,
     pub device_id_key_file: &'a Path,
     pub fleet_client_ca: &'a Path,
@@ -76,6 +78,10 @@ impl ProvisioningConfig {
         Ok(ProvisioningConfig {
             instance: String::from(paths.instance),
             fleet_tokens: HashedTokens::load(paths.fleet_tokens_file)?,
+            provision_tokens: match paths.provision_tokens_file {
+                Some(path) => HashedTokens::load(path)?,
+                None => HashedTokens::default(),
+            },
             install_token_keys: InstallTokenKeys::load(paths.install_token_keys)?,
             device_id_key: DeviceIdKey::load(paths.device_id_key_file)?,
             fleet_client_roots: load_certificates(paths.fleet_client_ca)?,

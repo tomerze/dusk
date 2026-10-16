@@ -244,6 +244,7 @@ async fn issues_node_certificates_through_a_real_step_ca() {
             hex::encode(sha256(b"retail secret"))
         ))
         .unwrap(),
+        provision_tokens: HashedTokens::default(),
         install_token_keys: InstallTokenKeys::from_json(&installer_jwks.to_string()).unwrap(),
         device_id_key: DeviceIdKey::from_hex(&"5a".repeat(32)).unwrap(),
         fleet_client_roots: roots,
