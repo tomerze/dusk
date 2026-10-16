@@ -5,7 +5,7 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
-embassy-executor = { version = "0.10.0", features = ["trace", "platform-std", "nightly", "executor-thread"] }
+embassy-executor = { version = "0.10.0", features = ["trace", "platform-std", "executor-thread"] }
 embassy-time = { version = "0.5", features = ["std"] }
 async-trait = "*"
 

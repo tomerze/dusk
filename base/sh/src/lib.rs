@@ -1,7 +1,6 @@
 #![allow(internal_features)]
 #![allow(clippy::too_many_arguments)]
 #![feature(prelude_import)]
-#![feature(impl_trait_in_assoc_type)]
 #![cfg_attr(not(feature = "client"), no_std)]
 
 extern crate alloc;
