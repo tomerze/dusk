@@ -22,7 +22,8 @@ pub struct Args {
 
 impl Args {
     pub fn new() -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root();
         Args { data }
     }

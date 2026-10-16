@@ -40,7 +40,7 @@ fn enrich(
     offset_from_unix_time_ms: u64,
     global_sequence: u64,
 ) -> capnp::Result<Builder<HeapAllocator>> {
-    let mut output = Builder::new_default();
+    let mut output = Builder::new(dusk_capnp::heap_allocator());
     {
         let mut signal = output.init_root::<signal::Builder>();
         signal.set_severity_number(severity(level));
@@ -73,7 +73,7 @@ fn enrich_log_record(
         .saturating_add(offset_from_unix_time_ms);
     let hex_ids = hex_id_attributes(stored.get_attributes()?)?;
 
-    let mut enriched = Builder::new_default();
+    let mut enriched = Builder::new(dusk_capnp::heap_allocator());
     enriched.set_root::<log_record::Owned>(stored)?;
     {
         // The buffer stores the log record's severity empty (it rides the `Signal`
@@ -103,7 +103,7 @@ fn enrich_span(
     let stored_end_milliseconds = stored.get_end_time_unix_nano();
     let hex_ids = hex_id_attributes(stored.get_attributes()?)?;
 
-    let mut enriched = Builder::new_default();
+    let mut enriched = Builder::new(dusk_capnp::heap_allocator());
     enriched.set_root::<span::Owned>(stored)?;
     {
         let mut span = enriched.get_root::<span::Builder>()?;

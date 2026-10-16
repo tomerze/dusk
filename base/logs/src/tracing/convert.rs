@@ -27,7 +27,7 @@ pub(crate) fn build_log_record(
         .map(|(name, value)| (*name, value))
         .collect();
 
-    let mut message = Builder::new_default();
+    let mut message = Builder::new(dusk_capnp::heap_allocator());
     {
         let mut log_record = message.init_root::<signal::Builder>().init_log_record();
         // Stamp embassy-relative milliseconds now (the writer no longer can -
@@ -112,7 +112,7 @@ pub(crate) fn build_span(
     end_milliseconds: Option<u64>,
     attributes: &[(&'static str, FieldValue)],
 ) -> Builder<HeapAllocator> {
-    let mut message = Builder::new_default();
+    let mut message = Builder::new(dusk_capnp::heap_allocator());
     {
         let mut builder = message.init_root::<signal::Builder>().init_span();
         if let Some(trace_id) = trace_id {

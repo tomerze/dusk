@@ -20,7 +20,7 @@ pub struct ProgramArgs {
 impl ProgramArgs {
     pub fn new() -> Self {
         Self {
-            inner: RefCell::new(ImbuedMessageBuilder::new(HeapAllocator::new())),
+            inner: RefCell::new(ImbuedMessageBuilder::new(dusk_capnp::heap_allocator())),
         }
     }
 
@@ -114,7 +114,7 @@ impl ProgramArgs {
 
     pub fn data_owned<T: Owned>(&self) -> capnp::Result<ImbuedMessageBuilder<HeapAllocator>> {
         self.with_data::<T, _, _>(|data| {
-            let mut owned = ImbuedMessageBuilder::new(HeapAllocator::new());
+            let mut owned = ImbuedMessageBuilder::new(dusk_capnp::heap_allocator());
             owned.set_root::<T>(data)?;
             Ok(owned)
         })

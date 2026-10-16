@@ -34,7 +34,8 @@ pub struct Args {
 
 impl Args {
     pub fn get(keys: &[u64]) -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         {
             let mut list = data.init_root().init_get(keys.len() as u32);
             for (index, key) in keys.iter().enumerate() {
@@ -45,7 +46,8 @@ impl Args {
     }
 
     pub fn set(key: u64, value: &Value) -> capnp::Result<Self> {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         {
             let mut set = data.init_root().init_set();
             set.set_key(key);
@@ -55,25 +57,29 @@ impl Args {
     }
 
     pub fn delete(key: u64) -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root().set_delete(key);
         Args { data }
     }
 
     pub fn exists(key: u64) -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root().set_exists(key);
         Args { data }
     }
 
     pub fn bind() -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root().set_bind(());
         Args { data }
     }
 
     pub fn scan() -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root().set_scan(());
         Args { data }
     }

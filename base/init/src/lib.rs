@@ -162,7 +162,7 @@ impl Args {
     pub fn new(init_script: &[u8]) -> capnp::Result<Self> {
         let message =
             capnp::serialize::read_message(init_script, capnp::message::ReaderOptions::new())?;
-        let mut data = InitArgsDataMessage::new(HeapAllocator::new());
+        let mut data = InitArgsDataMessage::new(dusk_capnp::heap_allocator());
         data.get_root::<init_capnp::init_args::data::Builder>()?
             .set_init_script(message.get_root::<bytecode::Reader>()?)?;
         Ok(Args { data })
@@ -268,7 +268,7 @@ impl dusk_program::process::ProcessMixin for Process {
             .ctx
             .program_args
             .with_data::<init_capnp::init_args::data::Owned, _, _>(|data| {
-                let mut init_script = BytecodeMessage::new(HeapAllocator::new());
+                let mut init_script = BytecodeMessage::new(dusk_capnp::heap_allocator());
                 init_script.set_root::<bytecode::Owned>(data.get_init_script()?)?;
                 Ok(init_script)
             })?;

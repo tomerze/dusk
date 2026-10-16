@@ -18,6 +18,8 @@ pub extern crate capnp_rpc;
 
 pub mod prelude;
 
+pub use capnp_rpc::heap_allocator;
+
 #[allow(unused)]
 #[prelude_import]
 use crate::prelude::*;
