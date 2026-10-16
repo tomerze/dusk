@@ -1234,10 +1234,13 @@ optionally only those whose `enrolled_at` is at or after `enrolled_after` and
 before `enrolled_before`, and never one that is already `revoked`. `matched` is
 how many matched when it started. The leader revokes them in the order of their
 device and installation ids, in batches, at `engine.revocations_per_second`
-across all running revocations: for each batch it produces one
+across all running revocations: for each batch, in one transaction, it locks
+the batch's installations that are not yet revoked, produces one
 `dusk.node-state` record per installation, with the revocation's reason and
 actor, waits until Kafka has them all, then marks the installations `revoked`
-and moves the revocation's place forward in one transaction. A batch Kafka did
+with the time the records carry and moves the revocation's place forward - the
+order every lifecycle change follows, so a change to one of those nodes, or a
+rebuild of the node-state topic, waits for the batch. A batch Kafka did
 not take, or that a former leader was writing, is sent again from that place, so
 a revocation carries on across restarts and leader changes and no installation
 is skipped. It finishes when no matching installation is left; one enrolled
