@@ -216,8 +216,11 @@ services:
         CLICKHOUSE_VECTOR_PASSWORD="$$(cat /run/secrets/clickhouse-vector/password)"
         CLICKHOUSE_GRAFANA_PASSWORD="$$(cat /run/secrets/clickhouse-grafana/password)"
         CLICKHOUSE_SIGNOZ_PASSWORD="$$(cat /run/secrets/clickhouse-signoz/password)"
+        CLICKHOUSE_TWILIGHT_PASSWORD="$$(cat /run/secrets/clickhouse-twilight/password)"
         LAKE_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-reader/access-key)"
         LAKE_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-reader/secret-key)"
+        LAKE_WRITER_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-vector/access-key)"
+        LAKE_WRITER_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-vector/secret-key)"
         SIGNOZ_COLD_ACCESS_KEY_ID="$$(cat /run/secrets/ceph-signoz/access-key)"
         SIGNOZ_COLD_SECRET_ACCESS_KEY="$$(cat /run/secrets/ceph-signoz/secret-key)"
         && exec /entrypoint.sh
@@ -245,7 +248,9 @@ services:
       - { <<: *secret, target: /run/secrets/clickhouse-vector, volume: { subpath: clickhouse-vector } }
       - { <<: *secret, target: /run/secrets/clickhouse-grafana, volume: { subpath: clickhouse-grafana } }
       - { <<: *secret, target: /run/secrets/clickhouse-signoz, volume: { subpath: clickhouse-signoz } }
+      - { <<: *secret, target: /run/secrets/clickhouse-twilight, volume: { subpath: clickhouse-twilight } }
       - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
+      - { <<: *secret, target: /run/secrets/ceph-vector, volume: { subpath: ceph-vector } }
       - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8123/ping"]
@@ -329,6 +334,7 @@ services:
       - { <<: *secret, target: /run/secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
       - { <<: *secret, target: /run/secrets/ceph-reader, volume: { subpath: ceph-reader } }
       - { <<: *secret, target: /run/secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+      - { <<: *secret, target: /run/secrets/ceph-twilight, volume: { subpath: ceph-twilight } }
 
   ceph-init:
     image: amazon/aws-cli:2.37.9
@@ -603,6 +609,8 @@ services:
       - { <<: *secret, target: /etc/twilight/pki/ledger-verify-jwks.json, volume: { subpath: nightfall-ledger-verify/ledger-verify-jwks.json } }
       - { <<: *secret, target: /etc/twilight/secrets/postgres, volume: { subpath: postgres-twilight } }
       - { <<: *secret, target: /run/secrets/alert-receivers, volume: { subpath: alert-receivers } }
+      - { <<: *secret, target: /etc/twilight/secrets/clickhouse, volume: { subpath: clickhouse-twilight } }
+      - { <<: *secret, target: /etc/twilight/secrets/s3, volume: { subpath: ceph-twilight } }
 
   grafana-alerting:
     image: dusk-twilight:dev
@@ -634,6 +642,10 @@ services:
       twilight-migrate:
         condition: service_completed_successfully
       alert-receivers-init:
+        condition: service_completed_successfully
+      clickhouse-schema:
+        condition: service_completed_successfully
+      ceph-init:
         condition: service_completed_successfully
       dawn:
         condition: service_started
@@ -820,6 +832,8 @@ services:
       - { <<: *secret, target: /secrets/ceph-reader, volume: { subpath: ceph-reader } }
       - { <<: *secret, target: /secrets/ceph-dawn, volume: { subpath: ceph-dawn } }
       - { <<: *secret, target: /secrets/ceph-signoz, volume: { subpath: ceph-signoz } }
+      - { <<: *secret, target: /secrets/ceph-twilight, volume: { subpath: ceph-twilight } }
+      - { <<: *secret, target: /secrets/clickhouse-twilight, volume: { subpath: clickhouse-twilight } }
       - { <<: *secret, target: /secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
       - { <<: *secret, target: /secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
       - { <<: *secret, target: /secrets/postgres-signoz, volume: { subpath: postgres-signoz } }

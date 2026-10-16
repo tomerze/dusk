@@ -95,7 +95,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/name
         operator: In
-        values: [dawn, vector, clickhouse, signoz, ceph-init]
+        values: [dawn, vector, clickhouse, signoz, ceph-init, twilight]
   policyTypes: [Egress]
   egress:
     - to:

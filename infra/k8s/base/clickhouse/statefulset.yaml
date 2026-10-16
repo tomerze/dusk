@@ -67,6 +67,11 @@ spec:
                 secretKeyRef:
                   name: clickhouse-signoz
                   key: password
+            - name: CLICKHOUSE_TWILIGHT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-twilight
+                  key: password
             - name: LAKE_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -76,6 +81,16 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: ceph-reader
+                  key: secret-key
+            - name: LAKE_WRITER_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ceph-vector
+                  key: access-key
+            - name: LAKE_WRITER_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ceph-vector
                   key: secret-key
             - name: SIGNOZ_COLD_ACCESS_KEY_ID
               valueFrom:

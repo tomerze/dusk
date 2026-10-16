@@ -23,3 +23,8 @@ dawn:
 reconcile:
   enabled: true
   ledger_keys: /etc/twilight/pki/ledger-verify-jwks.json
+clickhouse:
+  url: https://clickhouse:8443
+  ca: /etc/twilight/pki/internal-ca.crt
+object_store:
+  endpoint: http://rook-ceph-rgw-dusk.rook-ceph.svc

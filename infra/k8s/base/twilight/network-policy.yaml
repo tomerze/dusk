@@ -44,6 +44,20 @@ spec:
       ports:
         - protocol: TCP
           port: 8443
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: clickhouse
+      ports:
+        - protocol: TCP
+          port: 8123
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ceph
+      ports:
+        - protocol: TCP
+          port: 8080
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

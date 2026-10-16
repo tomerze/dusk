@@ -26,3 +26,4 @@ configMapGenerator:
       - schema/020-otel.sql
       - schema/030-ledger-chain.sql
       - schema/040-lake.sql
+      - schema/050-erasure-scope.sql

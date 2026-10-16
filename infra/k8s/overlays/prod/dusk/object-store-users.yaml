@@ -93,3 +93,19 @@ spec:
       secretKeyRef:
         name: ceph-signoz
         key: secret-key
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStoreUser
+metadata:
+  name: twilight
+spec:
+  store: dusk
+  clusterNamespace: rook-ceph
+  displayName: dusk twilight
+  keys:
+    - accessKeyRef:
+        name: ceph-twilight
+        key: access-key
+      secretKeyRef:
+        name: ceph-twilight
+        key: secret-key

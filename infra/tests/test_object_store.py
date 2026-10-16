@@ -69,7 +69,7 @@ def test_the_ledger_writer_may_only_put_evidence(
 
 
 def test_nobody_else_writes_evidence(object_store: Callable[[str], Any]) -> None:
-    for user in ["vector", "dawn", "reader", "signoz"]:
+    for user in ["vector", "dawn", "reader", "signoz", "twilight"]:
         client = object_store(user)
         assert (
             refused(
@@ -180,3 +180,42 @@ def test_evidence_expires_a_day_after_its_lock(
     assert rules["remove-expired-delete-markers"]["Expiration"] == {
         "ExpiredObjectDeleteMarker": True
     }
+
+
+def test_twilight_deletes_files_and_lake_objects_it_cannot_read(
+    object_store: Callable[[str], Any],
+) -> None:
+    twilight = object_store("twilight")
+    files_key = f"files/verify/{uuid.uuid4()}/0-photo"
+    lake_key = f"connections/dt=2026-10-07/verify-{uuid.uuid4()}.parquet"
+    object_store("admin").put_object(Bucket=FILES, Key=files_key, Body=b"photo")
+    object_store("vector").put_object(Bucket=LAKE, Key=lake_key, Body=b"PAR1")
+    assert any(
+        item["Key"] == files_key
+        for item in twilight.list_objects_v2(Bucket=FILES, Prefix="files/verify/")[
+            "Contents"
+        ]
+    )
+    assert (
+        refused(lambda: twilight.get_object(Bucket=FILES, Key=files_key))
+        == "AccessDenied"
+    )
+    assert (
+        refused(lambda: twilight.get_object(Bucket=LAKE, Key=lake_key))
+        == "AccessDenied"
+    )
+    assert (
+        refused(lambda: twilight.put_object(Bucket=LAKE, Key=lake_key, Body=b"x"))
+        == "AccessDenied"
+    )
+    twilight.delete_objects(Bucket=FILES, Delete={"Objects": [{"Key": files_key}]})
+    twilight.delete_object(Bucket=LAKE, Key=lake_key)
+    for bucket, key in ((FILES, files_key), (LAKE, lake_key)):
+        assert (
+            refused(lambda: object_store("admin").head_object(Bucket=bucket, Key=key))
+            == "404"
+        )
+    assert twilight.get_bucket_lifecycle_configuration(Bucket=LAKE)["Rules"]
+    lock = twilight.get_object_lock_configuration(Bucket=EVIDENCE)
+    assert lock["ObjectLockConfiguration"]["ObjectLockEnabled"] == "Enabled"
+    assert refused(lambda: twilight.list_objects_v2(Bucket=EVIDENCE)) == "AccessDenied"

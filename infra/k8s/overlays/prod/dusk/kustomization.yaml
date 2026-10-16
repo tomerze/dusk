@@ -106,6 +106,16 @@ patches:
         value: 9440
   - target:
       kind: NetworkPolicy
+      name: twilight
+    patch: |-
+      - op: test
+        path: /spec/egress/3/ports/0/port
+        value: 8123
+      - op: replace
+        path: /spec/egress/3/ports/0/port
+        value: 8443
+  - target:
+      kind: NetworkPolicy
       name: vector
     patch: |-
       - op: test

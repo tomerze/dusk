@@ -16,6 +16,7 @@ lake_writer=${LAKE_WRITER_USER:-vector}
 lake_reader=${LAKE_READER_USER:-reader}
 files_writer=${FILES_WRITER_USER:-dawn}
 signoz_user=${SIGNOZ_USER:-signoz}
+eraser=${ERASER_USER:-twilight}
 lake_days=${LAKE_RETENTION_DAYS:-90}
 lake_ledger_days=${LAKE_LEDGER_RETENTION_DAYS:-400}
 files_days=${FILES_RETENTION_DAYS:-30}
@@ -104,7 +105,7 @@ fi
 "${s3api[@]}" put-object-lock-configuration --bucket "$evidence_bucket" \
     --object-lock-configuration "{\"ObjectLockEnabled\":\"Enabled\",\"Rule\":{\"DefaultRetention\":{\"Mode\":\"$evidence_mode\",\"Days\":$evidence_days}}}"
 echo "bucket $evidence_bucket default retention $evidence_mode for $evidence_days days"
-put_policy "$evidence_bucket" "$(statement EvidenceWriter "$evidence_writer" '["s3:PutObject"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]"),$(statement EvidenceWriterOnly "$evidence_writer" "$write_only" "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]" Deny),$(statement EvidenceReader "$evidence_reader" '["s3:GetObject","s3:GetObjectVersion","s3:GetObjectRetention","s3:GetObjectLegalHold","s3:ListBucket","s3:ListBucketVersions","s3:GetBucketObjectLockConfiguration"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]")"
+put_policy "$evidence_bucket" "$(statement EvidenceWriter "$evidence_writer" '["s3:PutObject"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]"),$(statement EvidenceWriterOnly "$evidence_writer" "$write_only" "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]" Deny),$(statement EvidenceReader "$evidence_reader" '["s3:GetObject","s3:GetObjectVersion","s3:GetObjectRetention","s3:GetObjectLegalHold","s3:ListBucket","s3:ListBucketVersions","s3:GetBucketObjectLockConfiguration"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]"),$(statement EvidenceEraser "$eraser" '["s3:GetBucketObjectLockConfiguration"]' "[\"arn:aws:s3:::$evidence_bucket\"]")"
 evidence_rules=$(printf '{"ID":"expire-after-lock","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":%s},"NoncurrentVersionExpiration":{"NoncurrentDays":1}},{"ID":"remove-expired-delete-markers","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"ExpiredObjectDeleteMarker":true}}' $((evidence_days + 1)))
 put_lifecycle "$evidence_bucket" "$evidence_rules"
 echo "bucket $evidence_bucket expires each object $((evidence_days + 1)) days after it was written, one day after its lock ends"
@@ -113,8 +114,8 @@ for bucket in "$lake_bucket" "$files_bucket" "$signoz_bucket"; do
     ensure_bucket "$bucket"
 done
 
-put_policy "$lake_bucket" "$(statement LakeWriter "$lake_writer" '["s3:PutObject","s3:GetObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]"),$(statement LakeReader "$lake_reader" '["s3:GetObject","s3:ListBucket"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]")"
-put_policy "$files_bucket" "$(statement FilesWriter "$files_writer" '["s3:PutObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]"),$(statement FilesWriterOnly "$files_writer" "$write_only" "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]" Deny),$(statement FilesReader "$files_reader" '["s3:GetObject","s3:DeleteObject","s3:ListBucket"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]")"
+put_policy "$lake_bucket" "$(statement LakeWriter "$lake_writer" '["s3:PutObject","s3:GetObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]"),$(statement LakeReader "$lake_reader" '["s3:GetObject","s3:ListBucket"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]"),$(statement LakeEraser "$eraser" '["s3:DeleteObject","s3:ListBucket","s3:GetLifecycleConfiguration"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]")"
+put_policy "$files_bucket" "$(statement FilesWriter "$files_writer" '["s3:PutObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]"),$(statement FilesWriterOnly "$files_writer" "$write_only" "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]" Deny),$(statement FilesReader "$files_reader" '["s3:GetObject","s3:DeleteObject","s3:ListBucket"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]"),$(statement FilesEraser "$eraser" '["s3:DeleteObject","s3:ListBucket"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]")"
 put_policy "$signoz_bucket" "$(statement SignozCold "$signoz_user" '["s3:PutObject","s3:GetObject","s3:DeleteObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$signoz_bucket\",\"arn:aws:s3:::$signoz_bucket/*\"]")"
 abort_incomplete='{"ID":"abort-incomplete-uploads","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}'
 lake_rules="$abort_incomplete,$(expiration expire-ledger ledger/ "$lake_ledger_days")"

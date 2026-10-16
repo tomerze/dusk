@@ -48,6 +48,28 @@ users:
         - GRANT SELECT ON signoz_logs.*
         - GRANT SELECT ON signoz_traces.*
         - GRANT SELECT ON signoz_metrics.*
+  twilight:
+    password:
+      "@from_env": CLICKHOUSE_TWILIGHT_PASSWORD
+    networks:
+      ip: "::/0"
+    profile: dusk_writer
+    quota: default
+    grants:
+      query:
+        - GRANT SELECT ON dusk.*
+        - GRANT INSERT ON dusk.erasure_scope
+        - GRANT ALTER DELETE ON dusk.*
+        - GRANT SYSTEM SYNC REPLICA ON dusk.erasure_scope
+        - GRANT SELECT ON system.columns
+        - GRANT SELECT ON system.tables
+        - GRANT SELECT ON system.mutations
+        - GRANT CLUSTER ON *.*
+        - GRANT REMOTE ON *.*
+        - GRANT READ, WRITE ON S3
+        - GRANT CREATE TEMPORARY TABLE ON *.*
+        - GRANT NAMED COLLECTION ON lake
+        - GRANT NAMED COLLECTION ON lake_writer
   signoz:
     password:
       "@from_env": CLICKHOUSE_SIGNOZ_PASSWORD

@@ -10,8 +10,10 @@ spec:
   ingress:
     - from:
         - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vector
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [vector, twilight]
       ports:
         - protocol: TCP
           port: 8123

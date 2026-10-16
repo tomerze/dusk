@@ -2,7 +2,7 @@
 set -euo pipefail
 
 secrets=${DUSK_SECRETS_DIRECTORY:-/run/secrets}
-users=${CEPH_USERS:-admin vector ledger-writer dawn reader signoz}
+users=${CEPH_USERS:-admin vector ledger-writer dawn reader signoz twilight}
 
 attempt=0
 until radosgw-admin user list > /dev/null 2>&1; do

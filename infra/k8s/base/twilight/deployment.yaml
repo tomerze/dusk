@@ -133,3 +133,15 @@ spec:
                   items:
                     - key: pgpass
                       path: secrets/postgres/pgpass
+              - secret:
+                  name: clickhouse-twilight
+                  items:
+                    - key: password
+                      path: secrets/clickhouse/password
+              - secret:
+                  name: ceph-twilight
+                  items:
+                    - key: access-key
+                      path: secrets/s3/access-key
+                    - key: secret-key
+                      path: secrets/s3/secret-key

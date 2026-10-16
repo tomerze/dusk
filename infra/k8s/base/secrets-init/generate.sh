@@ -106,14 +106,14 @@ create step-ca-password step_ca_password
 create nightfall-ledger ledger_keys
 create nightfall-ledger-verify ledger_verify_keys
 create dawn-output-key dawn_output_key
-for user in admin vector ledger-writer dawn reader signoz; do
+for user in admin vector ledger-writer dawn reader signoz twilight; do
     create "ceph-$user" ceph_user
 done
 create postgres-superuser postgres_login postgres
 for role in twilight grafana signoz; do
     create "postgres-$role" postgres_login "$role"
 done
-for user in admin vector grafana signoz; do
+for user in admin vector grafana signoz twilight; do
     create "clickhouse-$user" single_password
 done
 create grafana-admin single_password
