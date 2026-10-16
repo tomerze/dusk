@@ -127,12 +127,56 @@ def test_dawn_uploads_files_it_cannot_read_back(
     object_store("admin").delete_object(Bucket=FILES, Key=key)
 
 
-def test_incomplete_uploads_of_collected_files_are_aborted_after_a_day(
-    object_store: Callable[[str], Any],
-) -> None:
-    rules = object_store("admin").get_bucket_lifecycle_configuration(Bucket=FILES)[
+def lifecycle(object_store: Callable[[str], Any], bucket: str) -> dict[str, Any]:
+    rules = object_store("admin").get_bucket_lifecycle_configuration(Bucket=bucket)[
         "Rules"
     ]
-    assert [
-        rule["AbortIncompleteMultipartUpload"]["DaysAfterInitiation"] for rule in rules
-    ] == [1]
+    return {rule["ID"]: rule for rule in rules}
+
+
+def test_collected_files_expire_and_incomplete_uploads_are_aborted(
+    object_store: Callable[[str], Any],
+) -> None:
+    rules = lifecycle(object_store, FILES)
+    assert rules["abort-incomplete-uploads"]["AbortIncompleteMultipartUpload"] == {
+        "DaysAfterInitiation": 1
+    }
+    expire = rules["expire-collected-files"]
+    assert expire["Expiration"] == {"Days": 30}
+    assert expire.get("Filter", {"Prefix": expire.get("Prefix")}) == {"Prefix": ""}
+
+
+def test_the_lake_keeps_the_ledger_longer_than_every_other_table(
+    object_store: Callable[[str], Any],
+) -> None:
+    rules = lifecycle(object_store, LAKE)
+    expirations = {
+        rule["Filter"]["Prefix"]: rule["Expiration"]["Days"]
+        for rule in rules.values()
+        if "Expiration" in rule
+    }
+    tables = [
+        "connections",
+        "enrollments",
+        "process_results",
+        "process_output",
+        "files",
+        "otel_logs",
+        "otel_spans",
+        "otel_metrics",
+    ]
+    assert expirations == {"ledger/": 400} | {f"{table}/": 90 for table in tables}
+    assert "abort-incomplete-uploads" in rules
+
+
+def test_evidence_expires_a_day_after_its_lock(
+    object_store: Callable[[str], Any],
+) -> None:
+    rules = lifecycle(object_store, EVIDENCE)
+    assert rules["expire-after-lock"]["Expiration"] == {"Days": 2}
+    assert (
+        rules["expire-after-lock"]["NoncurrentVersionExpiration"]["NoncurrentDays"] == 1
+    )
+    assert rules["remove-expired-delete-markers"]["Expiration"] == {
+        "ExpiredObjectDeleteMarker": True
+    }

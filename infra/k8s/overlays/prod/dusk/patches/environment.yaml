@@ -29,6 +29,12 @@ spec:
               value: COMPLIANCE
             - name: EVIDENCE_RETENTION_DAYS
               value: "400"
+            - name: LAKE_RETENTION_DAYS
+              value: "90"
+            - name: LAKE_LEDGER_RETENTION_DAYS
+              value: "400"
+            - name: FILES_RETENTION_DAYS
+              value: "30"
 ---
 apiVersion: apps/v1
 kind: StatefulSet

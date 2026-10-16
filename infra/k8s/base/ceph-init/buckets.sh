@@ -16,6 +16,10 @@ lake_writer=${LAKE_WRITER_USER:-vector}
 lake_reader=${LAKE_READER_USER:-reader}
 files_writer=${FILES_WRITER_USER:-dawn}
 signoz_user=${SIGNOZ_USER:-signoz}
+lake_days=${LAKE_RETENTION_DAYS:-90}
+lake_ledger_days=${LAKE_LEDGER_RETENTION_DAYS:-400}
+files_days=${FILES_RETENTION_DAYS:-30}
+lake_tables=${LAKE_TABLES:-connections enrollments process_results process_output files otel_logs otel_spans otel_metrics}
 
 AWS_ACCESS_KEY_ID=$(cat "${ADMIN_ACCESS_KEY_FILE:-$secrets/ceph-admin/access-key}")
 AWS_SECRET_ACCESS_KEY=$(cat "${ADMIN_SECRET_KEY_FILE:-$secrets/ceph-admin/secret-key}")
@@ -59,10 +63,32 @@ ensure_bucket() {
     fi
 }
 
+positive_days() {
+    case "$2" in
+        '' | *[!0-9]* | 0*)
+            echo "$1 must be a whole number of days of at least 1, not '$2'" >&2
+            exit 1
+            ;;
+    esac
+}
+
+expiration() {
+    printf '{"ID":"%s","Status":"Enabled","Filter":{"Prefix":"%s"},"Expiration":{"Days":%s}}' "$1" "$2" "$3"
+}
+
+put_lifecycle() {
+    "${s3api[@]}" put-bucket-lifecycle-configuration --bucket "$1" --lifecycle-configuration "{\"Rules\":[$2]}"
+}
+
 put_policy() {
     "${s3api[@]}" put-bucket-policy --bucket "$1" --policy "{\"Version\":\"2012-10-17\",\"Statement\":[$2]}"
     echo "bucket $1 policy applied"
 }
+
+positive_days EVIDENCE_RETENTION_DAYS "$evidence_days"
+positive_days LAKE_RETENTION_DAYS "$lake_days"
+positive_days LAKE_LEDGER_RETENTION_DAYS "$lake_ledger_days"
+positive_days FILES_RETENTION_DAYS "$files_days"
 
 if bucket_exists "$evidence_bucket"; then
     lock=$("${s3api[@]}" get-object-lock-configuration --bucket "$evidence_bucket" --query 'ObjectLockConfiguration.ObjectLockEnabled' --output text 2>/dev/null || true)
@@ -79,6 +105,9 @@ fi
     --object-lock-configuration "{\"ObjectLockEnabled\":\"Enabled\",\"Rule\":{\"DefaultRetention\":{\"Mode\":\"$evidence_mode\",\"Days\":$evidence_days}}}"
 echo "bucket $evidence_bucket default retention $evidence_mode for $evidence_days days"
 put_policy "$evidence_bucket" "$(statement EvidenceWriter "$evidence_writer" '["s3:PutObject"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]"),$(statement EvidenceWriterOnly "$evidence_writer" "$write_only" "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]" Deny),$(statement EvidenceReader "$evidence_reader" '["s3:GetObject","s3:GetObjectVersion","s3:GetObjectRetention","s3:GetObjectLegalHold","s3:ListBucket","s3:ListBucketVersions","s3:GetBucketObjectLockConfiguration"]' "[\"arn:aws:s3:::$evidence_bucket\",\"arn:aws:s3:::$evidence_bucket/*\"]")"
+evidence_rules=$(printf '{"ID":"expire-after-lock","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":%s},"NoncurrentVersionExpiration":{"NoncurrentDays":1}},{"ID":"remove-expired-delete-markers","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"ExpiredObjectDeleteMarker":true}}' $((evidence_days + 1)))
+put_lifecycle "$evidence_bucket" "$evidence_rules"
+echo "bucket $evidence_bucket expires each object $((evidence_days + 1)) days after it was written, one day after its lock ends"
 
 for bucket in "$lake_bucket" "$files_bucket" "$signoz_bucket"; do
     ensure_bucket "$bucket"
@@ -87,6 +116,12 @@ done
 put_policy "$lake_bucket" "$(statement LakeWriter "$lake_writer" '["s3:PutObject","s3:GetObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]"),$(statement LakeReader "$lake_reader" '["s3:GetObject","s3:ListBucket"]' "[\"arn:aws:s3:::$lake_bucket\",\"arn:aws:s3:::$lake_bucket/*\"]")"
 put_policy "$files_bucket" "$(statement FilesWriter "$files_writer" '["s3:PutObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]"),$(statement FilesWriterOnly "$files_writer" "$write_only" "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]" Deny),$(statement FilesReader "$files_reader" '["s3:GetObject","s3:DeleteObject","s3:ListBucket"]' "[\"arn:aws:s3:::$files_bucket\",\"arn:aws:s3:::$files_bucket/*\"]")"
 put_policy "$signoz_bucket" "$(statement SignozCold "$signoz_user" '["s3:PutObject","s3:GetObject","s3:DeleteObject","s3:ListBucket","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"]' "[\"arn:aws:s3:::$signoz_bucket\",\"arn:aws:s3:::$signoz_bucket/*\"]")"
-"${s3api[@]}" put-bucket-lifecycle-configuration --bucket "$files_bucket" \
-    --lifecycle-configuration '{"Rules":[{"ID":"abort-incomplete-uploads","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}]}'
-echo "bucket $files_bucket aborts incomplete multipart uploads after one day"
+abort_incomplete='{"ID":"abort-incomplete-uploads","Status":"Enabled","Filter":{"Prefix":""},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}'
+lake_rules="$abort_incomplete,$(expiration expire-ledger ledger/ "$lake_ledger_days")"
+for table in $lake_tables; do
+    lake_rules="$lake_rules,$(expiration "expire-$table" "$table/" "$lake_days")"
+done
+put_lifecycle "$lake_bucket" "$lake_rules"
+echo "bucket $lake_bucket expires ledger/ after $lake_ledger_days days and $lake_tables after $lake_days days"
+put_lifecycle "$files_bucket" "$abort_incomplete,$(expiration expire-collected-files "" "$files_days")"
+echo "bucket $files_bucket expires collected files after $files_days days and aborts incomplete multipart uploads after one day"
