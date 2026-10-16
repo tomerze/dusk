@@ -121,9 +121,28 @@ so a census burst never fills the ledger's queue.
 
 `GET /readyz` answers 200 only when all of these hold:
 
-* `dusk.node-state` was read up to the end it had when nightfall started. Until
-  then nightfall closes provisioning connections before TLS, and once it is read
-  it closes every node session the states revoke or retire;
+* `dusk.node-state` was read up to the end it had when nightfall started, and
+  every one of its partitions holds a completion record, which twilight writes
+  once the topic carries every lifecycle of the inventory. Until then nightfall
+  closes node links and provisioning connections before TLS, and once it is
+  read it closes every node session the states revoke or retire. A topic that
+  lost its records - Kafka lost, the topic deleted and created again - has no
+  completion record, and neither has the topic of a new stack before twilight
+  first starts, so nightfall does not serve from what is or is not there:
+  `/readyz` answers `node state incomplete` and nightfall logs once, at `warn`,
+  which partitions lack one, until twilight has written the topic again
+  ([Backups and disaster recovery](disaster-recovery.md#lose-kafkas-node-state)).
+  Completion records are `dusk.node-state/v2` messages; lifecycles are read
+  as v1 or v2. Every `node_state_partition_check_seconds` nightfall compares the
+  topic's partition count with the partitions it reads: when partitions were
+  added, it is not ready again until it has read every partition from the
+  beginning and found a completion record on each. Meanwhile it keeps the
+  states it holds and closes the sessions that a state it reads revokes or
+  retires, as it does once ready. A key's records from before the partitions
+  were added stay on the partition it hashed to then, so of two records of one
+  key on two partitions nightfall keeps the one with the later `time` - for a
+  tombstone, the record's timestamp - and within one partition the later in
+  the log;
 * `dusk.intended-processes` was read up to the end it had when nightfall
   started. Until then [admission](membrane.md#admission) refuses every call it
   judges with `not_caught_up`;
@@ -238,6 +257,7 @@ A Kafka property name holds dots, so it can only be set through the whole
 | `topics` | see [Kafka topics](#kafka-topics) | Topic names. |
 | `census_interval_seconds` | `300` | How often the full census is written. |
 | `census_heartbeat_seconds` | `15` | How often a header-only census heartbeat is written; an instance silent for three of its heartbeats is dead to the others. Must be shorter than the interval. |
+| `node_state_partition_check_seconds` | `30` | How often nightfall compares `dusk.node-state`'s partition count with the partitions it reads ([Readiness](#readiness)). |
 
 ### `[admission]`
 

@@ -198,7 +198,10 @@ When an installation or its device is `revoked` or `retired`:
 * nightfall refuses its assign, enroll and renew calls, so it cannot get a new
   certificate either;
 * a nightfall instance that starts is not ready until it has read
-  `dusk.node-state` to the end, so a restart never lets a revoked node in;
+  `dusk.node-state` to the end and found twilight's completion record on every
+  partition, so neither a restart nor a topic Kafka lost lets a revoked node in:
+  twilight writes the topic again from the inventory, completion records last
+  ([Backups and disaster recovery](disaster-recovery.md#lose-kafkas-node-state));
 * twilight raises a critical `revocation_not_enforced` alert when a node it has
   revoked or retired still appears online two census intervals after the
   change.

@@ -740,14 +740,23 @@ were run are in [Backups and disaster recovery](disaster-recovery.md).
 
 ## Upgrades and rollout order
 
-- Roll out the infrastructure first, then nightfall, then dawn and twilight,
-  then nodes. nightfall must know the schemas a node speaks before the node
-  arrives: its image carries every released schema bundle.
+- Roll out the infrastructure first, then twilight, then nightfall, then dawn,
+  then nodes. twilight writes the completion records of `dusk.node-state` that
+  a nightfall waits for before it serves nodes, so a nightfall that starts
+  before them stays unready, and a rolling update stalls at its first pod.
+  nightfall must know the schemas a node speaks before the node arrives: its
+  image carries every released schema bundle.
 - nightfall rolls one pod at a time and drains each for up to `drain_seconds`
   (300 s) before stopping it; its pods have 360 s to terminate.
 - A Kafka contract never changes in place: a changed message is a new
   `<topic>/v2`. Upgrade every consumer to accept both before any producer
-  writes v2.
+  writes v2 - unless every consumer of v1 only drops the new message and loses
+  nothing by it. `dusk.node-state` is that case: twilight writes its
+  completion records as v2 and every lifecycle still as v1, so twilight goes
+  before nightfall, as above. Until nightfall is upgraded, each nightfall of
+  the previous release drops every completion record it reads, logs `dropped
+  an invalid message` at `warn` for each and counts it in
+  `nightfall_invalid_messages_total`, and keeps applying the lifecycles.
 - Jobs cannot be changed once they exist. Before applying a new version, delete
   the finished init jobs (`kubectl -n dusk delete job --ignore-not-found
   secrets-init pki-init kafka-init clickhouse-schema ceph-init
