@@ -199,10 +199,10 @@ dusk_core         = { path = "../../dusk/src/dusk_core/" }
 dusk_program_sh   = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 # Common helpers - add only what you actually use:
-anyhow            = { version = "1.0", public = true }
-slab              = { version = "0.4", public = true }
+anyhow            = { version = "1.0", default-features = false, public = true }
+slab              = { version = "0.4", default-features = false, public = true }
 # Declared for macro use, versions taken from dusk_program:
-capnp             = { version = "0.21", public = false }
+capnp             = { version = "0.21", default-features = false, features = ["alloc"], public = false }
 # Optional client-side bits:
 linkme            = { version = "*", optional = true, public = false }
 clap              = { version = "4", features = ["derive"], optional = true }
