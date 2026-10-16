@@ -709,7 +709,7 @@ pub fn reload_credentials_if_changed(shared: &Shared, seen: &mut [Option<SystemT
     let now = credential_files_modified(&shared.config);
     let tokens_path = &shared.config.provision.fleet_tokens_file;
     if now[0] != seen[0] {
-        match nightfall_provisioning::credential::FleetTokens::load(tokens_path) {
+        match nightfall_provisioning::credential::HashedTokens::load(tokens_path) {
             Ok(tokens) => {
                 seen[0] = now[0];
                 shared.provisioning.replace_fleet_tokens(tokens);

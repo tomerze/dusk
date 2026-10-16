@@ -4,7 +4,7 @@ use std::time::Duration;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::pem::PemObject;
 
-use crate::credential::{FleetTokens, InstallTokenKeys};
+use crate::credential::{HashedTokens, InstallTokenKeys};
 use crate::identity::DeviceIdKey;
 
 #[derive(Debug, thiserror::Error)]
@@ -49,7 +49,7 @@ pub fn load_certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>, Co
 
 pub struct ProvisioningConfig {
     pub instance: String,
-    pub fleet_tokens: FleetTokens,
+    pub fleet_tokens: HashedTokens,
     pub install_token_keys: InstallTokenKeys,
     pub device_id_key: DeviceIdKey,
     pub fleet_client_roots: Vec<CertificateDer<'static>>,
@@ -75,7 +75,7 @@ impl ProvisioningConfig {
     pub fn load(paths: &ProvisioningFiles<'_>) -> Result<ProvisioningConfig, ConfigError> {
         Ok(ProvisioningConfig {
             instance: String::from(paths.instance),
-            fleet_tokens: FleetTokens::load(paths.fleet_tokens_file)?,
+            fleet_tokens: HashedTokens::load(paths.fleet_tokens_file)?,
             install_token_keys: InstallTokenKeys::load(paths.install_token_keys)?,
             device_id_key: DeviceIdKey::load(paths.device_id_key_file)?,
             fleet_client_roots: load_certificates(paths.fleet_client_ca)?,

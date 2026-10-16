@@ -13,7 +13,7 @@ use tracing::{error, info, warn};
 use crate::challenge::{Binding, ChallengeStore};
 use crate::config::ProvisioningConfig;
 use crate::credential::{
-    CredentialKind, CredentialName, FleetTokens, InstallToken, InstallTokenKeys, sha256,
+    CredentialKind, CredentialName, HashedTokens, InstallToken, InstallTokenKeys, sha256,
 };
 use crate::csr::validate_csr;
 use crate::events::{
@@ -264,7 +264,7 @@ struct Assigned {
 
 pub struct Provisioning {
     instance: String,
-    fleet_tokens: RwLock<Arc<FleetTokens>>,
+    fleet_tokens: RwLock<Arc<HashedTokens>>,
     install_token_keys: RwLock<Arc<InstallTokenKeys>>,
     device_id_key: DeviceIdKey,
     endorsement_roots: Vec<TrustAnchor<'static>>,
@@ -406,8 +406,8 @@ impl Provisioning {
         self.trust.clone()
     }
 
-    pub fn replace_fleet_tokens(&self, tokens: FleetTokens) {
-        let named = |tokens: &FleetTokens| -> std::collections::BTreeMap<String, (Option<String>, Option<u64>, bool)> {
+    pub fn replace_fleet_tokens(&self, tokens: HashedTokens) {
+        let named = |tokens: &HashedTokens| -> std::collections::BTreeMap<String, (Option<String>, Option<u64>, bool)> {
             tokens
                 .iter()
                 .map(|token| {

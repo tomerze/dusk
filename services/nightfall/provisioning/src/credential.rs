@@ -49,7 +49,7 @@ pub fn sha256(bytes: &[u8]) -> [u8; 32] {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FleetToken {
+pub struct HashedToken {
     pub name: String,
     pub value_sha256: [u8; 32],
     pub tenant: Option<String>,
@@ -58,20 +58,20 @@ pub struct FleetToken {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct FleetTokens {
-    tokens: Vec<FleetToken>,
+pub struct HashedTokens {
+    tokens: Vec<HashedToken>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct FleetTokensFile {
+struct HashedTokensFile {
     #[serde(default)]
-    token: Vec<FleetTokenEntry>,
+    token: Vec<HashedTokenEntry>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct FleetTokenEntry {
+struct HashedTokenEntry {
     name: String,
     value_sha256: String,
     tenant: Option<String>,
@@ -90,15 +90,15 @@ fn equal_in_constant_time(left: &[u8; 32], right: &[u8; 32]) -> bool {
     std::hint::black_box(difference) == 0
 }
 
-impl FleetTokens {
-    pub fn load(path: &Path) -> Result<FleetTokens, ConfigError> {
+impl HashedTokens {
+    pub fn load(path: &Path) -> Result<HashedTokens, ConfigError> {
         let text =
             std::fs::read_to_string(path).map_err(|source| ConfigError::read(path, source))?;
-        FleetTokens::from_toml(&text).map_err(|reason| ConfigError::invalid(path, reason))
+        HashedTokens::from_toml(&text).map_err(|reason| ConfigError::invalid(path, reason))
     }
 
-    pub fn from_toml(text: &str) -> Result<FleetTokens, String> {
-        let file: FleetTokensFile = toml::from_str(text).map_err(|error| error.to_string())?;
+    pub fn from_toml(text: &str) -> Result<HashedTokens, String> {
+        let file: HashedTokensFile = toml::from_str(text).map_err(|error| error.to_string())?;
         let mut names = HashSet::new();
         let mut digests = HashSet::new();
         let mut tokens = Vec::with_capacity(file.token.len());
@@ -144,7 +144,7 @@ impl FleetTokens {
                     entry.name
                 ));
             }
-            tokens.push(FleetToken {
+            tokens.push(HashedToken {
                 name: entry.name,
                 value_sha256,
                 tenant: entry.tenant,
@@ -152,7 +152,7 @@ impl FleetTokens {
                 retired: entry.retired,
             });
         }
-        Ok(FleetTokens { tokens })
+        Ok(HashedTokens { tokens })
     }
 
     pub fn len(&self) -> usize {
@@ -167,11 +167,11 @@ impl FleetTokens {
         self.tokens.iter().filter(|token| token.retired).count()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &FleetToken> {
+    pub fn iter(&self) -> impl Iterator<Item = &HashedToken> {
         self.tokens.iter()
     }
 
-    pub fn find(&self, presented: &str) -> Option<&FleetToken> {
+    pub fn find(&self, presented: &str) -> Option<&HashedToken> {
         let digest = sha256(presented.as_bytes());
         let mut found = None;
         for token in &self.tokens {
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn finds_a_fleet_token_by_its_digest() {
-        let tokens = FleetTokens::from_toml(&tokens_file()).unwrap();
+        let tokens = HashedTokens::from_toml(&tokens_file()).unwrap();
         assert_eq!(tokens.len(), 2);
         let retail = tokens.find("retail secret").unwrap();
         assert_eq!(retail.name, "retail-eu-2026");
@@ -336,7 +336,7 @@ mod tests {
         assert_eq!(tokens.find("lab secret").unwrap().tenant, None);
         assert!(tokens.find("retail secret ").is_none());
         assert!(tokens.find("").is_none());
-        assert!(FleetTokens::from_toml("").unwrap().is_empty());
+        assert!(HashedTokens::from_toml("").unwrap().is_empty());
     }
 
     #[test]
@@ -367,13 +367,13 @@ mod tests {
             format!("[[token]]\nname = \"a\"\nvalue_sha256 = \"{digest}\"\nretired = \"yes\"\n"),
         ];
         for text in refused {
-            assert!(FleetTokens::from_toml(&text).is_err(), "accepted {text}");
+            assert!(HashedTokens::from_toml(&text).is_err(), "accepted {text}");
         }
     }
 
     #[test]
     fn reads_the_installation_cap_and_retirement_of_a_fleet_token() {
-        let tokens = FleetTokens::from_toml(&format!(
+        let tokens = HashedTokens::from_toml(&format!(
             "[[token]]\nname = \"batch-7\"\nvalue_sha256 = \"{}\"\nmax_installations = 50000\n\n[[token]]\nname = \"old\"\nvalue_sha256 = \"{}\"\nretired = true\n",
             hex::encode(sha256(b"batch secret")),
             hex::encode(sha256(b"old secret"))

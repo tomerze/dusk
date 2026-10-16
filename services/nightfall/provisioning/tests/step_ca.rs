@@ -8,7 +8,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use dusk_capnp::capnp;
 use nightfall_provisioning::config::{ProvisioningConfig, load_certificates};
-use nightfall_provisioning::credential::{CredentialName, FleetTokens, InstallTokenKeys, sha256};
+use nightfall_provisioning::credential::{CredentialName, HashedTokens, InstallTokenKeys, sha256};
 use nightfall_provisioning::events::{EnrollmentEvent, EnrollmentEvents, Outcome};
 use nightfall_provisioning::identity::{
     DeviceIdKey, TPM_ATTESTATION_URI, device_uri, installation_uri, tenant_uri,
@@ -239,7 +239,7 @@ async fn issues_node_certificates_through_a_real_step_ca() {
     let events = Arc::new(Recorder::default());
     let config = ProvisioningConfig {
         instance: String::from("nightfall-0"),
-        fleet_tokens: FleetTokens::from_toml(&format!(
+        fleet_tokens: HashedTokens::from_toml(&format!(
             "[[token]]\nname = \"retail-eu-2026\"\nvalue_sha256 = \"{}\"\ntenant = \"retail-eu\"\n",
             hex::encode(sha256(b"retail secret"))
         ))

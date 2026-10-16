@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 use x509_parser::extensions::{GeneralName, ParsedExtension};
 
 use crate::config::ProvisioningConfig;
-use crate::credential::{CredentialKind, CredentialName, FleetTokens, InstallTokenKeys, sha256};
+use crate::credential::{CredentialKind, CredentialName, HashedTokens, InstallTokenKeys, sha256};
 use crate::csr::fixtures::{csr, p256};
 use crate::events::{EnrollmentEvent, EnrollmentEvents, Outcome};
 use crate::fake_step_ca::FakeStepCa;
@@ -188,8 +188,8 @@ struct Harness {
     device_key: DeviceIdKey,
 }
 
-fn fleet_tokens() -> FleetTokens {
-    FleetTokens::from_toml(&format!(
+fn fleet_tokens() -> HashedTokens {
+    HashedTokens::from_toml(&format!(
         "[[token]]\nname = \"retail-eu-2026\"\nvalue_sha256 = \"{}\"\ntenant = \"retail-eu\"\n\n[[token]]\nname = \"lab\"\nvalue_sha256 = \"{}\"\n",
         hex::encode(sha256(b"retail secret")),
         hex::encode(sha256(b"lab secret"))
@@ -1498,7 +1498,7 @@ async fn renews_a_tpm_bound_certificate_only_with_the_key_it_has() {
     assert_contract(&harness.events);
 }
 
-fn tokens_file(entries: &[(&str, &str, &str)]) -> FleetTokens {
+fn tokens_file(entries: &[(&str, &str, &str)]) -> HashedTokens {
     let mut text = String::new();
     for (name, secret, extra) in entries {
         text.push_str(&format!(
@@ -1506,7 +1506,7 @@ fn tokens_file(entries: &[(&str, &str, &str)]) -> FleetTokens {
             hex::encode(sha256(secret.as_bytes()))
         ));
     }
-    FleetTokens::from_toml(&text).unwrap()
+    HashedTokens::from_toml(&text).unwrap()
 }
 
 async fn enroll_new(
