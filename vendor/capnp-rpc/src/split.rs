@@ -19,10 +19,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+use crate::shared::SharedExt;
+
 use futures::{Future, FutureExt};
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use core::cell::RefCell;
+use alloc::rc::Rc;
 
 pub fn split<F, T1, T2, E>(
     f: F,
@@ -39,7 +43,7 @@ where
             let (v1, v2) = r?;
             Ok(Rc::new(RefCell::new((Some(v1), Some(v2)))))
         })
-        .shared();
+        .into_shared();
     (
         shared
             .clone()

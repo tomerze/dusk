@@ -31,15 +31,27 @@ repository = "https://github.com/capnproto/capnproto-rust"
 name = "capnp_rpc"
 path = "src/lib.rs"
 
+[features]
+std = [
+    "capnp/std",
+    "capnp-futures/std",
+]
+
 [dependencies.capnp]
 version = "0.21.0"
+features = ["alloc"]
+default-features = false
 
 [dependencies.capnp-futures]
 version = "0.21.0"
 
 [dependencies.futures]
 version = "0.3.0"
-features = ["std"]
+features = ["alloc"]
+default-features = false
+
+[dependencies.tracing]
+version = "0.1.41"
 default-features = false
 
 [lints.clippy]

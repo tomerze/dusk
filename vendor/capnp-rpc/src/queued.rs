@@ -19,15 +19,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+use crate::shared::SharedExt;
+
 use capnp::any_pointer;
 use capnp::capability::Promise;
 use capnp::private::capability::{ClientHook, ParamsHook, PipelineHook, PipelineOp, ResultsHook};
 use capnp::Error;
 
-use futures::{Future, FutureExt, TryFutureExt};
+use futures::{Future, TryFutureExt};
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use core::cell::RefCell;
+use alloc::rc::{Rc, Weak};
 
 use crate::attach::Attach;
 use crate::sender_queue::SenderQueue;
@@ -37,7 +41,7 @@ pub struct PipelineInner {
     // Once the promise resolves, this will become non-null and point to the underlying object.
     redirect: Option<Box<dyn PipelineHook>>,
 
-    promise_to_drive: futures::future::Shared<Promise<(), Error>>,
+    promise_to_drive: crate::shared::Shared<Promise<(), Error>>,
 
     clients_to_resolve: SenderQueue<(Weak<RefCell<ClientInner>>, Vec<PipelineOp>), ()>,
 }
@@ -64,7 +68,7 @@ impl PipelineInner {
             let _ = waiter.send(());
         }
 
-        this.borrow_mut().promise_to_drive = Promise::ok(()).shared();
+        this.borrow_mut().promise_to_drive = Promise::ok(()).into_shared();
     }
 }
 
@@ -117,7 +121,7 @@ impl Pipeline {
     pub fn new() -> (PipelineInnerSender, Self) {
         let inner = Rc::new(RefCell::new(PipelineInner {
             redirect: None,
-            promise_to_drive: Promise::ok(()).shared(),
+            promise_to_drive: Promise::ok(()).into_shared(),
             clients_to_resolve: SenderQueue::new(),
         }));
 
@@ -138,7 +142,7 @@ impl Pipeline {
             futures::future::try_join(self.inner.borrow_mut().promise_to_drive.clone(), promise)
                 .map_ok(|_| ()),
         )
-        .shared();
+        .into_shared();
         self.inner.borrow_mut().promise_to_drive = new;
     }
 }
@@ -184,7 +188,7 @@ pub struct ClientInner {
     // to a reference to it so that it doesn't get canceled before the client is resolved.
     pipeline_inner: Option<Rc<RefCell<PipelineInner>>>,
 
-    promise_to_drive: Option<futures::future::Shared<Promise<(), Error>>>,
+    promise_to_drive: Option<crate::shared::Shared<Promise<(), Error>>>,
 
     // When this promise resolves, each queued call will be forwarded to the real client.  This needs
     // to occur *before* any 'whenMoreResolved()' promises resolve, because we want to make sure
@@ -244,7 +248,7 @@ impl Client {
         F: Future<Output = Result<(), Error>> + 'static,
     {
         assert!(self.inner.borrow().promise_to_drive.is_none());
-        self.inner.borrow_mut().promise_to_drive = Some(Promise::from_future(promise).shared());
+        self.inner.borrow_mut().promise_to_drive = Some(Promise::from_future(promise).into_shared());
     }
 }
 

@@ -22,13 +22,18 @@
 //! An implementation of [`VatNetwork`](crate::VatNetwork) for the common case
 //! of a client-server connection.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
+use crate::shared::SharedExt;
+
 use capnp::capability::Promise;
 use capnp::message::ReaderOptions;
 use futures::channel::oneshot;
-use futures::{AsyncRead, AsyncWrite, FutureExt, TryFutureExt};
+use capnp_futures::io::{AsyncRead, AsyncWrite};
+use futures::{FutureExt, TryFutureExt};
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use core::cell::RefCell;
+use alloc::rc::{Rc, Weak};
 
 pub type VatId = crate::rpc_twoparty_capnp::Side;
 
@@ -221,7 +226,7 @@ where
     // connection handle that we will return on connect()
     weak_connection_inner: Weak<RefCell<ConnectionInner<T>>>,
 
-    execution_driver: futures::future::Shared<Promise<(), ::capnp::Error>>,
+    execution_driver: crate::shared::Shared<Promise<(), ::capnp::Error>>,
     side: crate::rpc_twoparty_capnp::Side,
 }
 
@@ -264,7 +269,7 @@ where
                         .then(move |_| futures::future::ready(r))
                         .map_ok(|_| ())
                 }))
-                .shared(),
+                .into_shared(),
                 tx,
             )
         };
