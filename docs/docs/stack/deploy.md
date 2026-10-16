@@ -438,6 +438,7 @@ custom resource definitions:
 |----------|---------|----------|
 | Strimzi | 1.2.0 | Kafka 4.2.1 on three combined controller and broker nodes, the topics, one user per producer and consumer with the ACLs of the Kafka contracts |
 | CloudNativePG | 1.30.1 | Postgres 17.11, three instances; twilight connects to `postgres-rw` |
+| CloudNativePG Barman Cloud plugin | v0.15.1 | Postgres WAL archiving and base backups to the object store ([Backups and disaster recovery](disaster-recovery.md#postgres)); needs cert-manager |
 | cert-manager | v1.21.2 | The internal and fleet-server CAs and nightfall's certificates, with its own approver turned off (`--controllers=*,-certificaterequests-approver`) |
 | cert-manager csi-driver | v0.16.0 | dawn's and twilight's per-pod certificates, `urn:dusk:principal:<pod>`, valid 24 hours, requested as the pod's ServiceAccount (`--use-token-request`) |
 | cert-manager approver-policy | | Which certificate requests in `dusk` are signed |
@@ -603,7 +604,7 @@ in Kubernetes it is a Secret of the same name in the `dusk` namespace.
 | `nightfall-ledger` | `ledger-signing.key` (Ed25519) and `ledger-param.key`; `ledger-verify-jwks.json`, the public key | nightfall; secrets-init reads it to derive `nightfall-ledger-verify` |
 | `nightfall-ledger-verify` | `ledger-verify-jwks.json`, the public key of `nightfall-ledger`, alone | twilight and verifiers |
 | `dawn-output-key` | `output.key`, the HMAC key of process output digests | dawn |
-| `ceph-admin`, `ceph-vector`, `ceph-ledger-writer`, `ceph-dawn`, `ceph-reader`, `ceph-signoz` | `access-key`, `secret-key` of each object store user | ceph-init; Vector (`vector`, `ledger-writer`), dawn, ClickHouse (`reader`, `signoz`), SigNoz |
+| `ceph-admin`, `ceph-vector`, `ceph-ledger-writer`, `ceph-dawn`, `ceph-reader`, `ceph-signoz`, `ceph-postgres-backup` | `access-key`, `secret-key` of each object store user | ceph-init; Vector (`vector`, `ledger-writer`), dawn, ClickHouse (`reader`, `signoz`), SigNoz, CloudNativePG's backups (`postgres-backup`) |
 | `postgres-superuser`, `postgres-twilight`, `postgres-grafana`, `postgres-signoz`, `postgres-scale` | `username`, `password`, `pgpass` | Postgres; twilight, Grafana, SigNoz, the [scale run](scale.md#the-report) report (the local stack and the scale overlay only) |
 | `clickhouse-admin`, `clickhouse-vector`, `clickhouse-grafana`, `clickhouse-signoz` | `password` | ClickHouse; the schema job, Vector, Grafana, SigNoz |
 | `grafana-admin` | `password` | Grafana |
@@ -702,20 +703,24 @@ the same every day at 03:17 in the controller manager's time zone.
 
 ## Backups
 
-Back up, before anything runs in production and whenever it changes:
+The prod overlay backs up Postgres - the inventory - by itself: CloudNativePG archives every WAL file, and takes a base backup every
+day, to the bucket `dusk-postgres-backups`, kept 30 days. `dusk.node-state` is
+rebuilt from the inventory, and ClickHouse is refilled from the Parquet lake.
+What remains is yours to keep outside the cluster, before anything runs in
+production and whenever it changes:
 
 | What | Where | Why |
 |------|-------|-----|
 | `fleet-device-id` | Secret | Every device id is derived from it. With a new key every device becomes a new device, and the inventory, campaign history and ledger no longer match the machines they describe. It is never rotated; losing it cannot be undone. |
 | `fleet-server-ca` (prod) or `pki-ca` (dev) | Secret | Every node trusts this CA. With a new one every node must be reinstalled with the new anchor. |
 | `step-ca`, `step-ca-password`, and the offline copy of `step-ca-root-key` | Secrets | Every node certificate chains to this CA; without it nodes cannot renew and must re-enroll. The root key is needed only to sign a new intermediate. |
-| step-ca's `database` volume | PersistentVolumeClaim | The one-time tokens step-ca accepted; losing it lets a token captured in the last five minutes be used again. |
+| step-ca's `database` volume | PersistentVolumeClaim | The one-time tokens step-ca accepted. Losing it lets every install token that has not expired be used once more; retire them as [Lose step-ca](disaster-recovery.md#lose-step-ca) says. |
 | `nightfall-ledger` | Secret | Checkpoint signatures are verified with its public key (also in `nightfall-ledger-verify`); keep every public key ever used. |
-| `inventory` database | Postgres | twilight's state: nodes, campaigns, alerts. |
+| `dusk-postgres-backups` | Object store | The Postgres backups live on the same Rook cluster; against losing the site, point the `ObjectStore` at an object store elsewhere or replicate the bucket. |
 | `dusk-ledger-evidence` | Object store | The evidence copy of the ledger. It is object-locked (COMPLIANCE, 400 days in prod), so it is its own backup against deletion; replicate it to another site against losing the site. |
 
-ClickHouse and Kafka hold copies: ClickHouse's tables can be refilled from the
-Parquet lake, and Kafka is a buffer with retention of days.
+Every secret, what losing each one costs, the restores and the drills that
+were run are in [Backups and disaster recovery](disaster-recovery.md).
 
 ## Sizing
 

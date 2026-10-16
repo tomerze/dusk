@@ -107,6 +107,7 @@ nav:
       - Campaigns: stack/campaigns.md
       - The twilight UI: stack/ui.md
       - Security model: stack/security.md
+      - Backups and disaster recovery: stack/disaster-recovery.md
       - Runbooks:
           - stack/runbooks/index.md
           - Process nobody intended: stack/runbooks/process_without_intent.md
@@ -132,6 +133,8 @@ nav:
           - Ledger evidence copy stalled: stack/runbooks/ledger_evidence_stalled.md
           - Alert delivery failing: stack/runbooks/alert_delivery_failing.md
           - Messages dropped by Vector: stack/runbooks/vector_messages_dropped.md
+          - Postgres backup failing: stack/runbooks/postgres_backup_failing.md
+          - Postgres WAL archiving lagging: stack/runbooks/postgres_wal_archiving_lagging.md
   - Telemetry:
       - Collected information: telemetry/collected-information.md
   - Customize:

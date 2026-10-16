@@ -33,6 +33,8 @@ rule, whose notifications link the page.
 | `ledger_evidence_stalled` | critical | Grafana, over ClickHouse | [Ledger evidence copy stalled](ledger_evidence_stalled.md) |
 | `alert_delivery_failing` | high | Grafana, over the inventory database | [Alert delivery failing](alert_delivery_failing.md) |
 | `vector_messages_dropped` | high | Grafana, over ClickHouse | [Messages dropped by Vector](vector_messages_dropped.md) |
+| `postgres_backup_failing` | high | Grafana, over ClickHouse | [Postgres backup failing](postgres_backup_failing.md) |
+| `postgres_wal_archiving_lagging` | high | Grafana, over ClickHouse | [Postgres WAL archiving lagging](postgres_wal_archiving_lagging.md) |
 
 ## How alerts reach people
 
