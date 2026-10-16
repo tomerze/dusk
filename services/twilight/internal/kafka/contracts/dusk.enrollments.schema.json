@@ -44,10 +44,10 @@
       "anyOf": [{ "$ref": "common.schema.json#/$defs/tenant" }, { "type": "null" }]
     },
     "credential_kind": {
-      "enum": ["fleet_token", "install_token", "tpm_attestation", "certificate"]
+      "enum": ["fleet_token", "install_token", "provision_token", "tpm_attestation", "certificate"]
     },
     "credential_ref": {
-      "description": "The fleet token entry's name or the install token's sub claim, never the secret.",
+      "description": "The fleet token or provision token entry's name, or the install token's sub claim, never the secret.",
       "type": ["string", "null"]
     },
     "credential_issuer": {
@@ -126,7 +126,9 @@
       },
       "then": {
         "properties": {
-          "credential_kind": { "enum": ["fleet_token", "install_token", "tpm_attestation"] }
+          "credential_kind": {
+            "enum": ["fleet_token", "install_token", "provision_token", "tpm_attestation"]
+          }
         }
       }
     }
