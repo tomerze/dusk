@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 
@@ -43,7 +44,7 @@ func TestNodeStateRoundTripAndTopicCheck(test *testing.T) {
 	defer cancel()
 	producerClient := client(test)
 	admin := kadm.NewClient(producerClient)
-	suffix := strings.ReplaceAll(test.Name(), "/", "-")
+	suffix := strings.ReplaceAll(test.Name(), "/", "-") + "." + uuid.NewString()[:8]
 	nodeStateTopic := "dusk.node-state." + suffix
 	ledgerTopic := "dusk.ledger." + suffix
 	if _, failure := admin.CreateTopic(operation, 1, 1, map[string]*string{"cleanup.policy": new("compact")}, nodeStateTopic); failure != nil {

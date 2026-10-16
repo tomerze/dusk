@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -100,6 +102,10 @@ func PostgresURL(test testing.TB) string {
 	if postgresURL != "" {
 		return postgresURL
 	}
+	if given := os.Getenv("TWILIGHT_TEST_POSTGRES_URL"); given != "" {
+		postgresURL = given
+		return postgresURL
+	}
 	operation, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	started, failure := postgres.Run(operation, PostgresImage,
@@ -142,13 +148,14 @@ func EmptyDatabase(test testing.TB) (*pgxpool.Pool, string) {
 	if failure != nil {
 		test.Fatalf("parse postgres url: %v", failure)
 	}
-	url := fmt.Sprintf("postgres://twilight:twilight@%s:%d/%s?sslmode=disable", configuration.Host, configuration.Port, name)
-	pool, failure := database.Open(operation, url, 16)
+	address := (&url.URL{Scheme: "postgres", User: url.UserPassword(configuration.User, configuration.Password),
+		Host: net.JoinHostPort(configuration.Host, fmt.Sprint(configuration.Port)), Path: "/" + name, RawQuery: "sslmode=disable"}).String()
+	pool, failure := database.Open(operation, address, 16)
 	if failure != nil {
 		test.Fatalf("open database: %v", failure)
 	}
 	test.Cleanup(pool.Close)
-	return pool, url
+	return pool, address
 }
 
 func Database(test testing.TB) (*pgxpool.Pool, string) {
@@ -174,6 +181,10 @@ func Brokers(test testing.TB) string {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if brokers != "" {
+		return brokers
+	}
+	if given := os.Getenv("TWILIGHT_TEST_KAFKA_BROKERS"); given != "" {
+		brokers = given
 		return brokers
 	}
 	operation, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
