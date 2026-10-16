@@ -12,7 +12,7 @@ over Kafka. Each topic has one JSON Schema (draft 2020-12) in
 | `dusk.census` | `<instance>/header`, `<instance>/<generation>/<index>` | nightfall | twilight, nightfall | compact | 1 / 6 |
 | `dusk.ledger` | `<instance>` | nightfall | vector, twilight | delete, 30 d | 3 / 32 |
 | `dusk.enrollments` | `<device_id>/<installation_id>` | nightfall | twilight, vector | delete, 30 d | 3 / 12 |
-| `dusk.node-state` | `device/<device_id>`, `installation/<device_id>/<installation_id>` | twilight | nightfall | compact | 1 / 6 |
+| `dusk.node-state` | `device/<device_id>`, `installation/<device_id>/<installation_id>`, `complete/<n>` (v2) | twilight | nightfall | compact | 1 / 6 |
 | `dusk.credential-quota` | `<credential_kind>/<credential>/<installation_id>`, the same with `/release` | nightfall | nightfall | compact | 1 / 1 |
 | `dusk.process-results` | `<device_id>/<installation_id>` | dawn | twilight, vector | delete, 7 d | 3 / 48 |
 | `dusk.process-output` | `<device_id>/<installation_id>` | dawn | vector | delete, 7 d | 3 / 24 |
@@ -40,6 +40,21 @@ In prod every topic has replication factor 3 and `min.insync.replicas` 2.
   writes to its own partition, by default the one numbered by its StatefulSet ordinal,
   in transactions, so consumers read it with `isolation.level=read_committed`. The prod
   partition count is at least the largest number of nightfall replicas.
+* `dusk.node-state` holds two kinds of record. Under a `device/` or
+  `installation/` key, the latest lifecycle of that device or installation, a
+  `dusk.node-state/v1` message. Under a `complete/<n>` key, a completion record
+  (`"record": "complete"`), which twilight writes once the topic carries every
+  lifecycle its inventory holds - after its first start, and again whenever it
+  rebuilds the topic. It picks one `n` per partition, the lowest that the Java
+  default partitioner sends there, so every partition holds one. nightfall
+  serves nodes only once it has read a completion record on every partition: a
+  topic Kafka lost, or one deleted and created again, has none, and its
+  lifecycles are not trusted until twilight has written them all again.
+  The completion record is new in `dusk.node-state/v2`, which is v1 plus that
+  record. twilight writes completion records as v2 and lifecycles still as v1,
+  so a nightfall that knows only v1 keeps applying every lifecycle and drops the
+  completion records it does not need; a lifecycle moves to v2 only once no
+  such nightfall runs.
 * `dusk.intended-processes` holds every process twilight intends: under its key, the
   latest record of it, written before twilight asks dawn for the process and again on
   every resend, and a tombstone once it expires or twilight reaps it. nightfall reads
