@@ -1,0 +1,84 @@
+volumes:
+  simulator-ca: {}
+
+services:
+  simulator-ca:
+    image: smallstep/step-cli:0.31.0
+    user: "0:0"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        { [ -s /simulator/ca.key ]
+        || { step certificate create "Dusk simulator CA" /simulator/ca.crt /tmp/sec1.key
+        --profile root-ca --not-after 87600h --kty EC --crv P-256 --no-password --insecure --force > /dev/null
+        && step crypto key format --pkcs8 --pem --no-password --insecure --force --out /simulator/ca.key /tmp/sec1.key > /dev/null; }; }
+        && cat /pki/trust-anchors/fleet-client-ca.crt /simulator/ca.crt > /simulator/fleet-client-ca.crt
+        && chown 10001:10001 /simulator/ca.key /simulator/ca.crt
+        && chmod 0400 /simulator/ca.key
+        && chmod 0444 /simulator/ca.crt /simulator/fleet-client-ca.crt
+    network_mode: none
+    depends_on:
+      pki-init:
+        condition: service_completed_successfully
+    volumes:
+      - simulator-ca:/simulator
+      - { type: volume, source: pki, target: /pki/trust-anchors, read_only: true, volume: { subpath: trust-anchors } }
+
+  nightfall:
+    depends_on:
+      simulator-ca:
+        condition: service_completed_successfully
+    volumes:
+      - { type: volume, source: simulator-ca, target: /etc/nightfall/pki/fleet-client-ca.crt, read_only: true, volume: { subpath: fleet-client-ca.crt } }
+
+  nightfall-simulator:
+    image: dusk-nightfall-simulator:dev
+    build:
+      context: ../..
+      dockerfile: services/nightfall/Dockerfile
+      target: simulator
+      args:
+        GIT_REV: ${GIT_REV:-}
+        CARGO_BUILD_JOBS: ${CARGO_BUILD_JOBS:-default}
+        CPUSET: ${DUSK_BUILD_CPUSET:-}
+    command:
+      - --fleet
+      - fleet.${DUSK_DOMAIN:-dusk.test}:8443
+      - --server-name
+      - fleet.${DUSK_DOMAIN:-dusk.test}
+      - --fleet-server-ca
+      - /etc/nightfall-simulator/fleet-server-ca.crt
+      - --issuer-certificate
+      - /etc/nightfall-simulator/ca.crt
+      - --issuer-key
+      - /etc/nightfall-simulator/ca.key
+      - --tenant
+      - dev
+      - --links
+      - ${DUSK_SIMULATED_LINKS:-1000}
+      - --links-per-second
+      - ${DUSK_SIMULATED_LINKS_PER_SECOND:-200}
+    networks: [stack]
+    ports:
+      - "127.0.0.1:${DUSK_SIMULATOR_METRICS_PORT-9103}:9103"
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    sysctls:
+      net.ipv4.ip_local_port_range: "1024 65535"
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    depends_on:
+      simulator-ca:
+        condition: service_completed_successfully
+      nightfall:
+        condition: service_healthy
+    volumes:
+      - { type: volume, source: simulator-ca, target: /etc/nightfall-simulator/ca.crt, read_only: true, volume: { subpath: ca.crt } }
+      - { type: volume, source: simulator-ca, target: /etc/nightfall-simulator/ca.key, read_only: true, volume: { subpath: ca.key } }
+      - { type: volume, source: pki, target: /etc/nightfall-simulator/fleet-server-ca.crt, read_only: true, volume: { subpath: trust-anchors/fleet-server-ca.crt } }

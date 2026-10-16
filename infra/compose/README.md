@@ -38,6 +38,18 @@ docker compose -p dusk-verify --profile verify run --rm verify
 docker compose -p dusk-verify down --volumes
 ```
 
+Load the stack with simulated nodes, each a fleet link of its own, from
+`simulator.yaml`, which also makes this nightfall trust the simulator's own
+CA (see `docs/docs/stack/simulator.md`):
+
+```bash
+docker compose -f compose.yaml -f simulator.yaml build nightfall-simulator
+DUSK_SIMULATED_LINKS=5000 docker compose -f compose.yaml -f simulator.yaml up -d nightfall-simulator
+```
+
+`docker compose up -d nightfall`, without `simulator.yaml`, takes that trust
+away again.
+
 Stop it, keeping every secret, all data and the nodes' identities:
 
 ```bash
