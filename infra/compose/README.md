@@ -21,6 +21,11 @@ On a machine you share, also export `CARGO_BUILD_JOBS` (Rust build
 parallelism) and `DUSK_BUILD_CPUSET` (the CPUs the compiles run on, such as
 `0-11`) before `docker compose build`.
 
+The nodes enroll with the provision token `secrets-init` writes to
+`/secrets/fleet-provision-token/provision-token`, which compose mounts into each
+node at `/etc/dusk/provision-token` and whose entry, named `compose`, nightfall
+reads from `provision-tokens.toml` beside it; their fleet token is never sent.
+
 | UI | Address | Sign in |
 |----|---------|---------|
 | twilight | http://127.0.0.1:8080 | `docker compose exec twilight twilight token create --name admin --role admin` |
