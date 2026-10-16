@@ -25,6 +25,7 @@ networks:
     ipam:
       config:
         - subnet: ${DUSK_SUBNET:-10.231.64.0/24}
+          ip_range: ${DUSK_IP_RANGE:-10.231.64.128/25}
 
 secrets:
   fleet-token:
