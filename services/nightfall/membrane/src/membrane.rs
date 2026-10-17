@@ -140,6 +140,7 @@ struct Capability {
     cap_id: u64,
     parent_cap_id: Option<u64>,
     pid: u64,
+    used: Cell<bool>,
     side: Side,
     scope: Weak<Scope>,
     connection: Weak<ConnectionState>,
@@ -224,6 +225,7 @@ impl Server for WrapperDispatch {
         results: Results<any_pointer::Owned>,
     ) -> DispatchCallResult {
         let capability = &self.wrapper.capability;
+        capability.used.set(true);
         let Some(connection) = capability.connection.upgrade() else {
             return DispatchCallResult::new(Promise::err(revoked()), false);
         };
@@ -373,6 +375,7 @@ struct ResultGuard {
     call: CallInfo,
     slot: Option<AuditReservation>,
     revocation: CancellationToken,
+    forwarded: bool,
 }
 
 impl ResultGuard {
@@ -389,7 +392,9 @@ impl Drop for ResultGuard {
         let Some(slot) = self.slot.take() else {
             return;
         };
-        let code = if self.revocation.is_cancelled() || self.connection.dropped.get() {
+        let code = if !self.forwarded {
+            ResultCode::Cancelled
+        } else if self.revocation.is_cancelled() || self.connection.dropped.get() {
             ResultCode::Revoked
         } else {
             ResultCode::Disconnected
@@ -400,7 +405,7 @@ impl Drop for ResultGuard {
             call_id = %self.call.call_id,
             action = %self.call.action,
             result = code.as_str(),
-            "a forwarded call ended before its answer"
+            "a call ended before its answer"
         );
         self.connection
             .record_result(&self.call, slot, code, Vec::new());
@@ -423,9 +428,16 @@ struct FilledPath {
 #[derive(Default)]
 struct Pipeline {
     paths: Vec<PendingPath>,
+    caller: Weak<()>,
 }
 
 impl Pipeline {
+    fn abandoned(&self) -> bool {
+        !self.paths.is_empty()
+            && self.caller.strong_count() == 0
+            && self.paths.iter().all(|path| !path.capability.used.get())
+    }
+
     fn fail(self, error: &capnp::Error) {
         for path in self.paths {
             if path.resolver.send(Err(error.clone())).is_err() {
@@ -1156,7 +1168,7 @@ impl ConnectionState {
         prepared: Prepared,
         mut results: Results<any_pointer::Owned>,
     ) -> Promise<(), capnp::Error> {
-        let pipeline = match self.pipeline(&prepared, &mut results) {
+        let mut pipeline = match self.pipeline(&prepared, &mut results) {
             Ok(pipeline) => pipeline,
             Err(error) => {
                 tracing::warn!(
@@ -1171,6 +1183,8 @@ impl ConnectionState {
             }
         };
         let pipelined = !pipeline.paths.is_empty();
+        let waiting = Rc::new(());
+        pipeline.caller = Rc::downgrade(&waiting);
         let call_id = prepared.call.call_id.clone();
         let entered = prepared.target.gate.enter();
         let forwarding = async move {
@@ -1197,6 +1211,7 @@ impl ConnectionState {
             }
         });
         Promise::from_future(async move {
+            let _waiting = waiting;
             receiver.await.unwrap_or_else(|_| {
                 Err(capnp::Error::disconnected(
                     "the forwarding of the call ended".to_string(),
@@ -1223,6 +1238,19 @@ impl ConnectionState {
         self.await_intent(&prepared).await?;
         let begun = self.begin(prepared)?;
         let begun = self.wait_commit(begun).await?;
+        if pipeline.as_ref().is_some_and(Pipeline::abandoned) {
+            tracing::debug!(
+                principal = %self.principal,
+                session_id = %self.session_id,
+                call_id = %begun.prepared.call.call_id,
+                action = %begun.prepared.call.action,
+                "the caller let go of a call and of everything pipelined on it before it was forwarded; it is not forwarded"
+            );
+            begun.result.record(ResultCode::Cancelled, Vec::new());
+            return Err(capnp::Error::disconnected(
+                "the caller let go of the call before it was forwarded".to_string(),
+            ));
+        }
         let in_flight = self.send(begun, pipeline.take().unwrap_or_default());
         drop(ticket);
         self.finish(in_flight?, results).await
@@ -1329,6 +1357,7 @@ impl ConnectionState {
             call: prepared.call.clone(),
             slot: Some(result_slot),
             revocation: prepared.revocation.clone(),
+            forwarded: false,
         };
         if override_event {
             let mut event = self.event_entry(AuditEvent::QuarantineOverride, prepared.call.pid);
@@ -1432,7 +1461,7 @@ impl ConnectionState {
         let Begun {
             prepared,
             mapped,
-            result,
+            mut result,
             commit: _,
         } = begun;
         let Some(scope) = prepared
@@ -1470,6 +1499,7 @@ impl ConnectionState {
             return Err(error);
         }
         let remote = request.hook.send();
+        result.forwarded = true;
         let mut paths = Vec::with_capacity(pipeline.paths.len());
         for path in pipeline.paths {
             let hook = remote
@@ -1650,6 +1680,7 @@ impl ConnectionState {
             cap_id,
             parent_cap_id: Some(origin.cap_id),
             pid: origin.pid,
+            used: Cell::new(false),
             side,
             scope: Rc::downgrade(scope),
             connection: Rc::downgrade(self),
@@ -1767,6 +1798,7 @@ impl ConnectionState {
                 .filter(|registration| registration.alive.strong_count() > 0)
                 .and_then(|registration| registration.capability.upgrade());
             if let Some(capability) = known {
+                capability.used.set(true);
                 cap_ids.push(capability.cap_id);
                 if capability.side == destination {
                     let inner = capability.scope.upgrade().and_then(|owner| {

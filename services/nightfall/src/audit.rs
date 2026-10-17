@@ -36,6 +36,7 @@ fn result_code(code: ResultCode) -> LedgerResultCode {
         ResultCode::Denied => LedgerResultCode::Denied,
         ResultCode::RateLimited => LedgerResultCode::RateLimited,
         ResultCode::Revoked => LedgerResultCode::Revoked,
+        ResultCode::Cancelled => LedgerResultCode::Cancelled,
     }
 }
 

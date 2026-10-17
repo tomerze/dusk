@@ -37,6 +37,7 @@ pub enum ResultCode {
     Denied,
     RateLimited,
     Revoked,
+    Cancelled,
 }
 
 impl ResultCode {
@@ -50,6 +51,7 @@ impl ResultCode {
             ResultCode::Denied => "denied",
             ResultCode::RateLimited => "rate_limited",
             ResultCode::Revoked => "revoked",
+            ResultCode::Cancelled => "cancelled",
         }
     }
 

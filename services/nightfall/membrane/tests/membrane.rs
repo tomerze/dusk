@@ -986,6 +986,59 @@ fn dropping_the_membrane_breaks_derived_caps_and_in_flight_calls() {
 }
 
 #[test]
+fn a_call_its_caller_let_go_of_before_its_ledger_entry_committed_never_reaches_the_node() {
+    run(|port| async move {
+        let harness = membrane_harness("tester-0", false, Limits::default(), port).await;
+        let node = connect_node(port).await;
+        let fixed = 0x5eed_1000_0000_0000 | u64::from(port);
+        harness.audit.hold_commits(true);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        for action in ["Dusk.process", "Dusk.ps"] {
+            let client = harness.dusk.clone();
+            let call = tokio::task::spawn_local(async move {
+                match action {
+                    "Dusk.process" => shell_at(&client, Some(fixed)).await.map(drop),
+                    _ => client.ps_request().send().promise.await.map(drop),
+                }
+            });
+            while harness.audit.held_commits() == 0 {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "{action} never reached the ledger"
+                );
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            call.abort();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            harness.audit.commit_held();
+            while harness.entries(action).len() < 2 {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "{action} has no result entry"
+                );
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            let entries = harness.entries(action);
+            assert_eq!(entries[0].kind, EntryKind::Call, "{action}");
+            assert_eq!(
+                entries[1].result_code,
+                Some(ResultCode::Cancelled),
+                "{action}"
+            );
+        }
+        let on_node = ps(&node)
+            .await
+            .get()
+            .unwrap()
+            .get_process_entries()
+            .unwrap()
+            .iter()
+            .any(|entry| entry.get_pid() == fixed);
+        assert!(!on_node);
+    });
+}
+
+#[test]
 fn a_non_streaming_call_beyond_the_rate_is_rejected() {
     run(|port| async move {
         let limits = Limits {
