@@ -80,6 +80,66 @@ def test_grafana_can_neither_write_nor_create() -> None:
     assert privileges == (0,)
 
 
+SCALE_REPORT_TABLES = {
+    "nodes",
+    "node_presence",
+    "campaigns",
+    "campaign_nodes",
+    "intended_processes",
+}
+
+
+def skip_without_scale() -> None:
+    with connect("twilight") as twilight:
+        found = twilight.execute(
+            "SELECT 1 FROM pg_roles WHERE rolname = 'scale'"
+        ).fetchone()
+    if found is None:
+        pytest.skip("the role scale exists only on a stack started with simulator.yaml")
+
+
+def test_scale_may_read_exactly_the_tables_a_scale_report_counts() -> None:
+    skip_without_scale()
+    with connect("twilight") as twilight, twilight.transaction(force_rollback=True):
+        existing = {
+            name
+            for (name,) in twilight.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            )
+        }
+        for name in sorted(SCALE_REPORT_TABLES - existing) + [
+            f"verify_{uuid.uuid4().hex}"
+        ]:
+            twilight.execute(
+                sql.SQL("CREATE TABLE {} (value integer)").format(sql.Identifier(name))
+            )
+        readable = dict(
+            twilight.execute(
+                "SELECT tablename, has_table_privilege('scale', format('public.%I', tablename), 'SELECT') "
+                "FROM pg_tables WHERE schemaname = 'public'"
+            ).fetchall()
+        )
+    assert {
+        name for name, allowed in readable.items() if allowed
+    } == SCALE_REPORT_TABLES
+
+
+def test_scale_can_neither_write_nor_create() -> None:
+    skip_without_scale()
+    with connect("scale") as scale:
+        assert scale.execute("SHOW default_transaction_read_only").fetchone() == ("on",)
+        scale.execute("SET default_transaction_read_only = off")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            scale.execute("CREATE TABLE public.verify_forbidden (value integer)")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            scale.execute("CREATE TEMPORARY TABLE verify_forbidden (value integer)")
+        privileges = scale.execute(
+            "SELECT count(*) FROM information_schema.table_privileges "
+            "WHERE grantee = 'scale' AND privilege_type <> 'SELECT'"
+        ).fetchone()
+    assert privileges == (0,)
+
+
 def test_signoz_has_its_own_database_and_no_inventory_access() -> None:
     if not os.path.exists("/secrets/postgres-signoz"):
         pytest.skip("the signoz password is not mounted")

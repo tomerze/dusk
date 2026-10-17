@@ -111,7 +111,7 @@ for user in admin vector ledger-writer dawn reader signoz; do
     create "ceph-$user" ceph_user
 done
 create postgres-superuser postgres_login postgres
-for role in twilight grafana signoz; do
+for role in twilight grafana signoz scale; do
     create "postgres-$role" postgres_login "$role"
 done
 for user in admin vector grafana signoz; do

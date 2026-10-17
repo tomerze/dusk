@@ -831,3 +831,4 @@ services:
       - { <<: *secret, target: /secrets/postgres-twilight, volume: { subpath: postgres-twilight } }
       - { <<: *secret, target: /secrets/postgres-grafana, volume: { subpath: postgres-grafana } }
       - { <<: *secret, target: /secrets/postgres-signoz, volume: { subpath: postgres-signoz } }
+      - { <<: *secret, target: /secrets/postgres-scale, volume: { subpath: postgres-scale } }
