@@ -64,7 +64,7 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 					break
 				}
 				backoff = time.Second
-				applied := applyPartitions(operation, name, logger, fetches, handle)
+				applied, stopped := applyPartitions(operation, name, logger, fetches, handle)
 				if len(applied) > 0 {
 					committing, cancel := context.WithTimeout(context.WithoutCancel(operation), 10*time.Second)
 					if failure := client.CommitRecords(committing, applied...); failure != nil {
@@ -72,6 +72,7 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 					}
 					cancel()
 				}
+				rewind(client, stopped)
 				client.AllowRebalance()
 			}
 			client.CloseAllowingRebalance()
@@ -86,9 +87,23 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 	}
 }
 
-func applyPartitions(operation context.Context, name string, logger *slog.Logger, fetches kgo.Fetches, handle func(context.Context, *kgo.Record) error) []*kgo.Record {
+func rewind(client *kgo.Client, stopped []*kgo.Record) {
+	if len(stopped) == 0 {
+		return
+	}
+	offsets := map[string]map[int32]kgo.EpochOffset{}
+	for _, record := range stopped {
+		if offsets[record.Topic] == nil {
+			offsets[record.Topic] = map[int32]kgo.EpochOffset{}
+		}
+		offsets[record.Topic][record.Partition] = kgo.EpochOffset{Epoch: record.LeaderEpoch, Offset: record.Offset}
+	}
+	client.SetOffsets(offsets)
+}
+
+func applyPartitions(operation context.Context, name string, logger *slog.Logger, fetches kgo.Fetches, handle func(context.Context, *kgo.Record) error) ([]*kgo.Record, []*kgo.Record) {
 	var mutex sync.Mutex
-	var applied []*kgo.Record
+	var applied, stopped []*kgo.Record
 	var running sync.WaitGroup
 	var lag int64
 	fetches.EachPartition(func(partition kgo.FetchTopicPartition) {
@@ -99,54 +114,61 @@ func applyPartitions(operation context.Context, name string, logger *slog.Logger
 		running.Add(1)
 		go func() {
 			defer running.Done()
-			var last *kgo.Record
+			var last, first *kgo.Record
 			for _, record := range partition.Records {
-				if !applyRecord(operation, name, logger, record, handle) {
+				done, stop := applyRecord(operation, name, logger, record, handle)
+				if stop {
+					first = record
+				}
+				if !done {
 					break
 				}
 				last = record
 			}
+			mutex.Lock()
 			if last != nil {
-				mutex.Lock()
 				applied = append(applied, last)
-				mutex.Unlock()
 			}
+			if first != nil {
+				stopped = append(stopped, first)
+			}
+			mutex.Unlock()
 		}()
 	})
 	running.Wait()
 	consumerLag.WithLabelValues(name).Set(float64(lag))
-	return applied
+	return applied, stopped
 }
 
 var ErrStopPartition = errors.New("the partition's records are not this member's to apply")
 
-func applyRecord(operation context.Context, name string, logger *slog.Logger, record *kgo.Record, handle func(context.Context, *kgo.Record) error) bool {
+func applyRecord(operation context.Context, name string, logger *slog.Logger, record *kgo.Record, handle func(context.Context, *kgo.Record) error) (bool, bool) {
 	backoff := time.Second
 	for {
 		failure := handle(operation, record)
 		if failure == nil {
-			return true
+			return true, false
 		}
 		if operation.Err() != nil {
-			return false
+			return false, false
 		}
 		if errors.Is(failure, ErrStopPartition) {
-			logger.Debug("a partition's records are left for the member that owns it", "consumer", name, "topic", record.Topic,
+			logger.Debug("a partition's records are left until it is resumed; it is paused at this record", "consumer", name, "topic", record.Topic,
 				"partition", record.Partition, "offset", record.Offset, "error", failure)
-			return false
+			return false, true
 		}
 		var refused *pgconn.PgError
 		if errors.As(failure, &refused) && strings.HasPrefix(refused.Code, "22") {
 			refusedRecords.WithLabelValues(name).Inc()
 			logger.Error("the database refused a record's data; it is skipped", "consumer", name, "topic", record.Topic,
 				"partition", record.Partition, "offset", record.Offset, "sqlstate", refused.Code, "error", failure)
-			return true
+			return true, false
 		}
 		logger.Warn("a record was not applied; it is retried before anything after it in its partition", "consumer", name, "topic", record.Topic,
 			"partition", record.Partition, "offset", record.Offset, "error", failure)
 		select {
 		case <-operation.Done():
-			return false
+			return false, false
 		case <-time.After(time.Duration(rand.Int64N(int64(backoff))) + 1):
 		}
 		backoff = min(2*backoff, 30*time.Second)

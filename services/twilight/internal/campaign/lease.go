@@ -80,6 +80,21 @@ func (store *Store) LeaseHeld(operation context.Context, lease Lease) (bool, err
 	return held, failure
 }
 
+func (store *Store) LeaseEpochs(operation context.Context, partitions []int32) (map[int32]int64, error) {
+	rows, failure := store.pool.Query(operation, `select partition, epoch from node_partition_leases where partition = any($1)`, partitions)
+	if failure != nil {
+		return nil, failure
+	}
+	epochs := map[int32]int64{}
+	var partition int32
+	var epoch int64
+	_, failure = pgx.ForEachRow(rows, []any{&partition, &epoch}, func() error {
+		epochs[partition] = epoch
+		return nil
+	})
+	return epochs, failure
+}
+
 func (store *Store) CurrentLease(operation context.Context, device, installation string) (Lease, error) {
 	var lease Lease
 	failure := store.pool.QueryRow(operation, `select partition, epoch from node_partition_leases

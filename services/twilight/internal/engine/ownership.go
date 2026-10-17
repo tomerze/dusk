@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"sort"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 
 	"dusk/services/twilight/internal/campaign"
@@ -20,8 +22,9 @@ import (
 )
 
 const (
-	sliceSessionTimeout    = 10 * time.Second
-	sliceHeartbeatInterval = time.Second
+	sliceSessionTimeout     = 10 * time.Second
+	sliceHeartbeatInterval  = time.Second
+	sliceLeaseCheckInterval = 5 * time.Second
 )
 
 var (
@@ -39,7 +42,10 @@ var (
 	}, []string{"how"})
 )
 
-var errNotOwned = errors.New("this instance does not own the node's slice")
+var (
+	errNotOwned          = errors.New("this instance does not own the node's slice")
+	errAssignedElsewhere = errors.New("the consumer group does not assign the slice to this instance")
+)
 
 type slice struct {
 	lease   campaign.Lease
@@ -49,6 +55,7 @@ type slice struct {
 
 type pendingLease struct {
 	since     time.Time
+	fenced    bool
 	retrying  bool
 	escalated bool
 	cancel    context.CancelFunc
@@ -232,10 +239,14 @@ func (current *ownership) run(operation context.Context) {
 		kgo.OnPartitionsLost(current.lost),
 	)
 	var running sync.WaitGroup
-	running.Add(1)
+	running.Add(2)
 	go func() {
 		defer running.Done()
 		current.retryUnleased(operation)
+	}()
+	go func() {
+		defer running.Done()
+		current.watchLeases(operation)
 	}()
 	kafka.ConsumeGroup(operation, options, "slices", current.engine.Config.Kafka.ResultsGroup, current.topic(), current.engine.Logger, current.apply)
 	running.Wait()
@@ -361,9 +372,93 @@ func (current *ownership) fenced(lease campaign.Lease) {
 	if client != nil {
 		client.PauseFetchPartitions(map[string][]int32{current.topic(): {lease.Partition}})
 	}
+	current.mutex.Lock()
+	if current.pending[lease.Partition] == nil {
+		current.pending[lease.Partition] = &pendingLease{since: time.Now(), fenced: true}
+	}
+	current.mutex.Unlock()
 	sliceLeaseLosses.WithLabelValues("fenced").Inc()
-	current.engine.Logger.Error("another instance took the lease of a slice this instance owned; it writes none of its rows until the group assigns it here again",
+	current.engine.Logger.Error("another raise of the lease of a slice this instance owns committed; it stops writing the slice's rows, and takes the lease again from the slice's first result not applied once the group confirms the slice is still assigned here",
 		"partition", lease.Partition, "lease_epoch", lease.Epoch)
+}
+
+func (current *ownership) confirm(operation context.Context, lease campaign.Lease) (bool, error) {
+	checking, cancel := context.WithTimeout(operation, 5*time.Second)
+	defer cancel()
+	held, failure := current.engine.Campaigns.LeaseHeld(checking, lease)
+	if failure != nil {
+		return false, fmt.Errorf("read the lease of slice %d: %w", lease.Partition, failure)
+	}
+	if !held {
+		current.fenced(lease)
+	}
+	return held, nil
+}
+
+func (current *ownership) watchLeases(operation context.Context) {
+	failing := false
+	for sleep(operation, sliceLeaseCheckInterval) {
+		held := current.leases()
+		if len(held) == 0 {
+			continue
+		}
+		partitions := make([]int32, len(held))
+		for index, lease := range held {
+			partitions[index] = lease.Partition
+		}
+		checking, cancel := context.WithTimeout(operation, 5*time.Second)
+		epochs, failure := current.engine.Campaigns.LeaseEpochs(checking, partitions)
+		cancel()
+		if failure != nil {
+			if !failing && operation.Err() == nil {
+				current.engine.Logger.Warn("the leases of the slices this instance owns were not read; a slice another instance took is noticed once they are", "error", failure)
+			}
+			failing = true
+			continue
+		}
+		if failing {
+			current.engine.Logger.Info("the leases of the slices this instance owns are read again")
+			failing = false
+		}
+		for _, lease := range held {
+			if epochs[lease.Partition] != lease.Epoch {
+				current.fenced(lease)
+			}
+		}
+	}
+}
+
+func (current *ownership) assignedHere(operation context.Context, client *kgo.Client, partition int32) (bool, error) {
+	if client == nil {
+		return false, nil
+	}
+	member, _ := client.GroupMetadata()
+	if member == "" {
+		return false, nil
+	}
+	group := current.engine.Config.Kafka.ResultsGroup
+	described, failure := kadm.NewClient(client).DescribeGroups(operation, group)
+	if failure != nil {
+		return false, fmt.Errorf("describe group %s: %w", group, failure)
+	}
+	if described[group].Err != nil {
+		return false, fmt.Errorf("describe group %s: %w", group, described[group].Err)
+	}
+	for _, candidate := range described[group].Members {
+		if candidate.MemberID != member {
+			continue
+		}
+		assignment, consumer := candidate.Assigned.AsConsumer()
+		if !consumer {
+			return false, nil
+		}
+		for _, assigned := range assignment.Topics {
+			if assigned.Topic == current.topic() && slices.Contains(assigned.Partitions, partition) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (current *ownership) retryUnleased(operation context.Context) {
@@ -388,9 +483,21 @@ func (current *ownership) retryUnleased(operation context.Context) {
 			}
 			attempt, cancel := context.WithCancel(operation)
 			waiting.retrying, waiting.cancel = true, cancel
+			fenced := waiting.fenced
 			current.mutex.Unlock()
 			attempted++
-			lease, restored, failure := current.raise(attempt, partition)
+			var lease campaign.Lease
+			var restored int
+			here, failure := true, error(nil)
+			if fenced {
+				here, failure = current.assignedHere(attempt, client, partition)
+			}
+			switch {
+			case failure == nil && here:
+				lease, restored, failure = current.raise(attempt, partition)
+			case failure == nil:
+				failure = errAssignedElsewhere
+			}
 			cancel()
 			current.mutex.Lock()
 			assigned := current.pending[partition] == waiting

@@ -274,7 +274,7 @@ func TestOnlyAppliedRecordsAreCommitted(test *testing.T) {
 		}
 		return nil
 	}
-	applied := applyPartitions(context.Background(), "test", logger, fetches, handle)
+	applied, _ := applyPartitions(context.Background(), "test", logger, fetches, handle)
 	committed := map[int32]int64{}
 	for _, record := range applied {
 		committed[record.Partition] = record.Offset
@@ -290,7 +290,10 @@ func TestOnlyAppliedRecordsAreCommitted(test *testing.T) {
 		}
 		return nil
 	}
-	applied = applyPartitions(operation, "test", logger, kgo.Fetches{{Topics: []kgo.FetchTopic{{Topic: "dusk.process-results", Partitions: []kgo.FetchPartition{partition(0, 10, 11, 12)}}}}}, stuck)
+	applied, stopped := applyPartitions(operation, "test", logger, kgo.Fetches{{Topics: []kgo.FetchTopic{{Topic: "dusk.process-results", Partitions: []kgo.FetchPartition{partition(0, 10, 11, 12)}}}}}, stuck)
+	if len(stopped) != 0 {
+		test.Fatalf("a consumer that stopped is not a partition a handler stopped: %v", stopped)
+	}
 	if len(applied) != 1 || applied[0].Offset != 10 {
 		test.Fatalf("a record that never applied before the consumer stopped must stay uncommitted with everything after it: %v", applied)
 	}
@@ -339,7 +342,7 @@ func TestRecordsTheDatabaseRefusesAreSkipped(test *testing.T) {
 	}
 	operation, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	applied := applyPartitions(operation, "test", logger, kgo.Fetches{{Topics: []kgo.FetchTopic{{Topic: "dusk.process-results", Partitions: []kgo.FetchPartition{fetched}}}}}, handle)
+	applied, _ := applyPartitions(operation, "test", logger, kgo.Fetches{{Topics: []kgo.FetchTopic{{Topic: "dusk.process-results", Partitions: []kgo.FetchPartition{fetched}}}}}, handle)
 	if len(applied) != 1 || applied[0].Offset != 12 || len(handled) != 3 {
 		test.Fatalf("a record the database refuses as data blocked its partition: applied %v, handled %v", applied, handled)
 	}
@@ -368,7 +371,7 @@ func TestAStoppedPartitionIsNeitherRetriedNorCommittedPastWhatItApplied(test *te
 		}
 		return nil
 	}
-	applied := applyPartitions(context.Background(), "test", slog.New(slog.NewJSONHandler(io.Discard, nil)), fetches, handle)
+	applied, stopped := applyPartitions(context.Background(), "test", slog.New(slog.NewJSONHandler(io.Discard, nil)), fetches, handle)
 	last := map[int32]int64{}
 	for _, record := range applied {
 		last[record.Partition] = record.Offset
@@ -378,5 +381,20 @@ func TestAStoppedPartitionIsNeitherRetriedNorCommittedPastWhatItApplied(test *te
 	}
 	if fmt.Sprint(handled[0]) != "[0 1 2]" || fmt.Sprint(handled[1]) != "[0 1 2]" {
 		test.Fatalf("handled %v: the stopped partition's record must be tried once and nothing after it", handled)
+	}
+	if len(stopped) != 1 || stopped[0].Partition != 0 || stopped[0].Offset != 2 {
+		test.Fatalf("the consumer is to rewind the stopped partition to its first record not applied, offset 2 of partition 0, not %v", stopped)
+	}
+}
+
+func TestARewindMovesAStoppedPartitionBackWithoutPausingIt(test *testing.T) {
+	client, failure := kgo.NewClient(kgo.SeedBrokers("127.0.0.1:1"), kgo.ConsumeTopics("dusk.process-results"))
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer client.Close()
+	rewind(client, []*kgo.Record{{Topic: "dusk.process-results", Partition: 1, Offset: 4, LeaderEpoch: -1}})
+	if paused := client.PauseFetchPartitions(nil); len(paused) != 0 {
+		test.Fatalf("a rewind paused %v; a slice taken back before it must go on fetching", paused)
 	}
 }
