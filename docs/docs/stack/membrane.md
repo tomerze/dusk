@@ -207,9 +207,12 @@ with an empty `param_hash`, and logged at `warn`.
 
 Every call that reaches the membrane is a ledger entry of kind `call`, and every
 call it forwarded is followed by one of kind `result` with the same `call_id`. A
-call that ends before the node answers it - the client cancelled it or its
-connection closed - gets the result `error:disconnected`, or `revoked` when the
-membrane was dropped.
+call whose client lets go of it - cancels it or closes its connection - before
+nightfall forwarded it is never forwarded, and gets the result `cancelled`; a
+call another call was pipelined on is forwarded for that call's sake even when
+its own caller let go of it. A call that ends after nightfall forwarded it and
+before the node answered it gets the result `error:disconnected`, or `revoked`
+when the membrane was dropped.
 The authoritative field list is `services/contracts/kafka/dusk.ledger.schema.json`;
 the membrane fills these:
 
@@ -244,8 +247,9 @@ the membrane fills these:
   and returned.
 * `param_hash` - see below.
 * `result_code` - `ok`, `error:failed`, `error:overloaded`,
-  `error:disconnected`, `error:unimplemented`, `revoked` on results; `denied` or
-  `rate_limited` on a call that was refused and never forwarded.
+  `error:disconnected`, `error:unimplemented`, `revoked`, `cancelled` on
+  results; `denied` or `rate_limited` on a call that was refused and never
+  forwarded.
 
 A call on an interface the node's schema bundle does not know is refused
 (`unimplemented`) and recorded as a denied call whose action is

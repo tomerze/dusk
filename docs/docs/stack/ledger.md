@@ -16,7 +16,8 @@ One entry for each of these:
 
 * every call a client makes on a node through nightfall, and every call a node
   makes back to a client;
-* the result of every forwarded call;
+* the result of every forwarded call, and of every call whose client let go of
+  it before nightfall forwarded it (`cancelled`: the node never received it);
 * every call nightfall refuses (`denied`) or holds back by a rate limit
   (`rate_limited`) - one entry, with no result entry after it, because the call
   never reached the node. A call refused because no process twilight intended
@@ -81,7 +82,7 @@ carries.
 | `param_fields` | The parameter fields by name, and whether each was redacted. |
 | `param_cap_ids` | The capabilities passed as parameters. |
 | `param_hash` | The parameter HMAC on calls; `""` on results, events and checkpoints. |
-| `result_code` | `ok`, `error:failed`, `error:overloaded`, `error:disconnected`, `error:unimplemented` or `revoked` on results; `denied` or `rate_limited` on refused calls; `null` on calls that were forwarded. |
+| `result_code` | `ok`, `error:failed`, `error:overloaded`, `error:disconnected`, `error:unimplemented`, `revoked` or `cancelled` on results; `denied` or `rate_limited` on refused calls; `null` on calls nightfall let through. A call let through whose client let go of it before nightfall forwarded it has the result `cancelled`. |
 | `result_cap_ids` | The capabilities a result returned. |
 | `event`, `event_detail` | The event an `event` entry records, and what it carries. A `denied` call refused by admission carries `{"rule": ...}` in `event_detail`; every other non-event entry carries `null`. |
 | `key_id`, `signature` | Checkpoints only: which key signed and the signature. |
