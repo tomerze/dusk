@@ -68,9 +68,13 @@ process at a pid:
   their budgets (`reconcile.default_shell`); twilight's reconcile counts the same
   afterwards: `default_shell_without_intent` when none is open,
   `process_shape` beyond the budgets.
-- A facts read, a file collection, a log stream or an interactive session runs
-  in a shell at its own random pid, and dawn kills and reaps that pid itself
-  when it is done.
+- A file collection, a log stream or an interactive session runs in a shell
+  at its own random pid, and dawn kills and reaps that pid itself when it is
+  done. A facts read is intended at a random pid but runs in the default shell
+  over one connection: its intended process allows no commands of its own
+  (`max_commands` 0) and one more default-shell command than the keys it reads
+  by name; twilight never reaps its pid, and dawn reports it `delivered: false`,
+  as for a reap.
 - Reap is `kill <pid>` then `kill --signal 8 <pid>` from the default shell,
   asked by twilight only once no duplicate can come. A node restart empties the
   process table, so a resend after one runs again.
