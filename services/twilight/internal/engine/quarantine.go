@@ -10,13 +10,13 @@ import (
 	"dusk/services/twilight/internal/kafka"
 )
 
-func (engine *Engine) runQuarantineFlips(operation context.Context, _ int64) {
+func (engine *Engine) runQuarantineFlips(operation context.Context) {
 	for sleep(operation, 2*time.Second) {
 		for _, target := range engine.registry.targets() {
 			if target.Campaign.Kind != campaign.KindQuarantine || target.Campaign.Status != campaign.StatusRunning {
 				continue
 			}
-			rows, failure := engine.Campaigns.RowsInState(operation, target.Campaign.ID, campaign.StateVerifying, 500)
+			rows, failure := engine.Campaigns.RowsInState(operation, target.Campaign.ID, engine.ownership.ownedPartitions(), campaign.StateVerifying, 500)
 			if failure != nil {
 				if operation.Err() == nil {
 					engine.Logger.Warn("reading quarantine rows failed", "campaign_id", target.Campaign.ID, "error", failure)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -67,8 +68,8 @@ func (engine *Engine) needsFacts(node *inventory.Node, session Session, now time
 	return stale && !engine.factsTried.recent(node.Key(), session.NamespaceID, time.Hour, now)
 }
 
-func (engine *Engine) runFacts(operation context.Context, term int64) {
-	bucket := NewTokenBucket(float64(engine.Config.Engine.FactsPerSecond), engine.Config.Engine.FactsPerSecond, time.Now())
+func (engine *Engine) runFacts(operation context.Context) {
+	bucket := NewTokenBucket(0, 1, time.Now())
 	var bucketMutex sync.Mutex
 	var running sync.WaitGroup
 	defer running.Wait()
@@ -89,6 +90,8 @@ func (engine *Engine) runFacts(operation context.Context, term int64) {
 				}
 				for {
 					bucketMutex.Lock()
+					factsPerSecond := float64(engine.Config.Engine.FactsPerSecond) * engine.ownership.share()
+					bucket.Reconfigure(factsPerSecond, max(1, int(math.Ceil(factsPerSecond))))
 					taken := bucket.Take(time.Now())
 					wait := bucket.Wait(time.Now())
 					bucketMutex.Unlock()
@@ -106,7 +109,7 @@ func (engine *Engine) runFacts(operation context.Context, term int64) {
 func (engine *Engine) refreshFacts(operation context.Context, key NodeKey) {
 	defer engine.hint(key)
 	session, online := engine.view.Target(key)
-	if !online {
+	if !online || !engine.ownership.owns(key) {
 		return
 	}
 	now := time.Now()

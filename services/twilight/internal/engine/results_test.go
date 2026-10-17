@@ -12,6 +12,7 @@ import (
 func TestOnlyStartedKeepsANodesDispatchInFlight(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: config.Default()}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.dispatcher = newDispatcher(engine)
+	ownEverything(engine)
 	key := NodeKey{DeviceID: "3f9c0e2a7b5d4c1e8a6f0b2d9e7c5a13", InstallationID: "a41e6c2f9b0d4e7a8c3f5b1d2e9a6c70"}
 	first, second := campaign.Pid(12808937078074471924), campaign.Pid(17352987455937552665)
 	engine.dispatcher.inFlight[key] = &batch{pids: map[campaign.Pid]bool{first: true, second: true}, deadline: time.Now().Add(time.Hour)}

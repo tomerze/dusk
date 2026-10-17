@@ -17,23 +17,32 @@ var gateVerdicts = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help: "Health gate verdicts, by verdict.",
 }, []string{"verdict"})
 
-func (engine *Engine) runGates(operation context.Context, term int64) {
+func (engine *Engine) runGates(operation context.Context, _ int64) {
 	interval := time.Duration(engine.Config.Engine.GateIntervalSeconds) * time.Second
 	for sleep(operation, interval) {
 		for _, target := range engine.registry.targets() {
-			if failure := engine.gate(operation, term, target.Campaign); failure != nil && operation.Err() == nil {
+			if failure := engine.gate(operation, target.Campaign); failure != nil && operation.Err() == nil {
 				engine.Logger.Warn("gate evaluation failed", "campaign_id", target.Campaign.ID, "error", failure)
 			}
 		}
 	}
 }
 
-func (engine *Engine) markLapsed(operation context.Context, term int64, target *campaign.Campaign, now time.Time) error {
-	window := time.Duration(target.Policy.Gates.SilentWindowSeconds) * time.Second
-	_, failure := engine.Pool.Exec(operation, `update campaign_nodes set silent = true, revision = revision + 1, updated_at = now()
-		where campaign_id = $1 and state = 'succeeded' and event_at is not null and back_at is null and silent is null and event_at < $2
-		and exists (select 1 from leadership where id = 1 and term = $3)`, target.ID, now.Add(-window), term)
-	return failure
+func (engine *Engine) runLapses(operation context.Context) {
+	interval := time.Duration(engine.Config.Engine.GateIntervalSeconds) * time.Second
+	for sleep(operation, interval) {
+		leases := engine.ownership.leases()
+		now := time.Now()
+		for _, target := range engine.registry.targets() {
+			if !target.Campaign.Status.Active() {
+				continue
+			}
+			window := time.Duration(target.Campaign.Policy.Gates.SilentWindowSeconds) * time.Second
+			if failure := engine.Campaigns.MarkLapsed(operation, leases, target.Campaign.ID, now.Add(-window)); failure != nil && operation.Err() == nil {
+				engine.Logger.Warn("nodes silent past their window were not marked; they are marked on the next pass", "campaign_id", target.Campaign.ID, "error", failure)
+			}
+		}
+	}
 }
 
 func (engine *Engine) Report(operation context.Context, target *campaign.Campaign) (GateReport, error) {
@@ -68,7 +77,7 @@ func gateAlert(kind, message string, target *campaign.Campaign, report GateRepor
 	return raised
 }
 
-func (engine *Engine) gate(operation context.Context, term int64, target *campaign.Campaign) error {
+func (engine *Engine) gate(operation context.Context, target *campaign.Campaign) error {
 	now := time.Now()
 	if target.Policy.Deadline != nil && !now.Before(*target.Policy.Deadline) {
 		engine.transition(operation, target, campaign.TransitionRequest{Transition: campaign.TransitionComplete, Actor: "twilight", Reason: "the campaign reached its deadline", Now: now})
@@ -78,9 +87,6 @@ func (engine *Engine) gate(operation context.Context, term int64, target *campai
 		return nil
 	}
 	paused := target.Status == campaign.StatusPaused
-	if failure := engine.markLapsed(operation, term, target, now); failure != nil {
-		return failure
-	}
 	report, failure := engine.Report(operation, target)
 	if failure != nil {
 		return failure

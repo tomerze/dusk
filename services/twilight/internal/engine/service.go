@@ -270,10 +270,6 @@ func (service *Service) RetryNodes(operation context.Context, identifier uuid.UU
 	if failure != nil {
 		return 0, failure
 	}
-	term, failure := service.engine.Campaigns.Term(operation)
-	if failure != nil {
-		return 0, failure
-	}
 	retried := 0
 	var interrupted error
 	for _, row := range rows {
@@ -286,7 +282,7 @@ func (service *Service) RetryNodes(operation context.Context, identifier uuid.UU
 			interrupted = fmt.Errorf("read the lease of node %s/%s: %w", row.DeviceID, row.InstallationID, failure)
 			break
 		}
-		if written, applied, _ := service.engine.writeUnder(operation, term, lease, &row, next, "operator retry"); applied {
+		if written, applied, _ := service.engine.writeUnder(operation, lease, &row, next, "operator retry"); applied {
 			retried++
 			service.engine.hint(inventory.Key{DeviceID: written.DeviceID, InstallationID: written.InstallationID})
 		}
@@ -314,10 +310,6 @@ func (service *Service) ResolveNodes(operation context.Context, identifier uuid.
 	if failure != nil {
 		return 0, failure
 	}
-	term, failure := service.engine.Campaigns.Term(operation)
-	if failure != nil {
-		return 0, failure
-	}
 	resolved := 0
 	var interrupted error
 	for _, row := range rows {
@@ -330,7 +322,7 @@ func (service *Service) ResolveNodes(operation context.Context, identifier uuid.
 			interrupted = fmt.Errorf("read the lease of node %s/%s: %w", row.DeviceID, row.InstallationID, failure)
 			break
 		}
-		if _, applied, _ := service.engine.writeUnder(operation, term, lease, &row, next, "operator resolve"); applied {
+		if _, applied, _ := service.engine.writeUnder(operation, lease, &row, next, "operator resolve"); applied {
 			resolved++
 		}
 	}

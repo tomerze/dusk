@@ -21,13 +21,9 @@ type Lease struct {
 
 const leaseGuard = `exists (select 1 from node_partition_leases where partition = $%d and epoch = $%d)`
 
-func sliceLockKey(partition int32) int64 {
-	return database.SliceLockKey + int64(partition)
-}
-
 func underSliceLock(operation context.Context, target querier, partition int32, sql string, arguments ...any) (pgconn.CommandTag, error) {
 	batch := &pgx.Batch{}
-	batch.Queue(`select pg_advisory_xact_lock_shared($1)`, sliceLockKey(partition))
+	batch.Queue(`select pg_advisory_xact_lock_shared($1)`, database.SliceLock(partition))
 	batch.Queue(sql, arguments...)
 	results := target.SendBatch(operation, batch)
 	_, locking := results.Exec()
@@ -55,7 +51,7 @@ func (store *Store) BumpLease(operation context.Context, partition int32, owner 
 		}
 	}()
 	batch := &pgx.Batch{}
-	batch.Queue(`select pg_advisory_xact_lock($1)`, sliceLockKey(partition))
+	batch.Queue(`select pg_advisory_xact_lock($1)`, database.SliceLock(partition))
 	batch.Queue(`update node_partition_leases set owner = $2, epoch = epoch + 1, renewed_at = now() where partition = $1 returning epoch`, partition, owner)
 	results := connection.SendBatch(running, batch)
 	_, locking := results.Exec()

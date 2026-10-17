@@ -118,7 +118,6 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 		{"late script", campaign.Action{Kind: campaign.KindRunScript, Script: "date"}},
 		{"isolate", campaign.Action{Kind: campaign.KindQuarantine, Script: "isolate"}},
 	}
-	term := currentTerm(test, pool)
 	names := map[uuid.UUID]string{}
 	for index, definition := range definitions {
 		created, failure := store.Create(operation, campaign.Definition{Name: definition.name, Selector: "has(device_id)", Action: definition.action, Policy: policy}, "operator@example.org", started)
@@ -133,7 +132,7 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 		}
 		names[created.ID] = definition.name
 	}
-	if failure := engine.registry.load(operation, term); failure != nil {
+	if failure := engine.registry.load(operation); failure != nil {
 		test.Fatal(failure)
 	}
 	now := time.Now()
@@ -198,7 +197,6 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 	pool, _ := testsupport.Database(test)
 	operation := context.Background()
 	store := campaign.NewStore(pool)
-	term := currentTerm(test, pool)
 	policy := campaign.Policy{Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 900}}, NodeTimeoutSeconds: 30, Gates: campaign.Gates{MinSample: 1}}
 	cases := []struct {
 		name      string
@@ -230,7 +228,7 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 		if _, failure := pool.Exec(operation, `update campaign_nodes set unreached = $2 where campaign_id = $1`, created.ID, scenario.unreached); failure != nil {
 			test.Fatal(failure)
 		}
-		if failure := engine.registry.load(operation, term); failure != nil {
+		if failure := engine.registry.load(operation); failure != nil {
 			test.Fatal(failure)
 		}
 		now := time.Now()
@@ -283,7 +281,7 @@ func TestDawnIsAskedOnlyForIntendedProcessesPublishedToNightfall(test *testing.T
 	if _, applied, failure := engine.write(operation, nil, campaign.NewRow(created.ID, key.DeviceID, key.InstallationID, 0, campaign.StatePending), "test"); failure != nil || !applied {
 		test.Fatalf("row: %v %v", applied, failure)
 	}
-	if failure := engine.registry.load(operation, term); failure != nil {
+	if failure := engine.registry.load(operation); failure != nil {
 		test.Fatal(failure)
 	}
 	dispatchOnce := func() {

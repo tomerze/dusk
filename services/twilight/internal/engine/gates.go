@@ -150,7 +150,8 @@ func Tallies(operation context.Context, pool *pgxpool.Pool, target *campaign.Cam
 		count(*) filter (where state = 'succeeded'),
 		count(*) filter (where state = 'unknown' or (state in ('backoff', 'failed') and last_status in ('failed', 'resolved'))),
 		count(*) filter (where state = 'succeeded' and finished_at <= $3),
-		count(*) filter (where state = 'succeeded' and finished_at <= $3 and silent),
+		count(*) filter (where state = 'succeeded' and finished_at <= $3
+			and (silent or (silent is null and event_at is not null and back_at is null and event_at < $3))),
 		(select count(*) from campaign_nodes where campaign_id = $1 and phase <= $2)
 		from campaign_nodes where campaign_id = $1 and phase <= $2 and ($4::timestamptz is null or dispatched_at >= $4)
 		group by grouping sets (` + strings.Join(sets, ", ") + `)`

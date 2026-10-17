@@ -59,12 +59,12 @@ func (engine *Engine) offerReaps(operation context.Context, keys []NodeKey, now 
 	return nil
 }
 
-func (engine *Engine) runReapSweep(operation context.Context, term int64) {
+func (engine *Engine) runReapSweep(operation context.Context) {
 	interval := max(time.Duration(engine.Config.Engine.ReapIntervalSeconds)*time.Second/reapBuckets, time.Second)
 	bucket := uint32(0)
 	for sleep(operation, interval) {
 		current := bucket
-		keys, _ := engine.view.LastSeen(func(key NodeKey) bool { return bucketOf(key, reapBuckets) == current })
+		keys, _ := engine.view.LastSeen(func(key NodeKey) bool { return bucketOf(key, reapBuckets) == current && engine.ownership.owns(key) })
 		for start := 0; start < len(keys) && operation.Err() == nil; start += reapKeysPerRead {
 			if failure := engine.offerReaps(operation, keys[start:min(start+reapKeysPerRead, len(keys))], time.Now()); failure != nil && operation.Err() == nil {
 				engine.Logger.Warn("the pids to reap were not read; their nodes are swept again on the next pass", "bucket", current, "nodes", len(keys), "error", failure)
@@ -79,7 +79,7 @@ func (current *dispatcher) reap(operation context.Context, key NodeKey) {
 	engine := current.engine
 	defer current.release(key)
 	session, online := engine.view.Target(key)
-	if !online {
+	if !online || !engine.ownership.owns(key) {
 		return
 	}
 	now := time.Now()

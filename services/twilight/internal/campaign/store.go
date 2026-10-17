@@ -682,17 +682,18 @@ func (store *Store) DueRows(operation context.Context, identifier uuid.UUID, now
 	return collectRows(rows)
 }
 
-func (store *Store) ExpiredRows(operation context.Context, now time.Time, limit int) ([]Row, error) {
+func (store *Store) ExpiredRows(operation context.Context, partitions []int32, now time.Time, limit int) ([]Row, error) {
 	rows, failure := store.pool.Query(operation, `select `+rowColumns+` from campaign_nodes
-		where state in ('dispatching', 'dispatched', 'delivered') and deadline_at <= $1 order by deadline_at limit $2`, now, limit)
+		where partition = any($3) and state in ('dispatching', 'dispatched', 'delivered') and deadline_at <= $1 order by deadline_at limit $2`, now, limit, partitions)
 	if failure != nil {
 		return nil, failure
 	}
 	return collectRows(rows)
 }
 
-func (store *Store) RowsInState(operation context.Context, identifier uuid.UUID, state NodeState, limit int) ([]Row, error) {
-	rows, failure := store.pool.Query(operation, `select `+rowColumns+` from campaign_nodes where campaign_id = $1 and state = $2 limit $3`, identifier, state, limit)
+func (store *Store) RowsInState(operation context.Context, identifier uuid.UUID, partitions []int32, state NodeState, limit int) ([]Row, error) {
+	rows, failure := store.pool.Query(operation, `select `+rowColumns+` from campaign_nodes where campaign_id = $1 and partition = any($4) and state = $2 limit $3`,
+		identifier, state, limit, partitions)
 	if failure != nil {
 		return nil, failure
 	}
@@ -706,15 +707,13 @@ func (store *Store) Outstanding(operation context.Context, identifier uuid.UUID)
 	return outstanding, failure
 }
 
-const termGuard = `exists (select 1 from leadership where id = 1 and term = $%d)`
-
-func (store *Store) InsertRow(operation context.Context, term int64, lease Lease, row Row) (Row, bool, error) {
+func (store *Store) InsertRow(operation context.Context, lease Lease, row Row) (Row, bool, error) {
 	breakdown, _ := json.Marshal(row.Breakdown)
 	tag, failure := underSliceLock(operation, store.pool, lease.Partition, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, attempt, failures, finished_at, last_status, breakdown, revision)
 		select $1, $2, $3, $4, $5, $6, $7, $8, nullif($9, ''), $10::jsonb, 1
-		where `+fmt.Sprintf(termGuard, 13)+` and $11 = node_partition($2, $3, (select count(*)::integer from node_partition_leases)) and `+fmt.Sprintf(leaseGuard, 11, 12)+`
+		where $11 = node_partition($2, $3, (select count(*)::integer from node_partition_leases)) and `+fmt.Sprintf(leaseGuard, 11, 12)+`
 		on conflict do nothing`,
-		row.CampaignID, row.DeviceID, row.InstallationID, row.Phase, row.State, row.Attempt, row.Failures, row.FinishedAt, row.LastStatus, breakdown, lease.Partition, lease.Epoch, term)
+		row.CampaignID, row.DeviceID, row.InstallationID, row.Phase, row.State, row.Attempt, row.Failures, row.FinishedAt, row.LastStatus, breakdown, lease.Partition, lease.Epoch)
 	if failure != nil {
 		return row, false, failure
 	}
@@ -722,17 +721,17 @@ func (store *Store) InsertRow(operation context.Context, term int64, lease Lease
 	return row, tag.RowsAffected() == 1, nil
 }
 
-func updateRow(operation context.Context, target querier, term int64, lease Lease, previous, next Row) (Row, bool, error) {
+func updateRow(operation context.Context, target querier, lease Lease, previous, next Row) (Row, bool, error) {
 	breakdown, _ := json.Marshal(next.Breakdown)
 	tag, failure := underSliceLock(operation, target, lease.Partition, `update campaign_nodes set phase = $5, state = $6, attempt = $7, failures = $8,
 		reaped_at = case when pid is not distinct from $9::text::numeric then reaped_at end, pid = $9::text::numeric, epoch = nullif($10::bigint, 0),
 		namespace_id = nullif($11, ''), dispatched_at = $12, delivered_at = $13, deadline_at = $14, finished_at = $15, next_attempt_at = $16,
 		last_error = nullif($17, ''), last_status = nullif($18, ''), event_at = $19, back_at = $20, silent = $21, breakdown = $22::jsonb,
 		unreached = $24, revision = revision + 1, updated_at = now()
-		where campaign_id = $1 and device_id = $2 and installation_id = $3 and revision = $4 and `+fmt.Sprintf(termGuard, 26)+` and partition = $23 and `+fmt.Sprintf(leaseGuard, 23, 25),
+		where campaign_id = $1 and device_id = $2 and installation_id = $3 and revision = $4 and partition = $23 and `+fmt.Sprintf(leaseGuard, 23, 25),
 		previous.CampaignID, previous.DeviceID, previous.InstallationID, previous.Revision,
 		next.Phase, next.State, next.Attempt, next.Failures, pidText(next.Pid), next.Epoch, next.NamespaceID, next.DispatchedAt, next.DeliveredAt,
-		next.DeadlineAt, next.FinishedAt, next.NextAttemptAt, next.LastError, next.LastStatus, next.EventAt, next.BackAt, next.Silent, breakdown, lease.Partition, next.Unreached, lease.Epoch, term)
+		next.DeadlineAt, next.FinishedAt, next.NextAttemptAt, next.LastError, next.LastStatus, next.EventAt, next.BackAt, next.Silent, breakdown, lease.Partition, next.Unreached, lease.Epoch)
 	if failure != nil {
 		return previous, false, failure
 	}
@@ -746,8 +745,8 @@ func updateRow(operation context.Context, target querier, term int64, lease Leas
 	return next, true, nil
 }
 
-func (store *Store) UpdateRow(operation context.Context, term int64, lease Lease, previous, next Row) (Row, bool, error) {
-	return updateRow(operation, store.pool, term, lease, previous, next)
+func (store *Store) UpdateRow(operation context.Context, lease Lease, previous, next Row) (Row, bool, error) {
+	return updateRow(operation, store.pool, lease, previous, next)
 }
 
 type IntendedProcess struct {
@@ -957,12 +956,12 @@ func (store *Store) RecordReaped(operation context.Context, device, installation
 	return recorded, failure
 }
 
-func (store *Store) Dispatching(operation context.Context, term int64, lease Lease, previous, next Row, intended IntendedProcess) (Row, bool, error) {
+func (store *Store) Dispatching(operation context.Context, lease Lease, previous, next Row, intended IntendedProcess) (Row, bool, error) {
 	var updated Row
 	changed := false
 	failure := pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
 		var failure error
-		updated, changed, failure = updateRow(operation, transaction, term, lease, previous, next)
+		updated, changed, failure = updateRow(operation, transaction, lease, previous, next)
 		if failure != nil || !changed {
 			return failure
 		}
@@ -1012,12 +1011,6 @@ func (store *Store) Overlap(operation context.Context, campaign *Campaign) (int6
 		}
 	}
 	return total, overlapping, nil
-}
-
-func (store *Store) Term(operation context.Context) (int64, error) {
-	var term int64
-	failure := store.pool.QueryRow(operation, `select term from leadership where id = 1`).Scan(&term)
-	return term, failure
 }
 
 func (store *Store) RowsForNode(operation context.Context, device, installation string, limit int) ([]Row, error) {

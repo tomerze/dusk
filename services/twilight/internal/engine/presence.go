@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 	"hash/fnv"
-	"math/rand/v2"
+	"slices"
 	"sync"
 	"time"
 
@@ -44,16 +44,27 @@ type silentEvent struct {
 }
 
 type presenceWriter struct {
-	engine  *Engine
-	mutex   sync.Mutex
-	pending map[NodeKey]*presenceUpdate
-	offline []silentEvent
-	online  []silentEvent
-	wake    chan struct{}
+	engine     *Engine
+	mutex      sync.Mutex
+	pending    map[NodeKey]*presenceUpdate
+	offline    []silentEvent
+	online     []silentEvent
+	reconciles map[int32]bool
+	wake       chan struct{}
 }
 
 func newPresenceWriter(engine *Engine) *presenceWriter {
-	return &presenceWriter{engine: engine, pending: map[NodeKey]*presenceUpdate{}, wake: make(chan struct{}, 1)}
+	return &presenceWriter{engine: engine, pending: map[NodeKey]*presenceUpdate{}, reconciles: map[int32]bool{}, wake: make(chan struct{}, 1)}
+}
+
+func (writer *presenceWriter) requestReconcile(partition int32) {
+	writer.mutex.Lock()
+	writer.reconciles[partition] = true
+	writer.mutex.Unlock()
+	select {
+	case writer.wake <- struct{}{}:
+	default:
+	}
 }
 
 const maximumSilentEvents = 200000
@@ -128,32 +139,48 @@ func presenceSessions(sessions []Session) []inventory.PresenceSession {
 	return converted
 }
 
-func (writer *presenceWriter) run(operation context.Context, term int64) {
-	backoff := time.Second
-	for {
-		failure := writer.reconcile(operation)
-		if failure == nil || operation.Err() != nil {
-			break
-		}
-		writer.engine.Logger.Error("diffing the online view against node_presence failed; retrying", "term", term, "error", failure)
-		if !sleep(operation, time.Duration(rand.Int64N(int64(backoff)))+1) {
-			return
-		}
-		backoff = min(2*backoff, time.Minute)
-	}
+func (writer *presenceWriter) run(operation context.Context) {
 	interval := time.Duration(writer.engine.Config.Engine.PresenceFlushMillis) * time.Millisecond
 	for sleep(operation, interval) {
-		if failure := writer.flush(operation, term); failure != nil && operation.Err() == nil {
+		writer.reconcileRequested(operation)
+		if failure := writer.flush(operation); failure != nil && operation.Err() == nil {
 			writer.engine.Logger.Warn("presence flush failed; it will be retried", "error", failure)
 		}
 	}
 }
 
-func (writer *presenceWriter) reconcile(operation context.Context) error {
+func (writer *presenceWriter) reconcileRequested(operation context.Context) {
+	writer.mutex.Lock()
+	partitions := make([]int32, 0, len(writer.reconciles))
+	for partition := range writer.reconciles {
+		partitions = append(partitions, partition)
+	}
+	writer.reconciles = map[int32]bool{}
+	writer.mutex.Unlock()
+	partitions = slices.DeleteFunc(partitions, func(partition int32) bool {
+		_, owned := writer.engine.ownership.leaseOf(partition)
+		return !owned
+	})
+	if len(partitions) == 0 {
+		return
+	}
+	if failure := writer.reconcile(operation, partitions); failure != nil {
+		if operation.Err() == nil {
+			writer.engine.Logger.Warn("diffing the online view against node_presence for slices taken over failed; they are diffed again on the next flush", "partitions", partitions, "error", failure)
+		}
+		writer.mutex.Lock()
+		for _, partition := range partitions {
+			writer.reconciles[partition] = true
+		}
+		writer.mutex.Unlock()
+	}
+}
+
+func (writer *presenceWriter) reconcile(operation context.Context, partitions []int32) error {
 	view := writer.engine.view
 	seen := map[NodeKey]bool{}
 	var changes []Change
-	failure := writer.engine.Inventory.ScanPresence(operation, func(stored inventory.Presence) error {
+	visit := func(stored inventory.Presence) error {
 		seen[stored.Key] = true
 		sessions := view.Sessions(stored.Key)
 		online := len(sessions) > 0
@@ -175,27 +202,40 @@ func (writer *presenceWriter) reconcile(operation context.Context) error {
 		}
 		changes = append(changes, change)
 		return nil
-	})
-	if failure != nil {
-		return failure
+	}
+	for _, partition := range partitions {
+		if failure := writer.engine.Inventory.ScanPresence(operation, partition, visit); failure != nil {
+			return failure
+		}
 	}
 	view.ForEachOnline(func(key NodeKey, sessions []Session) {
-		if !seen[key] {
+		if seen[key] {
+			return
+		}
+		if keyPartition, known := writer.engine.ownership.partitionOf(key); known && slices.Contains(partitions, keyPartition) {
 			changes = append(changes, Change{Key: key, Online: true, Reason: ReasonCensus, Epoch: sessions[0].Epoch, At: time.Now(), Sessions: sessions, NewNamespace: sessions[0].NamespaceID})
 		}
 	})
-	writer.engine.Logger.Info("presence differences found at election", "count", len(changes))
+	writer.engine.Logger.Info("presence differences found in slices taken over", "partitions", partitions, "count", len(changes))
 	writer.add(changes)
 	return nil
 }
 
-func (writer *presenceWriter) flush(operation context.Context, term int64) error {
+func (writer *presenceWriter) flush(operation context.Context) error {
 	writer.mutex.Lock()
 	pending := writer.pending
 	offline, online := writer.offline, writer.online
 	writer.pending = map[NodeKey]*presenceUpdate{}
 	writer.offline, writer.online = nil, nil
 	writer.mutex.Unlock()
+	ownership := writer.engine.ownership
+	for key := range pending {
+		if !ownership.owns(key) {
+			delete(pending, key)
+		}
+	}
+	offline = slices.DeleteFunc(offline, func(event silentEvent) bool { return !ownership.owns(event.key) })
+	online = slices.DeleteFunc(online, func(event silentEvent) bool { return !ownership.owns(event.key) })
 	if len(pending) == 0 && len(offline) == 0 && len(online) == 0 {
 		return nil
 	}
@@ -209,7 +249,8 @@ func (writer *presenceWriter) flush(operation context.Context, term int64) error
 		if update.becameOnline || update.connected {
 			arrived = append(arrived, key)
 		}
-		rows = append(rows, inventory.Presence{Key: key, Online: update.online, LastSeenAt: update.lastSeen, ConnectedAt: update.connectedAt,
+		partition, _ := ownership.partitionOf(key)
+		rows = append(rows, inventory.Presence{Key: key, Partition: partition, Online: update.online, LastSeenAt: update.lastSeen, ConnectedAt: update.connectedAt,
 			DisconnectedAt: update.disconnectedAt, Sessions: presenceSessions(update.sessions)})
 	}
 	requeueSilent := func() {
@@ -236,13 +277,17 @@ func (writer *presenceWriter) flush(operation context.Context, term int64) error
 			writer.engine.Logger.Info("node active after its first connection", "device_id", key.DeviceID, "installation_id", key.InstallationID)
 		}
 	}
-	if failure := writer.engine.Inventory.WritePresence(operation, rows); failure != nil {
+	held := map[int32]int64{}
+	for _, lease := range ownership.leases() {
+		held[lease.Partition] = lease.Epoch
+	}
+	if failure := writer.engine.Inventory.WritePresence(operation, rows, held); failure != nil {
 		return requeue(failure)
 	}
 	presenceWrites.Add(float64(len(rows)))
 	campaigns := writer.engine.registry.activeIDs()
 	if len(campaigns) > 0 {
-		if failure := writer.silent(operation, term, campaigns, offline, online); failure != nil {
+		if failure := writer.silent(operation, campaigns, offline, online); failure != nil {
 			writer.engine.Logger.Warn("silent-rate presence updates failed; they are retried with the next flush", "error", failure)
 			writer.mutex.Lock()
 			requeueSilent()
@@ -266,27 +311,17 @@ func columnsOf(events []silentEvent) ([]string, []string, []time.Time, []int64) 
 	return devices, installations, times, epochs
 }
 
-func (writer *presenceWriter) silent(operation context.Context, term int64, campaigns []uuid.UUID, offline, online []silentEvent) error {
-	pool := writer.engine.Pool
+func (writer *presenceWriter) silent(operation context.Context, campaigns []uuid.UUID, offline, online []silentEvent) error {
+	leases := writer.engine.ownership.leases()
 	for start := 0; start < len(offline); start += 5000 {
 		devices, installations, times, epochs := columnsOf(offline[start:min(len(offline), start+5000)])
-		if _, failure := pool.Exec(operation, `update campaign_nodes c set event_at = gone.at, revision = c.revision + 1, updated_at = now()
-			from unnest($1::text[], $2::text[], $3::timestamptz[], $4::bigint[]) as gone(device_id, installation_id, at, epoch)
-			where c.campaign_id = any($5) and c.device_id = gone.device_id and c.installation_id = gone.installation_id
-			and c.state = 'succeeded' and c.event_at is null and coalesce(c.epoch, 0) <= gone.epoch and c.finished_at <= gone.at
-			and exists (select 1 from leadership where id = 1 and term = $6)`, devices, installations, times, epochs, campaigns, term); failure != nil {
+		if failure := writer.engine.Campaigns.RecordGone(operation, leases, campaigns, devices, installations, times, epochs); failure != nil {
 			return failure
 		}
 	}
 	for start := 0; start < len(online); start += 5000 {
 		devices, installations, times, _ := columnsOf(online[start:min(len(online), start+5000)])
-		if _, failure := pool.Exec(operation, `update campaign_nodes c set back_at = back.at,
-			silent = extract(epoch from back.at - c.event_at) > coalesce((k.policy->'gates'->>'silent_window_seconds')::double precision, 0),
-			revision = c.revision + 1, updated_at = now()
-			from unnest($1::text[], $2::text[], $3::timestamptz[]) as back(device_id, installation_id, at), campaigns k
-			where k.id = c.campaign_id and c.campaign_id = any($4) and c.device_id = back.device_id and c.installation_id = back.installation_id
-			and c.state = 'succeeded' and c.event_at is not null and c.back_at is null and back.at >= c.event_at
-			and exists (select 1 from leadership where id = 1 and term = $5)`, devices, installations, times, campaigns, term); failure != nil {
+		if failure := writer.engine.Campaigns.RecordBack(operation, leases, campaigns, devices, installations, times); failure != nil {
 			return failure
 		}
 	}
@@ -299,13 +334,13 @@ func bucketOf(key NodeKey, buckets uint32) uint32 {
 	return hash.Sum32() % buckets
 }
 
-func (writer *presenceWriter) runLastSeen(operation context.Context, term int64) {
+func (writer *presenceWriter) runLastSeen(operation context.Context) {
 	const buckets = 30
 	interval := time.Duration(writer.engine.Config.Engine.LastSeenBucketSeconds) * time.Second
 	bucket := uint32(0)
 	for sleep(operation, interval) {
 		current := bucket
-		keys, times := writer.engine.view.LastSeen(func(key NodeKey) bool { return bucketOf(key, buckets) == current })
+		keys, times := writer.engine.view.LastSeen(func(key NodeKey) bool { return bucketOf(key, buckets) == current && writer.engine.ownership.owns(key) })
 		if len(keys) > 0 {
 			if failure := writer.engine.Inventory.UpdateLastSeen(operation, keys, times); failure != nil && operation.Err() == nil {
 				writer.engine.Logger.Warn("last_seen_at sweep failed", "bucket", bucket, "error", failure)

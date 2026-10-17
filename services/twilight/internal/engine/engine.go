@@ -138,6 +138,7 @@ func (engine *Engine) Run(operation context.Context) {
 	start(engine.runTopicCheck)
 	start(engine.runPresence)
 	start(engine.runExpiry)
+	start(engine.runSlices)
 	start(engine.leadership.Run)
 	start(engine.feed.run)
 	start(engine.Alerts.RunDelivery)
@@ -221,10 +222,69 @@ func (engine *Engine) runExpiry(operation context.Context) {
 }
 
 func (engine *Engine) onChanges(changes []Change) {
-	if len(changes) == 0 || !engine.leadership.Leading() {
-		return
+	var owned []Change
+	for _, change := range changes {
+		if engine.ownership.owns(change.Key) {
+			owned = append(owned, change)
+		}
 	}
-	engine.presence.add(changes)
+	if len(owned) > 0 {
+		engine.presence.add(owned)
+	}
+}
+
+func (engine *Engine) runSlices(operation context.Context) {
+	for !engine.presenceUp.Load() {
+		if !sleep(operation, 200*time.Millisecond) {
+			return
+		}
+	}
+	if failure := engine.registry.load(operation); failure != nil {
+		engine.Logger.Error("loading the campaigns failed; they are read again on the next refresh", "error", failure)
+	}
+	start := func(scope context.Context, group *sync.WaitGroup, name string, task func(context.Context)) {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			task(scope)
+			engine.Logger.Debug("slice task stopped", "task", name)
+		}()
+	}
+	var running sync.WaitGroup
+	start(operation, &running, "registry", engine.registry.run)
+	start(operation, &running, "counters", engine.registry.runFlush)
+	for operation.Err() == nil {
+		if !engine.partitioned.Load() {
+			sleep(operation, time.Second)
+			continue
+		}
+		writing, stopWriting := context.WithCancel(operation)
+		var writers sync.WaitGroup
+		start(writing, &writers, "slices", engine.ownership.run)
+		start(writing, &writers, "presence", engine.presence.run)
+		start(writing, &writers, "last_seen", engine.presence.runLastSeen)
+		start(writing, &writers, "lapses", engine.runLapses)
+		assigned := engine.ownership.owning()
+		for !assigned && engine.partitioned.Load() && sleep(operation, 200*time.Millisecond) {
+			assigned = engine.ownership.owning()
+		}
+		if assigned {
+			start(writing, &writers, "evaluations", engine.runEvaluations)
+			start(writing, &writers, "dispatcher", engine.dispatcher.run)
+			start(writing, &writers, "facts", engine.runFacts)
+			start(writing, &writers, "deadlines", engine.runDeadlines)
+			start(writing, &writers, "sweeps", engine.runSweeps)
+			start(writing, &writers, "due", engine.runDueScan)
+			start(writing, &writers, "reaps", engine.runReapSweep)
+			start(writing, &writers, "quarantine", engine.runQuarantineFlips)
+			engine.requestSweep(sweepRequest{all: true})
+		}
+		for engine.partitioned.Load() && sleep(operation, time.Second) {
+		}
+		stopWriting()
+		writers.Wait()
+	}
+	running.Wait()
 }
 
 func (engine *Engine) lead(operation context.Context, term int64) {
@@ -234,9 +294,6 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 		}
 	}
 	engine.Logger.Info("leader work starting", "term", term)
-	if failure := engine.registry.load(operation, term); failure != nil {
-		engine.Logger.Error("loading the campaigns at election failed", "term", term, "error", failure)
-	}
 	start := func(scope context.Context, group *sync.WaitGroup, name string, task func(context.Context, int64)) {
 		group.Add(1)
 		go func() {
@@ -246,10 +303,6 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 		}()
 	}
 	var running sync.WaitGroup
-	start(operation, &running, "last_seen", engine.presence.runLastSeen)
-	start(operation, &running, "registry", engine.registry.run)
-	start(operation, &running, "counters", engine.registry.runFlush)
-	start(operation, &running, "reaps", engine.runReapSweep)
 	start(operation, &running, "enrollments", engine.runEnrollments)
 	start(operation, &running, "revocations", engine.runRevocationCheck)
 	start(operation, &running, "bulk revocations", engine.runRevocations)
@@ -263,32 +316,14 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 			sleep(operation, time.Second)
 			continue
 		}
-		writing, stopWriting := context.WithCancel(operation)
-		var writers sync.WaitGroup
-		start(writing, &writers, "slices", engine.ownership.run)
-		start(writing, &writers, "presence", engine.presence.run)
-		start(writing, &writers, "gates", engine.runGates)
-		assigned := engine.ownership.owning()
-		for !assigned && engine.partitioned.Load() && sleep(operation, 200*time.Millisecond) {
-			assigned = engine.ownership.owning()
-		}
-		if assigned {
-			start(writing, &writers, "evaluations", engine.runEvaluations)
-			start(writing, &writers, "dispatcher", engine.dispatcher.run)
-			start(writing, &writers, "facts", engine.runFacts)
-			start(writing, &writers, "deadlines", engine.runDeadlines)
-			start(writing, &writers, "sweeps", engine.runSweeps)
-			start(writing, &writers, "due", engine.runDueScan)
-			start(writing, &writers, "quarantine", engine.runQuarantineFlips)
-			engine.requestSweep(sweepRequest{all: true})
-		}
+		judging, stopJudging := context.WithCancel(operation)
+		var judges sync.WaitGroup
+		start(judging, &judges, "gates", engine.runGates)
 		for engine.partitioned.Load() && sleep(operation, time.Second) {
 		}
-		stopWriting()
-		writers.Wait()
+		stopJudging()
+		judges.Wait()
 	}
 	running.Wait()
-	engine.dispatcher.reset()
-	engine.registry.reset()
 	engine.Logger.Info("leader work stopped", "term", term)
 }

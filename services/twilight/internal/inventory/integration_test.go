@@ -15,6 +15,7 @@ import (
 
 	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/inventory"
+	"dusk/services/twilight/internal/kafka"
 	"dusk/services/twilight/internal/selector"
 	"dusk/services/twilight/internal/testsupport"
 )
@@ -124,11 +125,33 @@ func TestInventoryUpkeep(test *testing.T) {
 		test.Fatalf("second page %+v", second)
 	}
 	connected := at
-	presence := []inventory.Presence{{Key: key, Online: true, ConnectedAt: &connected, LastSeenAt: &connected,
+	other := inventory.Key{DeviceID: strings.Repeat("e", 32), InstallationID: strings.Repeat("f", 32)}
+	presence := []inventory.Presence{{Key: key, Partition: kafka.KeyPartition(key.String(), testsupport.NodePartitions), Online: true, ConnectedAt: &connected, LastSeenAt: &connected,
 		Sessions: []inventory.PresenceSession{{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 7, Instance: "nightfall-0", InnerAddress: "nightfall-0:8444", ConnectedAt: at}}},
-		{Key: inventory.Key{DeviceID: strings.Repeat("e", 32), InstallationID: strings.Repeat("f", 32)}, Online: false}}
-	if failure := store.WritePresence(operation, presence); failure != nil {
+		{Key: other, Partition: kafka.KeyPartition(other.String(), testsupport.NodePartitions), Online: false}}
+	leases := map[int32]int64{}
+	for partition := range int32(testsupport.NodePartitions) {
+		leases[partition] = 0
+	}
+	if failure := store.WritePresence(operation, presence, leases); failure != nil {
 		test.Fatal(failure)
+	}
+	if _, failure := pool.Exec(operation, `update node_partition_leases set epoch = epoch + 1, owner = 'twilight-next' where partition = $1`, presence[1].Partition); failure != nil {
+		test.Fatal(failure)
+	}
+	reconnected := presence[1]
+	reconnected.Online = true
+	if failure := store.WritePresence(operation, []inventory.Presence{reconnected}, leases); failure != nil {
+		test.Fatal(failure)
+	}
+	if stale, failure := store.GetPresence(operation, other); failure != nil || stale.Online {
+		test.Fatalf("a presence write under a replaced lease landed: %+v %v", stale, failure)
+	}
+	if failure := store.WritePresence(operation, []inventory.Presence{reconnected}, map[int32]int64{presence[1].Partition: 1}); failure != nil {
+		test.Fatal(failure)
+	}
+	if current, failure := store.GetPresence(operation, other); failure != nil || !current.Online {
+		test.Fatalf("a presence write under the current lease did not land: %+v %v", current, failure)
 	}
 	if failure := store.UpdateLastSeen(operation, []inventory.Key{key}, []time.Time{at.Add(time.Hour)}); failure != nil {
 		test.Fatal(failure)
@@ -138,8 +161,20 @@ func TestInventoryUpkeep(test *testing.T) {
 		test.Fatalf("presence %+v %v", stored, failure)
 	}
 	scanned := 0
-	if failure := store.ScanPresence(operation, func(inventory.Presence) error { scanned++; return nil }); failure != nil || scanned != 2 {
-		test.Fatalf("scanned %d %v", scanned, failure)
+	for partition := range int32(testsupport.NodePartitions) {
+		failure := store.ScanPresence(operation, partition, func(stored inventory.Presence) error {
+			if want := kafka.KeyPartition(stored.Key.String(), testsupport.NodePartitions); want != partition {
+				test.Errorf("scanning partition %d returned %s, which is in partition %d", partition, stored.Key, want)
+			}
+			scanned++
+			return nil
+		})
+		if failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	if scanned != 2 {
+		test.Fatalf("scanning every partition found %d presence rows, want 2", scanned)
 	}
 	counts, failure := store.LifecycleCounts(operation)
 	if failure != nil || counts["active"] != 2 || counts["enrolled"] != 1 {

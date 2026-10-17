@@ -12,6 +12,12 @@ import (
 	"dusk/services/twilight/internal/config"
 )
 
+func ownEverything(engine *Engine) {
+	engine.ownership = newOwnership(engine)
+	engine.ownership.partitions = 1
+	engine.ownership.slices[0] = &slice{lease: campaign.Lease{Partition: 0, Epoch: 1}}
+}
+
 func TestBusyDawnBacksOffFurtherEachTime(test *testing.T) {
 	if first, second, capped := busyDelay(1, 1), busyDelay(2, 1), busyDelay(40, 1); first != 10*time.Second || second != 20*time.Second || capped != 5*time.Minute {
 		test.Fatalf("busy delays %s %s %s", first, second, capped)
@@ -27,6 +33,7 @@ func TestReapsTakeTokensFromTheirOwnBucket(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: settings}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	ownEverything(engine)
 	now := time.Now().Add(time.Hour)
 	keys := []NodeKey{{DeviceID: "a", InstallationID: "1"}, {DeviceID: "b", InstallationID: "2"}, {DeviceID: "c", InstallationID: "3"}}
 	for _, key := range keys {
@@ -56,10 +63,12 @@ func TestANodeDueInSeveralCampaignsGoesOutInOnePick(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: config.Default()}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	ownEverything(engine)
 	start := time.Now()
 	identifiers := []uuid.UUID{uuid.MustParse("0192f3a4-0000-7000-8000-000000000001"), uuid.MustParse("0192f3a4-0000-7000-8000-000000000002"), uuid.MustParse("0192f3a4-0000-7000-8000-000000000003")}
 	for _, identifier := range identifiers {
-		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusRunning}, bucket: NewTokenBucket(1, 5, start), counters: map[counterKey]int64{}}
+		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusRunning, Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: 1, Burst: 5}}},
+			bucket: NewTokenBucket(1, 5, start), counters: map[counterKey]int64{}}
 	}
 	shared, other := NodeKey{DeviceID: "a", InstallationID: "1"}, NodeKey{DeviceID: "b", InstallationID: "2"}
 	for _, identifier := range identifiers {
@@ -90,6 +99,7 @@ func TestQueuesOfCampaignsNoLongerTrackedAreDropped(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: config.Default()}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	ownEverything(engine)
 	finished, running := uuid.MustParse("0192f3a4-0000-7000-8000-00000000000a"), uuid.MustParse("0192f3a4-0000-7000-8000-00000000000b")
 	start := time.Now()
 	for _, identifier := range []uuid.UUID{finished, running} {

@@ -93,35 +93,24 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 	if failure != nil || resumed.Status != campaign.StatusRunning || resumed.GateOverrideAfter == nil || resumed.PhasePausedSeconds != 120 || resumed.PausedAt != nil {
 		test.Fatalf("resumed %+v %v", resumed, failure)
 	}
-	term, failure := store.Term(operation)
-	if failure != nil {
-		test.Fatal(failure)
-	}
 	lease := leaseFor(test, store, device, installation)
 	row := campaign.NewRow(created.ID, device, installation, 0, campaign.StatePending)
-	inserted, applied, failure := store.InsertRow(operation, term, lease, row)
+	inserted, applied, failure := store.InsertRow(operation, lease, row)
 	if failure != nil || !applied {
 		test.Fatalf("insert %v %v", applied, failure)
 	}
-	if _, applied, _ := store.InsertRow(operation, term, lease, row); applied {
+	if _, applied, _ := store.InsertRow(operation, lease, row); applied {
 		test.Fatal("inserted a row twice")
-	}
-	stranger := "b" + installation[1:]
-	if _, applied, _ := store.InsertRow(operation, term+1, leaseFor(test, store, device, stranger), campaign.NewRow(created.ID, device, stranger, 0, campaign.StatePending)); applied {
-		test.Fatal("a stale term inserted a row")
 	}
 	next, _ := inserted.Dispatch(created.ID, campaign.Session{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 9}, now, now.Add(time.Hour), map[string]string{"os_build": "13"})
 	attempt := 1
 	intended := campaign.IntendedProcess{Pid: next.Pid, CampaignID: &created.ID, Attempt: &attempt, DeviceID: device, InstallationID: installation, ActionKind: "ensure_version",
 		Principal: "operator@example.org", Subject: created.Subject(), ExpiresAt: now.Add(2 * time.Hour), MaxCommands: 3, DefaultShellCommands: 8, At: now}
-	if _, applied, failure := store.Dispatching(operation, term+1, lease, inserted, next, intended); failure != nil || applied {
-		test.Fatalf("a stale term dispatched: %v %v", applied, failure)
-	}
-	dispatching, applied, failure := store.Dispatching(operation, term, lease, inserted, next, intended)
+	dispatching, applied, failure := store.Dispatching(operation, lease, inserted, next, intended)
 	if failure != nil || !applied || dispatching.Revision != 2 {
 		test.Fatalf("dispatching %+v %v %v", dispatching, applied, failure)
 	}
-	if _, applied, _ := store.UpdateRow(operation, term, lease, inserted, next); applied {
+	if _, applied, _ := store.UpdateRow(operation, lease, inserted, next); applied {
 		test.Fatal("a stale revision applied")
 	}
 	stored, failure := store.Row(operation, created.ID, device, installation)
@@ -141,10 +130,10 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 		test.Fatal(failure)
 	}
 	undelivered, _ := stored.Undelivered("unreachable", "", now, 0)
-	undelivered, _, _ = store.UpdateRow(operation, term, lease, stored, undelivered)
+	undelivered, _, _ = store.UpdateRow(operation, lease, stored, undelivered)
 	again, _ := undelivered.Dispatch(created.ID, campaign.Session{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 10}, now, now.Add(time.Hour), nil)
 	intended.ExpiresAt, intended.At = now.Add(3*time.Hour), now.Add(time.Minute)
-	if _, applied, failure := store.Dispatching(operation, term, lease, undelivered, again, intended); failure != nil || !applied {
+	if _, applied, failure := store.Dispatching(operation, lease, undelivered, again, intended); failure != nil || !applied {
 		test.Fatalf("resend %v %v", applied, failure)
 	}
 	var recorded, maxCommands, defaultShellCommands int
@@ -157,7 +146,7 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 		test.Fatalf("a resend must add its own command budget: max_commands %d, default_shell_commands %d", maxCommands, defaultShellCommands)
 	}
 	pending := campaign.NewRow(created.ID, device, "c"+installation[1:], 0, campaign.StatePending)
-	if _, applied, _ := store.InsertRow(operation, term, leaseFor(test, store, device, pending.InstallationID), pending); !applied {
+	if _, applied, _ := store.InsertRow(operation, leaseFor(test, store, device, pending.InstallationID), pending); !applied {
 		test.Fatal("second row")
 	}
 	counts, failure := store.CountRows(operation, created.ID, everyPartition())
@@ -330,8 +319,7 @@ func TestReapablePids(test *testing.T) {
 		test.Fatal("a succeeded row did not drift")
 	}
 	retried.Pid = campaign.DerivePid(finished.ID, device, installation, retried.Attempt)
-	term, _ := store.Term(operation)
-	written, applied, failure := store.UpdateRow(operation, term, leaseFor(test, store, device, installation), row, retried)
+	written, applied, failure := store.UpdateRow(operation, leaseFor(test, store, device, installation), row, retried)
 	if failure != nil || !applied || written.ReapedAt != nil {
 		test.Fatalf("a new attempt's pid kept the old pid's reaped_at: %+v %v %v", written, applied, failure)
 	}
@@ -352,10 +340,6 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 	operation := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	created, failure := store.Create(operation, definition(), "operator@example.org", now)
-	if failure != nil {
-		test.Fatal(failure)
-	}
-	term, failure := store.Term(operation)
 	if failure != nil {
 		test.Fatal(failure)
 	}
@@ -381,7 +365,7 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 	if failure != nil {
 		test.Fatal(failure)
 	}
-	row, applied, failure := store.InsertRow(operation, term, first, campaign.NewRow(created.ID, device, installation, 0, campaign.StatePending))
+	row, applied, failure := store.InsertRow(operation, first, campaign.NewRow(created.ID, device, installation, 0, campaign.StatePending))
 	if failure != nil || !applied {
 		test.Fatalf("the owner's insert: %v %v", applied, failure)
 	}
@@ -393,12 +377,12 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 	if _, failure := pool.Exec(operation, `update node_partition_leases set epoch = $2 where partition = $1`, other.Partition, first.Epoch); failure != nil {
 		test.Fatal(failure)
 	}
-	if _, applied, failure := store.InsertRow(operation, term, misdirected, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || applied {
+	if _, applied, failure := store.InsertRow(operation, misdirected, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || applied {
 		test.Fatalf("a lease of another slice inserted a row: %v %v", applied, failure)
 	}
 	retried := row
 	retried.LastError = "under another slice's lease"
-	if _, applied, failure := store.UpdateRow(operation, term, misdirected, row, retried); failure != nil || applied {
+	if _, applied, failure := store.UpdateRow(operation, misdirected, row, retried); failure != nil || applied {
 		test.Fatalf("a lease of another slice updated a row: %v %v", applied, failure)
 	}
 
@@ -415,17 +399,17 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 	if current, failure := store.CurrentLease(operation, device, neighbour); failure != nil || current != second {
 		test.Fatalf("the current lease of a node in the slice is %+v (%v), want %+v", current, failure, second)
 	}
-	if _, applied, failure := store.InsertRow(operation, term, first, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || applied {
+	if _, applied, failure := store.InsertRow(operation, first, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || applied {
 		test.Fatalf("a stale lease inserted a row: %v %v", applied, failure)
 	}
-	if _, applied, failure := store.UpdateRow(operation, term, first, row, retried); failure != nil || applied {
+	if _, applied, failure := store.UpdateRow(operation, first, row, retried); failure != nil || applied {
 		test.Fatalf("a stale lease updated a row: %v %v", applied, failure)
 	}
 	next, _ := row.Dispatch(created.ID, campaign.Session{NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 9}, now, now.Add(time.Hour), nil)
 	attempt := 1
 	intended := campaign.IntendedProcess{Pid: next.Pid, CampaignID: &created.ID, Attempt: &attempt, DeviceID: device, InstallationID: installation, ActionKind: "ensure_version",
 		Principal: "operator@example.org", Subject: created.Subject(), ExpiresAt: now.Add(2 * time.Hour), MaxCommands: 1, DefaultShellCommands: 1, At: now}
-	if _, applied, failure := store.Dispatching(operation, term, first, row, next, intended); failure != nil || applied {
+	if _, applied, failure := store.Dispatching(operation, first, row, next, intended); failure != nil || applied {
 		test.Fatalf("a stale lease dispatched: %v %v", applied, failure)
 	}
 	var recorded int
@@ -436,11 +420,11 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 	if failure != nil || stored.Revision != row.Revision || stored.State != campaign.StatePending || stored.LastError != "" {
 		test.Fatalf("the row after the refused writes: %+v %v", stored, failure)
 	}
-	dispatched, applied, failure := store.Dispatching(operation, term, second, row, next, intended)
+	dispatched, applied, failure := store.Dispatching(operation, second, row, next, intended)
 	if failure != nil || !applied || dispatched.Revision != row.Revision+1 {
 		test.Fatalf("the current owner's dispatch: %+v %v %v", dispatched, applied, failure)
 	}
-	if inserted, applied, failure := store.InsertRow(operation, term, second, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || !applied || inserted.Revision != 1 {
+	if inserted, applied, failure := store.InsertRow(operation, second, campaign.NewRow(created.ID, device, neighbour, 0, campaign.StatePending)); failure != nil || !applied || inserted.Revision != 1 {
 		test.Fatalf("the current owner's insert: %+v %v %v", inserted, applied, failure)
 	}
 	inFlight, failure := store.InFlightRows(operation, partition, now)
@@ -492,7 +476,7 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 	late.LastError = "written while the lease changed hands"
 	refused := make(chan bool, 1)
 	go func() {
-		_, applied, failure := store.UpdateRow(operation, term, third, dispatched, late)
+		_, applied, failure := store.UpdateRow(operation, third, dispatched, late)
 		if failure != nil {
 			test.Error(failure)
 		}
@@ -638,5 +622,77 @@ func TestSweepCursorsArePerPartitionAndWrittenUnderTheLease(test *testing.T) {
 	}
 	if cursor, failure := store.SweepCursor(operation, created.ID, 0); failure != nil || !strings.Contains(string(cursor), `"swept": 1`) {
 		test.Fatalf("partition 0's cursor %s (%v)", cursor, failure)
+	}
+}
+
+func TestSilentRateWritesTouchOnlyTheSlicesTheirLeasesHold(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := campaign.NewStore(pool)
+	operation := context.Background()
+	created, failure := store.Create(operation, definition(), "operator@example.org", time.Now())
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	finished := time.Now().Add(-time.Hour)
+	nodes := map[int32]string{}
+	for index := 0; len(nodes) < testsupport.NodePartitions; index++ {
+		node := fmt.Sprintf("%032x", 0xd0000+index)
+		partition := kafka.KeyPartition(device+"/"+node, testsupport.NodePartitions)
+		if _, taken := nodes[partition]; taken {
+			continue
+		}
+		nodes[partition] = node
+		if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, finished_at, epoch) values ($1, $2, $3, 0, 'succeeded', $4, 1)`,
+			created.ID, device, node, finished); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	held, failure := store.BumpLease(operation, 0, "twilight-test")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	stale := campaign.Lease{Partition: 1, Epoch: 0}
+	if _, failure := store.BumpLease(operation, 1, "twilight-elsewhere"); failure != nil {
+		test.Fatal(failure)
+	}
+	devices := []string{device, device, device}
+	installations := []string{nodes[0], nodes[1], nodes[2]}
+	gone := finished.Add(10 * time.Minute)
+	times := []time.Time{gone, gone, gone}
+	if failure := store.RecordGone(operation, []campaign.Lease{held, stale}, []uuid.UUID{created.ID}, devices, installations, times, []int64{2, 2, 2}); failure != nil {
+		test.Fatal(failure)
+	}
+	departed := func() map[string]bool {
+		rows, failure := pool.Query(operation, `select installation_id, event_at is not null from campaign_nodes where campaign_id = $1`, created.ID)
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		marked := map[string]bool{}
+		for rows.Next() {
+			var node string
+			var set bool
+			if failure := rows.Scan(&node, &set); failure != nil {
+				test.Fatal(failure)
+			}
+			marked[node] = set
+		}
+		return marked
+	}
+	if marked := departed(); !marked[nodes[0]] || marked[nodes[1]] || marked[nodes[2]] {
+		test.Fatalf("a departure was recorded outside the held slice or under a stale lease: %v", marked)
+	}
+	if failure := store.MarkLapsed(operation, []campaign.Lease{held}, created.ID, time.Now()); failure != nil {
+		test.Fatal(failure)
+	}
+	var silent int
+	if failure := pool.QueryRow(operation, `select count(*) from campaign_nodes where campaign_id = $1 and silent`, created.ID).Scan(&silent); failure != nil || silent != 1 {
+		test.Fatalf("%d rows marked silent (%v), want only the held slice's departed one", silent, failure)
+	}
+	if failure := store.RecordBack(operation, []campaign.Lease{stale}, []uuid.UUID{created.ID}, devices[:1], installations[:1], []time.Time{gone.Add(time.Minute)}); failure != nil {
+		test.Fatal(failure)
+	}
+	var back int
+	if failure := pool.QueryRow(operation, `select count(*) from campaign_nodes where campaign_id = $1 and back_at is not null`, created.ID).Scan(&back); failure != nil || back != 0 {
+		test.Fatalf("a return was recorded with a lease that does not hold the node's slice: %d (%v)", back, failure)
 	}
 }

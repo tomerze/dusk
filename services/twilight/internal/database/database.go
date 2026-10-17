@@ -20,6 +20,10 @@ const (
 	SliceLockKey        int64 = 0x7477696c69730000
 )
 
+func SliceLock(partition int32) int64 {
+	return SliceLockKey + int64(partition)
+}
+
 func Open(operation context.Context, url string, maximumConnections int32) (*pgxpool.Pool, error) {
 	config, failure := pgxpool.ParseConfig(url)
 	if failure != nil {
