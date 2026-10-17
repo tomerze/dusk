@@ -112,7 +112,13 @@ every record of `dusk.credential-quota` to partition 0 (see
 consumer group rebalancing). Every message it reads is checked against its
 contract in `services/contracts/kafka/`; an invalid one is dropped, counted in
 `nightfall_invalid_messages_total` and logged at `warn` with its topic,
-partition and offset.
+partition and offset. Every 10 seconds each of these consumers compares its
+positions with the high watermarks of its partitions; when records wait beyond a
+position that has not moved for 30 seconds, nightfall recreates the consumer at
+the positions it had reached, logs it at `error` and counts it in
+`nightfall_consumers_recreated_total`. What it had read is kept: the intended
+processes, node states, directory and credential quotas go on from where they
+were.
 
 The ledger, the census and the other events each have a producer of their own,
 so a census burst never fills the ledger's queue.
@@ -415,6 +421,7 @@ roles = ["admin"]
 | `nightfall_unknown_server_names_total` | `listener` | Connections refused for their server name. |
 | `nightfall_accept_descriptor_exhaustion_total` | | Times the listeners paused for lack of file descriptors. |
 | `nightfall_invalid_messages_total`, `nightfall_consumer_errors_total` | `topic` | Kafka messages dropped as invalid, and failed polls. |
+| `nightfall_consumers_recreated_total` | `topic` | Kafka consumers recreated because they read nothing for 30 seconds while records waited for them. |
 | `nightfall_census_failures_total`, `nightfall_event_delivery_failures_total` | `topic` on the second | Census writes and events Kafka did not take. |
 | `nightfall_dead_instances_total` | | Instances whose census stopped. |
 | `nightfall_tls_reload_failures_total`, `nightfall_permissions_reload_failures_total` | | Changed files that did not load. |
