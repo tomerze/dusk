@@ -1,0 +1,13 @@
+[package]
+name = "dusk_program_nightfall_tls"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+rustls = { version = "0.23", default-features = false, public = true }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "ecdh", "pkcs8"] }
+sha2 = { version = "0.10", default-features = false }
+hmac = { version = "0.12", default-features = false }
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["zeroize"] }
+zeroize = { version = "1", default-features = false }
