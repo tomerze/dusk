@@ -67,7 +67,6 @@ func (engine *Engine) applyResult(operation context.Context, pid campaign.Pid, r
 		return errNotOwned
 	}
 	defer release()
-	term := engine.leadership.Term()
 	at, failure := kafka.ParseTime(result.Time)
 	if failure != nil {
 		at = time.Now()
@@ -139,7 +138,7 @@ func (engine *Engine) applyResult(operation context.Context, pid campaign.Pid, r
 			engine.finishInFlight(key, pid, result)
 			return nil
 		}
-		_, written, failure := engine.writeUnder(operation, term, lease, &row, next, "result "+result.Status)
+		_, written, failure := engine.writeUnder(operation, lease, &row, next, "result "+result.Status)
 		if failure != nil {
 			return fmt.Errorf("write the row of pid %s: %w", pid, failure)
 		}
@@ -151,13 +150,6 @@ func (engine *Engine) applyResult(operation context.Context, pid campaign.Pid, r
 			if !held {
 				engine.ownership.fenced(lease)
 				return fmt.Errorf("slice %d at epoch %d: %w", lease.Partition, lease.Epoch, errNotOwned)
-			}
-			current, failure := engine.Campaigns.Term(operation)
-			if failure != nil {
-				return fmt.Errorf("read the leadership term: %w", failure)
-			}
-			if current != term {
-				return fmt.Errorf("term %d no longer leads; term %d does", term, current)
 			}
 			continue
 		}

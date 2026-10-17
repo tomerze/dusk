@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"sort"
@@ -54,15 +55,6 @@ func newDispatcher(engine *Engine) *dispatcher {
 		wake:       make(chan struct{}, 1),
 		workers:    make(chan struct{}, engine.Config.Engine.DispatchWorkers),
 	}
-}
-
-func (current *dispatcher) reset() {
-	current.mutex.Lock()
-	defer current.mutex.Unlock()
-	current.ready = map[NodeKey]map[uuid.UUID]bool{}
-	current.queues = map[uuid.UUID][]NodeKey{}
-	current.inFlight = map[NodeKey]*batch{}
-	current.reaps.take(current.reaps.size())
 }
 
 func (current *dispatcher) queueLimit(identifier uuid.UUID) int {
@@ -242,6 +234,8 @@ func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
 		}
 	}
 	if current.reaps.size() > 0 {
+		reapsPerSecond := float64(current.engine.Config.Engine.ReapsPerSecond) * current.engine.ownership.share()
+		current.reapTokens.Reconfigure(reapsPerSecond, max(1, int(math.Ceil(reapsPerSecond))))
 		if !current.reapTokens.Available(now) {
 			return pick{}, min(wait, max(current.reapTokens.Wait(now), 5*time.Millisecond))
 		}
@@ -258,7 +252,7 @@ func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
 	return pick{}, wait
 }
 
-func (current *dispatcher) run(operation context.Context, _ int64) {
+func (current *dispatcher) run(operation context.Context) {
 	var running sync.WaitGroup
 	defer running.Wait()
 	for operation.Err() == nil {
@@ -423,7 +417,7 @@ func (current *dispatcher) dispatch(operation context.Context, chosen pick) {
 			engine.registry.returnTokens(target.ID, 1)
 			continue
 		}
-		written, applied, failure := engine.Campaigns.Dispatching(operation, engine.leadership.Term(), lease, item.row, next, intended)
+		written, applied, failure := engine.Campaigns.Dispatching(operation, lease, item.row, next, intended)
 		release()
 		if failure != nil || !applied {
 			if failure != nil && operation.Err() == nil {

@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/selector"
 )
 
@@ -604,17 +607,35 @@ func (store *Store) Withdrawn(operation context.Context) ([]Lifecycle, error) {
 	})
 }
 
-func (store *Store) WritePresence(operation context.Context, rows []Presence) error {
+func (store *Store) WritePresence(operation context.Context, rows []Presence, leases map[int32]int64) (int64, error) {
+	var written int64
 	for start := 0; start < len(rows); start += 5000 {
+		chunk := rows[start:min(len(rows), start+5000)]
+		var locked []int32
+		for _, row := range chunk {
+			if _, held := leases[row.Partition]; held && !slices.Contains(locked, row.Partition) {
+				locked = append(locked, row.Partition)
+			}
+		}
+		slices.Sort(locked)
 		batch := &pgx.Batch{}
-		for _, row := range rows[start:min(len(rows), start+5000)] {
+		for _, partition := range locked {
+			batch.Queue(`select pg_advisory_xact_lock_shared($1)`, database.SliceLock(partition))
+		}
+		queued := 0
+		for _, row := range chunk {
+			epoch, held := leases[row.Partition]
+			if !held {
+				continue
+			}
+			queued++
 			sessions := row.Sessions
 			if sessions == nil {
 				sessions = []PresenceSession{}
 			}
 			encoded, failure := json.Marshal(sessions)
 			if failure != nil {
-				return failure
+				return written, failure
 			}
 			firstSeen := time.Now()
 			if row.ConnectedAt != nil {
@@ -622,19 +643,41 @@ func (store *Store) WritePresence(operation context.Context, rows []Presence) er
 			}
 			batch.Queue(`insert into nodes (device_id, installation_id, first_seen_at) values ($1, $2, $3) on conflict do nothing`, row.DeviceID, row.InstallationID, firstSeen)
 			batch.Queue(`insert into node_presence (device_id, installation_id, online, last_seen_at, connected_at, disconnected_at, sessions)
-				values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+				select $1, $2, $3, $4, $5, $6, $7::jsonb where exists (select 1 from node_partition_leases where partition = $8 and epoch = $9)
 				on conflict (device_id, installation_id) do update set online = excluded.online,
 					last_seen_at = greatest(node_presence.last_seen_at, excluded.last_seen_at),
 					connected_at = coalesce(excluded.connected_at, node_presence.connected_at),
 					disconnected_at = coalesce(excluded.disconnected_at, node_presence.disconnected_at),
 					sessions = excluded.sessions`,
-				row.DeviceID, row.InstallationID, row.Online, row.LastSeenAt, row.ConnectedAt, row.DisconnectedAt, encoded)
+				row.DeviceID, row.InstallationID, row.Online, row.LastSeenAt, row.ConnectedAt, row.DisconnectedAt, encoded, row.Partition, epoch)
 		}
-		if failure := store.pool.SendBatch(operation, batch).Close(); failure != nil {
-			return fmt.Errorf("write presence: %w", failure)
+		if batch.Len() == 0 {
+			continue
 		}
+		results := store.pool.SendBatch(operation, batch)
+		var failure error
+		for range locked {
+			if failure == nil {
+				_, failure = results.Exec()
+			}
+		}
+		var applied int64
+		for range queued {
+			if failure == nil {
+				_, failure = results.Exec()
+			}
+			if failure == nil {
+				var tag pgconn.CommandTag
+				tag, failure = results.Exec()
+				applied += tag.RowsAffected()
+			}
+		}
+		if failure = errors.Join(failure, results.Close()); failure != nil {
+			return written, fmt.Errorf("write presence: %w", failure)
+		}
+		written += applied
 	}
-	return nil
+	return written, nil
 }
 
 func (store *Store) UpdateLastSeen(operation context.Context, keys []Key, times []time.Time) error {
@@ -653,11 +696,13 @@ func (store *Store) UpdateLastSeen(operation context.Context, keys []Key, times 
 
 const presencePage = 5000
 
-func (store *Store) ScanPresence(operation context.Context, visit func(Presence) error) error {
+func (store *Store) ScanPresence(operation context.Context, partition int32, visit func(Presence) error) error {
 	var after Key
 	for {
-		rows, failure := store.pool.Query(operation, `select device_id, installation_id, online, last_seen_at, connected_at, disconnected_at, sessions from node_presence
-			where (device_id, installation_id) > ($1, $2) order by device_id, installation_id limit $3`, after.DeviceID, after.InstallationID, presencePage)
+		rows, failure := store.pool.Query(operation, `select p.device_id, p.installation_id, p.online, p.last_seen_at, p.connected_at, p.disconnected_at, p.sessions
+			from nodes n join node_presence p on p.device_id = n.device_id and p.installation_id = n.installation_id
+			where n.partition = $4 and (n.device_id, n.installation_id) > ($1, $2) order by n.device_id, n.installation_id limit $3`,
+			after.DeviceID, after.InstallationID, presencePage, partition)
 		if failure != nil {
 			return failure
 		}

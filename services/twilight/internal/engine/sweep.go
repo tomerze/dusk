@@ -25,7 +25,7 @@ func (engine *Engine) requestSweep(request sweepRequest) {
 	}
 }
 
-func (engine *Engine) runSweeps(operation context.Context, _ int64) {
+func (engine *Engine) runSweeps(operation context.Context) {
 	interval := time.Duration(engine.Config.Engine.SweepIntervalSeconds) * time.Second
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
@@ -216,7 +216,8 @@ func collectKeys(rows interface {
 
 func (engine *Engine) refreshStaleFacts(operation context.Context) {
 	maximumAge := time.Duration(engine.Config.Engine.FactsMaxAgeSeconds) * time.Second
-	rows, failure := engine.Pool.Query(operation, `select device_id, installation_id from nodes where facts_read_at is null or facts_read_at < $1 limit 50000`, time.Now().Add(-maximumAge))
+	rows, failure := engine.Pool.Query(operation, `select device_id, installation_id from nodes where partition = any($2) and (facts_read_at is null or facts_read_at < $1) limit 50000`,
+		time.Now().Add(-maximumAge), engine.ownership.ownedPartitions())
 	if failure != nil {
 		engine.Logger.Warn("reading nodes with stale facts failed", "error", failure)
 		return
@@ -237,14 +238,15 @@ func (engine *Engine) refreshStaleFacts(operation context.Context) {
 	}
 }
 
-func (engine *Engine) runDueScan(operation context.Context, term int64) {
+func (engine *Engine) runDueScan(operation context.Context) {
 	for sleep(operation, 15*time.Second) {
 		identifiers := engine.registry.activeIDs()
 		if len(identifiers) == 0 {
 			continue
 		}
 		rows, failure := engine.Pool.Query(operation, `select device_id, installation_id from campaign_nodes
-			where campaign_id = any($1) and state in ('pending', 'backoff') and next_attempt_at <= $2 order by next_attempt_at limit 20000`, identifiers, time.Now())
+			where campaign_id = any($1) and partition = any($3) and state in ('pending', 'backoff') and next_attempt_at <= $2 order by next_attempt_at limit 20000`,
+			identifiers, time.Now(), engine.ownership.ownedPartitions())
 		if failure != nil {
 			if operation.Err() == nil {
 				engine.Logger.Warn("the due scan failed", "error", failure)

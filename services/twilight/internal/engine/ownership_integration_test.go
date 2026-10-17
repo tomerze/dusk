@@ -115,7 +115,7 @@ func TestAFencedOwnerWritesNothingAndGivesTheSliceUp(test *testing.T) {
 	if current, failure := store.CurrentLease(operation, key.DeviceID, key.InstallationID); failure != nil || current != taken {
 		test.Fatalf("the current lease %+v (%v), want the new owner's %+v", current, failure, taken)
 	}
-	if _, applied, failure := owner.writeUnder(operation, currentTerm(test, pool), taken, &dispatched, succeeded, "test"); failure != nil || !applied {
+	if _, applied, failure := owner.writeUnder(operation, taken, &dispatched, succeeded, "test"); failure != nil || !applied {
 		test.Fatalf("a write under the current lease: %v %v", applied, failure)
 	}
 }
@@ -218,7 +218,7 @@ func startSliceMember(test *testing.T, url string, settings config.Config, insta
 	member.cancel = cancel
 	go func() {
 		defer close(member.stopped)
-		member.engine.ownership.run(running, 1)
+		member.engine.ownership.run(running)
 	}()
 	test.Cleanup(member.stop)
 	return member
@@ -409,7 +409,7 @@ func TestNoRowIsWrittenUnderAStaleLeaseAcrossARebalance(test *testing.T) {
 			}
 			next := row
 			next.LastError = "stale"
-			if _, applied, failure := store.UpdateRow(operation, currentTerm(test, pool), stale, row, next); failure != nil || applied {
+			if _, applied, failure := store.UpdateRow(operation, stale, row, next); failure != nil || applied {
 				test.Fatalf("a write under the first member's lease of partition %d after it moved: %v %v", partition, applied, failure)
 			}
 			break
@@ -558,108 +558,6 @@ func TestAnUnleasedSliceWaitsForItsLeaseAndMisplacedResultsAreDropped(test *test
 	if state(droppedNode) != campaign.StateDispatched {
 		test.Fatalf("the dropped misplaced result was applied later: %s", state(droppedNode))
 	}
-}
-
-func TestAMovedTermLeavesItsResultUncommittedUntilItIsApplied(test *testing.T) {
-	pool, url := testsupport.Database(test)
-	brokers := testsupport.Brokers(test)
-	operation := context.Background()
-	store := campaign.NewStore(pool)
-	suffix := strings.ReplaceAll(uuid.NewString()[:8], "-", "")
-	settings := config.Default()
-	settings.Kafka.Brokers = []string{brokers}
-	settings.Kafka.AllowPlaintext = true
-	settings.Kafka.Topics.ProcessResults = "dusk.process-results." + suffix
-	settings.Kafka.ResultsGroup = "twilight-results-" + suffix
-	producer, failure := kgo.NewClient(kgo.SeedBrokers(brokers))
-	if failure != nil {
-		test.Fatal(failure)
-	}
-	defer producer.Close()
-	admin := kadm.NewClient(producer)
-	if _, failure := admin.CreateTopic(operation, testsupport.NodePartitions, 1, map[string]*string{"cleanup.policy": new("delete")}, settings.Kafka.Topics.ProcessResults); failure != nil {
-		test.Fatal(failure)
-	}
-	validator, failure := kafka.NewValidator()
-	if failure != nil {
-		test.Fatal(failure)
-	}
-	target := startedRunScript(test, store, "term moved")
-	var changed, reaped NodeKey
-	for index := 0; reaped.DeviceID == ""; index++ {
-		key := sliceNode(3000 + index)
-		if kafka.KeyPartition(key.String(), testsupport.NodePartitions) != 0 {
-			continue
-		}
-		if changed.DeviceID == "" {
-			changed = key
-		} else {
-			reaped = key
-		}
-	}
-	pid := campaign.DerivePid(target.ID, changed.DeviceID, changed.InstallationID, 1)
-	if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, pid, dispatched_at, deadline_at, revision)
-		values ($1, $2, $3, 0, 'dispatched', $4::text::numeric, now(), now() + interval '1 hour', 1)`, target.ID, changed.DeviceID, changed.InstallationID, pid.String()); failure != nil {
-		test.Fatal(failure)
-	}
-	produce := func(key NodeKey, fields map[string]any) int64 {
-		now := kafka.FormatTime(time.Now())
-		message := map[string]any{
-			"schema": "dusk.process-results/v1", "id": kafka.NewMessageID(), "time": now, "device_id": key.DeviceID, "installation_id": key.InstallationID,
-			"namespace_id": "5d2e9a1c7b3f8e04", "delivered": true, "error": nil, "started_at": now, "finished_at": now, "dawn_instance": "dawn-0",
-			"output_digest": strings.Repeat("ab", 32), "output_count": 0, "output_truncated": false, "reported": nil,
-		}
-		for name, value := range fields {
-			message[name] = value
-		}
-		encoded, _ := json.Marshal(message)
-		if failure := validator.Validate(kafka.ContractProcessResults, encoded); failure != nil {
-			test.Fatalf("an invalid process result: %v", failure)
-		}
-		producing, cancel := context.WithTimeout(operation, 30*time.Second)
-		defer cancel()
-		produced, failure := producer.ProduceSync(producing, &kgo.Record{Topic: settings.Kafka.Topics.ProcessResults, Key: []byte(key.String()), Value: encoded}).First()
-		if failure != nil {
-			test.Fatal(failure)
-		}
-		return produced.Offset
-	}
-	state := func() campaign.NodeState {
-		row, failure := store.Row(operation, target.ID, changed.DeviceID, changed.InstallationID)
-		if failure != nil {
-			test.Fatal(failure)
-		}
-		return row.State
-	}
-
-	deposed := startSliceMember(test, url, settings, "twilight-deposed")
-	eventually(test, "the member owning every slice", time.Minute, func() (bool, string) {
-		return len(deposed.owned()) == testsupport.NodePartitions, fmt.Sprintf("owns %v", deposed.owned())
-	})
-	if _, failure := pool.Exec(operation, `update leadership set term = term + 1 where id = 1`); failure != nil {
-		test.Fatal(failure)
-	}
-	skipped := produce(changed, map[string]any{"pid": pid.String(), "campaign_id": target.ID.String(), "attempt": 1, "action_kind": "run_script", "status": "succeeded"})
-	produce(reaped, map[string]any{"pid": "1234567", "campaign_id": nil, "attempt": nil, "action_kind": "reap", "status": "reaped", "delivered": false})
-	time.Sleep(8 * time.Second)
-	if current := state(); current != campaign.StateDispatched {
-		test.Fatalf("a member whose term moved on wrote the row: %s", current)
-	}
-	committed, failure := admin.FetchOffsets(operation, settings.Kafka.ResultsGroup)
-	if failure != nil {
-		test.Fatal(failure)
-	}
-	if offset, found := committed.Lookup(settings.Kafka.Topics.ProcessResults, 0); found && offset.At > skipped {
-		test.Fatalf("the group committed offset %d past the result at %d that the member could not apply", offset.At, skipped)
-	}
-	deposed.stop()
-	if _, failure := pool.Exec(operation, `update leadership set term = term - 1 where id = 1`); failure != nil {
-		test.Fatal(failure)
-	}
-	successor := startSliceMember(test, url, settings, "twilight-successor")
-	eventually(test, "the result the deposed member left is applied by the next one", time.Minute, func() (bool, string) {
-		return state() == campaign.StateSucceeded, fmt.Sprintf("row %s, successor owns %v", state(), successor.owned())
-	})
 }
 
 func TestAStuckLeaseAttemptHoldsBackOnlyItsOwnSlice(test *testing.T) {

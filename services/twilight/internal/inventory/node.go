@@ -143,6 +143,7 @@ type PresenceSession struct {
 
 type Presence struct {
 	Key
+	Partition      int32             `json:"-"`
 	Online         bool              `json:"online"`
 	LastSeenAt     *time.Time        `json:"last_seen_at"`
 	ConnectedAt    *time.Time        `json:"connected_at"`

@@ -24,6 +24,7 @@ import (
 
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
+	"dusk/services/twilight/internal/database"
 	"dusk/services/twilight/internal/dawn"
 	"dusk/services/twilight/internal/engine"
 	"dusk/services/twilight/internal/inventory"
@@ -859,5 +860,179 @@ func TestTheLeaderDispatchesNothingWhileTheResultsTopicIsPartitionedUnlikeTheInv
 	current.fake.mutex.Unlock()
 	if counts := current.rows(again.ID); len(counts) != 0 || after != before || !current.engine.Ready() {
 		test.Fatalf("after the topic grew under the running leader it wrote rows %v and made %d dispatches; ready %v", counts, after-before, current.engine.Ready())
+	}
+}
+
+func (current *harness) startInstance(instance string) *engine.Engine {
+	current.test.Helper()
+	pool, failure := database.Open(context.Background(), current.settings.Database.URL+"&application_name="+instance, 8)
+	if failure != nil {
+		current.test.Fatal(failure)
+	}
+	current.test.Cleanup(pool.Close)
+	settings := current.settings
+	settings.Instance = instance
+	logger := testsupport.Logger().With("instance", instance)
+	dawnClient, failure := dawn.New(settings.Dawn, nil, logger)
+	if failure != nil {
+		current.test.Fatal(failure)
+	}
+	options, _ := kafka.Options(settings.Kafka, instance)
+	nodeStateClient, failure := kgo.NewClient(options...)
+	if failure != nil {
+		current.test.Fatal(failure)
+	}
+	current.test.Cleanup(nodeStateClient.Close)
+	started := engine.New(engine.Dependencies{
+		Config: settings, Pool: pool, Campaigns: campaign.NewStore(pool), Inventory: inventory.NewStore(pool), Alerts: testsupport.AlertStore(current.test, pool),
+		Dawn: dawnClient, KafkaOptions: options, Validator: current.validator,
+		NodeState: kafka.NewNodeStateProducer(nodeStateClient, current.validator, settings.Kafka.Topics.NodeState),
+		Intended:  kafka.NewIntendedProcessProducer(nodeStateClient, current.validator, settings.Kafka.Topics.IntendedProcesses),
+		Logger:    logger,
+	})
+	operation, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		started.Run(operation)
+	}()
+	current.test.Cleanup(func() {
+		cancel()
+		select {
+		case <-stopped:
+		case <-time.After(30 * time.Second):
+			current.test.Errorf("instance %s did not stop within 30 s", instance)
+		}
+	})
+	return started
+}
+
+func TestTwoInstancesSplitTheSlicesAndEachRunsItsOwnNodes(test *testing.T) {
+	current := newHarness(test)
+	var targets []node
+	for index := range 9 {
+		target := identity(60 + index)
+		copied := target
+		current.fake.nodes[target.device] = &copied
+		current.enroll(target)
+		targets = append(targets, target)
+	}
+	current.census(targets...)
+	if _, failure := current.pool.Exec(context.Background(), `create table slice_writes (partition smallint, writer text, lease_owner text);
+		create function record_slice_write() returns trigger language plpgsql as $body$
+		begin
+			insert into slice_writes select new.partition, current_setting('application_name'), owner from node_partition_leases where partition = new.partition;
+			return new;
+		end
+		$body$;
+		create trigger record_slice_writes after insert or update on campaign_nodes for each row execute function record_slice_write()`); failure != nil {
+		test.Fatal(failure)
+	}
+	first := current.startInstance("twilight-first")
+	current.startInstance("twilight-second")
+	current.eventually("both instances own slices", 2*time.Minute, func() (bool, string) {
+		var owners int
+		_ = current.pool.QueryRow(context.Background(), `select count(distinct owner) from node_partition_leases`).Scan(&owners)
+		return owners == 2, fmt.Sprintf("%d owners", owners)
+	})
+	current.eventually("facts reach inventory", time.Minute, func() (bool, string) {
+		var known int
+		_ = current.pool.QueryRow(context.Background(), `select count(*) from nodes where country = 'US'`).Scan(&known)
+		return known == len(targets), fmt.Sprintf("%d of %d", known, len(targets))
+	})
+	service := first.Service()
+	script := campaign.Definition{
+		Name:     "everyone",
+		Selector: `country == "US"`,
+		Action:   campaign.Action{Kind: campaign.KindRunScript, Script: "ps"},
+		Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: 50, Burst: 50}, Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 5}},
+			NodeTimeoutSeconds: 5, Gates: campaign.Gates{MinSample: 1}},
+	}
+	everyone, failure := service.CreateCampaign(context.Background(), script, "operator@example.org")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := service.StartCampaign(context.Background(), everyone.ID, "operator@example.org"); failure != nil {
+		test.Fatal(failure)
+	}
+	current.eventually("every node's process succeeds", 2*time.Minute, func() (bool, string) {
+		counts := current.rows(everyone.ID)
+		return counts[campaign.StateSucceeded] == len(targets), fmt.Sprint(counts)
+	})
+	current.fake.mutex.Lock()
+	dispatched := map[string]int{}
+	for _, record := range current.fake.dispatches {
+		dispatched[record.node.DeviceID] += len(record.work)
+	}
+	current.fake.mutex.Unlock()
+	for _, target := range targets {
+		if dispatched[target.device] != 1 {
+			test.Errorf("node %s got %d processes, want one", target.device, dispatched[target.device])
+		}
+	}
+	var stale, byFirst, bySecond int
+	if failure := current.pool.QueryRow(context.Background(), `select count(*) filter (where writer <> lease_owner), count(*) filter (where writer = 'twilight-first'),
+		count(*) filter (where writer = 'twilight-second') from slice_writes`).Scan(&stale, &byFirst, &bySecond); failure != nil {
+		test.Fatal(failure)
+	}
+	if stale != 0 || byFirst == 0 || bySecond == 0 {
+		test.Fatalf("%d row writes by an instance not holding the slice's lease; %d by the first instance, %d by the second", stale, byFirst, bySecond)
+	}
+	current.eventually("the counters of every slice are written and sum to every node", time.Minute, func() (bool, string) {
+		var succeeded int64
+		var partitions int
+		_ = current.pool.QueryRow(context.Background(), `select coalesce(sum(count) filter (where state = 'succeeded'), 0), count(distinct partition)
+			from campaign_counters where campaign_id = $1`, everyone.ID).Scan(&succeeded, &partitions)
+		return succeeded == int64(len(targets)), fmt.Sprintf("%d succeeded counted over %d partitions", succeeded, partitions)
+	})
+	var swept int
+	if failure := current.pool.QueryRow(context.Background(), `select count(*) from campaign_sweep_cursors where campaign_id = $1`, everyone.ID).Scan(&swept); failure != nil || swept != testsupport.NodePartitions {
+		test.Fatalf("%d partitions have a sweep cursor (%v), want every one", swept, failure)
+	}
+}
+
+func TestAnOwnerResendsAProcessAKilledInstanceLeftDispatching(test *testing.T) {
+	current := newHarness(test)
+	target := identity(80)
+	copied := target
+	current.fake.nodes[target.device] = &copied
+	current.enroll(target)
+	current.census(target)
+	store := campaign.NewStore(current.pool)
+	operation := context.Background()
+	created, failure := store.Create(operation, campaign.Definition{
+		Name: "left dispatching", Selector: fmt.Sprintf(`device_id == "%s"`, target.device), Action: campaign.Action{Kind: campaign.KindRunScript, Script: "ps"},
+		Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: 50, Burst: 50}, Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 5}},
+			NodeTimeoutSeconds: 5, Gates: campaign.Gates{MinSample: 1}, Retry: campaign.Retry{MaxAttempts: 1, InitialBackoffSeconds: 1, MaxBackoffSeconds: 1, Multiplier: 1}},
+	}, "operator@example.org", time.Now())
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: time.Now()}); failure != nil {
+		test.Fatal(failure)
+	}
+	pid := campaign.DerivePid(created.ID, target.device, target.installation, 1)
+	if _, failure := current.pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, attempt, pid, epoch, namespace_id,
+			dispatched_at, deadline_at, revision)
+		values ($1, $2, $3, 0, 'dispatching', 1, $4::text::numeric, $5, $6, now() - interval '10 minutes', now() - interval '1 minute', 3)`,
+		created.ID, target.device, target.installation, pid.String(), target.epoch, target.namespace); failure != nil {
+		test.Fatal(failure)
+	}
+	current.start()
+	current.eventually("the slice's new owner resends the process with the pid the killed instance chose", 2*time.Minute, func() (bool, string) {
+		row, failure := store.Row(operation, created.ID, target.device, target.installation)
+		return failure == nil && row.State == campaign.StateSucceeded, fmt.Sprintf("%+v %v", row, failure)
+	})
+	current.fake.mutex.Lock()
+	defer current.fake.mutex.Unlock()
+	for _, record := range current.fake.dispatches {
+		for _, work := range record.work {
+			if work.Pid != pid || *work.Attempt != 1 {
+				test.Errorf("the node was sent pid %s attempt %d, want the left pid %s and attempt 1", work.Pid, *work.Attempt, pid)
+			}
+		}
+	}
+	if len(current.fake.dispatches) == 0 {
+		test.Fatal("the process was never sent again")
 	}
 }

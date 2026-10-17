@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"math"
 	"slices"
 	"sort"
 	"sync"
@@ -45,24 +46,14 @@ type registry struct {
 	finished map[finishedPartition]bool
 	counted  map[int32]bool
 	recount  chan struct{}
-	term     int64
 }
 
 func newRegistry(engine *Engine) *registry {
 	return &registry{engine: engine, runtimes: map[uuid.UUID]*runtime{}, finished: map[finishedPartition]bool{}, counted: map[int32]bool{}, recount: make(chan struct{}, 1)}
 }
 
-func (current *registry) reset() {
+func (current *registry) load(operation context.Context) error {
 	current.mutex.Lock()
-	defer current.mutex.Unlock()
-	current.runtimes = map[uuid.UUID]*runtime{}
-	current.counted = map[int32]bool{}
-	current.term = 0
-}
-
-func (current *registry) load(operation context.Context, term int64) error {
-	current.mutex.Lock()
-	current.term = term
 	current.runtimes = map[uuid.UUID]*runtime{}
 	current.mutex.Unlock()
 	return current.refresh(operation)
@@ -127,7 +118,7 @@ func (current *registry) refresh(operation context.Context) error {
 			current.mutex.Lock()
 			current.runtimes[loaded.ID] = created
 			current.mutex.Unlock()
-			current.engine.Logger.Info("campaign tracked by the leader", "campaign_id", loaded.ID, "status", loaded.Status, "phase", loaded.CurrentPhase)
+			current.engine.Logger.Info("campaign tracked", "campaign_id", loaded.ID, "status", loaded.Status, "phase", loaded.CurrentPhase)
 			if loaded.Status == campaign.StatusRunning {
 				sweeps = append(sweeps, loaded.ID)
 			}
@@ -157,7 +148,7 @@ func (current *registry) refresh(operation context.Context) error {
 	}
 	current.mutex.Unlock()
 	for _, finished := range gone {
-		current.engine.Logger.Info("campaign no longer tracked by the leader", "campaign_id", finished.campaign.ID)
+		current.engine.Logger.Info("campaign no longer tracked", "campaign_id", finished.campaign.ID)
 	}
 	for _, identifier := range sweeps {
 		current.engine.requestSweep(sweepRequest{campaign: identifier})
@@ -165,10 +156,10 @@ func (current *registry) refresh(operation context.Context) error {
 	return nil
 }
 
-func (current *registry) run(operation context.Context, term int64) {
+func (current *registry) run(operation context.Context) {
 	for sleep(operation, 2*time.Second) {
 		if failure := current.refresh(operation); failure != nil && operation.Err() == nil {
-			current.engine.Logger.Warn("refreshing the campaigns failed", "term", term, "error", failure)
+			current.engine.Logger.Warn("refreshing the campaigns failed", "error", failure)
 		}
 	}
 }
@@ -253,7 +244,14 @@ func (current *registry) takeToken(identifier uuid.UUID, now time.Time) bool {
 	if existing == nil || existing.campaign.Status != campaign.StatusRunning {
 		return false
 	}
+	current.budget(existing)
 	return existing.bucket.Take(now)
+}
+
+func (current *registry) budget(existing *runtime) {
+	share := current.engine.ownership.share()
+	rate := existing.campaign.Policy.Rate
+	existing.bucket.Reconfigure(rate.PerSecond*share, max(1, int(math.Ceil(float64(rate.Burst)*share))))
 }
 
 func (current *registry) tokenAvailable(identifier uuid.UUID, now time.Time) (bool, time.Duration) {
@@ -263,6 +261,7 @@ func (current *registry) tokenAvailable(identifier uuid.UUID, now time.Time) (bo
 	if existing == nil || existing.campaign.Status != campaign.StatusRunning {
 		return false, time.Hour
 	}
+	current.budget(existing)
 	return existing.bucket.Available(now), existing.bucket.Wait(now)
 }
 
@@ -274,7 +273,7 @@ func (current *registry) returnTokens(identifier uuid.UUID, count int) {
 	}
 }
 
-func (current *registry) runFlush(operation context.Context, term int64) {
+func (current *registry) runFlush(operation context.Context) {
 	interval := time.Duration(current.engine.Config.Engine.CountersFlushSeconds) * time.Second
 	rebuildEvery := max(1, int(time.Minute/interval))
 	for tick := 1; sleep(operation, interval); tick++ {

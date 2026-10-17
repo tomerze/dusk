@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -84,7 +85,7 @@ func newEvaluationQueue(capacity int) *evaluationQueue {
 }
 
 func (engine *Engine) hint(key NodeKey) {
-	if !engine.leadership.Leading() {
+	if !engine.ownership.owns(key) {
 		return
 	}
 	if !engine.evaluations.offer(key) {
@@ -92,7 +93,7 @@ func (engine *Engine) hint(key NodeKey) {
 	}
 }
 
-func (engine *Engine) runEvaluations(operation context.Context, _ int64) {
+func (engine *Engine) runEvaluations(operation context.Context) {
 	for {
 		select {
 		case <-operation.Done():
@@ -114,6 +115,7 @@ func (engine *Engine) runEvaluations(operation context.Context, _ int64) {
 }
 
 func (engine *Engine) evaluateBatch(operation context.Context, keys []NodeKey) (int, error) {
+	keys = slices.DeleteFunc(keys, func(key NodeKey) bool { return !engine.ownership.owns(key) })
 	if len(keys) == 0 {
 		return 0, nil
 	}
@@ -205,17 +207,17 @@ func (engine *Engine) write(operation context.Context, previous *campaign.Row, n
 		return next, false, nil
 	}
 	defer release()
-	return engine.writeUnder(operation, engine.leadership.Term(), lease, previous, next, reason)
+	return engine.writeUnder(operation, lease, previous, next, reason)
 }
 
-func (engine *Engine) writeUnder(operation context.Context, term int64, lease campaign.Lease, previous *campaign.Row, next campaign.Row, reason string) (campaign.Row, bool, error) {
+func (engine *Engine) writeUnder(operation context.Context, lease campaign.Lease, previous *campaign.Row, next campaign.Row, reason string) (campaign.Row, bool, error) {
 	var written campaign.Row
 	var applied bool
 	var failure error
 	if previous == nil {
-		written, applied, failure = engine.Campaigns.InsertRow(operation, term, lease, next)
+		written, applied, failure = engine.Campaigns.InsertRow(operation, lease, next)
 	} else {
-		written, applied, failure = engine.Campaigns.UpdateRow(operation, term, lease, *previous, next)
+		written, applied, failure = engine.Campaigns.UpdateRow(operation, lease, *previous, next)
 	}
 	if failure != nil {
 		if operation.Err() == nil {

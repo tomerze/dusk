@@ -84,6 +84,18 @@ func (current *ownership) partitionOf(key NodeKey) (int32, bool) {
 	return kafka.KeyPartition(key.String(), partitions), true
 }
 
+func (current *ownership) leases() []campaign.Lease {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	held := make([]campaign.Lease, 0, len(current.slices))
+	for _, owned := range current.slices {
+		if !owned.revoked.Load() {
+			held = append(held, owned.lease)
+		}
+	}
+	return held
+}
+
 func (current *ownership) partitionCount() int32 {
 	current.mutex.Lock()
 	defer current.mutex.Unlock()
@@ -152,6 +164,16 @@ func (current *ownership) own(lease campaign.Lease) {
 	current.mutex.Unlock()
 	slicesOwnedGauge.Set(float64(owned))
 	current.engine.registry.requestRecount()
+	current.engine.presence.requestReconcile(lease.Partition)
+}
+
+func (current *ownership) share() float64 {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	if current.partitions == 0 {
+		return 0
+	}
+	return float64(len(current.slices)) / float64(current.partitions)
 }
 
 func (current *ownership) drop(partition int32, drain bool) *slice {
@@ -198,11 +220,10 @@ func (current *ownership) load(operation context.Context) bool {
 	}
 }
 
-func (current *ownership) run(operation context.Context, term int64) {
+func (current *ownership) run(operation context.Context) {
 	if !current.load(operation) {
 		return
 	}
-	logger := current.engine.Logger.With("term", term)
 	options := append(append([]kgo.Opt(nil), current.engine.KafkaOptions...),
 		kgo.SessionTimeout(sliceSessionTimeout),
 		kgo.HeartbeatInterval(sliceHeartbeatInterval),
@@ -216,7 +237,7 @@ func (current *ownership) run(operation context.Context, term int64) {
 		defer running.Done()
 		current.retryUnleased(operation)
 	}()
-	kafka.ConsumeGroup(operation, options, "slices", current.engine.Config.Kafka.ResultsGroup, current.topic(), logger, current.apply)
+	kafka.ConsumeGroup(operation, options, "slices", current.engine.Config.Kafka.ResultsGroup, current.topic(), current.engine.Logger, current.apply)
 	running.Wait()
 	current.mutex.Lock()
 	partitions := make([]int32, 0, len(current.slices))
