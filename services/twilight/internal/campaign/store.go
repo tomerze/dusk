@@ -50,7 +50,7 @@ func (store *Store) Pool() *pgxpool.Pool {
 
 const campaignColumns = `id, name, description, tenant, status, kind, selector, coalesce(selector_sql_snapshot, ''), selector_sql_parameters,
 	action, policy, salt, created_by, created_at, updated_at, started_at, paused_at, finished_at, current_phase, phase_started_at,
-	phase_paused_seconds, gate_override_after, pause_kind, pause_reason, abort_reason, last_dispatch_at, version`
+	phase_paused_seconds, gate_override_after, pause_kind, pause_reason, abort_reason, last_dispatch_at, version, phase_held_at`
 
 func scanCampaign(row pgx.Row) (*Campaign, error) {
 	campaign := &Campaign{}
@@ -59,7 +59,7 @@ func scanCampaign(row pgx.Row) (*Campaign, error) {
 		&campaign.Selector, &campaign.SelectorSQL, &parameters, &action, &policy, &campaign.Salt, &campaign.CreatedBy, &campaign.CreatedAt,
 		&campaign.UpdatedAt, &campaign.StartedAt, &campaign.PausedAt, &campaign.FinishedAt, &campaign.CurrentPhase, &campaign.PhaseStartedAt,
 		&campaign.PhasePausedSeconds, &campaign.GateOverrideAfter, &campaign.PauseKind, &campaign.PauseReason, &campaign.AbortReason,
-		&campaign.LastDispatchAt, &campaign.Version)
+		&campaign.LastDispatchAt, &campaign.Version, &campaign.PhaseHeldAt)
 	if errors.Is(failure, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -339,6 +339,10 @@ func (store *Store) Transition(operation context.Context, identifier uuid.UUID, 
 			add("paused_at", now)
 			add("pause_kind", string(kind))
 			add("pause_reason", request.Reason)
+			if current.PhaseHeldAt != nil {
+				add("phase_paused_seconds", current.PhasePausedSeconds+max(0, int64(now.Sub(*current.PhaseHeldAt).Seconds())))
+				add("phase_held_at", nil)
+			}
 			detail["pause_kind"] = string(kind)
 		case TransitionResume:
 			if current.PauseKind != nil && *current.PauseKind == PauseGate {
@@ -422,6 +426,17 @@ func (store *Store) AdvancePhase(operation context.Context, identifier uuid.UUID
 		return addEvent(operation, transaction, identifier, "phase_advanced", "twilight", detail)
 	})
 	return advanced, failure
+}
+
+func (store *Store) HoldPhases(operation context.Context, now time.Time) (int64, error) {
+	tag, failure := store.pool.Exec(operation, `update campaigns set phase_held_at = $1 where status = 'running' and phase_held_at is null`, now)
+	return tag.RowsAffected(), failure
+}
+
+func (store *Store) ReleasePhases(operation context.Context, now time.Time) (int64, error) {
+	tag, failure := store.pool.Exec(operation, `update campaigns set phase_paused_seconds = phase_paused_seconds + greatest(0, floor(extract(epoch from $1::timestamptz - phase_held_at)))::bigint,
+		phase_held_at = null where phase_held_at is not null`, now)
+	return tag.RowsAffected(), failure
 }
 
 func (store *Store) HoldForGate(operation context.Context, identifier uuid.UUID, request TransitionRequest) (bool, error) {

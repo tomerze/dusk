@@ -834,6 +834,14 @@ func TestTheLeaderDispatchesNothingWhileTheResultsTopicIsPartitionedUnlikeTheInv
 		counts := current.rows(held.ID)
 		return counts[campaign.StateSucceeded] == 1 && gauge(test, "twilight_process_results_partitions_mismatched") == 0, fmt.Sprint(counts)
 	})
+	var pausedSeconds int64
+	var stillHeld bool
+	if failure := current.pool.QueryRow(context.Background(), `select phase_paused_seconds, phase_held_at is not null from campaigns where id = $1`, held.ID).Scan(&pausedSeconds, &stillHeld); failure != nil {
+		test.Fatal(failure)
+	}
+	if stillHeld || pausedSeconds < 10 {
+		test.Fatalf("the campaign started during the hold counts %d s of it as paused and is held %v; its bake must not count the hold", pausedSeconds, stillHeld)
+	}
 
 	if _, failure := admin.CreatePartitions(context.Background(), 1, narrow); failure != nil {
 		test.Fatal(failure)

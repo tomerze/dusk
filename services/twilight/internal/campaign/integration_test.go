@@ -696,3 +696,68 @@ func TestSilentRateWritesTouchOnlyTheSlicesTheirLeasesHold(test *testing.T) {
 		test.Fatalf("a return was recorded with a lease that does not hold the node's slice: %d (%v)", back, failure)
 	}
 }
+
+func TestAHeldPhaseCountsNoBakeTime(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := campaign.NewStore(pool)
+	operation := context.Background()
+	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	running, failure := store.Create(operation, definition(), "operator@example.org", started)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.Transition(operation, running.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: started}); failure != nil {
+		test.Fatal(failure)
+	}
+	draft, failure := store.Create(operation, definition(), "operator@example.org", started)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	held := started.Add(30 * time.Minute)
+	if count, failure := store.HoldPhases(operation, held); failure != nil || count != 1 {
+		test.Fatalf("held %d campaigns (%v), want the running one", count, failure)
+	}
+	if count, failure := store.HoldPhases(operation, held.Add(5*time.Minute)); failure != nil || count != 0 {
+		test.Fatalf("a second hold moved the start of the hold: %d (%v)", count, failure)
+	}
+	during, failure := store.Get(operation, running.ID)
+	if failure != nil || during.PhaseHeldAt == nil || !during.PhaseHeldAt.Equal(held) {
+		test.Fatalf("held since %v (%v), want %v", during.PhaseHeldAt, failure, held)
+	}
+	if accrued := during.BakeAccrued(held.Add(20 * time.Minute)); accrued != 30*time.Minute {
+		test.Fatalf("bake accrued to %v during the hold, want 30m", accrued)
+	}
+	if count, failure := store.ReleasePhases(operation, held.Add(20*time.Minute)); failure != nil || count != 1 {
+		test.Fatalf("released %d campaigns (%v)", count, failure)
+	}
+	after, failure := store.Get(operation, running.ID)
+	if failure != nil || after.PhaseHeldAt != nil || after.PhasePausedSeconds != 1200 {
+		test.Fatalf("after the release: held %v, paused %d s (%v); want no hold and 1200 s", after.PhaseHeldAt, after.PhasePausedSeconds, failure)
+	}
+	if accrued := after.BakeAccrued(held.Add(30 * time.Minute)); accrued != 40*time.Minute {
+		test.Fatalf("bake accrued to %v ten minutes after the release, want 40m", accrued)
+	}
+	if untouched, failure := store.Get(operation, draft.ID); failure != nil || untouched.PhaseHeldAt != nil || untouched.PhasePausedSeconds != 0 {
+		test.Fatalf("a draft campaign was held: %+v (%v)", untouched, failure)
+	}
+	overlapped := held.Add(time.Hour)
+	if _, failure := store.HoldPhases(operation, overlapped); failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.Transition(operation, running.ID, campaign.TransitionRequest{Transition: campaign.TransitionPause, Actor: "operator@example.org", Now: overlapped.Add(10 * time.Minute)}); failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.Transition(operation, running.ID, campaign.TransitionRequest{Transition: campaign.TransitionResume, Actor: "operator@example.org", Now: overlapped.Add(25 * time.Minute)}); failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.HoldPhases(operation, overlapped.Add(25*time.Minute)); failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.ReleasePhases(operation, overlapped.Add(40*time.Minute)); failure != nil {
+		test.Fatal(failure)
+	}
+	overlapping, failure := store.Get(operation, running.ID)
+	if failure != nil || overlapping.PhasePausedSeconds != 1200+40*60 || overlapping.PhaseHeldAt != nil {
+		test.Fatalf("a pause inside a hold left %d s paused, held %v (%v); want the 40 minutes of hold and pause counted once on top of 1200 s", overlapping.PhasePausedSeconds, overlapping.PhaseHeldAt, failure)
+	}
+}
