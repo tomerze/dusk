@@ -45,6 +45,8 @@ pub enum ResultCode {
     RateLimited,
     #[serde(rename = "revoked")]
     Revoked,
+    #[serde(rename = "cancelled")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -312,7 +314,7 @@ impl EntryContent {
                 self.result_code,
                 None | Some(ResultCode::Denied) | Some(ResultCode::RateLimited)
             ) {
-                return invalid("a result entry needs ok, error:* or revoked");
+                return invalid("a result entry needs ok, error:*, revoked or cancelled");
             }
         }
         match self.event {

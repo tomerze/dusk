@@ -66,6 +66,10 @@ fn produced() -> Vec<LedgerEntry> {
             ..result()
         },
         EntryContent {
+            result_code: Some(ResultCode::Cancelled),
+            ..result()
+        },
+        EntryContent {
             session_id: None,
             call_id: None,
             cap_id: Some(0),

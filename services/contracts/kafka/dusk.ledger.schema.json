@@ -145,7 +145,8 @@
         "error:unimplemented",
         "denied",
         "rate_limited",
-        "revoked"
+        "revoked",
+        "cancelled"
       ]
     },
     "result_cap_ids": {
@@ -298,7 +299,8 @@
               "error:overloaded",
               "error:disconnected",
               "error:unimplemented",
-              "revoked"
+              "revoked",
+              "cancelled"
             ]
           }
         }
