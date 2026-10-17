@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nightfall_ledger::entry::{Direction, EntryContent, Event, Kind, NIGHTFALL_PRINCIPAL};
-use nightfall_ledger::kafka::{KafkaLog, KafkaLogConfig, PartitionRange, verify_partition};
+use nightfall_ledger::kafka::{
+    KafkaLog, KafkaLogConfig, PartitionRange, read_partition, reader_config, verify_partition,
+};
 use nightfall_ledger::log::LedgerLog;
 use nightfall_ledger::signing::{CheckpointSigner, VerifyingKeys};
 use nightfall_ledger::verifier::{VerificationReport, VerifyOptions};
@@ -13,6 +15,7 @@ use nightfall_ledger::writer::{
 use rdkafka::ClientConfig;
 use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
 use rdkafka::client::DefaultClientContext;
+use rdkafka::consumer::{BaseConsumer, Consumer};
 use ring::rand::SystemRandom;
 use ring::signature::Ed25519KeyPair;
 
@@ -75,6 +78,14 @@ impl Broker {
         .await
         .unwrap()
     }
+}
+
+fn docker(verb: &str, container: &str) {
+    let status = std::process::Command::new("docker")
+        .args([verb, container])
+        .status()
+        .unwrap();
+    assert!(status.success(), "docker {verb} {container} failed");
 }
 
 async fn stop(writer: &LedgerWriter, thread: LedgerThread) {
@@ -201,4 +212,114 @@ async fn writes_continues_fences_links_and_verifies_a_chain_on_a_real_broker() {
     assert_eq!(report.chains.len(), 2);
     assert_eq!(report.chains[1].instance, "nightfall-1-replacement");
     assert_eq!(report.chains[1].last_checkpoint_sequence, Some(1));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs a Kafka broker in NIGHTFALL_KAFKA_TEST_BROKERS running in the Docker container NIGHTFALL_KAFKA_TEST_CONTAINER"]
+async fn commits_again_and_loses_no_entry_after_the_broker_pauses_and_resumes() {
+    let brokers = std::env::var("NIGHTFALL_KAFKA_TEST_BROKERS")
+        .ok()
+        .filter(|brokers| !brokers.is_empty())
+        .expect("NIGHTFALL_KAFKA_TEST_BROKERS names the Kafka bootstrap servers to test against");
+    let container = std::env::var("NIGHTFALL_KAFKA_TEST_CONTAINER")
+        .ok()
+        .filter(|container| !container.is_empty())
+        .expect("NIGHTFALL_KAFKA_TEST_CONTAINER names the Docker container the broker runs in");
+    let topic = format!("nightfall-ledger-pause-test-{}", uuid::Uuid::now_v7());
+    create_topic(&brokers, &topic, 2).await;
+    let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+        .unwrap()
+        .as_ref()
+        .to_vec();
+    let broker = Arc::new(Broker {
+        brokers,
+        topic,
+        pkcs8,
+    });
+    let instance = "nightfall-1";
+    let log = KafkaLog::connect(KafkaLogConfig {
+        operation_timeout: Duration::from_secs(10),
+        ..broker.log_config(1, instance)
+    })
+    .unwrap();
+    let config = LedgerConfig {
+        checkpoint_interval: Duration::from_secs(3600),
+        ..LedgerConfig::new(instance, 1)
+    };
+    let (writer, thread) =
+        LedgerWriter::start(config, Box::new(log), broker.signer(), Arc::new(NoObserver)).unwrap();
+    let mut recorded = 0u64;
+    let mut record = |writer: &LedgerWriter| {
+        let mut reservation = writer.reserve(1).ok()?;
+        let commit = reservation
+            .record_write_ahead(call(&uuid::Uuid::now_v7().to_string()))
+            .ok()?;
+        recorded += 1;
+        Some(commit)
+    };
+    record(&writer).unwrap().await.unwrap();
+
+    docker("pause", &container);
+    assert_eq!(record(&writer).unwrap().await, Err(CommitFailure::TimedOut));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(writer.stalled());
+    for _ in 0..55 {
+        drop(record(&writer));
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    docker("unpause", &container);
+
+    let deadline = Instant::now() + Duration::from_secs(300);
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "the ledger did not commit again within 300 s of the broker resuming (status {:?})",
+            writer.status()
+        );
+        if let Some(commit) = record(&writer)
+            && commit.await.is_ok()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    assert!(!writer.stalled());
+    assert_eq!(writer.queue_depth(), 0);
+    stop(&writer, thread).await;
+
+    let report = broker.verify().await;
+    assert!(report.is_clean(), "{report}");
+    let reader = broker.clone();
+    let calls = tokio::task::spawn_blocking(move || {
+        let consumer: BaseConsumer = reader_config(
+            &reader.brokers,
+            &BTreeMap::new(),
+            "nightfall-ledger-pause-test",
+        )
+        .create()
+        .unwrap();
+        let (low, high) = consumer
+            .fetch_watermarks(&reader.topic, 1, Duration::from_secs(30))
+            .unwrap();
+        let mut calls = 0u64;
+        read_partition(
+            &consumer,
+            &reader.topic,
+            1,
+            low,
+            Some(high),
+            Duration::from_secs(30),
+            |_, payload| {
+                let entry: serde_json::Value = serde_json::from_slice(payload).unwrap();
+                if entry["kind"] == "call" {
+                    calls += 1;
+                }
+            },
+        )
+        .unwrap();
+        calls
+    })
+    .await
+    .unwrap();
+    assert_eq!(calls, recorded);
 }
