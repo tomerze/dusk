@@ -210,7 +210,7 @@ brought back while it still matches.
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `rate.per_second` | `10` | Processes this campaign sends per second, across the whole fleet. |
-| `rate.burst` | `per_second`, rounded up | Processes that may be sent at once after a quiet period. The budget starts empty, also after a twilight failover. |
+| `rate.burst` | `per_second`, rounded up | Processes that may be sent in a row after a quiet period. The budget is shared by every twilight instance and kept in twilight's database: it starts empty when the campaign first has work to send, a twilight failover or restart leaves it as it was, and it keeps filling while the campaign is paused. Each instance takes at most 0.2 seconds of the rate from it, and at least one process, every 100 ms, so a full burst goes out over about burst ÷ (instances × that) × 100 ms. |
 | `phases` | one phase, `all`, 100 percent | Up to 20 phases, each with a `name`, a cumulative `percent` (the last one 100, at most three decimals) and `bake_seconds`. The default phase bakes for the longer of `node_timeout_seconds` and `gates.silent_window_seconds`. |
 | `gates.min_sample` | `1` | Results needed before the gate may pass, overall and per group; at least 1. While the open phases hold fewer nodes, the gate needs a result from each of them. |
 | `gates.max_failure_rate` | `0.05` | The highest failure rate the gate passes. |
