@@ -304,6 +304,13 @@ impl LedgerLog for KafkaLog {
     }
 
     fn commit(&mut self) -> Result<(), LogError> {
+        let timeout = i32::try_from(self.config.operation_timeout.as_millis()).unwrap_or(i32::MAX);
+        let flushed = RDKafkaErrorCode::from(unsafe {
+            rdkafka::bindings::rd_kafka_flush(self.producer.client().native_ptr(), timeout)
+        });
+        if flushed != RDKafkaErrorCode::NoError {
+            return Err(self.classify(KafkaError::Flush(flushed)));
+        }
         self.producer
             .commit_transaction(self.config.operation_timeout)
             .map_err(|error| self.classify(error))
