@@ -144,6 +144,7 @@ type Campaign struct {
 	CurrentPhase       int        `json:"current_phase"`
 	PhaseStartedAt     *time.Time `json:"phase_started_at"`
 	PhasePausedSeconds int64      `json:"phase_paused_seconds"`
+	PhaseHeldAt        *time.Time `json:"-"`
 	GateOverrideAfter  *time.Time `json:"gate_override_after"`
 	PauseKind          *PauseKind `json:"pause_kind"`
 	PauseReason        *string    `json:"pause_reason"`
@@ -180,6 +181,9 @@ func (campaign *Campaign) BakeAccrued(now time.Time) time.Duration {
 	end := now
 	if campaign.Status == StatusPaused && campaign.PausedAt != nil {
 		end = *campaign.PausedAt
+	}
+	if campaign.PhaseHeldAt != nil && campaign.PhaseHeldAt.Before(end) {
+		end = *campaign.PhaseHeldAt
 	}
 	accrued := end.Sub(*campaign.PhaseStartedAt) - time.Duration(campaign.PhasePausedSeconds)*time.Second
 	return max(0, accrued)

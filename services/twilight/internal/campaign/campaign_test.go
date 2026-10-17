@@ -359,4 +359,12 @@ func TestBakeAccrualExcludesPauses(test *testing.T) {
 	if accrued := campaign.BakeAccrued(now); accrued != time.Hour {
 		test.Fatalf("accrued %v after resume, want 1h", accrued)
 	}
+	held := now.Add(-20 * time.Minute)
+	campaign.PhaseHeldAt = &held
+	if accrued := campaign.BakeAccrued(now); accrued != 40*time.Minute {
+		test.Fatalf("accrued %v while held since 20 minutes, want 40m", accrued)
+	}
+	if accrued := campaign.BakeAccrued(now.Add(time.Hour)); accrued != 40*time.Minute {
+		test.Fatalf("bake accrued to %v while held, want it to stay at 40m", accrued)
+	}
 }

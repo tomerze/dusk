@@ -313,8 +313,24 @@ func (engine *Engine) lead(operation context.Context, term int64) {
 	}
 	for operation.Err() == nil {
 		if !engine.partitioned.Load() {
+			if held, failure := engine.Campaigns.HoldPhases(operation, time.Now()); failure != nil && operation.Err() == nil {
+				engine.Logger.Warn("running campaigns were not marked held; their bake time goes on until they are", "error", failure)
+			} else if held > 0 {
+				engine.Logger.Info("bake time stops while the partition counts differ", "campaigns", held, "term", term)
+			}
 			sleep(operation, time.Second)
 			continue
+		}
+		released, failure := engine.Campaigns.ReleasePhases(operation, time.Now())
+		if failure != nil {
+			if operation.Err() == nil {
+				engine.Logger.Warn("held campaigns were not released; gates wait until they are", "error", failure)
+			}
+			sleep(operation, time.Second)
+			continue
+		}
+		if released > 0 {
+			engine.Logger.Info("bake time goes on again; the time held is not counted", "campaigns", released, "term", term)
 		}
 		judging, stopJudging := context.WithCancel(operation)
 		var judges sync.WaitGroup
