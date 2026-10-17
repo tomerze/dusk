@@ -287,3 +287,18 @@ func ClickHouse(test testing.TB, user, password string) string {
 	}
 	return endpoint
 }
+
+func WithinBudget(times []time.Time, start time.Time, rate float64, burst int, leased int) error {
+	for index, at := range times {
+		if allowed := float64(burst) + rate*at.Sub(start).Seconds(); float64(index+1) > allowed+0.5 {
+			return fmt.Errorf("%d were spent %s after the start; the budget allows %.1f in total", index+1, at.Sub(start), allowed)
+		}
+		for later := index + 1; later < len(times); later++ {
+			window := times[later].Sub(at).Seconds()
+			if allowed := float64(burst) + rate*window + float64(leased); float64(later-index+1) > allowed+0.5 {
+				return fmt.Errorf("%d were spent within %.3f s; the budget allows %.1f there, counting the %d tokens that can be leased before it", later-index+1, window, allowed, leased)
+			}
+		}
+	}
+	return nil
+}

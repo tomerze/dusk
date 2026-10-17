@@ -112,9 +112,7 @@ func (current *dispatcher) reap(operation context.Context, key NodeKey) {
 	reapRequests.WithLabelValues(outcome.String()).Inc()
 	if outcome != dawn.Accepted && outcome != dawn.Ambiguous {
 		if outcome == dawn.Busy {
-			current.mutex.Lock()
-			current.reapTokens.Return(1)
-			current.mutex.Unlock()
+			engine.budgets.give(campaign.ReapsBudget, 1)
 		}
 		engine.Logger.Warn("dawn did not take the pids to reap; they are asked again on a later sweep", "device_id", key.DeviceID, "installation_id", key.InstallationID,
 			"pids", texts, "outcome", outcome.String(), "error", failure)

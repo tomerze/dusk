@@ -175,9 +175,16 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 	if _, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionArchive, Actor: "operator@example.org", Now: now.Add(time.Hour)}); !errors.Is(failure, campaign.ErrNotArchivable) {
 		test.Fatalf("archived too early: %v", failure)
 	}
+	if failure := store.EnsureBudget(operation, created.ID, 10, 10); failure != nil {
+		test.Fatal(failure)
+	}
 	archived, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionArchive, Actor: "operator@example.org", Now: now.Add(2 * time.Hour)})
 	if failure != nil || archived.Status != campaign.StatusArchived {
 		test.Fatalf("archived %+v %v", archived, failure)
+	}
+	var budgets int
+	if failure := pool.QueryRow(operation, `select count(*) from campaign_budgets where campaign_id = $1`, created.ID).Scan(&budgets); failure != nil || budgets != 0 {
+		test.Fatalf("%d budget rows survived archiving: %v", budgets, failure)
 	}
 	if _, failure := store.Row(operation, created.ID, device, installation); failure == nil {
 		test.Fatal("rows survived archiving")

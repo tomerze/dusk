@@ -396,7 +396,8 @@ func (store *Store) Transition(operation context.Context, identifier uuid.UUID, 
 			return failure
 		}
 		if request.Transition == TransitionArchive {
-			return nil
+			_, failure := transaction.Exec(operation, `delete from campaign_budgets where campaign_id = $1`, identifier)
+			return failure
 		}
 		return addEvent(operation, transaction, identifier, transitionEvents[request.Transition], request.Actor, detail)
 	})
