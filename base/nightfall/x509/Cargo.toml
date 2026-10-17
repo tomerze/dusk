@@ -6,3 +6,4 @@ license.workspace = true
 
 [dependencies]
 anyhow = { version = "1.0", default-features = false, public = true }
+der = { version = "0.7", default-features = false }
