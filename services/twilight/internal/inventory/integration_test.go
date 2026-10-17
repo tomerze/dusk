@@ -324,3 +324,42 @@ func TestANodeEnrolledWithAProvisionTokenIsRevocableByTheEntryName(test *testing
 		test.Fatalf("a fleet token entry of the same name matched %d nodes", count)
 	}
 }
+
+func TestAnOlderReportNeverReplacesANewerOne(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := inventory.NewStore(pool)
+	operation := context.Background()
+	node := inventory.Key{DeviceID: strings.Repeat("e", 32), InstallationID: strings.Repeat("f", 32)}
+	at := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	if failure := store.RecordEnrollment(operation, inventory.Enrollment{Key: node, Operation: "enroll", CredentialKind: "fleet_token", At: at}); failure != nil {
+		test.Fatal(failure)
+	}
+	versionKey, older, newer, newest := "dusk.version", "0.1.0", "0.2.0", "0.3.0"
+	report := func(version *string, reportedAt time.Time) {
+		test.Helper()
+		if failure := store.ApplyReport(operation, node, "5d2e9a1c7b3f8e04", reportedAt, inventory.Reported{VersionKey: &versionKey, Version: version}); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	reported := func() string {
+		test.Helper()
+		stored, failure := store.Get(operation, node)
+		if failure != nil || stored.ReportedVersion == nil {
+			test.Fatalf("the node's reported version: %+v %v", stored, failure)
+		}
+		return *stored.ReportedVersion
+	}
+	report(&newer, at.Add(2*time.Minute))
+	report(&newer, at.Add(2*time.Minute))
+	if version := reported(); version != newer {
+		test.Fatalf("a report applied twice left %s, want %s", version, newer)
+	}
+	report(&older, at.Add(time.Minute))
+	if version := reported(); version != newer {
+		test.Fatalf("a report older than the stored one, with no facts, put back %s over %s", version, newer)
+	}
+	report(&newest, at.Add(3*time.Minute))
+	if version := reported(); version != newest {
+		test.Fatalf("a newer report left %s, want %s", version, newest)
+	}
+}

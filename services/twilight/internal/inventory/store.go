@@ -371,15 +371,15 @@ const ConfigHashFact = "dusk.config.hash"
 func (store *Store) ApplyReport(operation context.Context, key Key, namespaceID string, at time.Time, report Reported) error {
 	return pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
 		var current json.RawMessage
-		var readAt *time.Time
-		if failure := transaction.QueryRow(operation, `select facts, facts_read_at from nodes where device_id = $1 and installation_id = $2 for update`,
-			key.DeviceID, key.InstallationID).Scan(&current, &readAt); failure != nil {
+		var readAt, reportedAt *time.Time
+		if failure := transaction.QueryRow(operation, `select facts, facts_read_at, reported_at from nodes where device_id = $1 and installation_id = $2 for update`,
+			key.DeviceID, key.InstallationID).Scan(&current, &readAt, &reportedAt); failure != nil {
 			if errors.Is(failure, pgx.ErrNoRows) {
 				return ErrNotFound
 			}
 			return failure
 		}
-		if readAt != nil && readAt.After(at) {
+		if (readAt != nil && readAt.After(at)) || (reportedAt != nil && reportedAt.After(at)) {
 			return nil
 		}
 		facts := map[string]json.RawMessage{}

@@ -137,7 +137,7 @@ func (engine *Engine) applyResult(operation context.Context, term int64, pid cam
 			"device_id", key.DeviceID, "installation_id", key.InstallationID, "action_kind", result.ActionKind, "status", result.Status, "error", errorText)
 		return nil
 	}
-	applied := campaign.Result{Pid: pid, Status: campaign.ResultStatus(result.Status), Delivered: result.Delivered, Error: errorText, Satisfied: satisfiedBy(target, result.Reported)}
+	applied := campaign.Result{Pid: pid, Status: campaign.ResultStatus(result.Status), Delivered: result.Delivered, Error: errorText, Satisfied: satisfiedBy(target, result.Reported), At: at}
 	for range resultRaces {
 		row, failure := engine.Campaigns.Row(operation, identifier, key.DeviceID, key.InstallationID)
 		if errors.Is(failure, campaign.ErrRowNotFound) {

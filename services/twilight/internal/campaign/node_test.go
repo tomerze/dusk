@@ -95,7 +95,10 @@ func TestRunningKeepsADuplicateDelivered(test *testing.T) {
 		test.Fatalf("a one-shot still running at its deadline: %+v", expired)
 	}
 	later := far.Add(time.Minute)
-	revived, _, changed := expired.ApplyResult(campaign, Result{Pid: row.Pid, Status: ResultRunning, Delivered: true}, later, 0.5)
+	if stale, _, changed := expired.ApplyResult(campaign, Result{Pid: row.Pid, Status: ResultRunning, Delivered: true, At: far.Add(-time.Minute)}, later, 0.5); changed {
+		test.Fatalf("a running result from before the row went unknown revived it: %+v", stale)
+	}
+	revived, _, changed := expired.ApplyResult(campaign, Result{Pid: row.Pid, Status: ResultRunning, Delivered: true, At: later}, later, 0.5)
 	if !changed || revived.State != StateDelivered || revived.FinishedAt != nil || !revived.DeadlineAt.Equal(later.Add(900*time.Second)) {
 		test.Fatalf("running after unknown: %+v", revived)
 	}
@@ -525,5 +528,30 @@ func TestAnEndedScriptIsNeverRunAgain(test *testing.T) {
 	verifying, _, changed := row.ApplyResult(converging, Result{Pid: row.Pid, Status: ResultEnded, Delivered: true, Satisfied: &unsatisfied}, now, 0)
 	if !changed || verifying.State != StateVerifying {
 		test.Fatalf("an ensure row whose script ended is judged on the facts of its next session: %+v", verifying)
+	}
+}
+
+func TestAnUnknownRowTakesNoResultOlderThanItselfAndNoResultTwice(test *testing.T) {
+	oneShot := testCampaign(KindRunScript)
+	delivered, _, _ := apply(test, oneShot, dispatched(test, oneShot), ResultStarted, true)
+	unknown, changed := delivered.Expire(oneShot, now.Add(2*time.Hour), time.Minute)
+	if !changed || unknown.State != StateUnknown {
+		test.Fatalf("delivered one-shot past its deadline: %+v", unknown)
+	}
+	for _, status := range []ResultStatus{ResultStarted, ResultRunning, ResultDuplicate, ResultEnded, ResultTimedOut} {
+		for range 2 {
+			if again, _, changed := apply(test, oneShot, unknown, status, true); changed {
+				test.Fatalf("a %s result reopened an unknown row: %+v", status, again)
+			}
+		}
+	}
+	succeeded, _, changed := apply(test, oneShot, unknown, ResultSucceeded, true)
+	if !changed || succeeded.State != StateSucceeded {
+		test.Fatalf("a late outcome on an unknown row: %+v", succeeded)
+	}
+	for _, status := range []ResultStatus{ResultSucceeded, ResultStarted, ResultRunning, ResultEnded, ResultFailed} {
+		if again, _, changed := apply(test, oneShot, succeeded, status, true); changed {
+			test.Fatalf("a %s result applied after the outcome changed the row: %+v", status, again)
+		}
 	}
 }

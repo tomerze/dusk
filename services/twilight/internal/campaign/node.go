@@ -103,6 +103,7 @@ type Result struct {
 	Delivered bool
 	Error     string
 	Satisfied *bool
+	At        time.Time
 }
 
 type Effect int
@@ -250,6 +251,12 @@ func (row Row) ApplyResult(campaign *Campaign, result Result, now time.Time, ran
 func (row Row) applyResult(campaign *Campaign, result Result, now time.Time, random float64) (Row, Effect, bool) {
 	if result.Status == ResultReaped || !row.accepts(result.Pid) {
 		return row, EffectNone, false
+	}
+	if row.State == StateUnknown && row.FinishedAt != nil && !result.At.After(*row.FinishedAt) {
+		switch result.Status {
+		case ResultStarted, ResultRunning, ResultDuplicate, ResultEnded, ResultTimedOut:
+			return row, EffectNone, false
+		}
 	}
 	kind, action, policy := campaign.Kind, campaign.Action, campaign.Policy
 	nodeTimeout := campaign.ProcessTimeout()
