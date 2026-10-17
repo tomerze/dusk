@@ -1,4 +1,6 @@
 use alloc::vec::Vec;
+use der::Decode;
+use der::asn1::{AnyRef, UintRef};
 
 const SEQUENCE: u8 = 0x30;
 const SET: u8 = 0x31;
@@ -41,6 +43,12 @@ pub fn certificate_request(
 ) -> anyhow::Result<Vec<u8>> {
     if uris.is_empty() {
         anyhow::bail!("a certificate request needs at least one URI");
+    }
+    if !matches!(
+        (public_key.len(), public_key.first()),
+        (65, Some(0x04)) | (33, Some(0x02 | 0x03))
+    ) {
+        anyhow::bail!("the public key is not a SEC1 P-256 point");
     }
     if let Some(uri) = uris.iter().find(|uri| !uri.is_ascii()) {
         anyhow::bail!("`{uri}` is not ASCII, which a URI in a certificate must be");
@@ -88,6 +96,19 @@ pub fn certificate_request(
         ],
     );
     let signature = sign(&information)?;
+    AnyRef::from_der(&signature)
+        .and_then(|signature| {
+            signature.sequence(|integers| {
+                UintRef::decode(integers)?;
+                UintRef::decode(integers)?;
+                Ok(())
+            })
+        })
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "the signer returned something other than a DER ECDSA signature: {error}"
+            )
+        })?;
     Ok(element(
         SEQUENCE,
         &[
