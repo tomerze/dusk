@@ -15,6 +15,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 1_000_000;
 const METADATA_TIMEOUT: Duration = Duration::from_secs(10);
+const PROGRESS_CHECK: Duration = Duration::from_secs(10);
+const STALL_LIMIT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutgoingRecord {
@@ -64,6 +66,14 @@ pub fn caught_up(targets: &[Watermarks], positions: &[(i32, Option<i64>)]) -> bo
                     && position.is_some_and(|position| position >= target.high)
             })
     })
+}
+
+pub fn waiting_without_progress(
+    seen: &[(i32, Option<i64>)],
+    positions: &[(i32, Option<i64>)],
+    targets: &[Watermarks],
+) -> bool {
+    positions == seen && !caught_up(targets, positions)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -502,12 +512,77 @@ impl RecordProducer for KafkaProducer {
 
 struct KafkaConsumer {
     consumer: BaseConsumer,
+    config: ClientConfig,
+    assignment: TopicPartitionList,
     topic: String,
     partitions: Vec<i32>,
+    checked: Instant,
+    seen: Vec<(i32, Option<i64>)>,
+    behind_since: Option<Instant>,
+}
+
+impl KafkaConsumer {
+    fn check_progress(&mut self) {
+        self.checked = Instant::now();
+        let (Ok(positions), Ok(targets)) = (self.positions(), self.watermarks()) else {
+            return;
+        };
+        if !waiting_without_progress(&self.seen, &positions, &targets) {
+            self.seen = positions;
+            self.behind_since = None;
+            return;
+        }
+        let behind_since = *self.behind_since.get_or_insert(self.checked);
+        if behind_since.elapsed() < STALL_LIMIT {
+            return;
+        }
+        match self.recreate(&positions) {
+            Ok(consumer) => {
+                metrics::counter!("nightfall_consumers_recreated_total", "topic" => self.topic.clone())
+                    .increment(1);
+                tracing::error!(
+                    topic = %self.topic,
+                    positions = ?positions,
+                    watermarks = ?targets,
+                    seconds = behind_since.elapsed().as_secs_f64(),
+                    "a Kafka consumer read nothing while records waited for it; it was recreated at its positions"
+                );
+                self.consumer = consumer;
+                self.behind_since = None;
+            }
+            Err(error) => tracing::error!(
+                topic = %self.topic,
+                error = format!("{error:#}"),
+                "recreating a Kafka consumer that read nothing failed; it is tried again"
+            ),
+        }
+    }
+
+    fn recreate(&self, positions: &[(i32, Option<i64>)]) -> anyhow::Result<BaseConsumer> {
+        let consumer: BaseConsumer = self
+            .config
+            .create()
+            .with_context(|| format!("create a Kafka consumer of {}", self.topic))?;
+        let mut assignment = self.assignment.clone();
+        for (partition, position) in positions {
+            if let Some(position) = position {
+                assignment
+                    .set_partition_offset(&self.topic, *partition, Offset::Offset(*position))
+                    .with_context(|| format!("assign {} partition {partition}", self.topic))?;
+            }
+        }
+        consumer
+            .assign(&assignment)
+            .with_context(|| format!("assign the partitions of {}", self.topic))?;
+        Ok(consumer)
+    }
 }
 
 impl RecordConsumer for KafkaConsumer {
     fn poll(&mut self, timeout: Duration) -> Result<Option<IncomingRecord>, String> {
+        if self.checked.elapsed() >= PROGRESS_CHECK {
+            self.check_progress();
+        }
         match self.consumer.poll(timeout) {
             None => Ok(None),
             Some(Err(KafkaError::PartitionEOF(_))) => Ok(None),
@@ -636,8 +711,13 @@ impl Broker for KafkaBroker {
             .with_context(|| format!("assign the partitions of {topic}"))?;
         Ok(Box::new(KafkaConsumer {
             consumer,
+            config,
+            assignment,
             topic: topic.to_string(),
             partitions,
+            checked: Instant::now(),
+            seen: Vec::new(),
+            behind_since: None,
         }))
     }
 
@@ -786,6 +866,36 @@ mod tests {
         assert!(caught_up(&targets, &[(0, Some(5)), (1, None)]));
         assert!(caught_up(&targets, &[(0, Some(9))]));
         assert!(!caught_up(&targets, &[(1, Some(9))]));
+    }
+
+    #[test]
+    fn a_consumer_waits_without_progress_only_when_it_is_behind_and_did_not_move() {
+        let targets = [Watermarks {
+            partition: 0,
+            low: 0,
+            high: 5,
+        }];
+        assert!(waiting_without_progress(
+            &[(0, Some(3))],
+            &[(0, Some(3))],
+            &targets
+        ));
+        assert!(waiting_without_progress(
+            &[(0, None)],
+            &[(0, None)],
+            &targets
+        ));
+        assert!(!waiting_without_progress(
+            &[(0, Some(2))],
+            &[(0, Some(3))],
+            &targets
+        ));
+        assert!(!waiting_without_progress(
+            &[(0, Some(5))],
+            &[(0, Some(5))],
+            &targets
+        ));
+        assert!(!waiting_without_progress(&[], &[(0, Some(3))], &targets));
     }
 
     #[test]
