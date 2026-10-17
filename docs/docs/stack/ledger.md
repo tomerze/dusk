@@ -127,8 +127,10 @@ How a chain continues across the life of an instance:
 A Kafka consumer can see a record twice. An entry identical to one already seen
 (same chain, `sequence` and `hash`) is a duplicate, not a break.
 
-nightfall writes the entries of one transaction within 5 ms or 500 entries,
-whichever comes first. A client's call on a node that is not a streaming call is
+nightfall commits entries as soon as it has them. When no transaction is
+committing, the next one starts at once with the entries waiting, at most 500 of
+them, and entries that arrive while it commits go into the one after it. A
+client's call on a node that is not a streaming call is
 forwarded only after the transaction holding its `call` entry has committed; if
 that takes more than 5 seconds the call fails with `overloaded` and is not
 forwarded. Results, calls from nodes to clients and streaming calls are recorded
