@@ -83,7 +83,9 @@ twilight has no way to change the count once migrated.
 Migration `0021_partition_counters` recounts the campaign counters from the
 campaign rows, per partition, and `0022_partition_sweep_cursors` keeps a sweep
 cursor per campaign and partition, so every running campaign starts its sweeps
-over once.
+over once. Migration `0024_campaign_budgets` adds the shared rate budgets (see
+Rate budgets); a running campaign's budget starts empty when an instance first
+needs it.
 
 ### Shutting down
 
@@ -990,6 +992,7 @@ On `health_listen`:
 |--------|----------------|
 | `twilight_leader`, `twilight_leader_term` | 1 and the term while this instance leads. |
 | `twilight_slices_owned` | Partitions of `topics.process_results` this instance owns under a lease. |
+| `twilight_budget_tokens_leased_total{budget}`, `twilight_budget_tokens_returned_total{budget}` | Tokens this instance leased from the shared rate budgets, and those it did not spend within their second and gave back, by budget: `campaign`, `facts` or `reaps`. |
 | `twilight_slice_lease_losses_total{how}` | Slices this instance stopped owning without giving them up: `lost` when the consumer group dropped it, `fenced` when another instance took the lease. |
 | `twilight_slice_partition_mismatches_total` | Process results that arrived in a partition other than the one their node's key hashes to, which means their producer does not partition like Kafka's default partitioner. Each is logged at `error`. |
 | `twilight_online_nodes` | Nodes the online view holds as online. |
@@ -1110,9 +1113,8 @@ when it dies.
   between.
 
 * A campaign's rate and burst, `engine.facts_per_second` and
-  `engine.reaps_per_second` are divided among the instances by the share of
-  the slices each owns, so together they never exceed them. An instance with
-  less work queued than its share leaves the rest of it unspent.
+  `engine.reaps_per_second` are each one budget every instance takes from (see
+  Rate budgets).
 * Whenever the leader starts judging gates - when it is elected, or when a
   partition-count hold ends - it notes the end of `topics.process_results` and
   opens no phase and completes no campaign until the group has committed every
@@ -1122,6 +1124,29 @@ when it dies.
   that fails is tried again three times within seconds; a partition whose
   commit still fails holds the gates until its next result is applied and
   committed.
+
+### Rate budgets
+
+Every campaign's rate and burst, and the fleet's facts and reap rates
+(`engine.facts_per_second` and `engine.reaps_per_second`, each with a burst of
+one second's worth), are a token bucket in the `campaign_budgets` table that
+every instance takes from. No instance has a rate of its own.
+
+* An instance with work queued under a budget leases tokens from it at most
+  every 100 ms: as many as it has work queued, up to 0.2 seconds of the rate,
+  and fewer when the bucket holds fewer. A campaign's budget is leased from only
+  while the campaign is running, so a pause takes effect at the next lease.
+* Leased tokens are spent within a second. The tokens left then, and those a
+  dispatch dawn answered 429 gave back, go back to the bucket, never filling
+  it past its burst, so an instance with little work strands none; an instance
+  that stops gives back what it holds. The tokens held by an instance that dies
+  are lost, which slows the campaign for a moment and never speeds it up.
+* So the instances together dispatch at most the burst plus the rate times the
+  time since the campaign started, and within any span of time at most the
+  burst, plus the rate times that span, plus the tokens leased before it began:
+  at most 0.2 seconds of the rate for each instance.
+* A rate below one process a second, or below the number of instances, still
+  dispatches: whichever instance asks first takes the next token.
 
 ### The online view
 
@@ -1155,8 +1180,8 @@ every instance sweeps every campaign once the view recovers.
   `sweep_interval_seconds`, and whenever a campaign starts, resumes or opens a
   phase, the owner of each slice also sweeps it for matching online nodes, so
   a node that stays connected for weeks is reached too.
-* A campaign's rate is shared out among the instances by the slices they own
-  (see Slices).
+* A campaign's rate is one budget for the whole fleet, shared by every
+  instance (see Rate budgets).
 * Each node has at most one dispatch with dawn at a time; the work of several
   campaigns due on one node goes in one dispatch.
 * Work is a process on the node. A campaign's process runs at a pid derived
