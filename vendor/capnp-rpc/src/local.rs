@@ -97,7 +97,7 @@ impl Results {
         pipeline_sender: crate::queued::PipelineInnerSender,
     ) -> Self {
         Self {
-            message: Some(::capnp::message::Builder::new_default()),
+            message: Some(::capnp::message::Builder::new(crate::heap_allocator())),
             cap_table: Vec::new(),
             results_done_fulfiller: Some(fulfiller),
             pipeline_sender: Some(pipeline_sender),
@@ -221,7 +221,7 @@ impl Request {
     ) -> Self {
         let (pipeline_sender, pipeline) = crate::queued::Pipeline::new();
         Self {
-            message: message::Builder::new_default(),
+            message: message::Builder::new(crate::heap_allocator()),
             cap_table: Vec::new(),
             interface_id,
             method_id,

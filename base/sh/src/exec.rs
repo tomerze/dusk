@@ -4,7 +4,6 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use dusk_capnp::capnp::message::HeapAllocator;
 use dusk_program::anyhow;
 use dusk_program::embassy_executor;
 use dusk_program::embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -98,7 +97,7 @@ pub(crate) fn spawn_sh_exec_task(
 ) -> capnp::Result<
     Rc<dusk_program::embassy_sync::signal::Signal<CriticalSectionRawMutex, anyhow::Result<()>>>,
 > {
-    let mut owned_script = BytecodeMessage::new(HeapAllocator::new());
+    let mut owned_script = BytecodeMessage::new(dusk_capnp::heap_allocator());
     owned_script.set_root::<crate::bytecode::Owned>(script)?;
 
     state.borrow_mut().active_stops.push(stop.clone());

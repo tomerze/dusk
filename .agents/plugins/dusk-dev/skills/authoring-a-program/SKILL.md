@@ -287,7 +287,7 @@ impl Args {
     pub fn new(/* whatever your program needs */) -> Self {
         let mut data = capnp::message::TypedBuilder::<
             <name>_capnp::<name>_args::data::Owned,
-        >::new_default();
+        >::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         {
             let mut root = data.init_root();
             // root.set_…(…);

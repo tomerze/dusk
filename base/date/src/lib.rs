@@ -25,13 +25,15 @@ pub struct Args {
 
 impl Args {
     pub fn show() -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root().set_show(());
         Args { data }
     }
 
     pub fn set_to(unix_time_ms: u64) -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         data.init_root().set_set_to(unix_time_ms);
         Args { data }
     }

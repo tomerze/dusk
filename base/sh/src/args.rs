@@ -30,7 +30,7 @@ pub struct ShArgs {
 
 impl ShArgs {
     pub fn new(mode: ShMode) -> anyhow::Result<Self> {
-        let mut data = ShArgsDataMessage::new(HeapAllocator::new());
+        let mut data = ShArgsDataMessage::new(dusk_capnp::heap_allocator());
         let created = {
             let mut data_builder: sh_capnp::sh_args::data::Builder = data.get_root()?;
             match mode {

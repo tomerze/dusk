@@ -13,7 +13,6 @@ use crate::bytecode;
 use super::instructions::{Inst, Instructions};
 use super::{FunctionTable, GeneratedFunctions};
 use crate::BytecodeMessage;
-use dusk_capnp::capnp::message::HeapAllocator;
 
 pub(super) fn generate(script: bytecode::Reader<'_>) -> Result<Instructions> {
     let mut output_instructions = Instructions::new();
@@ -130,7 +129,7 @@ fn generate_statement(
             output_instructions.push(Inst::DefineFunction {
                 symbol,
                 body: {
-                    let mut body = BytecodeMessage::new(HeapAllocator::new());
+                    let mut body = BytecodeMessage::new(dusk_capnp::heap_allocator());
                     body.set_root::<bytecode::Owned>(def.get_body()?)?;
                     Rc::new(RefCell::new(body))
                 },

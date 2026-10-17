@@ -62,7 +62,7 @@ impl Request {
     pub fn new(error: Error, _size_hint: Option<::capnp::MessageSize>) -> Self {
         Self {
             error,
-            message: ::capnp::message::Builder::new_default(),
+            message: ::capnp::message::Builder::new(crate::heap_allocator()),
             cap_table: Vec::new(),
         }
     }

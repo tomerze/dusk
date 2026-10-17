@@ -28,7 +28,8 @@ pub struct Args {
 
 impl Args {
     pub fn new(address: &str, port: u16) -> Self {
-        let mut data = ArgsDataBuilder::new_default();
+        let mut data =
+            ArgsDataBuilder::new(capnp::message::Builder::new(dusk_capnp::heap_allocator()));
         {
             let mut root = data.init_root();
             root.set_address(address);
