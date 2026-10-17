@@ -46,6 +46,14 @@ func leaseFor(test *testing.T, store *campaign.Store, device, installation strin
 	return lease
 }
 
+func everyPartition() []int32 {
+	partitions := make([]int32, testsupport.NodePartitions)
+	for partition := range partitions {
+		partitions[partition] = int32(partition)
+	}
+	return partitions
+}
+
 func TestCampaignLifecycleInPostgres(test *testing.T) {
 	pool, _ := testsupport.Database(test)
 	store := campaign.NewStore(pool)
@@ -152,11 +160,11 @@ func TestCampaignLifecycleInPostgres(test *testing.T) {
 	if _, applied, _ := store.InsertRow(operation, term, leaseFor(test, store, device, pending.InstallationID), pending); !applied {
 		test.Fatal("second row")
 	}
-	counts, failure := store.CountRows(operation, created.ID)
+	counts, failure := store.CountRows(operation, created.ID, everyPartition())
 	if failure != nil || len(counts) != 2 {
 		test.Fatalf("counts %+v %v", counts, failure)
 	}
-	if failure := store.WriteCounters(operation, created.ID, counts); failure != nil {
+	if failure := store.WriteCounters(operation, created.ID, everyPartition(), counts); failure != nil {
 		test.Fatal(failure)
 	}
 	stored2, _ := store.Counters(operation, []uuid.UUID{created.ID})
@@ -508,5 +516,75 @@ func TestRowWritesNeedTheCurrentLeaseOfTheirSlice(test *testing.T) {
 		}
 	case <-time.After(30 * time.Second):
 		test.Fatal("the write waiting for the lease never finished")
+	}
+}
+
+func TestCountersAreWrittenPerPartitionAndReadAsTheirSum(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := campaign.NewStore(pool)
+	operation := context.Background()
+	created, failure := store.Create(operation, definition(), "operator@example.org", time.Now())
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := store.Transition(operation, created.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: time.Now()}); failure != nil {
+		test.Fatal(failure)
+	}
+	byPartition := map[int32]int64{}
+	for index := range 30 {
+		node := fmt.Sprintf("%032x", 0xc0000+index)
+		state := campaign.StatePending
+		if index%3 == 0 {
+			state = campaign.StateSucceeded
+		}
+		if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state) values ($1, $2, $3, 0, $4)`,
+			created.ID, device, node, state); failure != nil {
+			test.Fatal(failure)
+		}
+		if state == campaign.StatePending {
+			byPartition[kafka.KeyPartition(device+"/"+node, testsupport.NodePartitions)]++
+		}
+	}
+	first, second := []int32{0}, []int32{1, 2}
+	for _, owned := range [][]int32{first, second} {
+		counts, failure := store.CountRows(operation, created.ID, owned)
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		for _, counter := range counts {
+			if !slices.Contains(owned, counter.Partition) {
+				test.Fatalf("counting partitions %v returned partition %d", owned, counter.Partition)
+			}
+			if counter.State == campaign.StatePending && counter.Count != byPartition[counter.Partition] {
+				test.Fatalf("partition %d has %d pending rows, counted %d", counter.Partition, byPartition[counter.Partition], counter.Count)
+			}
+		}
+		if failure := store.WriteCounters(operation, created.ID, owned, counts); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	summed, failure := store.Counters(operation, []uuid.UUID{created.ID})
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	totals := map[campaign.NodeState]int64{}
+	for _, counter := range summed[created.ID] {
+		totals[counter.State] += counter.Count
+	}
+	if totals[campaign.StatePending] != 20 || totals[campaign.StateSucceeded] != 10 || len(summed[created.ID]) != 2 {
+		test.Fatalf("the summed counters %+v, want 20 pending and 10 succeeded", summed[created.ID])
+	}
+	if failure := store.WriteCounters(operation, created.ID, first, []campaign.Counter{{Partition: 0, Phase: 0, State: campaign.StateFailed, Count: 4}}); failure != nil {
+		test.Fatal(failure)
+	}
+	var rows, partitionZero int
+	if failure := pool.QueryRow(operation, `select count(*), count(*) filter (where partition = 0) from campaign_counters where campaign_id = $1`, created.ID).Scan(&rows, &partitionZero); failure != nil {
+		test.Fatal(failure)
+	}
+	if partitionZero != 1 {
+		test.Fatalf("rewriting partition 0 left %d of its counters, want only the new one", partitionZero)
+	}
+	if rows <= partitionZero {
+		test.Fatalf("rewriting partition 0 touched the other partitions' counters: %d rows left", rows)
 	}
 }

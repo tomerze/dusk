@@ -375,6 +375,13 @@ func (store *Store) Transition(operation context.Context, identifier uuid.UUID, 
 				where campaign_id = $1 and state in ('pending', 'backoff', 'excluded', 'conflict', 'verifying')`, identifier, now); failure != nil {
 				return failure
 			}
+			if _, failure := transaction.Exec(operation, `delete from campaign_counters where campaign_id = $1`, identifier); failure != nil {
+				return failure
+			}
+			if _, failure := transaction.Exec(operation, `insert into campaign_counters (campaign_id, partition, phase, state, count)
+				select campaign_id, partition, phase, state, count(*) from campaign_nodes where campaign_id = $1 group by campaign_id, partition, phase, state`, identifier); failure != nil {
+				return failure
+			}
 		}
 		if request.Transition == TransitionResume || request.Transition == TransitionAbort || request.Transition == TransitionComplete || request.Transition == TransitionFail {
 			if failure := alerts.ResolveFingerprintIn(operation, transaction, alerts.KindCampaignPausedByGate+":"+identifier.String(), request.Actor, now); failure != nil {
@@ -470,13 +477,15 @@ func (store *Store) Events(operation context.Context, identifier uuid.UUID, afte
 }
 
 type Counter struct {
-	Phase int       `json:"phase"`
-	State NodeState `json:"state"`
-	Count int64     `json:"count"`
+	Partition int32     `json:"-"`
+	Phase     int       `json:"phase"`
+	State     NodeState `json:"state"`
+	Count     int64     `json:"count"`
 }
 
 func (store *Store) Counters(operation context.Context, identifiers []uuid.UUID) (map[uuid.UUID][]Counter, error) {
-	rows, failure := store.pool.Query(operation, `select campaign_id, phase, state, count from campaign_counters where campaign_id = any($1) and count > 0 order by campaign_id, phase, state`, identifiers)
+	rows, failure := store.pool.Query(operation, `select campaign_id, phase, state, sum(count)::bigint from campaign_counters where campaign_id = any($1)
+		group by campaign_id, phase, state having sum(count) > 0 order by campaign_id, phase, state`, identifiers)
 	if failure != nil {
 		return nil, failure
 	}
@@ -493,32 +502,43 @@ func (store *Store) Counters(operation context.Context, identifiers []uuid.UUID)
 	return counters, rows.Err()
 }
 
-func (store *Store) CountRows(operation context.Context, identifier uuid.UUID) ([]Counter, error) {
-	rows, failure := store.pool.Query(operation, `select phase, state, count(*) from campaign_nodes where campaign_id = $1 group by phase, state order by phase, state`, identifier)
+func (store *Store) CountRows(operation context.Context, identifier uuid.UUID, partitions []int32) ([]Counter, error) {
+	rows, failure := store.pool.Query(operation, `select partition, phase, state, count(*) from campaign_nodes where campaign_id = $1 and partition = any($2)
+		group by partition, phase, state order by partition, phase, state`, identifier, partitions)
 	if failure != nil {
 		return nil, failure
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Counter, error) {
 		var counter Counter
-		return counter, row.Scan(&counter.Phase, &counter.State, &counter.Count)
+		return counter, row.Scan(&counter.Partition, &counter.Phase, &counter.State, &counter.Count)
 	})
 }
 
-func (store *Store) WriteCounters(operation context.Context, identifier uuid.UUID, counters []Counter) error {
+func (store *Store) WriteCounters(operation context.Context, identifier uuid.UUID, partitions []int32, counters []Counter) error {
+	counted := make([]int32, 0, len(counters))
+	phases := make([]int32, 0, len(counters))
+	states := make([]string, 0, len(counters))
+	counts := make([]int64, 0, len(counters))
+	for _, counter := range counters {
+		if counter.Count > 0 {
+			counted, phases, states, counts = append(counted, counter.Partition), append(phases, int32(counter.Phase)), append(states, string(counter.State)), append(counts, counter.Count)
+		}
+	}
 	return pgx.BeginFunc(operation, store.pool, func(transaction pgx.Tx) error {
-		if _, failure := transaction.Exec(operation, `delete from campaign_counters where campaign_id = $1`, identifier); failure != nil {
+		var active bool
+		if failure := transaction.QueryRow(operation, `select coalesce((select status in ('running', 'paused') from campaigns where id = $1 for share), false)`, identifier).Scan(&active); failure != nil {
 			return failure
 		}
-		for _, counter := range counters {
-			if counter.Count <= 0 {
-				continue
-			}
-			if _, failure := transaction.Exec(operation, `insert into campaign_counters (campaign_id, phase, state, count) values ($1, $2, $3, $4)`,
-				identifier, counter.Phase, counter.State, counter.Count); failure != nil {
-				return failure
-			}
+		if !active {
+			return nil
 		}
-		return nil
+		if _, failure := transaction.Exec(operation, `delete from campaign_counters where campaign_id = $1 and partition = any($2)`, identifier, partitions); failure != nil {
+			return failure
+		}
+		_, failure := transaction.Exec(operation, `insert into campaign_counters (campaign_id, partition, phase, state, count)
+			select $1, partition, phase, state, count from unnest($2::smallint[], $3::integer[], $4::text[], $5::bigint[]) as counted (partition, phase, state, count)`,
+			identifier, counted, phases, states, counts)
+		return failure
 	})
 }
 

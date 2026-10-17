@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -12,11 +13,17 @@ import (
 	"dusk/services/twilight/internal/selector"
 )
 
+type counterKey struct {
+	partition int32
+	phase     int
+	state     campaign.NodeState
+}
+
 type runtime struct {
 	campaign       *campaign.Campaign
 	selector       *selector.Selector
 	bucket         *TokenBucket
-	counters       map[int]map[campaign.NodeState]int64
+	counters       map[counterKey]int64
 	dirty          bool
 	lastHold       string
 	conflictRaised bool
@@ -30,17 +37,20 @@ type registry struct {
 	engine   *Engine
 	mutex    sync.Mutex
 	runtimes map[uuid.UUID]*runtime
+	counted  map[int32]bool
+	recount  chan struct{}
 	term     int64
 }
 
 func newRegistry(engine *Engine) *registry {
-	return &registry{engine: engine, runtimes: map[uuid.UUID]*runtime{}}
+	return &registry{engine: engine, runtimes: map[uuid.UUID]*runtime{}, counted: map[int32]bool{}, recount: make(chan struct{}, 1)}
 }
 
 func (current *registry) reset() {
 	current.mutex.Lock()
 	defer current.mutex.Unlock()
 	current.runtimes = map[uuid.UUID]*runtime{}
+	current.counted = map[int32]bool{}
 	current.term = 0
 }
 
@@ -52,19 +62,36 @@ func (current *registry) load(operation context.Context, term int64) error {
 	return current.refresh(operation)
 }
 
-func (current *registry) countersFor(operation context.Context, identifier uuid.UUID) (map[int]map[campaign.NodeState]int64, error) {
-	counted, failure := current.engine.Campaigns.CountRows(operation, identifier)
+func (current *registry) countersFor(operation context.Context, identifier uuid.UUID, partitions []int32) (map[counterKey]int64, error) {
+	counted, failure := current.engine.Campaigns.CountRows(operation, identifier, partitions)
 	if failure != nil {
 		return nil, failure
 	}
-	counters := map[int]map[campaign.NodeState]int64{}
+	counters := map[counterKey]int64{}
 	for _, counter := range counted {
-		if counters[counter.Phase] == nil {
-			counters[counter.Phase] = map[campaign.NodeState]int64{}
-		}
-		counters[counter.Phase][counter.State] = counter.Count
+		counters[counterKey{partition: counter.Partition, phase: counter.Phase, state: counter.State}] = counter.Count
 	}
 	return counters, nil
+}
+
+func (current *registry) forget(partition int32) {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	delete(current.counted, partition)
+	for _, existing := range current.runtimes {
+		for key := range existing.counters {
+			if key.partition == partition {
+				delete(existing.counters, key)
+			}
+		}
+	}
+}
+
+func (current *registry) requestRecount() {
+	select {
+	case current.recount <- struct{}{}:
+	default:
+	}
 }
 
 func (current *registry) refresh(operation context.Context) error {
@@ -86,7 +113,7 @@ func (current *registry) refresh(operation context.Context) error {
 				current.engine.Logger.Error("a running campaign's selector no longer parses; it is skipped", "campaign_id", loaded.ID, "error", failure)
 				continue
 			}
-			counters, failure := current.countersFor(operation, loaded.ID)
+			counters, failure := current.countersFor(operation, loaded.ID, current.engine.ownership.ownedPartitions())
 			if failure != nil {
 				return failure
 			}
@@ -120,13 +147,6 @@ func (current *registry) refresh(operation context.Context) error {
 	}
 	current.mutex.Unlock()
 	for _, finished := range gone {
-		counters, failure := current.engine.Campaigns.CountRows(operation, finished.campaign.ID)
-		if failure == nil {
-			failure = current.engine.Campaigns.WriteCounters(operation, finished.campaign.ID, counters)
-		}
-		if failure != nil {
-			current.engine.Logger.Warn("final counters of a finished campaign were not written", "campaign_id", finished.campaign.ID, "error", failure)
-		}
 		current.engine.Logger.Info("campaign no longer tracked by the leader", "campaign_id", finished.campaign.ID)
 	}
 	for _, identifier := range sweeps {
@@ -201,18 +221,14 @@ func (current *registry) count(identifier uuid.UUID, previous *campaign.Row, nex
 	current.mutex.Lock()
 	defer current.mutex.Unlock()
 	existing := current.runtimes[identifier]
-	if existing == nil {
+	partition, known := current.engine.ownership.partitionOf(NodeKey{DeviceID: next.DeviceID, InstallationID: next.InstallationID})
+	if existing == nil || !known {
 		return
 	}
 	if previous != nil {
-		if existing.counters[previous.Phase] != nil {
-			existing.counters[previous.Phase][previous.State]--
-		}
+		existing.counters[counterKey{partition: partition, phase: previous.Phase, state: previous.State}]--
 	}
-	if existing.counters[next.Phase] == nil {
-		existing.counters[next.Phase] = map[campaign.NodeState]int64{}
-	}
-	existing.counters[next.Phase][next.State]++
+	existing.counters[counterKey{partition: partition, phase: next.Phase, state: next.State}]++
 	existing.dirty = true
 }
 
@@ -248,8 +264,13 @@ func (current *registry) runFlush(operation context.Context, term int64) {
 	interval := time.Duration(current.engine.Config.Engine.CountersFlushSeconds) * time.Second
 	rebuildEvery := max(1, int(time.Minute/interval))
 	for tick := 1; sleep(operation, interval); tick++ {
-		if tick%rebuildEvery == 0 {
+		select {
+		case <-current.recount:
 			current.rebuild(operation)
+		default:
+			if tick%rebuildEvery == 0 {
+				current.rebuild(operation)
+			}
 		}
 		current.flush(operation)
 	}
@@ -259,9 +280,12 @@ func (current *registry) runFlush(operation context.Context, term int64) {
 }
 
 func (current *registry) rebuild(operation context.Context) {
+	owned := current.engine.ownership.ownedPartitions()
+	recounted := true
 	for _, identifier := range current.activeIDs() {
-		counters, failure := current.countersFor(operation, identifier)
+		counters, failure := current.countersFor(operation, identifier, owned)
 		if failure != nil {
+			recounted = false
 			if operation.Err() == nil {
 				current.engine.Logger.Warn("campaign counters were not rebuilt", "campaign_id", identifier, "error", failure)
 			}
@@ -269,11 +293,26 @@ func (current *registry) rebuild(operation context.Context) {
 		}
 		current.mutex.Lock()
 		if existing := current.runtimes[identifier]; existing != nil {
-			existing.counters = counters
+			for key := range existing.counters {
+				if slices.Contains(owned, key.partition) {
+					delete(existing.counters, key)
+				}
+			}
+			for key, count := range counters {
+				existing.counters[key] = count
+			}
 			existing.dirty = true
 		}
 		current.mutex.Unlock()
 	}
+	if !recounted {
+		return
+	}
+	current.mutex.Lock()
+	for _, partition := range owned {
+		current.counted[partition] = true
+	}
+	current.mutex.Unlock()
 }
 
 func (current *registry) flush(operation context.Context) {
@@ -282,17 +321,21 @@ func (current *registry) flush(operation context.Context) {
 		counters   []campaign.Counter
 	}
 	var writes []pending
+	var writable []int32
 	current.mutex.Lock()
+	for _, partition := range current.engine.ownership.ownedPartitions() {
+		if current.counted[partition] {
+			writable = append(writable, partition)
+		}
+	}
 	for identifier, existing := range current.runtimes {
-		if !existing.dirty {
+		if !existing.dirty || len(writable) == 0 {
 			continue
 		}
 		var counters []campaign.Counter
-		for phase, states := range existing.counters {
-			for state, count := range states {
-				if count > 0 {
-					counters = append(counters, campaign.Counter{Phase: phase, State: state, Count: count})
-				}
+		for key, count := range existing.counters {
+			if count > 0 && slices.Contains(writable, key.partition) {
+				counters = append(counters, campaign.Counter{Partition: key.partition, Phase: key.phase, State: key.state, Count: count})
 			}
 		}
 		existing.dirty = false
@@ -300,7 +343,7 @@ func (current *registry) flush(operation context.Context) {
 	}
 	current.mutex.Unlock()
 	for _, write := range writes {
-		if failure := current.engine.Campaigns.WriteCounters(operation, write.identifier, write.counters); failure != nil {
+		if failure := current.engine.Campaigns.WriteCounters(operation, write.identifier, writable, write.counters); failure != nil {
 			current.mutex.Lock()
 			if existing := current.runtimes[write.identifier]; existing != nil {
 				existing.dirty = true
