@@ -581,7 +581,7 @@ does not raise the baseline later windows of the same hour are compared with.
 | `default_shell.state_reads` | `1` | `kvs get` reads of one reported key, made before and after the script: `ensure_config` reads `dusk.config.hash`, `ensure_version` its version key and `dusk.config.hash`. |
 | `default_shell.logs_dump` | `1` | The `logs dump` dawn reads when the stream to a campaign's script breaks, to learn whether the script ended. |
 | `default_shell.kill` | `1` | The `kill` dawn runs when a process's work is done, or for the pids of a reap. |
-| `default_shell.reap_rounds` | `3` | The further reads dawn makes while it waits for killed processes to exit: after a facts read, a log stream, a file collection or an interactive session, and for a reap. |
+| `default_shell.reap_rounds` | `3` | The further reads dawn makes while it waits for killed processes to exit: after a log stream, a file collection or an interactive session, and for a reap. |
 | `default_shell.reaped_pid` | `0` | Further commands per pid a reap names; dawn kills and reaps every pid of a request in each read. |
 
 dawn runs its reads, kills and reaps in the node's default shell, so reconcile
@@ -589,7 +589,9 @@ holds each shell command there (`ShPortal.sh`) to the processes twilight
 intended for the node that were open at the time - created, and not yet expired,
 5 s either side for clock skew. Each intended process allows the counts above:
 3 shell commands for `run_script` and `quarantine`, 6 for `ensure_config`, 8 for
-`ensure_version`, 4 for anything else and for a reap. A command when no process
+`ensure_version`, 4 for anything else and for a reap. A facts read is not held to
+these counts: it runs entirely in the default shell and allows one command more
+than the keys it reads by name, `dusk.config.hash` and its version keys. A command when no process
 is open raises `default_shell_without_intent`; more commands in one stretch of
 open processes than they allow together raises `process_shape`.
 
@@ -1044,8 +1046,9 @@ the leader sweeps every campaign once the view recovers.
   and runs nothing. A node that restarted in between has an empty process table
   and runs the work again; that is why dawn reads an `ensure_version` node's
   reported state before it runs anything.
-* Facts reads, file collections, log streams and interactive sessions run at a
-  random pid. A facts read asks dawn for the version key of every
+* Facts reads, file collections, log streams and interactive sessions are
+  intended at a random pid; a facts read runs in the node's default shell and
+  starts no process at it. A facts read asks dawn for the version key of every
   `ensure_version` campaign with an open row on the node, so a node waiting in
   `verifying` is judged on a key outside `dusk.` too.
 * Before every call to dawn that reaches a node, twilight records the pid in
@@ -1053,10 +1056,11 @@ the leader sweeps every campaign once the view recovers.
   it is, who asked for it, until when it is intended and how many shell
   commands may run in its own shell - for a campaign's process its script, one
   `cp` per collected file and one `logs stream`, for an interactive session
-  `reconcile.commands_per_session`, for a facts read one more than the keys it
-  reads (`dusk.config.hash` and those version keys), for anything else one -
-  and how many shell commands it allows in the node's default shell, where
-  dawn's reads, kills and reaps run (`reconcile.default_shell`). For campaign
+  `reconcile.commands_per_session`, for a facts read and a reap none, for
+  anything else one - and how many shell commands it allows in the node's
+  default shell, where dawn's reads, kills and reaps run
+  (`reconcile.default_shell`; for a facts read one more than the keys it reads,
+  `dusk.config.hash` and those version keys). For campaign
   work that row and the node's move to `dispatching` are one transaction; a
   resend extends the row's expiry.
 * nightfall admits only the calls an intended process allows
@@ -1079,7 +1083,8 @@ the leader sweeps every campaign once the view recovers.
   can send it again - its row has finished, or moved on to a later attempt -
   and its campaign's retry horizon (`retry.max_backoff_seconds` plus the
   node time-out) has passed since its intended process expired; the pid of
-  other work is reaped once it expires. twilight asks dawn to kill and reap up
+  other work is reaped once it expires, except a facts read's and a reap's,
+  which start no process. twilight asks dawn to kill and reap up
   to 256 pids of a node per request, oldest first, at most `reaps_per_second`
   requests across the fleet; dawn reports each pid `reaped` in
   `dusk.process-results`, and twilight records it in `reaped_at`.

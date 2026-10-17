@@ -5,8 +5,8 @@ nodes through it. It says how work runs on a node: at which pid, how a node that
 already has the work is recognised so nothing runs twice, what each status in
 `dusk.process-results` means, and when a finished process is cleaned up.
 
-Work sent to a node - a campaign's script, a facts read, a log stream, a file
-collection, an interactive session - is a **process** on the node, identified by its pid, and running it once is a
+Work sent to a node - a campaign's script, a log stream, a file collection, an
+interactive session - is a **process** on the node, identified by its pid, and running it once is a
 property of Dusk itself: a node's namespace holds one process per pid. The
 stack adds nothing to the node for this; dawn drives the node's own `sh` program
 through the `dusk` Python extension, as any client can.
@@ -23,9 +23,11 @@ twilight picks the pid before anything reaches the node, and records it first
   the default shell's - is replaced by hashing again with `/1`, `/2` and so on
   appended. Every resend of one attempt, from any twilight instance, sends the
   same pid; a new attempt gets a new pid.
-* **Everything else** - facts reads, file collections, log streams,
-  interactive sessions - runs at a random pid, in a shell at that pid. dawn
-  kills and reaps that pid itself as soon as the work is done.
+* **Everything else** - file collections, log streams, interactive sessions -
+  runs at a random pid, in a shell at that pid. dawn kills and reaps that pid
+  itself as soon as the work is done.
+* **A facts read** is intended at a random pid too, but it is a read: dawn runs
+  it in the default shell and no process starts at its pid.
 
 ## The default shell
 
@@ -33,14 +35,16 @@ Every node runs a shell server at a fixed pid, the `defaultPid` that
 `sh.capnp` names, which serves any number of `sh` calls at once. A client that
 connects without naming a pid - `dusk.Dusk(address, port)` - talks to it. dawn
 runs everything that is not the work itself there: `ps`, reads (`kvs get`,
-`logs dump`), kills and reaps. It starts no other shells.
+`logs dump`) - a facts read among them - kills and reaps. It starts no other
+shells.
 
 twilight holds those commands to a budget. Every intended process (below)
 allows a number of default-shell commands, set by twilight's
 `reconcile.default_shell` configuration: for a campaign's process the `ps`, the
-reads of its reported state, one `logs dump` and the kill; for any other work
-the kill and the reaps that release its pid, and for a reap one more per pid it
-reaps. nightfall holds every node's default shell to those budgets: it refuses
+reads of its reported state, one `logs dump` and the kill; for a facts read one
+command more than the keys it reads by name (`dusk.config.hash` and the version
+keys); for any other work the kill and the reaps that release its pid, and for
+a reap one more per pid it reaps. nightfall holds every node's default shell to those budgets: it refuses
 a default-shell command while none of the node's intended processes is open, and
 one beyond the open processes' budgets together
 ([Admission](membrane.md#admission)). Reconcile counts the same commands
@@ -122,8 +126,8 @@ its campaign row is finished, or has moved on to a later attempt, and the
 campaign's retry horizon - its longest backoff plus the node time-out - has
 passed. dawn kills and reaps the pid from the default shell (`kill <pid>`, then
 `kill --signal 8 <pid>`, the [`Reap`](../getting-started/concepts/signals.md#the-signal-type)
-signal) and reports it `reaped`. The pid of other work - a facts read, a file
-collection, a log stream, an interactive session - dawn kills and reaps itself
+signal) and reports it `reaped`. The pid of other work - a file collection, a
+log stream, an interactive session - dawn kills and reaps itself
 as soon as the work is done; twilight's sweep asks for it too once its intended
 process has expired, which finds it gone unless dawn could not reap it. A node
 that restarts reaps everything at once, by forgetting it.
@@ -138,7 +142,8 @@ record: the pid, the device and installation, the campaign and attempt when ther
 one, the kind of work, who asked for it (`campaign:<id>` or the operator), until
 when it is intended, how many shell commands may run in its own shell - for a
 campaign's process its script, one `cp` per collected file and one
-`logs stream` - and how many it allows in the node's default shell
+`logs stream`, and none for a facts read or a reap, which start no process at
+their pid - and how many it allows in the node's default shell
 ([The default shell](#the-default-shell)).
 
 A resend of the same pid writes the record again, with the later deadline and
