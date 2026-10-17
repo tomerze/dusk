@@ -17,6 +17,7 @@ use crate::writer::{
 
 const BACKOFF_BASE: Duration = Duration::from_millis(100);
 const BACKOFF_CAP: Duration = Duration::from_secs(30);
+const ATTEMPTS_ON_ONE_PRODUCER: u32 = 3;
 
 struct Pending {
     id: String,
@@ -229,6 +230,7 @@ impl Builder {
 
     fn commit_batch(&mut self) -> Outcome {
         let started = Instant::now();
+        self.shared.committing(Some(started));
         let mut attempt = 0u32;
         loop {
             let error = match self.write_transaction() {
@@ -257,8 +259,21 @@ impl Builder {
                             }
                         }
                     }
-                    backoff(attempt);
                     attempt = attempt.saturating_add(1);
+                    if attempt < ATTEMPTS_ON_ONE_PRODUCER {
+                        backoff(attempt - 1);
+                        continue;
+                    }
+                    let stuck = LogError::new(
+                        LogErrorKind::Fatal,
+                        format!(
+                            "the ledger transaction failed {attempt} times in a row on one producer, the last time with {error}"
+                        ),
+                    );
+                    if !self.recover(&stuck) {
+                        return Outcome::Halted;
+                    }
+                    attempt = 0;
                 }
                 LogErrorKind::Fatal => {
                     if !self.recover(&error) {
@@ -280,6 +295,7 @@ impl Builder {
     }
 
     fn settle_batch(&mut self, started: Instant) {
+        self.shared.committing(None);
         let entries = self.batch.len();
         let last_sequence = self.batch.last().map(|pending| pending.sequence);
         for pending in std::mem::take(&mut self.batch) {

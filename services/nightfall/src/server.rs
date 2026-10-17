@@ -110,6 +110,9 @@ impl Shared {
         if self.audit.writer().status() != LedgerStatus::Ready {
             return Err("ledger not ready");
         }
+        if self.audit.writer().stalled() {
+            return Err("ledger not committing");
+        }
         Ok(())
     }
 

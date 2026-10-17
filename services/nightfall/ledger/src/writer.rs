@@ -1,11 +1,11 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::oneshot;
 use tracing::{error, info};
@@ -147,6 +147,7 @@ pub(crate) struct Shared {
     queued: AtomicUsize,
     senders: AtomicUsize,
     status: AtomicU8,
+    committing_since: Mutex<Option<Instant>>,
     sender: SyncSender<Message>,
 }
 
@@ -190,6 +191,20 @@ impl Shared {
         self.status
             .compare_exchange(from.code(), to.code(), Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
+    }
+
+    pub(crate) fn committing(&self, since: Option<Instant>) {
+        *self
+            .committing_since
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = since;
+    }
+
+    fn stalled(&self) -> bool {
+        self.committing_since
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some_and(|since| since.elapsed() > self.config.write_ahead_budget)
     }
 
     pub(crate) fn wait_for_senders(&self) {
@@ -259,6 +274,7 @@ impl LedgerWriter {
             queued: AtomicUsize::new(0),
             senders: AtomicUsize::new(0),
             status: AtomicU8::new(LedgerStatus::Ready.code()),
+            committing_since: Mutex::new(None),
             sender,
         });
         let builder = Builder::new(
@@ -304,6 +320,10 @@ impl LedgerWriter {
 
     pub fn status(&self) -> LedgerStatus {
         self.shared.status()
+    }
+
+    pub fn stalled(&self) -> bool {
+        self.shared.stalled()
     }
 
     pub fn queue_depth(&self) -> usize {
@@ -772,6 +792,85 @@ mod tests {
                 LedgerStatus::Stopped
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn recreates_the_producer_when_one_transaction_fails_three_times_on_it() {
+        let log = MemoryLog::new();
+        let (writer, thread, observer) = start(quiet_config(), &log);
+        let mut reservation = writer.reserve(2).unwrap();
+        reservation
+            .record_write_ahead(session_open())
+            .unwrap()
+            .await
+            .unwrap();
+        for _ in 0..3 {
+            log.inject(Fault::Commit(LogErrorKind::Abortable));
+        }
+        reservation
+            .record_write_ahead(call())
+            .unwrap()
+            .await
+            .unwrap();
+        stop(&writer, thread);
+        assert_eq!(log.recoveries(), 1);
+        assert_eq!(
+            *observer.failures.lock().unwrap(),
+            [LogErrorKind::Abortable; 3]
+        );
+        let events: Vec<Option<String>> = entries(&log)
+            .iter()
+            .map(|entry| entry["event"].as_str().map(String::from))
+            .collect();
+        assert_eq!(
+            events,
+            [
+                Some(String::from("session_open")),
+                Some(String::from("chain_resumed")),
+                None,
+                None
+            ]
+        );
+        let report = verify(&log);
+        assert!(report.is_clean(), "{report}");
+        assert_eq!(
+            *observer.statuses.lock().unwrap(),
+            [
+                LedgerStatus::Recovering,
+                LedgerStatus::Ready,
+                LedgerStatus::Stopped
+            ]
+        );
+    }
+
+    #[test]
+    fn reports_a_stall_while_one_transaction_commits_past_the_write_ahead_budget() {
+        let log = MemoryLog::new();
+        log.hold_commits();
+        let config = LedgerConfig {
+            write_ahead_budget: Duration::from_millis(20),
+            ..quiet_config()
+        };
+        let (writer, thread, _) = start(config, &log);
+        assert!(!writer.stalled());
+        writer.reserve(1).unwrap().record(session_open()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !writer.stalled() {
+            assert!(
+                Instant::now() < deadline,
+                "the held transaction never stalled"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        log.release_commits();
+        while writer.stalled() || log.records().is_empty() {
+            assert!(
+                Instant::now() < deadline,
+                "the released transaction never committed"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        stop(&writer, thread);
     }
 
     #[tokio::test]
