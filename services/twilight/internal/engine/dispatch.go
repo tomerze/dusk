@@ -418,6 +418,9 @@ func (current *dispatcher) dispatch(operation context.Context, chosen pick) {
 			continue
 		}
 		written, applied, failure := engine.Campaigns.Dispatching(operation, lease, item.row, next, intended)
+		if failure == nil && !applied {
+			_, failure = engine.ownership.confirm(operation, lease)
+		}
 		release()
 		if failure != nil || !applied {
 			if failure != nil && operation.Err() == nil {

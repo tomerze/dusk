@@ -632,3 +632,215 @@ func TestAStuckLeaseAttemptHoldsBackOnlyItsOwnSlice(test *testing.T) {
 		test.Fatal("a slice given up while its lease was pending ended up owned")
 	}
 }
+
+func TestAFencedOwnerStillAssignedTheSliceTakesItBackWithoutARebalance(test *testing.T) {
+	pool, url := testsupport.Database(test)
+	brokers := testsupport.Brokers(test)
+	operation := context.Background()
+	store := campaign.NewStore(pool)
+	suffix := strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	settings := config.Default()
+	settings.Kafka.Brokers = []string{brokers}
+	settings.Kafka.AllowPlaintext = true
+	settings.Kafka.Topics.ProcessResults = "dusk.process-results." + suffix
+	settings.Kafka.ResultsGroup = "twilight-results-" + suffix
+	producer, failure := kgo.NewClient(kgo.SeedBrokers(brokers))
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer producer.Close()
+	admin := kadm.NewClient(producer)
+	if _, failure := admin.CreateTopic(operation, testsupport.NodePartitions, 1, map[string]*string{"cleanup.policy": new("delete")}, settings.Kafka.Topics.ProcessResults); failure != nil {
+		test.Fatal(failure)
+	}
+	validator, failure := kafka.NewValidator()
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	target := startedRunScript(test, store, "fenced and taken back")
+	var settled, waiting NodeKey
+	for index := 0; waiting.DeviceID == ""; index++ {
+		key := sliceNode(4000 + index)
+		if kafka.KeyPartition(key.String(), testsupport.NodePartitions) != 1 {
+			continue
+		}
+		if settled.DeviceID == "" {
+			settled = key
+		} else {
+			waiting = key
+		}
+	}
+	pids := map[NodeKey]campaign.Pid{}
+	for _, key := range []NodeKey{settled, waiting} {
+		pids[key] = campaign.DerivePid(target.ID, key.DeviceID, key.InstallationID, 1)
+		if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, pid, dispatched_at, deadline_at, revision)
+			values ($1, $2, $3, 0, 'dispatched', $4::text::numeric, now(), now() + interval '1 hour', 1)`, target.ID, key.DeviceID, key.InstallationID, pids[key].String()); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	member := startSliceMember(test, url, settings, "twilight-fenced")
+	eventually(test, "the member owning every slice", time.Minute, func() (bool, string) {
+		return len(member.owned()) == testsupport.NodePartitions, fmt.Sprintf("owns %v", member.owned())
+	})
+	before := leaseLosses(test, "fenced")
+	elsewhere, failure := store.BumpLease(operation, 1, "twilight-elsewhere")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	now := kafka.FormatTime(time.Now())
+	encoded, _ := json.Marshal(map[string]any{
+		"schema": "dusk.process-results/v1", "id": kafka.NewMessageID(), "time": now, "pid": pids[settled].String(), "campaign_id": target.ID.String(),
+		"attempt": 1, "device_id": settled.DeviceID, "installation_id": settled.InstallationID, "namespace_id": "5d2e9a1c7b3f8e04",
+		"action_kind": "run_script", "status": "succeeded", "delivered": true, "error": nil, "started_at": now, "finished_at": now,
+		"dawn_instance": "dawn-0", "output_digest": strings.Repeat("ab", 32), "output_count": 0, "output_truncated": false, "reported": nil,
+	})
+	if failure := validator.Validate(kafka.ContractProcessResults, encoded); failure != nil {
+		test.Fatal(failure)
+	}
+	if failure := producer.ProduceSync(operation, &kgo.Record{Topic: settings.Kafka.Topics.ProcessResults, Key: []byte(settled.String()), Value: encoded}).FirstErr(); failure != nil {
+		test.Fatal(failure)
+	}
+	eventually(test, "the result refused under the replaced lease is applied once the member takes the lease back", 2*time.Minute, func() (bool, string) {
+		row, failure := store.Row(operation, target.ID, settled.DeviceID, settled.InstallationID)
+		return failure == nil && row.State == campaign.StateSucceeded, fmt.Sprintf("row %s (%v), member owns %v", row.State, failure, member.owned())
+	})
+	if losses := leaseLosses(test, "fenced") - before; losses != 1 {
+		test.Fatalf("%v fenced slices counted, want 1", losses)
+	}
+	var owner string
+	var epoch int64
+	if failure := pool.QueryRow(operation, `select owner, epoch from node_partition_leases where partition = 1`).Scan(&owner, &epoch); failure != nil {
+		test.Fatal(failure)
+	}
+	if owner != "twilight-fenced" || epoch != elsewhere.Epoch+1 || member.owned()[1].Epoch != epoch {
+		test.Fatalf("partition 1 is at epoch %d owned by %s, the member holds %+v; want the member's raise right after the other one at %d", epoch, owner, member.owned()[1], elsewhere.Epoch)
+	}
+	member.engine.dispatcher.mutex.Lock()
+	entry := member.engine.dispatcher.inFlight[waiting]
+	member.engine.dispatcher.mutex.Unlock()
+	if entry == nil || !entry.pids[pids[waiting]] {
+		test.Fatalf("the slice taken back did not restore the process still waiting for its result: %+v", entry)
+	}
+	eventually(test, "the applied result is committed", time.Minute, func() (bool, string) {
+		committed, failure := admin.FetchOffsets(operation, settings.Kafka.ResultsGroup)
+		if failure != nil {
+			return false, failure.Error()
+		}
+		offset, found := committed.Lookup(settings.Kafka.Topics.ProcessResults, 1)
+		return found && offset.At >= 1, fmt.Sprintf("%+v", offset)
+	})
+}
+
+func succeededResult(test *testing.T, validator *kafka.Validator, topic string, key NodeKey, pid campaign.Pid, identifier uuid.UUID) *kgo.Record {
+	test.Helper()
+	now := kafka.FormatTime(time.Now())
+	encoded, _ := json.Marshal(map[string]any{
+		"schema": "dusk.process-results/v1", "id": kafka.NewMessageID(), "time": now, "pid": pid.String(), "campaign_id": identifier.String(),
+		"attempt": 1, "device_id": key.DeviceID, "installation_id": key.InstallationID, "namespace_id": "5d2e9a1c7b3f8e04",
+		"action_kind": "run_script", "status": "succeeded", "delivered": true, "error": nil, "started_at": now, "finished_at": now,
+		"dawn_instance": "dawn-0", "output_digest": strings.Repeat("ab", 32), "output_count": 0, "output_truncated": false, "reported": nil,
+	})
+	if failure := validator.Validate(kafka.ContractProcessResults, encoded); failure != nil {
+		test.Fatal(failure)
+	}
+	return &kgo.Record{Topic: topic, Key: []byte(key.String()), Value: encoded}
+}
+
+func TestASliceTakenBackWhileItsBatchIsStillAppliedGoesOnApplyingResults(test *testing.T) {
+	pool, url := testsupport.Database(test)
+	brokers := testsupport.Brokers(test)
+	operation := context.Background()
+	store := campaign.NewStore(pool)
+	suffix := strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	settings := config.Default()
+	settings.Kafka.Brokers = []string{brokers}
+	settings.Kafka.AllowPlaintext = true
+	settings.Kafka.Topics.ProcessResults = "dusk.process-results." + suffix
+	settings.Kafka.ResultsGroup = "twilight-results-" + suffix
+	topic := settings.Kafka.Topics.ProcessResults
+	producer, failure := kgo.NewClient(kgo.SeedBrokers(brokers))
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer producer.Close()
+	if _, failure := kadm.NewClient(producer).CreateTopic(operation, testsupport.NodePartitions, 1, map[string]*string{"cleanup.policy": new("delete")}, topic); failure != nil {
+		test.Fatal(failure)
+	}
+	validator, failure := kafka.NewValidator()
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	target := startedRunScript(test, store, "taken back mid-batch")
+	nodes := map[string]NodeKey{}
+	for index := 0; len(nodes) < 3; index++ {
+		key := sliceNode(5000 + index)
+		switch partition := kafka.KeyPartition(key.String(), testsupport.NodePartitions); {
+		case partition == 1 && nodes["fenced"].DeviceID == "":
+			nodes["fenced"] = key
+		case partition == 1 && nodes["later"].DeviceID == "":
+			nodes["later"] = key
+		case partition == 2 && nodes["blocking"].DeviceID == "":
+			nodes["blocking"] = key
+		}
+	}
+	pids := map[NodeKey]campaign.Pid{}
+	for _, key := range nodes {
+		pids[key] = campaign.DerivePid(target.ID, key.DeviceID, key.InstallationID, 1)
+		if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, pid, dispatched_at, deadline_at, revision)
+			values ($1, $2, $3, 0, 'dispatched', $4::text::numeric, now(), now() + interval '1 hour', 1)`, target.ID, key.DeviceID, key.InstallationID, pids[key].String()); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	member := startSliceMember(test, url, settings, "twilight-mid-batch")
+	eventually(test, "the member owning every slice", time.Minute, func() (bool, string) {
+		return len(member.owned()) == testsupport.NodePartitions, fmt.Sprintf("owns %v", member.owned())
+	})
+	member.engine.ownership.mutex.Lock()
+	client := member.engine.ownership.client
+	member.engine.ownership.mutex.Unlock()
+	every := map[string][]int32{topic: {0, 1, 2}}
+	client.PauseFetchPartitions(every)
+	locker, failure := pool.Begin(operation)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer locker.Rollback(operation)
+	blocking := nodes["blocking"]
+	if _, failure := locker.Exec(operation, `select 1 from campaign_nodes where campaign_id = $1 and device_id = $2 and installation_id = $3 for update`,
+		target.ID, blocking.DeviceID, blocking.InstallationID); failure != nil {
+		test.Fatal(failure)
+	}
+	elsewhere, failure := store.BumpLease(operation, 1, "twilight-elsewhere")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	fencedResult := succeededResult(test, validator, topic, nodes["fenced"], pids[nodes["fenced"]], target.ID)
+	blockingResult := succeededResult(test, validator, topic, blocking, pids[blocking], target.ID)
+	if failure := producer.ProduceSync(operation, fencedResult, blockingResult).FirstErr(); failure != nil {
+		test.Fatal(failure)
+	}
+	client.ResumeFetchPartitions(every)
+	eventually(test, "the member takes the fenced slice back while the batch with the blocked result is still being applied", 40*time.Second, func() (bool, string) {
+		return member.owned()[1].Epoch > elsewhere.Epoch, fmt.Sprintf("owns %v", member.owned())
+	})
+	for name, key := range map[string]NodeKey{"blocked": blocking, "fenced": nodes["fenced"]} {
+		if row, failure := store.Row(operation, target.ID, key.DeviceID, key.InstallationID); failure != nil || row.State != campaign.StateDispatched {
+			test.Fatalf("the %s node's row is %s (%v) before the blocked batch finished", name, row.State, failure)
+		}
+	}
+	if failure := producer.ProduceSync(operation, succeededResult(test, validator, topic, nodes["later"], pids[nodes["later"]], target.ID)).FirstErr(); failure != nil {
+		test.Fatal(failure)
+	}
+	if failure := locker.Rollback(operation); failure != nil {
+		test.Fatal(failure)
+	}
+	eventually(test, "every result is applied once the blocked batch finishes", time.Minute, func() (bool, string) {
+		for name, key := range nodes {
+			row, failure := store.Row(operation, target.ID, key.DeviceID, key.InstallationID)
+			if failure != nil || row.State != campaign.StateSucceeded {
+				return false, fmt.Sprintf("the %s node is %s (%v); the member owns %v", name, row.State, failure, member.owned())
+			}
+		}
+		return true, ""
+	})
+}

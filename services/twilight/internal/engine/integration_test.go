@@ -1036,3 +1036,53 @@ func TestAnOwnerResendsAProcessAKilledInstanceLeftDispatching(test *testing.T) {
 		test.Fatal("the process was never sent again")
 	}
 }
+
+func TestAnOwnerFencedWithNothingInFlightTakesItsSliceBackAndDispatches(test *testing.T) {
+	current := newHarness(test)
+	target := identity(300)
+	copied := target
+	current.fake.nodes[target.device] = &copied
+	current.enroll(target)
+	current.census(target)
+	current.start()
+	partition := kafka.KeyPartition(target.device+"/"+target.installation, testsupport.NodePartitions)
+	current.eventually("the instance owns the node's slice and knows its facts", 2*time.Minute, func() (bool, string) {
+		var owner string
+		var known int
+		_ = current.pool.QueryRow(context.Background(), `select coalesce(owner, '') from node_partition_leases where partition = $1`, partition).Scan(&owner)
+		_ = current.pool.QueryRow(context.Background(), `select count(*) from nodes where country = 'US' and device_id = $1`, target.device).Scan(&known)
+		return owner == current.settings.Instance && known == 1, fmt.Sprintf("owner %q, known %d", owner, known)
+	})
+	store := campaign.NewStore(current.pool)
+	elsewhere, failure := store.BumpLease(context.Background(), partition, "twilight-elsewhere")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	service := current.engine.Service()
+	script := campaign.Definition{
+		Name:     "after the fence",
+		Selector: fmt.Sprintf(`device_id == "%s"`, target.device),
+		Action:   campaign.Action{Kind: campaign.KindRunScript, Script: "ps"},
+		Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: 50, Burst: 50}, Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 5}},
+			NodeTimeoutSeconds: 5, Gates: campaign.Gates{MinSample: 1}},
+	}
+	fenced, failure := service.CreateCampaign(context.Background(), script, "operator@example.org")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := service.StartCampaign(context.Background(), fenced.ID, "operator@example.org"); failure != nil {
+		test.Fatal(failure)
+	}
+	current.eventually("the fenced owner takes its slice back and the node's process succeeds", 2*time.Minute, func() (bool, string) {
+		counts := current.rows(fenced.ID)
+		return counts[campaign.StateSucceeded] == 1, fmt.Sprint(counts)
+	})
+	var owner string
+	var epoch int64
+	if failure := current.pool.QueryRow(context.Background(), `select owner, epoch from node_partition_leases where partition = $1`, partition).Scan(&owner, &epoch); failure != nil {
+		test.Fatal(failure)
+	}
+	if owner != current.settings.Instance || epoch <= elsewhere.Epoch {
+		test.Fatalf("the slice is at epoch %d owned by %s; the fenced owner should have raised it past %d", epoch, owner, elsewhere.Epoch)
+	}
+}

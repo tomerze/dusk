@@ -181,6 +181,9 @@ func (engine *Engine) sweepPartition(operation context.Context, target *campaign
 			return counted, failure
 		}
 		if !stored {
+			if _, failure := engine.ownership.confirm(operation, lease); failure != nil {
+				return counted, failure
+			}
 			return counted, fmt.Errorf("the sweep cursor was not stored: the slice's lease moved on from epoch %d, or the campaign is gone", lease.Epoch)
 		}
 		if finished {

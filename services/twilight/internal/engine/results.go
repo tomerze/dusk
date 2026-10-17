@@ -143,12 +143,11 @@ func (engine *Engine) applyResult(operation context.Context, pid campaign.Pid, r
 			return fmt.Errorf("write the row of pid %s: %w", pid, failure)
 		}
 		if !written {
-			held, failure := engine.Campaigns.LeaseHeld(operation, lease)
+			held, failure := engine.ownership.confirm(operation, lease)
 			if failure != nil {
-				return fmt.Errorf("read the lease of slice %d: %w", lease.Partition, failure)
+				return failure
 			}
 			if !held {
-				engine.ownership.fenced(lease)
 				return fmt.Errorf("slice %d at epoch %d: %w", lease.Partition, lease.Epoch, errNotOwned)
 			}
 			continue

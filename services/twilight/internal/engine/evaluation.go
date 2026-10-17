@@ -207,7 +207,13 @@ func (engine *Engine) write(operation context.Context, previous *campaign.Row, n
 		return next, false, nil
 	}
 	defer release()
-	return engine.writeUnder(operation, lease, previous, next, reason)
+	written, applied, failure := engine.writeUnder(operation, lease, previous, next, reason)
+	if failure == nil && !applied {
+		if _, failure := engine.ownership.confirm(operation, lease); failure != nil && operation.Err() == nil {
+			engine.Logger.Warn("a refused campaign node write did not tell whether the slice's lease is still held", "partition", lease.Partition, "lease_epoch", lease.Epoch, "error", failure)
+		}
+	}
+	return written, applied, failure
 }
 
 func (engine *Engine) writeUnder(operation context.Context, lease campaign.Lease, previous *campaign.Row, next campaign.Row, reason string) (campaign.Row, bool, error) {
