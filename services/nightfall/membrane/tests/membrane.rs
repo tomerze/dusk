@@ -1379,6 +1379,41 @@ fn a_call_pipelined_on_a_call_its_caller_let_go_of_still_reaches_the_node() {
     });
 }
 
+#[test]
+fn a_call_reaches_the_node_only_once_its_ledger_entry_committed() {
+    run(|port| async move {
+        let harness = membrane_harness("tester-0", false, Limits::default(), port).await;
+        let node = connect_node(port).await;
+        let fixed = 0x5eed_0000_0000_0000 | u64::from(port);
+        let on_node = async |node: &dusk::Client| {
+            ps(node)
+                .await
+                .get()
+                .unwrap()
+                .get_process_entries()
+                .unwrap()
+                .iter()
+                .any(|entry| entry.get_pid() == fixed)
+        };
+        harness.audit.hold_commits(true);
+        let client = harness.dusk.clone();
+        let created = tokio::task::spawn_local(async move { shell_at(&client, Some(fixed)).await });
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        while harness.audit.held_commits() == 0 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the call never reached the ledger"
+            );
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!on_node(&node).await);
+        harness.audit.commit_held();
+        created.await.unwrap().unwrap();
+        assert!(on_node(&node).await);
+    });
+}
+
 const CAMPAIGN: &str = "0192f3a4-5b6c-7d8e-9f01-23456789abcd";
 const OTHER_INSTALLATION: &str = "00000000000000000000000000000001";
 
