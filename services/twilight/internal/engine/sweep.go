@@ -25,7 +25,7 @@ func (engine *Engine) requestSweep(request sweepRequest) {
 	}
 }
 
-func (engine *Engine) runSweeps(operation context.Context, term int64) {
+func (engine *Engine) runSweeps(operation context.Context, _ int64) {
 	interval := time.Duration(engine.Config.Engine.SweepIntervalSeconds) * time.Second
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
@@ -47,7 +47,7 @@ func (engine *Engine) runSweeps(operation context.Context, term int64) {
 			if target.Campaign.Status != campaign.StatusRunning {
 				continue
 			}
-			if failure := engine.sweep(operation, term, target.Campaign, !request.all); failure != nil && operation.Err() == nil {
+			if failure := engine.sweep(operation, target.Campaign, !request.all); failure != nil && operation.Err() == nil {
 				engine.Logger.Warn("sweep failed", "campaign_id", target.Campaign.ID, "error", failure)
 			}
 		}
@@ -65,58 +65,89 @@ type sweepCursor struct {
 	Swept          *int   `json:"swept"`
 }
 
-func (engine *Engine) readSweepCursor(operation context.Context, identifier uuid.UUID) (sweepCursor, error) {
-	var stored []byte
-	if failure := engine.Pool.QueryRow(operation, `select coalesce(sweep_cursor, '{}'::jsonb) from campaigns where id = $1`, identifier).Scan(&stored); failure != nil {
+func (engine *Engine) readSweepCursor(operation context.Context, identifier uuid.UUID, partition int32) (sweepCursor, error) {
+	stored, failure := engine.Campaigns.SweepCursor(operation, identifier, partition)
+	if failure != nil {
 		return sweepCursor{}, failure
 	}
 	var cursor sweepCursor
 	if failure := json.Unmarshal(stored, &cursor); failure != nil {
-		engine.Logger.Warn("a campaign's sweep cursor does not decode; its sweep starts over", "campaign_id", identifier, "error", failure)
+		engine.Logger.Warn("a campaign's sweep cursor does not decode; its sweep starts over", "campaign_id", identifier, "partition", partition, "error", failure)
 		return sweepCursor{}, nil
 	}
 	return cursor, nil
 }
 
-func (engine *Engine) sweep(operation context.Context, term int64, target *campaign.Campaign, fresh bool) error {
+type sweepCount struct {
+	candidates, scanned, missed int
+}
+
+func (engine *Engine) sweep(operation context.Context, target *campaign.Campaign, fresh bool) error {
 	if target.SelectorSQL == "" {
 		return errors.New("the campaign has no frozen selector")
 	}
-	limit := max(1000, int(2*target.Policy.Rate.PerSecond*float64(engine.Config.Engine.SweepIntervalSeconds)))
+	owned := engine.ownership.ownedPartitions()
+	partitions := engine.ownership.partitionCount()
+	if len(owned) == 0 || partitions == 0 {
+		return nil
+	}
+	total := max(1000, int(2*target.Policy.Rate.PerSecond*float64(engine.Config.Engine.SweepIntervalSeconds)))
+	limit := max(1, (total+int(partitions)-1)/int(partitions))
+	var counted sweepCount
+	var failures []error
+	for _, partition := range owned {
+		swept, failure := engine.sweepPartition(operation, target, partition, fresh, limit)
+		counted.candidates, counted.scanned, counted.missed = counted.candidates+swept.candidates, counted.scanned+swept.scanned, counted.missed+swept.missed
+		if failure != nil {
+			failures = append(failures, fmt.Errorf("partition %d: %w", partition, failure))
+		}
+	}
+	engine.Logger.Info("sweep finished", "campaign_id", target.ID, "phase", target.CurrentPhase, "partitions", len(owned),
+		"candidates", counted.candidates, "scanned", counted.scanned, "not_evaluated", counted.missed)
+	return errors.Join(failures...)
+}
+
+func (engine *Engine) sweepPartition(operation context.Context, target *campaign.Campaign, partition int32, fresh bool, limit int) (sweepCount, error) {
+	var counted sweepCount
 	threshold := target.Thresholds()[target.CurrentPhase].String()
-	cursor, failure := engine.readSweepCursor(operation, target.ID)
+	cursor, failure := engine.readSweepCursor(operation, target.ID, partition)
 	if failure != nil {
-		return failure
+		return counted, failure
 	}
 	if fresh || cursor.Phase != target.CurrentPhase {
 		cursor = sweepCursor{Phase: target.CurrentPhase, Swept: cursor.Swept}
 	}
-	candidates, scanned, missed := 0, 0, 0
 	now := time.Now()
-	for page := 0; candidates < limit && page < 200; page++ {
-		values := make([]any, 0, len(target.SelectorParameters)+6)
+	for page := 0; counted.candidates < limit && page < 200; page++ {
+		lease, owned := engine.ownership.leaseOf(partition)
+		if !owned {
+			return counted, nil
+		}
+		values := make([]any, 0, len(target.SelectorParameters)+8)
 		for _, parameter := range target.SelectorParameters {
 			values = append(values, parameter)
 		}
 		offset := len(values)
-		values = append(values, target.ID, now, target.Salt, threshold, cursor.DeviceID, cursor.InstallationID)
+		pageSize := min(1000, limit-counted.candidates)
+		values = append(values, target.ID, now, target.Salt, threshold, cursor.DeviceID, cursor.InstallationID, partition, pageSize)
 		query := fmt.Sprintf(`select n.device_id, n.installation_id from nodes n
 			left join campaign_nodes c on c.campaign_id = $%d and c.device_id = n.device_id and c.installation_id = n.installation_id
 			where %s
+			and n.partition = $%d
 			and (c.device_id is null or c.state in ('excluded', 'conflict') or (c.state = 'pending' and (c.next_attempt_at is null or c.next_attempt_at <= $%d))
 				or (c.state = 'backoff' and c.next_attempt_at <= $%d))
 			and phase_bucket(n.device_id, n.installation_id, $%d) < $%d::numeric
 			and (n.device_id, n.installation_id) > ($%d, $%d)
-			order by n.device_id, n.installation_id limit 1000`, offset+1, target.SelectorSQL, offset+2, offset+2, offset+3, offset+4, offset+5, offset+6)
+			order by n.device_id, n.installation_id limit $%d`, offset+1, target.SelectorSQL, offset+7, offset+2, offset+2, offset+3, offset+4, offset+5, offset+6, offset+8)
 		rows, failure := engine.Pool.Query(operation, query, values...)
 		if failure != nil {
-			return failure
+			return counted, failure
 		}
 		keys, failure := collectKeys(rows)
 		if failure != nil {
-			return failure
+			return counted, failure
 		}
-		scanned += len(keys)
+		counted.scanned += len(keys)
 		reachable := make([]NodeKey, 0, len(keys))
 		for _, key := range keys {
 			if target.Kind == campaign.KindQuarantine || engine.view.Online(key) {
@@ -125,12 +156,12 @@ func (engine *Engine) sweep(operation context.Context, term int64, target *campa
 		}
 		unevaluated, failure := engine.evaluateBatch(operation, reachable)
 		if failure != nil {
-			return failure
+			return counted, failure
 		}
-		candidates += len(reachable)
-		missed += unevaluated
+		counted.candidates += len(reachable)
+		counted.missed += unevaluated
 		cursor.Missed = cursor.Missed || unevaluated > 0
-		finished := len(keys) < 1000
+		finished := len(keys) < pageSize
 		if finished {
 			if !cursor.Missed {
 				swept := cursor.Phase
@@ -143,30 +174,26 @@ func (engine *Engine) sweep(operation context.Context, term int64, target *campa
 		}
 		encoded, failure := json.Marshal(cursor)
 		if failure != nil {
-			return failure
+			return counted, failure
 		}
-		tag, failure := engine.Pool.Exec(operation, `update campaigns set sweep_cursor = $2::jsonb where id = $1 and exists (select 1 from leadership where id = 1 and term = $3)`, target.ID, encoded, term)
+		stored, failure := engine.Campaigns.WriteSweepCursor(operation, lease, target.ID, encoded)
 		if failure != nil {
-			return failure
+			return counted, failure
 		}
-		if tag.RowsAffected() == 0 {
-			return fmt.Errorf("the sweep cursor was not stored: term %d no longer leads, or the campaign is gone", term)
+		if !stored {
+			return counted, fmt.Errorf("the sweep cursor was not stored: the slice's lease moved on from epoch %d, or the campaign is gone", lease.Epoch)
 		}
 		if finished {
-			engine.Logger.Info("sweep pass finished", "campaign_id", target.ID, "phase", target.CurrentPhase, "complete", cursor.Swept != nil && *cursor.Swept == target.CurrentPhase)
+			engine.Logger.Debug("sweep pass finished", "campaign_id", target.ID, "phase", target.CurrentPhase, "partition", partition,
+				"complete", cursor.Swept != nil && *cursor.Swept == target.CurrentPhase)
 			break
 		}
 	}
-	engine.Logger.Info("sweep finished", "campaign_id", target.ID, "phase", target.CurrentPhase, "candidates", candidates, "scanned", scanned, "not_evaluated", missed)
-	return nil
+	return counted, nil
 }
 
 func (engine *Engine) sweptPhase(operation context.Context, identifier uuid.UUID) (int, error) {
-	cursor, failure := engine.readSweepCursor(operation, identifier)
-	if failure != nil || cursor.Swept == nil {
-		return -1, failure
-	}
-	return *cursor.Swept, nil
+	return engine.Campaigns.SweptPhase(operation, identifier)
 }
 
 func collectKeys(rows interface {

@@ -588,3 +588,55 @@ func TestCountersAreWrittenPerPartitionAndReadAsTheirSum(test *testing.T) {
 		test.Fatalf("rewriting partition 0 touched the other partitions' counters: %d rows left", rows)
 	}
 }
+
+func TestSweepCursorsArePerPartitionAndWrittenUnderTheLease(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	store := campaign.NewStore(pool)
+	operation := context.Background()
+	created, failure := store.Create(operation, definition(), "operator@example.org", time.Now())
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if cursor, failure := store.SweepCursor(operation, created.ID, 0); failure != nil || string(cursor) != "{}" {
+		test.Fatalf("a partition never swept has cursor %s (%v)", cursor, failure)
+	}
+	leases := map[int32]campaign.Lease{}
+	for _, partition := range everyPartition() {
+		lease, failure := store.BumpLease(operation, partition, "twilight-test")
+		if failure != nil {
+			test.Fatal(failure)
+		}
+		leases[partition] = lease
+	}
+	swept := func(phase int) []byte { return []byte(fmt.Sprintf(`{"phase": %d, "swept": %d}`, phase, phase)) }
+	for _, partition := range everyPartition()[1:] {
+		if stored, failure := store.WriteSweepCursor(operation, leases[partition], created.ID, swept(1)); failure != nil || !stored {
+			test.Fatalf("partition %d's cursor: %v %v", partition, stored, failure)
+		}
+	}
+	if phase, failure := store.SweptPhase(operation, created.ID); failure != nil || phase != -1 {
+		test.Fatalf("with partition 0 never swept the campaign counts as swept to phase %d (%v)", phase, failure)
+	}
+	if stored, failure := store.WriteSweepCursor(operation, leases[0], created.ID, swept(0)); failure != nil || !stored {
+		test.Fatalf("partition 0's cursor: %v %v", stored, failure)
+	}
+	if phase, failure := store.SweptPhase(operation, created.ID); failure != nil || phase != 0 {
+		test.Fatalf("the campaign counts as swept to phase %d (%v), want the least of its partitions, 0", phase, failure)
+	}
+	taken, failure := store.BumpLease(operation, 0, "twilight-elsewhere")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if stored, failure := store.WriteSweepCursor(operation, leases[0], created.ID, swept(1)); failure != nil || stored {
+		test.Fatalf("a replaced lease wrote a sweep cursor: %v %v", stored, failure)
+	}
+	if stored, failure := store.WriteSweepCursor(operation, taken, created.ID, swept(1)); failure != nil || !stored {
+		test.Fatalf("the current lease's cursor: %v %v", stored, failure)
+	}
+	if phase, failure := store.SweptPhase(operation, created.ID); failure != nil || phase != 1 {
+		test.Fatalf("the campaign counts as swept to phase %d (%v), want 1", phase, failure)
+	}
+	if cursor, failure := store.SweepCursor(operation, created.ID, 0); failure != nil || !strings.Contains(string(cursor), `"swept": 1`) {
+		test.Fatalf("partition 0's cursor %s (%v)", cursor, failure)
+	}
+}

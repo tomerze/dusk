@@ -84,6 +84,22 @@ func (current *ownership) partitionOf(key NodeKey) (int32, bool) {
 	return kafka.KeyPartition(key.String(), partitions), true
 }
 
+func (current *ownership) partitionCount() int32 {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	return current.partitions
+}
+
+func (current *ownership) leaseOf(partition int32) (campaign.Lease, bool) {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	owned := current.slices[partition]
+	if owned == nil || owned.revoked.Load() {
+		return campaign.Lease{}, false
+	}
+	return owned.lease, true
+}
+
 func (current *ownership) hold(key NodeKey) (campaign.Lease, func(), bool) {
 	partition, known := current.partitionOf(key)
 	if !known {
