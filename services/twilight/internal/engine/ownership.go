@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand/v2"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -110,6 +111,17 @@ func (current *ownership) owns(key NodeKey) bool {
 	return owned
 }
 
+func (current *ownership) ownedPartitions() []int32 {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	owned := make([]int32, 0, len(current.slices))
+	for partition := range current.slices {
+		owned = append(owned, partition)
+	}
+	slices.Sort(owned)
+	return owned
+}
+
 func (current *ownership) owning() bool {
 	current.mutex.Lock()
 	defer current.mutex.Unlock()
@@ -123,6 +135,7 @@ func (current *ownership) own(lease campaign.Lease) {
 	owned := len(current.slices)
 	current.mutex.Unlock()
 	slicesOwnedGauge.Set(float64(owned))
+	current.engine.registry.requestRecount()
 }
 
 func (current *ownership) drop(partition int32, drain bool) *slice {
@@ -142,6 +155,7 @@ func (current *ownership) drop(partition int32, drain bool) *slice {
 		owned.writers.Unlock()
 	}
 	current.engine.dispatcher.dropPartition(partition, partitions)
+	current.engine.registry.forget(partition)
 	return owned
 }
 

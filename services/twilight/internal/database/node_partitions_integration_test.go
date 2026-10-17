@@ -239,3 +239,44 @@ func TestMigrationsAskForASettingOnlyWhenTheyNameIt(test *testing.T) {
 		test.Fatalf("the migration saw the setting as %d (%v)", partitions, failure)
 	}
 }
+
+func TestPartitionCountersMigrationRecountsFromRows(test *testing.T) {
+	pool, _ := testsupport.EmptyDatabase(test)
+	operation := context.Background()
+	before, loaded := migrationsBefore(test, 21)
+	if _, failure := database.Migrate(operation, pool, before, testsupport.MigrationSettings, testsupport.Logger()); failure != nil {
+		test.Fatal(failure)
+	}
+	campaign := uuid.New()
+	failure := pgx.BeginFunc(operation, pool, func(transaction pgx.Tx) error {
+		if failure := database.CreateCampaignPartitions(operation, transaction, campaign); failure != nil {
+			return failure
+		}
+		if _, failure := transaction.Exec(operation, `insert into campaigns (id, name, status, kind, selector, action, policy, salt, created_by)
+			values ($1, 'counted', 'running', 'run_script', 'has(device_id)', '{}', '{}', $2, 'operator')`, campaign, make([]byte, 32)); failure != nil {
+			return failure
+		}
+		if _, failure := transaction.Exec(operation, `insert into campaign_counters (campaign_id, phase, state, count) values ($1, 0, 'pending', 999)`, campaign); failure != nil {
+			return failure
+		}
+		_, failure := transaction.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state)
+			select $1, lpad(to_hex(index), 32, '0'), lpad(to_hex(index), 32, 'f'), 0, case when index % 4 = 0 then 'succeeded' else 'pending' end
+			from generate_series(1, 200) as index`, campaign)
+		return failure
+	})
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := database.Migrate(operation, pool, loaded, testsupport.MigrationSettings, testsupport.Logger()); failure != nil {
+		test.Fatal(failure)
+	}
+	var mismatched, counted int
+	if failure := pool.QueryRow(operation, `select count(*) filter (where counter.count is distinct from actual.count), coalesce(sum(counter.count), 0)
+		from (select partition, phase, state, count(*) as count from campaign_nodes where campaign_id = $1 group by partition, phase, state) actual
+		full join (select partition, phase, state, count from campaign_counters where campaign_id = $1) counter using (partition, phase, state)`, campaign).Scan(&mismatched, &counted); failure != nil {
+		test.Fatal(failure)
+	}
+	if mismatched != 0 || counted != 200 {
+		test.Fatalf("after the migration %d counters differ from the rows and they sum to %d, want 200", mismatched, counted)
+	}
+}

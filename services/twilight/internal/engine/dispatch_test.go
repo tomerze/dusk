@@ -59,7 +59,7 @@ func TestANodeDueInSeveralCampaignsGoesOutInOnePick(test *testing.T) {
 	start := time.Now()
 	identifiers := []uuid.UUID{uuid.MustParse("0192f3a4-0000-7000-8000-000000000001"), uuid.MustParse("0192f3a4-0000-7000-8000-000000000002"), uuid.MustParse("0192f3a4-0000-7000-8000-000000000003")}
 	for _, identifier := range identifiers {
-		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusRunning}, bucket: NewTokenBucket(1, 5, start), counters: map[int]map[campaign.NodeState]int64{}}
+		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusRunning}, bucket: NewTokenBucket(1, 5, start), counters: map[counterKey]int64{}}
 	}
 	shared, other := NodeKey{DeviceID: "a", InstallationID: "1"}, NodeKey{DeviceID: "b", InstallationID: "2"}
 	for _, identifier := range identifiers {
@@ -93,7 +93,7 @@ func TestQueuesOfCampaignsNoLongerTrackedAreDropped(test *testing.T) {
 	finished, running := uuid.MustParse("0192f3a4-0000-7000-8000-00000000000a"), uuid.MustParse("0192f3a4-0000-7000-8000-00000000000b")
 	start := time.Now()
 	for _, identifier := range []uuid.UUID{finished, running} {
-		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusPaused}, bucket: NewTokenBucket(1, 1, start), counters: map[int]map[campaign.NodeState]int64{}}
+		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusPaused}, bucket: NewTokenBucket(1, 1, start), counters: map[counterKey]int64{}}
 	}
 	keys := []NodeKey{{DeviceID: "a", InstallationID: "1"}, {DeviceID: "b", InstallationID: "2"}}
 	for _, key := range keys {
