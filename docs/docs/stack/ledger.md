@@ -117,7 +117,8 @@ How a chain continues across the life of an instance:
   entry is a `chain_link` event whose `event_detail` names the entry it follows:
   `{"instance": ..., "sequence": ..., "hash": ...}`. A chain start that follows an
   earlier entry on the partition without such a link is a break.
-* **Producer failure.** When Kafka reports a fatal error, nightfall stops
+* **Producer failure.** When Kafka reports a fatal error, or one transaction
+  fails three times in a row on the same producer, nightfall stops
   forwarding calls, creates a new producer, reads the partition's last entries,
   keeps the queued entries Kafka already holds (it matches them by `id`) and writes
   a `chain_resumed` event naming the last entry Kafka holds,

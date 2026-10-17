@@ -149,7 +149,8 @@ so a census burst never fills the ledger's queue.
 * `dusk.census` was read to its end and nightfall reads `dusk.connections`, so it
   knows which namespace ids other instances hold;
 * every topic above exists with its cleanup policy;
-* the ledger can take entries;
+* the ledger can take entries, and no ledger transaction has been committing
+  for longer than `limits.write_ahead_timeout_ms`;
 * nightfall is not draining.
 
 Reading `dusk.credential-quota` to its end is not one of them: until it is
