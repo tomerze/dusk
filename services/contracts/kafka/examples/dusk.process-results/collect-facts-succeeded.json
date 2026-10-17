@@ -10,7 +10,7 @@
   "namespace_id": "5d2e9a1c7b3f8e04",
   "action_kind": "collect_facts",
   "status": "succeeded",
-  "delivered": true,
+  "delivered": false,
   "error": null,
   "started_at": "2026-10-06T09:15:40.001200400Z",
   "finished_at": "2026-10-06T09:15:58.774501933Z",

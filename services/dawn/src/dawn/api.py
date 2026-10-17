@@ -57,9 +57,9 @@ from .models import (
     ReapRequest,
     Reported,
 )
-from .nodes import Connector, Sessions, SessionsExhausted, described
+from .nodes import Connector, Sessions, SessionsExhausted, connect, described
 from .telemetry import RequestSpans
-from .work import Results, classify, shell_at
+from .work import Results, classify
 
 logger = logging.getLogger(__name__)
 
@@ -192,9 +192,11 @@ def add_routes(api: FastAPI, services: Services) -> None:
         summary="Read a node's facts",
         description=(
             "Reads every `dusk.*` fact the node registered, the version keys you name, "
-            "its configuration hash and the processes it runs, in a shell at `pid`, "
-            "and answers with them. `dusk.device.id` is never read out. The same "
-            "result goes to `dusk.process-results` with the action `collect_facts`."
+            "its configuration hash and the processes it runs, in the node's default "
+            "shell, and answers with them. `pid` names the intended process the read "
+            "is admitted under; nothing runs at it. `dusk.device.id` is never read "
+            "out. The same result goes to `dusk.process-results` with the action "
+            "`collect_facts`."
         ),
         response_description="The node's facts and the state it reports.",
         responses={
@@ -221,11 +223,11 @@ def add_routes(api: FastAPI, services: Services) -> None:
         reported: dict[str, Any] = {}
         try:
             async with asyncio.timeout(settings.limits.process_timeout_default):
-                async with shell_at(
-                    services.connector, settings, node, attempt.pid, attempt.log()
-                ) as connection:
-                    attempt.delivered = True
+                connection = await connect(services.connector, settings, node, None)
+                try:
                     found, reported = await facts.collect(connection, body.version_keys)
+                finally:
+                    await connection.close()
             attempt.status = "succeeded"
             attempt.reported = reported
         except asyncio.CancelledError:

@@ -118,7 +118,7 @@ func (engine *Engine) refreshFacts(operation context.Context, key NodeKey) {
 		return
 	}
 	pid, failure := engine.recordRandomProcess(operation, key, "collect_facts", engine.Config.Instance, "twilight",
-		now.Add(time.Duration(engine.Config.Engine.ProcessLifetimeSeconds)*time.Second), factsCommands(versionKeys), 0, now)
+		now.Add(time.Duration(engine.Config.Engine.ProcessLifetimeSeconds)*time.Second), 0, factsCommands(versionKeys), now)
 	if failure != nil {
 		factsRefreshes.WithLabelValues("error").Inc()
 		engine.Logger.Warn("the facts process was not recorded", "device_id", key.DeviceID, "installation_id", key.InstallationID, "error", failure)
@@ -185,14 +185,14 @@ func factsCommands(versionKeys []string) int {
 	return 1 + len(read)
 }
 
-func (engine *Engine) recordRandomProcess(operation context.Context, key NodeKey, actionKind, principal, subject string, expires time.Time, maxCommands, reapedPids int, now time.Time) (campaign.Pid, error) {
+func (engine *Engine) recordRandomProcess(operation context.Context, key NodeKey, actionKind, principal, subject string, expires time.Time, maxCommands, defaultShellCommands int, now time.Time) (campaign.Pid, error) {
 	pid, failure := campaign.RandomPid()
 	if failure != nil {
 		return 0, failure
 	}
 	intended := campaign.IntendedProcess{Pid: pid, DeviceID: key.DeviceID, InstallationID: key.InstallationID, ActionKind: actionKind,
 		Principal: principal, Subject: subject, ExpiresAt: expires, MaxCommands: maxCommands,
-		DefaultShellCommands: engine.Config.Reconcile.DefaultShell.Commands(actionKind, reapedPids), At: now}
+		DefaultShellCommands: defaultShellCommands, At: now}
 	if failure := engine.Campaigns.RecordIntendedProcess(operation, intended); failure != nil {
 		return 0, fmt.Errorf("record the intended %s process: %w", actionKind, failure)
 	}

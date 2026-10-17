@@ -143,7 +143,7 @@ func TestValidation(test *testing.T) {
 
 func TestDefaultShellCommandsFollowDawnsReads(test *testing.T) {
 	shell := Default().Reconcile.DefaultShell
-	for kind, want := range map[string]int{"run_script": 3, "quarantine": 3, "ensure_config": 6, "ensure_version": 8, "collect_facts": 4, "interactive": 4} {
+	for kind, want := range map[string]int{"run_script": 3, "quarantine": 3, "ensure_config": 6, "ensure_version": 8, "interactive": 4} {
 		if got := shell.Commands(kind, 0); got != want {
 			test.Errorf("%s allows %d default-shell commands, want %d", kind, got, want)
 		}

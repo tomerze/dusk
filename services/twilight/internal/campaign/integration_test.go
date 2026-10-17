@@ -238,6 +238,10 @@ func TestReapablePids(test *testing.T) {
 	pending := intend(holding, "run_script", installation, past)
 	succeeded := intend(finished, "ensure_version", installation, past)
 	facts := intend(nil, "collect_facts", installation, now.Add(-time.Second))
+	readInDefaultShell := intend(nil, "collect_facts", installation, now.Add(-2*time.Second))
+	if _, failure := pool.Exec(operation, `update intended_processes set max_commands = 0 where pid = $1::text::numeric`, readInDefaultShell.String()); failure != nil {
+		test.Fatal(failure)
+	}
 	insideHorizon := intend(finished, "run_script", installation, now.Add(-time.Minute))
 	unexpired := intend(nil, "interactive", installation, now.Add(time.Hour))
 	elsewhere := intend(finished, "run_script", other, past)

@@ -218,10 +218,39 @@ def test_facts_answer_with_the_nodes_facts_and_report_them(dawn, client):
     assert body["facts"]["dusk.hostname"] == "node-1"
     assert body["reported"]["services"] == ["nightfall", "sh[server]"]
     assert finished(dawn) == [(str(PID), "collect_facts", "succeeded")]
-    assert dawn.producer.results()[0]["delivered"] is True
-    assert node.commands_in(PID)[0] == "kvs get dusk.; ps"
+    assert dawn.producer.results()[0]["delivered"] is False
+    assert node.calls == [
+        ("connect", DEFAULT_SH_PID),
+        ("sh", DEFAULT_SH_PID, "kvs get dusk.; ps"),
+        ("sh", DEFAULT_SH_PID, "kvs get dusk.config.hash"),
+        ("disconnect", DEFAULT_SH_PID),
+    ]
     assert PID not in node.processes
     assert dawn.sessions.open == 0
+
+
+def test_facts_with_version_keys_read_each_key_the_node_has_once(dawn, client):
+    node = dawn.fleet.add(FakeNode())
+    node.kvs["dusk.config.hash"] = "ab" * 32
+    node.kvs["app.version"] = "3.1.0"
+
+    response = client.post(
+        "/v1/facts",
+        json=facts_body(version_keys=["app.version", "app.absent", "dusk.version"]),
+        headers=bearer(DISPATCHER_TOKEN),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["reported"]["config_hash"] == "ab" * 32
+    assert response.json()["facts"]["app.version"] == "3.1.0"
+    assert node.calls == [
+        ("connect", DEFAULT_SH_PID),
+        ("sh", DEFAULT_SH_PID, "kvs get dusk.; ps"),
+        ("sh", DEFAULT_SH_PID, "kvs get dusk.config.hash"),
+        ("sh", DEFAULT_SH_PID, "kvs get app.version"),
+        ("sh", DEFAULT_SH_PID, "kvs get app.absent"),
+        ("disconnect", DEFAULT_SH_PID),
+    ]
 
 
 @pytest.mark.parametrize(

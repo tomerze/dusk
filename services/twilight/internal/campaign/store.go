@@ -861,7 +861,7 @@ func (store *Store) Reapable(operation context.Context, devices, installations [
 			select intended.pid from intended_processes intended
 			left join campaigns on campaigns.id = intended.campaign_id
 			where intended.device_id = node.device_id and intended.installation_id = node.installation_id
-				and intended.reaped_at is null and intended.action_kind <> 'reap'
+				and intended.reaped_at is null and intended.action_kind <> 'reap' and intended.max_commands > 0
 				and (intended.reap_requested_at is null or intended.reap_requested_at < $3::timestamptz - make_interval(secs => $4))
 				and intended.expires_at < $3::timestamptz - make_interval(secs => coalesce(
 					(campaigns.policy -> 'retry' ->> 'max_backoff_seconds')::double precision

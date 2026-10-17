@@ -170,12 +170,20 @@ func (fake *fakeDawn) handler() http.Handler {
 	})
 	mux.HandleFunc("POST /v1/facts", func(writer http.ResponseWriter, request *http.Request) {
 		var body struct {
-			Node dawn.NodeRef `json:"node"`
-			Pid  campaign.Pid `json:"pid"`
+			Node        dawn.NodeRef `json:"node"`
+			Pid         campaign.Pid `json:"pid"`
+			VersionKeys []string     `json:"version_keys"`
 		}
 		_ = json.NewDecoder(request.Body).Decode(&body)
 		if !fake.intended(body.Pid, body.Node, "collect_facts") {
 			http.Error(writer, "the facts pid was not intended", http.StatusForbidden)
+			return
+		}
+		var maxCommands, defaultShellCommands int
+		if failure := fake.harness.pool.QueryRow(context.Background(), `select max_commands, default_shell_commands from intended_processes where pid = $1::text::numeric`,
+			body.Pid.String()).Scan(&maxCommands, &defaultShellCommands); failure != nil || maxCommands != 0 || defaultShellCommands != 2+len(body.VersionKeys) {
+			http.Error(writer, fmt.Sprintf("the facts pid allows %d commands in a shell of its own and %d in the default shell, want 0 and %d (%v)",
+				maxCommands, defaultShellCommands, 2+len(body.VersionKeys), failure), http.StatusForbidden)
 			return
 		}
 		fake.mutex.Lock()

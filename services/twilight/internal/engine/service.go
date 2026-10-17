@@ -567,7 +567,7 @@ func (service *Service) operatorProcess(operation context.Context, key inventory
 		return OperatorProcess{}, ErrNodeOffline
 	}
 	now := time.Now()
-	pid, failure := service.engine.recordRandomProcess(operation, key, actionKind, actor, actor, now.Add(lifetime), maxCommands, 0, now)
+	pid, failure := service.engine.recordRandomProcess(operation, key, actionKind, actor, actor, now.Add(lifetime), maxCommands, service.engine.Config.Reconcile.DefaultShell.Commands(actionKind, 0), now)
 	if failure != nil {
 		return OperatorProcess{}, failure
 	}

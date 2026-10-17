@@ -99,7 +99,7 @@ func (current *dispatcher) reap(operation context.Context, key NodeKey) {
 		pids[index], texts[index] = entry.Pid, entry.Pid.String()
 	}
 	lifetime := time.Duration(engine.Config.Engine.ProcessLifetimeSeconds) * time.Second
-	if _, failure := engine.recordRandomProcess(operation, key, "reap", engine.Config.Instance, "twilight", now.Add(lifetime), 0, len(pids), now); failure != nil {
+	if _, failure := engine.recordRandomProcess(operation, key, "reap", engine.Config.Instance, "twilight", now.Add(lifetime), 0, engine.Config.Reconcile.DefaultShell.Commands("reap", len(pids)), now); failure != nil {
 		if operation.Err() == nil {
 			engine.Logger.Warn("the reap was not recorded as an intended process; the node is asked again on a later sweep", "device_id", key.DeviceID, "installation_id", key.InstallationID, "error", failure)
 		}
