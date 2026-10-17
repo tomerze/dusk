@@ -148,6 +148,7 @@ async fn connect_mode_outcome(port: u16) -> Result<(), capnp::Error> {
             install_token_file: None,
             heartbeat_timeout_seconds: 90,
             tpm: None,
+            provision_token_file: None,
         })
         .as_program_args()?;
         let mut process_request = node.process_request();

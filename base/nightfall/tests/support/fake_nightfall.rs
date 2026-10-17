@@ -33,6 +33,7 @@ use x509_parser::prelude::FromDer as _;
 
 const DEVICE_ID: &str = "0123456789abcdef0123456789abcdef";
 pub(crate) const INSTALL_TOKEN: &str = "an-install-token-for-the-tests";
+pub(crate) const PROVISION_TOKEN: &str = "a-provision-token-for-the-tests";
 pub(crate) const TPM_BOUND_URI: &str = "urn:dusk:attestation:tpm";
 pub(crate) const FIRST_LINK_TIMEOUT: Duration = Duration::from_secs(40);
 pub(crate) const INSTALLATION_ID: u64 =
@@ -718,6 +719,14 @@ impl provisioning::Server for FakeProvisioning {
                         )));
                     }
                     "install"
+                }
+                provision_capnp::credential::Which::ProvisionToken(token) => {
+                    if text(token)? != PROVISION_TOKEN {
+                        return Err(capnp::Error::failed(String::from(
+                            "denied: unknown provision token",
+                        )));
+                    }
+                    "provision"
                 }
                 _ => {
                     return Err(capnp::Error::failed(String::from("denied: not a token")));

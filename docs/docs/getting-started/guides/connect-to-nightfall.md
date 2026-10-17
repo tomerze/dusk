@@ -24,7 +24,9 @@ Three settings are compiled into the node, all while it is built:
   [`DUSK_NODE_KVS_PERSISTENT`](../../embedding/node-artifacts.md#dusk_node_kvs_persistent),
   where the node keeps its identity;
 - the [fleet token](../../embedding/node-artifacts.md#the-fleet-token),
-  `DUSK_FLEET_TOKEN`, which the node enrolls with the first time it starts.
+  `DUSK_FLEET_TOKEN`, which the node enrolls with the first time it starts,
+  unless it is given an [install token](#install-tokens) or a
+  [provision token](#provision-tokens).
 
 From the repository root, for the Linux executable:
 
@@ -71,12 +73,34 @@ every attempt, so replacing it is enough. There is no option that takes the
 token itself: the init script is compiled into a binary every installation
 shares.
 
+### Provision tokens
+
+Whoever runs nightfall can also issue provision tokens: a token nightfall accepts
+for any number of enrollments until it is retired, and that is never compiled
+into a node. A node's fleet token can never be replaced - the key of its
+persistent kvs file derives from it - so a provision token is how the credential
+nodes enroll with is replaced. To enroll with one, add
+`--provision-token-file /etc/dusk/provision-token` to the `nightfall -c` command
+and install the token at that path for every node that should use it. The node
+enrolls with it instead of the fleet token, the first time and every time it has
+to enroll again - its persistent kvs file deleted, or its certificate expired
+beyond nightfall's renew grace. It reads the file again for every attempt, so
+replacing the token in the file is enough for the node's next enrollment, with no
+restart and no rebuild. A node that is already enrolled does not read it: it
+renews its certificate with the certificate itself.
+
+While the file is missing, unreadable or empty the node does not enroll: it logs
+the failure at `warn` and tries again after a random wait that grows to up to 10
+minutes. It never enrolls with the fleet token instead. A node takes
+`--install-token-file` or `--provision-token-file`, not both.
+
 ## The options
 
 ```
 nightfall -c <host>:<port> --provision <host>:<port> --ca <file>
           [--server-name <name>] [--provision-server-name <name>]
-          [--install-token-file <file>] [--heartbeat-timeout <seconds>]
+          [--install-token-file <file> | --provision-token-file <file>]
+          [--heartbeat-timeout <seconds>]
           [--tpm <path> | --no-tpm]
 ```
 
@@ -88,6 +112,7 @@ nightfall -c <host>:<port> --provision <host>:<port> --ca <file>
 | `--provision-server-name <name>` | The same as `--server-name`, for `--provision`. |
 | `--ca <file>` | The certificates of the CAs that sign nightfall's server certificates, PEM, at most 1 MiB. The node trusts no other CA, not even the system's. It reads the file again for every connection, so a replaced file takes effect without a restart. |
 | `--install-token-file <file>` | A file holding an install token, to enroll with instead of the fleet token. The node reads at most 64 KiB of it, which must be UTF-8, and ignores the whitespace around the token. |
+| `--provision-token-file <file>` | A file holding a provision token, to enroll with instead of the fleet token. Read like `--install-token-file`, which it cannot be combined with. |
 | `--heartbeat-timeout <seconds>` | How long the connection may stay silent before the node closes it: 90 by default, from 1 to 86400. |
 | `--tpm <path>` | The TPM to keep the node key in: `/dev/tpmrm0` by default. A path that does not exist means the machine has no TPM. The path can also be the Unix socket of a software TPM, such as swtpm's. See [The TPM](#the-tpm). |
 | `--no-tpm` | Keep the node key in the kvs even on a machine with a TPM. |
@@ -135,11 +160,11 @@ identity: two nodes on one device, or in one process, are two installations.
    machine with one (see [The TPM](#the-tpm)) - and keeps it in
    `nightfall.staged_private_key` - which also proves it can write the kvs
    before it asks nightfall for anything. It connects to `--provision` (TLS 1.2
-   or 1.3) and calls `assign` with its fleet token, or its install token, and a
-   report about the machine: its hardware fingerprint, hostname, Dusk version,
-   impl and target, and the installation id of an earlier enrollment if
-   `nightfall.installation_id` still holds one. The hardware fingerprint is the
-   SHA-256 of the device's id, the
+   or 1.3) and calls `assign` with its fleet token, install token or provision
+   token, and a report about the machine: its hardware fingerprint, hostname,
+   Dusk version, impl and target, and the installation id of an earlier
+   enrollment if `nightfall.installation_id` still holds one. The hardware
+   fingerprint is the SHA-256 of the device's id, the
    [`dusk.device.id`](../../features/kvs.md#what-the-impl-records) the impl
    records. A machine without one (no device id at all, or one that is all zeros
    or `uninitialized`) gets 32 random bytes, kept in
@@ -218,9 +243,9 @@ the node stays connected while it retries.
 A node that was off long enough for its certificate to expire renews it the same
 way when it comes back, if nightfall still accepts the expired certificate. If
 nightfall refuses because the certificate expired too long ago, the node enrolls
-again with its token, as at its first start: the fleet token gives it a new
-installation, and an install token that was already used is refused until a new
-one is in its file.
+again with its token, as at its first start: the fleet token and a provision
+token give it a new installation, and an install token that was already used is
+refused until a new one is in its file.
 
 ## The TPM
 

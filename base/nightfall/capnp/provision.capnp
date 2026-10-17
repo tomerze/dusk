@@ -7,6 +7,7 @@ struct Credential {
     fleetToken @0 :Text $Dusk.sensitive;
     installToken @1 :Text $Dusk.sensitive;
     certificate @2 :Void;
+    provisionToken @3 :Text $Dusk.sensitive;
   }
 }
 

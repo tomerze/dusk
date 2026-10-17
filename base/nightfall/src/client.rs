@@ -76,6 +76,14 @@ struct NightfallCli {
     install_token_file: Option<String>,
     #[arg(
         long,
+        value_name = "PATH",
+        requires = "connect",
+        conflicts_with = "install_token_file",
+        help = "A file holding a provision token to enroll with instead of the fleet token"
+    )]
+    provision_token_file: Option<String>,
+    #[arg(
+        long,
         value_name = "SECONDS",
         requires = "connect",
         default_value_t = connect::DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
@@ -115,6 +123,7 @@ impl NightfallCli {
             install_token_file: self.install_token_file,
             heartbeat_timeout_seconds: self.heartbeat_timeout,
             tpm: (!self.no_tpm).then_some(self.tpm),
+            provision_token_file: self.provision_token_file,
         }))
     }
 }
@@ -142,9 +151,11 @@ The `nightfall` program serves the node's Dusk sessions. It keeps running until 
 * Use `nightfall -l <ip>:<port>` to listen on one address.
 * Use `nightfall -c <host>:<port> --provision <host>:<port> --ca <file>` to dial out to nightfall
   instead, over TLS 1.3 with the node's certificate. The first time, the node gets its certificate
-  from `--provision` with the fleet token it was built with, or with the install token in
-  `--install-token-file <file>`. It keeps its identity in persistent kvs keys, so it needs a node
-  built with a persistent kvs file, and renews its certificate before it expires.
+  from `--provision` with the fleet token it was built with, with the install token in
+  `--install-token-file <file>`, or with the provision token in `--provision-token-file <file>`,
+  which it can enroll with again whenever it has to. It keeps its identity in persistent kvs
+  keys, so it needs a node built with a persistent kvs file, and renews its certificate before
+  it expires.
   `--server-name` and `--provision-server-name` set the TLS server names when they are not the
   hosts, and `--heartbeat-timeout <seconds>` (90 by default) closes a link that has gone silent.
   On a machine with a TPM at `--tpm <path>` (`/dev/tpmrm0` by default) the node key is created in
@@ -232,6 +243,8 @@ mod tests {
             "-c fleet.example:443 --provision provision.example --ca ca.pem",
             "-l 9090 -c fleet.example:443 --provision provision.example:443 --ca ca.pem",
             "-l 9090 --install-token-file install",
+            "-l 9090 --provision-token-file provision",
+            "-c fleet.example:443 --provision provision.example:443 --ca ca.pem --install-token-file install --provision-token-file provision",
             "-l 9090 --ca ca.pem",
             "-l 9090 --heartbeat-timeout 30",
             "-l 9090 --tpm /dev/tpm0",
@@ -274,6 +287,7 @@ mod tests {
                 install_token_file: None,
                 heartbeat_timeout_seconds: 90,
                 tpm: Some(String::from("/dev/tpmrm0")),
+                provision_token_file: None,
             }
         );
         assert_eq!(
@@ -283,6 +297,14 @@ mod tests {
             .install_token_file
             .as_deref(),
             Some("/etc/dusk/install-token")
+        );
+        assert_eq!(
+            connect_arguments(&format!(
+                "{CONNECT} --provision-token-file /etc/dusk/provision-token"
+            ))
+            .provision_token_file
+            .as_deref(),
+            Some("/etc/dusk/provision-token")
         );
     }
 }
