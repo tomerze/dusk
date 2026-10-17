@@ -25,7 +25,6 @@ pub struct LedgerConfig {
     pub session_entries: usize,
     pub checkpoint_interval: Duration,
     pub transaction_entries: usize,
-    pub transaction_time: Duration,
     pub write_ahead_budget: Duration,
 }
 
@@ -39,7 +38,6 @@ impl LedgerConfig {
             session_entries: 200_000,
             checkpoint_interval: Duration::from_millis(1000),
             transaction_entries: 500,
-            transaction_time: Duration::from_millis(5),
             write_ahead_budget: Duration::from_secs(5),
         }
     }
@@ -553,7 +551,6 @@ mod tests {
         let log = MemoryLog::new();
         let config = LedgerConfig {
             transaction_entries: 3,
-            transaction_time: Duration::from_secs(3600),
             ..quiet_config()
         };
         let (writer, thread, _) = start(config, &log);
@@ -568,26 +565,71 @@ mod tests {
     }
 
     #[test]
-    fn closes_a_transaction_when_its_time_is_up() {
+    fn commits_an_entry_at_once_and_the_entries_queued_meanwhile_together_in_order() {
         let log = MemoryLog::new();
-        let config = LedgerConfig {
-            transaction_time: Duration::from_millis(5),
-            ..quiet_config()
+        log.hold_commits();
+        let (writer, thread, _) = start(quiet_config(), &log);
+        let mut reservation = writer.reserve(101).unwrap();
+        let numbered = |cap_id: u64| EntryContent {
+            cap_id: Some(cap_id),
+            ..call()
         };
-        let (writer, thread, _) = start(config, &log);
-        let mut reservation = writer.reserve(2).unwrap();
-        reservation.record(session_open()).unwrap();
+        reservation.record(numbered(0)).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
-        while log.records().is_empty() {
+        while log.held_commits() == 0 {
             assert!(
                 Instant::now() < deadline,
-                "the first transaction never committed"
+                "the first entry was not committed at once"
             );
             std::thread::sleep(Duration::from_millis(1));
         }
-        reservation.record(session_open()).unwrap();
+        for cap_id in 1..=100 {
+            reservation.record(numbered(cap_id)).unwrap();
+        }
+        log.release_commits();
+        while log.records().len() < 101 {
+            assert!(
+                Instant::now() < deadline,
+                "the queued entries were not committed"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
         stop(&writer, thread);
-        assert!(log.commits() >= 2);
+        assert_eq!(log.transactions()[..2], [1, 100]);
+        let cap_ids: Vec<u64> = entries(&log)[..101]
+            .iter()
+            .map(|entry| entry["cap_id"].as_u64().unwrap())
+            .collect();
+        assert_eq!(cap_ids, (0..=100).collect::<Vec<u64>>());
+        let report = verify(&log);
+        assert!(report.is_clean(), "{report}");
+    }
+
+    #[tokio::test]
+    async fn a_write_ahead_entry_resolves_only_once_its_transaction_committed() {
+        let log = MemoryLog::new();
+        log.hold_commits();
+        let (writer, thread, _) = start(quiet_config(), &log);
+        let mut reservation = writer.reserve(1).unwrap();
+        let mut commit = reservation.record_write_ahead(call()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while log.held_commits() == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "the entry's transaction never began to commit"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut commit)
+                .await
+                .is_err()
+        );
+        assert!(log.records().is_empty());
+        log.release_commits();
+        commit.await.unwrap();
+        assert_eq!(log.records().len(), 1);
+        stop(&writer, thread);
     }
 
     #[test]

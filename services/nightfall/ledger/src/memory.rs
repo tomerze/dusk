@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::log::{LedgerLog, LogError, LogErrorKind};
 
@@ -19,14 +19,21 @@ struct MemoryState {
     committed: Vec<Vec<u8>>,
     transaction: Option<Vec<Vec<u8>>>,
     faults: VecDeque<Fault>,
-    commits: usize,
+    transactions: Vec<usize>,
     recoveries: usize,
     broken: bool,
+}
+
+#[derive(Default)]
+struct Hold {
+    holding: bool,
+    waiting: usize,
 }
 
 #[derive(Clone, Default)]
 pub struct MemoryLog {
     state: Arc<Mutex<MemoryState>>,
+    hold: Arc<(Mutex<Hold>, Condvar)>,
 }
 
 impl MemoryLog {
@@ -45,7 +52,44 @@ impl MemoryLog {
     }
 
     pub fn commits(&self) -> usize {
-        self.lock().commits
+        self.lock().transactions.len()
+    }
+
+    pub fn transactions(&self) -> Vec<usize> {
+        self.lock().transactions.clone()
+    }
+
+    pub fn hold_commits(&self) {
+        self.lock_hold().holding = true;
+    }
+
+    pub fn release_commits(&self) {
+        self.lock_hold().holding = false;
+        self.hold.1.notify_all();
+    }
+
+    pub fn held_commits(&self) -> usize {
+        self.lock_hold().waiting
+    }
+
+    fn lock_hold(&self) -> MutexGuard<'_, Hold> {
+        self.hold
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn wait_while_held(&self) {
+        let mut hold = self.lock_hold();
+        hold.waiting += 1;
+        while hold.holding {
+            hold = self
+                .hold
+                .1
+                .wait(hold)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        hold.waiting -= 1;
     }
 
     pub fn recoveries(&self) -> usize {
@@ -125,6 +169,7 @@ impl LedgerLog for MemoryLog {
     }
 
     fn commit(&mut self) -> Result<(), LogError> {
+        self.wait_while_held();
         let mut state = self.lock();
         let fault = state.faults.front().copied();
         let transaction = state
@@ -141,13 +186,13 @@ impl LedgerLog for MemoryLog {
             }
             Some(Fault::CommitAppliedThen(kind)) => {
                 state.faults.pop_front();
+                state.transactions.push(transaction.len());
                 state.committed.extend(transaction);
-                state.commits += 1;
                 Err(failure(&mut state, kind, "commit"))
             }
             _ => {
+                state.transactions.push(transaction.len());
                 state.committed.extend(transaction);
-                state.commits += 1;
                 Ok(())
             }
         }

@@ -97,27 +97,16 @@ impl Builder {
     }
 
     fn collect(&mut self) {
-        let mut opened = (!self.batch.is_empty()).then(Instant::now);
         while self.batch.len() < self.shared.config.transaction_entries {
-            let message = if self.stopping {
+            let message = if self.stopping || !self.batch.is_empty() {
                 match self.receiver.try_recv() {
                     Ok(message) => message,
                     Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => return,
                 }
             } else {
-                let wait = match opened {
-                    Some(opened) => {
-                        let wait = (opened + self.shared.config.transaction_time)
-                            .saturating_duration_since(Instant::now());
-                        if wait.is_zero() {
-                            return;
-                        }
-                        wait
-                    }
-                    None => self
-                        .checkpoint_due
-                        .saturating_duration_since(Instant::now()),
-                };
+                let wait = self
+                    .checkpoint_due
+                    .saturating_duration_since(Instant::now());
                 match self.receiver.recv_timeout(wait) {
                     Ok(message) => message,
                     Err(RecvTimeoutError::Timeout) => return,
@@ -128,10 +117,7 @@ impl Builder {
                 }
             };
             match message {
-                Message::Entry(queued) => {
-                    self.push(*queued);
-                    opened.get_or_insert_with(Instant::now);
-                }
+                Message::Entry(queued) => self.push(*queued),
                 Message::Shutdown => {
                     info!(
                         "ledger shutdown requested; writing the queued entries and a final checkpoint"
