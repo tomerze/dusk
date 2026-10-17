@@ -71,12 +71,19 @@ window.
 
 The partition count is fixed from then on. While the topic has another number
 of partitions, every instance logs it at `error` on each topic check, every 30
-seconds, and sets `twilight_process_results_partitions_mismatched` to 1, and
-the leader writes no campaign row, advances no phase and dispatches nothing;
-the API keeps answering. Kafka cannot take partitions away from a topic, so
-the way back from a grown topic is to recreate it with the count the inventory
-was migrated with, which loses the results still on it. twilight has no way to
-change the count once migrated.
+seconds, and sets `twilight_process_results_partitions_mismatched` to 1; no
+instance writes a campaign row or dispatches, and the leader advances no phase.
+The API keeps answering. The time held does not count toward any campaign's
+bake time, and once the counts match no phase opens until the results produced
+in the meantime are applied (see Slices). Kafka cannot take partitions away
+from a topic, so the way back from a grown topic is to recreate it with the
+count the inventory was migrated with, which loses the results still on it.
+twilight has no way to change the count once migrated.
+
+Migration `0021_partition_counters` recounts the campaign counters from the
+campaign rows, per partition, and `0022_partition_sweep_cursors` keeps a sweep
+cursor per campaign and partition, so every running campaign starts its sweeps
+over once.
 
 ### Shutting down
 
@@ -178,7 +185,7 @@ creates.
 | `topics.node_state` | `dusk.node-state` | |
 | `topics.process_results` | `dusk.process-results` | |
 | `topics.intended_processes` | `dusk.intended-processes` | |
-| `results_group` | `twilight-results` | The consumer group in which the leader owns the partitions of `topics.process_results`, the inventory's slices, and applies the process results that land in them. |
+| `results_group` | `twilight-results` | The consumer group in which every instance owns partitions of `topics.process_results`, the inventory's slices, and applies the process results that land in them. |
 | `inventory_group` | `twilight-inventory` | The consumer group the leader records enrollments in. |
 | `reconcile_group` | `twilight-reconcile` | The consumer group every instance shares to reconcile the ledger. |
 | `reconcile_results_group` | `twilight-reconcile-results` | The consumer group every instance shares to read process results for reconcile. |
@@ -222,8 +229,8 @@ is skipped for 30 seconds.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `sweep_interval_seconds` | `300` | How often the leader sweeps every running campaign for matching online nodes. |
-| `gate_interval_seconds` | `15` | How often the leader judges each running campaign's health gate. |
+| `sweep_interval_seconds` | `300` | How often each instance sweeps every running campaign for matching online nodes in the slices it owns. |
+| `gate_interval_seconds` | `15` | How often the leader judges each running campaign's health gate, and each instance marks the nodes of its slices that stayed away past the silent window. |
 | `evaluation_queue` | `100000` | How many nodes may wait for evaluation; a connect hint beyond it is dropped and counted. |
 | `dispatch_workers` | `64` | Concurrent calls to dawn. |
 | `dispatch_attempts` | `3` | Attempts at a dispatch whose answer was lost, with the same pids. |
@@ -233,11 +240,11 @@ is skipped for 30 seconds.
 | `census_interval_seconds` | `300` | nightfall's full census interval; a revoked node still online two intervals after it was revoked raises an alert. |
 | `skip_lag_records` | `200000` | Connection events behind the end before the stream skips to the latest. |
 | `skip_age_seconds` | `60` | Age of the newest connection event read, while behind, before the stream skips to the latest. |
-| `counters_flush_seconds` | `5` | How often the leader writes campaign counters to `campaign_counters`. |
+| `counters_flush_seconds` | `5` | How often each instance writes the campaign counters of the slices it owns to `campaign_counters`. |
 | `process_lifetime_seconds` | `900` | How long the process of a facts read or a file collection is intended for, from when twilight asks dawn for it. |
 | `intended_process_retention_days` | `31` | How long `intended_processes` and reconcile's per-pid state are kept: the ledger's 30 days plus one. |
-| `presence_flush_millis` | `1000` | How often the leader writes presence changes to `node_presence`. |
-| `last_seen_bucket_seconds` | `10` | The leader writes `last_seen_at` for one of 30 groups of online nodes this often, so each node's is at most 30 of these old. |
+| `presence_flush_millis` | `1000` | How often each instance writes the presence changes of the nodes in its slices to `node_presence`. |
+| `last_seen_bucket_seconds` | `10` | Each instance writes `last_seen_at` for one of 30 groups of the online nodes in its slices this often, so each node's is at most 30 of these old. |
 | `reap_interval_seconds` | `300` | How long the reap sweep takes to look at every online node once, one of 30 groups at a time. |
 | `reaps_per_second` | `20` | Reap requests sent to dawn per second, across the fleet. |
 | `reap_retry_seconds` | `600` | How long a pid dawn was asked to reap waits before it is asked again, when dawn never reported it reaped. |
@@ -986,7 +993,7 @@ On `health_listen`:
 | `twilight_slice_lease_losses_total{how}` | Slices this instance stopped owning without giving them up: `lost` when the consumer group dropped it, `fenced` when another instance took the lease. |
 | `twilight_slice_partition_mismatches_total` | Process results that arrived in a partition other than the one their node's key hashes to, which means their producer does not partition like Kafka's default partitioner. Each is logged at `error`. |
 | `twilight_online_nodes` | Nodes the online view holds as online. |
-| `twilight_process_results_partitions_mismatched` | 1 while `topics.process_results` has another partition count than the inventory was migrated with; the leader writes no campaign row, advances no phase and dispatches nothing then. |
+| `twilight_process_results_partitions_mismatched` | 1 while `topics.process_results` has another partition count than the inventory was migrated with; meanwhile no instance writes a campaign row or dispatches, and the leader advances no phase. |
 | `twilight_view_degraded` | 1 while the online view is degraded (below). |
 | `twilight_node_state_rebuilds_total` | Times this instance wrote `dusk.node-state` again from the inventory. |
 | `twilight_connections_skips_total` | Times the connection stream skipped to its latest offsets. |
@@ -1029,23 +1036,39 @@ lock, and stops leading after two failed checks. The connection sets TCP
 keepalives (idle 10 s, interval 5 s, 3 probes) and a 15-second TCP user
 timeout, so a lost primary is noticed within seconds rather than minutes.
 
-Every change to a campaign's node rows is a compare-and-set that also requires
-the term to be the current one and the lease of the node's slice to be current
-(below), so a leader that lost the lock without noticing cannot change anything
-after the next leader took over. A new leader starts every campaign's rate budget empty - a failover
-never releases a burst on top of what the previous leader spent - and rebuilds
-the campaigns' counters from their rows.
+The leader runs what is still done once for the whole fleet: health gates,
+phase advance and campaign completion, enrollments, the revocation checks, and
+the partitions and publication of intended processes. Everything done for a
+node is done by the instance that owns the node's slice (below), and every
+change to a campaign's node rows is a compare-and-set that requires the lease
+of the node's slice to be current, whichever instance leads.
 
 ### Slices
 
 The partitions of `topics.process_results` are the inventory's slices: every
 node row carries the partition its node's results land in (see Upgrading the
-schema). The leader joins the consumer group `kafka.results_group` on that topic,
-with a 10-second session timeout and a heartbeat every second, and owns the
-partitions the group assigns it. For each one it adds one to the partition's
-epoch in `node_partition_leases` and records itself as the owner, works out from
-the slice's rows which of its nodes have a process in flight, and only then
-reads the slice's results.
+schema). Every instance joins the consumer group `kafka.results_group` on that
+topic, with a 10-second session timeout and a heartbeat every second, and owns
+the partitions the group assigns it. For each one it adds one to the
+partition's epoch in `node_partition_leases` and records itself as the owner,
+works out from the slice's rows which of its nodes have a process in flight,
+and only then reads the slice's results; it also recounts the slice's counters
+and compares its presence rows with the online view.
+
+For the slices it owns, an instance does every piece of work done for a node:
+it evaluates connect hints, sweeps each campaign (each slice with a cursor of
+its own and its share of the campaign's candidate budget), dispatches and keeps
+the in-flight set, applies results, acts on deadlines and due retries, reaps,
+flips quarantined nodes, refreshes facts, writes presence and `last_seen_at`,
+records the departures and returns the silent-rate gate counts, and writes its
+slices' counters. Work for a node in a slice it does not own is left to that
+slice's owner. The leader's silent-rate gate counts a node that left after its
+success and stayed away past `silent_window_seconds` as silent whether or not
+the owner of its slice has recorded that yet. The transition that finishes a
+campaign recounts its counters from its rows for every partition, and no
+instance writes that campaign's counters after it. When an instance stops, the group gives its slices to the others
+within seconds: at once when it shuts down cleanly, after the session timeout
+when it dies.
 
 * Every insert and update of a campaign node row names the slice's partition
   and the epoch its writer holds, and Postgres refuses it unless that is still
@@ -1058,15 +1081,21 @@ reads the slice's results.
   waits for the writes already running, and commits the results it applied
   before the rebalance goes on. When the group drops the instance, because its
   session expired, it stops at once.
-* An owner whose write is refused because another instance took the lease
-  stops reading that slice until the group assigns it again.
+* An owner one of whose writes - a campaign row, a dispatch, a sweep cursor or
+  a result it applies - is refused because another raise of the lease
+  committed stops writing the slice's rows and pauses it at its first result
+  not applied. It asks the group coordinator whether the slice is still
+  assigned to it; while it is, it raises the epoch again, rebuilds the slice's
+  in-flight set and reads on from that result, without waiting for a
+  rebalance. A slice the group has given to another instance stays paused
+  until the group takes it away.
 * A slice whose epoch could not be raised is not read until it is. The owner
   tries again after a random wait that doubles with every failure, up to a
   minute, and logs at `error` once a slice has gone without its lease for a
   minute. Taking a slice away waits only for the attempt on that slice; losing
   it cancels the attempt.
-* Results arrive at least once: a rebalance, a restart or a new leader can
-  hand a result over again. Applying one is safe twice and out of order: a
+* Results arrive at least once: a rebalance, a restart or a slice changing
+  owner can hand a result over again. Applying one is safe twice and out of order: a
   report older than the node's last one does not replace it, and a row whose
   outcome is `unknown` takes no `started`, `running`, `duplicate`, `ended` or
   `timed_out` from before it became `unknown`. Older and newer are told apart
@@ -1080,16 +1109,27 @@ reads the slice's results.
   on the row's revision keeps them from overwriting a change the owner made in
   between.
 
-Only the leader joins the group. While a deposed leader is still a member, the
-new leader may own only part of the slices; the deposed leader's writes fail on
-the term, it commits no result past one it could not apply and keeps trying
-that one until it stops leading, and once it leaves the group its slices move
-to the new leader, which reads from there.
+* A campaign's rate and burst, `engine.facts_per_second` and
+  `engine.reaps_per_second` are divided among the instances by the share of
+  the slices each owns, so together they never exceed them. An instance with
+  less work queued than its share leaves the rest of it unspent.
+* Whenever the leader starts judging gates - when it is elected, or when a
+  partition-count hold ends - it notes the end of `topics.process_results` and
+  opens no phase and completes no campaign until the group has committed every
+  result up to there. A gate that would pass holds meanwhile with the event
+  "waiting for the process results produced before the gates started to be
+  applied"; a failing gate still pauses or aborts. A commit of applied results
+  that fails is tried again three times within seconds; a partition whose
+  commit still fails holds the gates until its next result is applied and
+  committed.
 
 ### The online view
 
 Every instance keeps in memory which nodes are online, from nightfall's census
-and connection events, and the leader writes what changes to `node_presence`.
+and connection events, and writes what changes for the nodes of its slices to
+`node_presence`, under each slice's lease as it writes campaign rows, so an
+instance that lost a slice writes none of its presence rows once its successor
+took the lease.
 Heartbeats are never stored; `last_seen_at` comes from the census.
 
 * Epochs are compared per namespace: an event older than what twilight already
@@ -1107,24 +1147,24 @@ Heartbeats are never stored; `last_seen_at` comes from the census.
 The view is degraded while any nightfall instance is in census timeout, and
 after a skip until every instance has sent a full census. While it is degraded
 no campaign phase advances and silent-rate gates are not judged; after a skip
-the leader sweeps every campaign once the view recovers.
+every instance sweeps every campaign once the view recovers.
 
 ### Dispatch
 
 * A connected event is a hint that a node may be due; every
   `sweep_interval_seconds`, and whenever a campaign starts, resumes or opens a
-  phase, the leader also sweeps for matching online nodes, so a node that stays
-  connected for weeks is reached too.
-* A campaign's rate is one token bucket for the whole fleet, held by the
-  leader.
+  phase, the owner of each slice also sweeps it for matching online nodes, so
+  a node that stays connected for weeks is reached too.
+* A campaign's rate is shared out among the instances by the slices they own
+  (see Slices).
 * Each node has at most one dispatch with dawn at a time; the work of several
   campaigns due on one node goes in one dispatch.
 * Work is a process on the node. A campaign's process runs at a pid derived
   from the campaign, the node and the attempt: the first 8 bytes, big-endian,
   of SHA-256 of `dusk-pid-v1` followed by `<campaign id>/<device id>/<installation id>/<attempt>`;
   a pid below 65536 or equal to the shell's default pid is replaced by hashing
-  again with `/1`, `/2` and so on appended. Every resend of an attempt, and
-  every leader, sends the same pid. dawn looks for the pid in the node's
+  again with `/1`, `/2` and so on appended. Every resend of an attempt, from
+  whichever instance owns the node's slice, sends the same pid. dawn looks for the pid in the node's
   process table first: a process already there - running, or ended and not yet
   reaped - means the work was delivered before, and dawn reports `duplicate`
   and runs nothing. A node that restarted in between has an empty process table
