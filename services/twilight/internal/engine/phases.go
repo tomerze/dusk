@@ -7,6 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/twmb/franz-go/pkg/kgo"
 
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
@@ -18,10 +19,23 @@ var gateVerdicts = promauto.NewCounterVec(prometheus.CounterOpts{
 }, []string{"verdict"})
 
 func (engine *Engine) runGates(operation context.Context, _ int64) {
+	client, failure := kgo.NewClient(engine.KafkaOptions...)
+	if failure != nil {
+		engine.Logger.Error("kafka client for the gates", "error", failure)
+		return
+	}
+	defer client.Close()
+	barrier := newResultsBarrier(engine, client)
 	interval := time.Duration(engine.Config.Engine.GateIntervalSeconds) * time.Second
 	for sleep(operation, interval) {
+		checking, cancel := context.WithTimeout(operation, 15*time.Second)
+		opening, failure := barrier.passed(checking)
+		cancel()
+		if failure != nil && operation.Err() == nil {
+			engine.Logger.Warn("whether the process results produced before the gates started are applied was not read; no phase opens until it is", "error", failure)
+		}
 		for _, target := range engine.registry.targets() {
-			if failure := engine.gate(operation, target.Campaign); failure != nil && operation.Err() == nil {
+			if failure := engine.gate(operation, target.Campaign, opening); failure != nil && operation.Err() == nil {
 				engine.Logger.Warn("gate evaluation failed", "campaign_id", target.Campaign.ID, "error", failure)
 			}
 		}
@@ -77,7 +91,7 @@ func gateAlert(kind, message string, target *campaign.Campaign, report GateRepor
 	return raised
 }
 
-func (engine *Engine) gate(operation context.Context, target *campaign.Campaign) error {
+func (engine *Engine) gate(operation context.Context, target *campaign.Campaign, opening bool) error {
 	now := time.Now()
 	if target.Policy.Deadline != nil && !now.Before(*target.Policy.Deadline) {
 		engine.transition(operation, target, campaign.TransitionRequest{Transition: campaign.TransitionComplete, Actor: "twilight", Reason: "the campaign reached its deadline", Now: now})
@@ -90,6 +104,9 @@ func (engine *Engine) gate(operation context.Context, target *campaign.Campaign)
 	report, failure := engine.Report(operation, target)
 	if failure != nil {
 		return failure
+	}
+	if report.Verdict == VerdictPass && !opening {
+		report.Verdict, report.Reason = VerdictHold, "waiting for the process results produced before the gates started to be applied"
 	}
 	gateVerdicts.WithLabelValues(report.Verdict).Inc()
 	existing := engine.registry.get(target.ID)

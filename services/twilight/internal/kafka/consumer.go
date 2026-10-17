@@ -66,11 +66,7 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 				backoff = time.Second
 				applied, stopped := applyPartitions(operation, name, logger, fetches, handle)
 				if len(applied) > 0 {
-					committing, cancel := context.WithTimeout(context.WithoutCancel(operation), 10*time.Second)
-					if failure := client.CommitRecords(committing, applied...); failure != nil {
-						logger.Warn("consumer offsets were not committed; records may be applied again", "consumer", name, "error", failure)
-					}
-					cancel()
+					commitApplied(operation, name, logger, client.CommitRecords, applied)
 				}
 				rewind(client, stopped)
 				client.AllowRebalance()
@@ -84,6 +80,31 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 		case <-time.After(time.Duration(rand.Int64N(int64(backoff))) + 1):
 		}
 		backoff = min(2*backoff, time.Minute)
+	}
+}
+
+const commitAttempts = 4
+
+func commitApplied(operation context.Context, name string, logger *slog.Logger, commit func(context.Context, ...*kgo.Record) error, applied []*kgo.Record) {
+	backoff := 500 * time.Millisecond
+	for attempt := 1; ; attempt++ {
+		committing, cancel := context.WithTimeout(context.WithoutCancel(operation), 10*time.Second)
+		failure := commit(committing, applied...)
+		cancel()
+		if failure == nil {
+			return
+		}
+		if attempt == commitAttempts || operation.Err() != nil {
+			logger.Error("consumer offsets were not committed; records may be applied again", "consumer", name, "attempts", attempt, "error", failure)
+			return
+		}
+		delay := time.Duration(rand.Int64N(int64(backoff))) + 1
+		logger.Warn("consumer offsets were not committed; committing them again", "consumer", name, "attempt", attempt, "retry_in_seconds", delay.Seconds(), "error", failure)
+		select {
+		case <-operation.Done():
+		case <-time.After(delay):
+		}
+		backoff *= 2
 	}
 }
 

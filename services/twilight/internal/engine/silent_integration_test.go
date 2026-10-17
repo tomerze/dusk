@@ -46,7 +46,7 @@ func TestACanaryWhoseNodesWentSilentFailsItsGateBeforeAnyOwnerMarksThem(test *te
 	if failure != nil || overall.Eligible != 3 || overall.Silent != 2 {
 		test.Fatalf("the tallies count %+v (%v); two of three nodes left past their silent window and must count as silent before anyone marks them", overall, failure)
 	}
-	if failure := engine.gate(operation, started); failure != nil {
+	if failure := engine.gate(operation, started, true); failure != nil {
 		test.Fatal(failure)
 	}
 	after, failure := store.Get(operation, target.ID)

@@ -398,3 +398,31 @@ func TestARewindMovesAStoppedPartitionBackWithoutPausingIt(test *testing.T) {
 		test.Fatalf("a rewind paused %v; a slice taken back before it must go on fetching", paused)
 	}
 }
+
+func TestAppliedRecordsAreCommittedAgainAfterAFailedCommit(test *testing.T) {
+	applied := []*kgo.Record{{Topic: "dusk.process-results", Partition: 2, Offset: 7}}
+	calls := 0
+	commit := func(_ context.Context, records ...*kgo.Record) error {
+		calls++
+		if len(records) != 1 || records[0] != applied[0] {
+			test.Fatalf("committed %v, want the applied record", records)
+		}
+		if calls < 3 {
+			return errors.New("the coordinator is moving")
+		}
+		return nil
+	}
+	commitApplied(context.Background(), "test", slog.New(slog.NewJSONHandler(io.Discard, nil)), commit, applied)
+	if calls != 3 {
+		test.Fatalf("committed %d times, want twice more after the first failure", calls)
+	}
+	calls = 0
+	failing := func(context.Context, ...*kgo.Record) error {
+		calls++
+		return errors.New("the coordinator is gone")
+	}
+	commitApplied(context.Background(), "test", slog.New(slog.NewJSONHandler(io.Discard, nil)), failing, applied)
+	if calls != commitAttempts {
+		test.Fatalf("committed %d times against a coordinator that never answers, want %d", calls, commitAttempts)
+	}
+}
