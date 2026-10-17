@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -64,6 +66,7 @@ type fakeDawn struct {
 type dispatchRecord struct {
 	node dawn.NodeRef
 	work []dawn.Work
+	at   time.Time
 }
 
 func (fake *fakeDawn) intended(pid campaign.Pid, node dawn.NodeRef, actionKind string) bool {
@@ -142,7 +145,7 @@ func (fake *fakeDawn) handler() http.Handler {
 			accepted = append(accepted, work.Pid)
 		}
 		fake.mutex.Lock()
-		fake.dispatches = append(fake.dispatches, dispatchRecord{node: body.Node, work: body.Work})
+		fake.dispatches = append(fake.dispatches, dispatchRecord{node: body.Node, work: body.Work, at: time.Now()})
 		fake.mutex.Unlock()
 		writer.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(writer).Encode(map[string]any{"accepted": accepted})
@@ -871,7 +874,7 @@ func TestTheLeaderDispatchesNothingWhileTheResultsTopicIsPartitionedUnlikeTheInv
 	}
 }
 
-func (current *harness) startInstance(instance string) *engine.Engine {
+func (current *harness) startInstance(instance string) (*engine.Engine, func()) {
 	current.test.Helper()
 	pool, failure := database.Open(context.Background(), current.settings.Database.URL+"&application_name="+instance, 8)
 	if failure != nil {
@@ -904,15 +907,16 @@ func (current *harness) startInstance(instance string) *engine.Engine {
 		defer close(stopped)
 		started.Run(operation)
 	}()
-	current.test.Cleanup(func() {
+	stop := func() {
 		cancel()
 		select {
 		case <-stopped:
 		case <-time.After(30 * time.Second):
 			current.test.Errorf("instance %s did not stop within 30 s", instance)
 		}
-	})
-	return started
+	}
+	current.test.Cleanup(stop)
+	return started, stop
 }
 
 func TestTwoInstancesSplitTheSlicesAndEachRunsItsOwnNodes(test *testing.T) {
@@ -936,7 +940,7 @@ func TestTwoInstancesSplitTheSlicesAndEachRunsItsOwnNodes(test *testing.T) {
 		create trigger record_slice_writes after insert or update on campaign_nodes for each row execute function record_slice_write()`); failure != nil {
 		test.Fatal(failure)
 	}
-	first := current.startInstance("twilight-first")
+	first, _ := current.startInstance("twilight-first")
 	current.startInstance("twilight-second")
 	current.eventually("both instances own slices", 2*time.Minute, func() (bool, string) {
 		var owners int
@@ -1092,5 +1096,133 @@ func TestAnOwnerFencedWithNothingInFlightTakesItsSliceBackAndDispatches(test *te
 	}
 	if owner != current.settings.Instance || epoch <= elsewhere.Epoch {
 		test.Fatalf("the slice is at epoch %d owned by %s; the fenced owner should have raised it past %d", epoch, owner, elsewhere.Epoch)
+	}
+}
+
+func (current *harness) dispatchTimes(identifier uuid.UUID) []time.Time {
+	current.fake.mutex.Lock()
+	defer current.fake.mutex.Unlock()
+	var times []time.Time
+	for _, record := range current.fake.dispatches {
+		for _, work := range record.work {
+			if work.CampaignID != nil && *work.CampaignID == identifier.String() {
+				times = append(times, record.at)
+			}
+		}
+	}
+	slices.SortFunc(times, func(left, right time.Time) int { return left.Compare(right) })
+	return times
+}
+
+func (current *harness) onlineTargets(first, count int) []node {
+	var targets []node
+	for index := range count {
+		target := identity(first + index)
+		copied := target
+		current.fake.nodes[target.device] = &copied
+		current.enroll(target)
+		targets = append(targets, target)
+	}
+	current.census(targets...)
+	return targets
+}
+
+func TestInstancesShareOneCampaignRateAcrossAStopAndAJoin(test *testing.T) {
+	current := newHarness(test)
+	targets := current.onlineTargets(200, 30)
+	first, _ := current.startInstance("twilight-first")
+	_, stopSecond := current.startInstance("twilight-second")
+	current.startInstance("twilight-third")
+	current.eventually("three instances own slices and the facts reach inventory", 2*time.Minute, func() (bool, string) {
+		var owners, known int
+		_ = current.pool.QueryRow(context.Background(), `select count(distinct owner) from node_partition_leases`).Scan(&owners)
+		_ = current.pool.QueryRow(context.Background(), `select count(*) from nodes where country = 'US'`).Scan(&known)
+		return owners == 3 && known == len(targets), fmt.Sprintf("%d owners, %d of %d nodes known", owners, known, len(targets))
+	})
+	const rate, burst = 3.0, 2
+	script := campaign.Definition{
+		Name:     "metered",
+		Selector: `country == "US"`,
+		Action:   campaign.Action{Kind: campaign.KindRunScript, Script: "ps"},
+		Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: rate, Burst: burst}, Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 30}},
+			NodeTimeoutSeconds: 30, Gates: campaign.Gates{MinSample: 1}},
+	}
+	service := first.Service()
+	metered, failure := service.CreateCampaign(context.Background(), script, "operator@example.org")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	start := time.Now()
+	if _, failure := service.StartCampaign(context.Background(), metered.ID, "operator@example.org"); failure != nil {
+		test.Fatal(failure)
+	}
+	current.eventually("a third of the nodes are dispatched", time.Minute, func() (bool, string) {
+		dispatched := len(current.dispatchTimes(metered.ID))
+		return dispatched >= len(targets)/3, fmt.Sprintf("%d dispatched", dispatched)
+	})
+	stopSecond()
+	current.startInstance("twilight-fourth")
+	current.eventually("every node's process succeeds", 3*time.Minute, func() (bool, string) {
+		counts := current.rows(metered.ID)
+		return counts[campaign.StateSucceeded] == len(targets), fmt.Sprint(counts)
+	})
+	times := current.dispatchTimes(metered.ID)
+	if len(times) != len(targets) {
+		test.Fatalf("%d processes for %d nodes", len(times), len(targets))
+	}
+	if failure := testsupport.WithinBudget(times, start, rate, burst, 4*int(math.Ceil(rate*0.2))); failure != nil {
+		test.Fatal(failure)
+	}
+	var owners []string
+	rows, failure := current.pool.Query(context.Background(), `select distinct owner from node_partition_leases order by owner`)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var owner string
+		_ = rows.Scan(&owner)
+		owners = append(owners, owner)
+	}
+	if slices.Contains(owners, "twilight-second") || !slices.Contains(owners, "twilight-fourth") {
+		test.Fatalf("the slices are owned by %v after the second instance stopped and the fourth joined", owners)
+	}
+}
+
+func TestThreeInstancesDispatchACampaignSlowerThanOneProcessASecond(test *testing.T) {
+	current := newHarness(test)
+	targets := current.onlineTargets(240, 3)
+	first, _ := current.startInstance("twilight-first")
+	current.startInstance("twilight-second")
+	current.startInstance("twilight-third")
+	current.eventually("three instances own slices and the facts reach inventory", 2*time.Minute, func() (bool, string) {
+		var owners, known int
+		_ = current.pool.QueryRow(context.Background(), `select count(distinct owner) from node_partition_leases`).Scan(&owners)
+		_ = current.pool.QueryRow(context.Background(), `select count(*) from nodes where country = 'US'`).Scan(&known)
+		return owners == 3 && known == len(targets), fmt.Sprintf("%d owners, %d of %d nodes known", owners, known, len(targets))
+	})
+	const rate, burst = 0.5, 1
+	script := campaign.Definition{
+		Name:     "slow",
+		Selector: `country == "US"`,
+		Action:   campaign.Action{Kind: campaign.KindRunScript, Script: "ps"},
+		Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: rate, Burst: burst}, Phases: []campaign.Phase{{Name: "all", Percent: 100, BakeSeconds: 30}},
+			NodeTimeoutSeconds: 30, Gates: campaign.Gates{MinSample: 1}},
+	}
+	service := first.Service()
+	slow, failure := service.CreateCampaign(context.Background(), script, "operator@example.org")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	start := time.Now()
+	if _, failure := service.StartCampaign(context.Background(), slow.ID, "operator@example.org"); failure != nil {
+		test.Fatal(failure)
+	}
+	current.eventually("every node's process succeeds", 2*time.Minute, func() (bool, string) {
+		counts := current.rows(slow.ID)
+		return counts[campaign.StateSucceeded] == len(targets), fmt.Sprint(counts)
+	})
+	if failure := testsupport.WithinBudget(current.dispatchTimes(slow.ID), start, rate, burst, 3*int(math.Ceil(rate*0.2))); failure != nil {
+		test.Fatal(failure)
 	}
 }

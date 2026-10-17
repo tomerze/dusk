@@ -173,15 +173,6 @@ func (current *ownership) own(lease campaign.Lease) {
 	current.engine.presence.requestReconcile(lease.Partition)
 }
 
-func (current *ownership) share() float64 {
-	current.mutex.Lock()
-	defer current.mutex.Unlock()
-	if current.partitions == 0 {
-		return 0
-	}
-	return float64(len(current.slices)) / float64(current.partitions)
-}
-
 func (current *ownership) drop(partition int32, drain bool) *slice {
 	current.mutex.Lock()
 	owned := current.slices[partition]

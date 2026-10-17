@@ -33,8 +33,10 @@ func TestReapsTakeTokensFromTheirOwnBucket(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: settings}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	engine.budgets = newBudgets(engine)
 	ownEverything(engine)
-	now := time.Now().Add(time.Hour)
+	now := time.Now()
+	engine.budgets.grant(campaign.ReapsBudget, 2, now)
 	keys := []NodeKey{{DeviceID: "a", InstallationID: "1"}, {DeviceID: "b", InstallationID: "2"}, {DeviceID: "c", InstallationID: "3"}}
 	for _, key := range keys {
 		engine.dispatcher.offerReap(key)
@@ -46,16 +48,28 @@ func TestReapsTakeTokensFromTheirOwnBucket(test *testing.T) {
 		}
 	}
 	chosen, wait := engine.dispatcher.next(now)
-	if chosen.found || wait < 400*time.Millisecond || wait > time.Second {
-		test.Fatalf("a third reap within the second went out (%+v) or waits %s", chosen, wait)
+	if chosen.found || wait != budgetLeaseInterval {
+		test.Fatalf("a third reap went out on two leased tokens (%+v), or it waits %s instead of the next lease", chosen, wait)
 	}
-	chosen, _ = engine.dispatcher.next(now.Add(time.Second))
+	if queued := engine.dispatcher.reaps.size(); queued != 1 {
+		test.Fatalf("%d reaps wait for a token, want the third", queued)
+	}
+	engine.budgets.grant(campaign.ReapsBudget, 1, now)
+	chosen, _ = engine.dispatcher.next(now)
 	if !chosen.found || !chosen.reap || chosen.key != keys[2] {
 		test.Fatalf("the third reap after its token came: %+v", chosen)
 	}
+	engine.budgets.grant(campaign.ReapsBudget, 1, now)
 	engine.dispatcher.offerReap(keys[2])
-	if chosen, _ := engine.dispatcher.next(now.Add(2 * time.Second)); chosen.found {
+	if chosen, _ := engine.dispatcher.next(now); chosen.found {
 		test.Fatalf("a reap went to a node with a dispatch in flight: %+v", chosen)
+	}
+	if !engine.budgets.take(campaign.ReapsBudget, now) {
+		test.Fatal("a reap that did not go out spent its token")
+	}
+	engine.budgets.grant(campaign.ReapsBudget, 1, now)
+	if engine.budgets.take(campaign.ReapsBudget, now.Add(budgetTokenLifetime)) {
+		test.Fatal("a leased token outlived its lifetime")
 	}
 }
 
@@ -63,26 +77,28 @@ func TestANodeDueInSeveralCampaignsGoesOutInOnePick(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: config.Default()}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	engine.budgets = newBudgets(engine)
 	ownEverything(engine)
 	start := time.Now()
 	identifiers := []uuid.UUID{uuid.MustParse("0192f3a4-0000-7000-8000-000000000001"), uuid.MustParse("0192f3a4-0000-7000-8000-000000000002"), uuid.MustParse("0192f3a4-0000-7000-8000-000000000003")}
 	for _, identifier := range identifiers {
 		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusRunning, Policy: campaign.Policy{Rate: campaign.Rate{PerSecond: 1, Burst: 5}}},
-			bucket: NewTokenBucket(1, 5, start), counters: map[counterKey]int64{}}
+			counters: map[counterKey]int64{}}
+		engine.budgets.grant(identifier, 5, start)
 	}
 	shared, other := NodeKey{DeviceID: "a", InstallationID: "1"}, NodeKey{DeviceID: "b", InstallationID: "2"}
 	for _, identifier := range identifiers {
 		engine.dispatcher.offer(identifier, shared)
 	}
 	engine.dispatcher.offer(identifiers[2], other)
-	now := start.Add(time.Hour)
+	now := start
 	chosen, _ := engine.dispatcher.next(now)
 	slices.SortFunc(chosen.campaigns, func(left, right uuid.UUID) int { return strings.Compare(left.String(), right.String()) })
 	if !chosen.found || chosen.key != shared || !slices.Equal(chosen.campaigns, identifiers) || !engine.dispatcher.inFlightFor(shared) {
 		test.Fatalf("one node due in three campaigns: %+v", chosen)
 	}
 	for _, identifier := range identifiers {
-		if tokens := engine.registry.runtimes[identifier].bucket.tokens; tokens != 4 {
+		if tokens := engine.budgets.held[identifier].tokens; tokens != 4 {
 			test.Fatalf("campaign %s holds %v tokens after one process; each campaign gives one", identifier, tokens)
 		}
 	}
@@ -99,11 +115,12 @@ func TestQueuesOfCampaignsNoLongerTrackedAreDropped(test *testing.T) {
 	engine := &Engine{Dependencies: Dependencies{Config: config.Default()}, leadership: &Leadership{}, evaluations: newEvaluationQueue(10)}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	engine.budgets = newBudgets(engine)
 	ownEverything(engine)
 	finished, running := uuid.MustParse("0192f3a4-0000-7000-8000-00000000000a"), uuid.MustParse("0192f3a4-0000-7000-8000-00000000000b")
 	start := time.Now()
 	for _, identifier := range []uuid.UUID{finished, running} {
-		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusPaused}, bucket: NewTokenBucket(1, 1, start), counters: map[counterKey]int64{}}
+		engine.registry.runtimes[identifier] = &runtime{campaign: &campaign.Campaign{ID: identifier, Status: campaign.StatusPaused}, counters: map[counterKey]int64{}}
 	}
 	keys := []NodeKey{{DeviceID: "a", InstallationID: "1"}, {DeviceID: "b", InstallationID: "2"}}
 	for _, key := range keys {

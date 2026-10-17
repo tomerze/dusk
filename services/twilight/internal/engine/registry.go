@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"math"
 	"slices"
 	"sort"
 	"sync"
@@ -23,7 +22,6 @@ type counterKey struct {
 type runtime struct {
 	campaign       *campaign.Campaign
 	selector       *selector.Selector
-	bucket         *TokenBucket
 	counters       map[counterKey]int64
 	dirty          bool
 	lastHold       string
@@ -90,7 +88,6 @@ func (current *registry) refresh(operation context.Context) error {
 	if failure != nil {
 		return failure
 	}
-	now := time.Now()
 	seen := map[uuid.UUID]bool{}
 	var sweeps []uuid.UUID
 	for _, loaded := range active {
@@ -108,7 +105,7 @@ func (current *registry) refresh(operation context.Context) error {
 			if failure != nil {
 				return failure
 			}
-			created := &runtime{campaign: loaded, selector: parsed, bucket: NewTokenBucket(loaded.Policy.Rate.PerSecond, loaded.Policy.Rate.Burst, now), counters: counters, dirty: true}
+			created := &runtime{campaign: loaded, selector: parsed, counters: counters, dirty: true}
 			current.mutex.Lock()
 			current.runtimes[loaded.ID] = created
 			current.mutex.Unlock()
@@ -230,14 +227,7 @@ func (current *registry) takeToken(identifier uuid.UUID, now time.Time) bool {
 	if existing == nil || existing.campaign.Status != campaign.StatusRunning {
 		return false
 	}
-	current.budget(existing)
-	return existing.bucket.Take(now)
-}
-
-func (current *registry) budget(existing *runtime) {
-	share := current.engine.ownership.share()
-	rate := existing.campaign.Policy.Rate
-	existing.bucket.Reconfigure(rate.PerSecond*share, max(1, int(math.Ceil(float64(rate.Burst)*share))))
+	return current.engine.budgets.take(identifier, now)
 }
 
 func (current *registry) tokenAvailable(identifier uuid.UUID, now time.Time) (bool, time.Duration) {
@@ -247,16 +237,11 @@ func (current *registry) tokenAvailable(identifier uuid.UUID, now time.Time) (bo
 	if existing == nil || existing.campaign.Status != campaign.StatusRunning {
 		return false, time.Hour
 	}
-	current.budget(existing)
-	return existing.bucket.Available(now), existing.bucket.Wait(now)
+	return current.engine.budgets.available(identifier, now)
 }
 
 func (current *registry) returnTokens(identifier uuid.UUID, count int) {
-	current.mutex.Lock()
-	defer current.mutex.Unlock()
-	if existing := current.runtimes[identifier]; existing != nil {
-		existing.bucket.Return(count)
-	}
+	current.engine.budgets.give(identifier, count)
 }
 
 func (current *registry) runFlush(operation context.Context) {

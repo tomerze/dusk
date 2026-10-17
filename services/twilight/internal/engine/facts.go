@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"slices"
 	"sync"
 	"time"
@@ -68,9 +67,11 @@ func (engine *Engine) needsFacts(node *inventory.Node, session Session, now time
 	return stale && !engine.factsTried.recent(node.Key(), session.NamespaceID, time.Hour, now)
 }
 
+func (engine *Engine) factsDemand() int {
+	return engine.facts.size() + int(engine.factsWaiting.Load())
+}
+
 func (engine *Engine) runFacts(operation context.Context) {
-	bucket := NewTokenBucket(0, 1, time.Now())
-	var bucketMutex sync.Mutex
 	var running sync.WaitGroup
 	defer running.Wait()
 	for range engine.Config.Engine.FactsWorkers {
@@ -88,18 +89,15 @@ func (engine *Engine) runFacts(operation context.Context) {
 					}
 					continue
 				}
-				for {
-					bucketMutex.Lock()
-					factsPerSecond := float64(engine.Config.Engine.FactsPerSecond) * engine.ownership.share()
-					bucket.Reconfigure(factsPerSecond, max(1, int(math.Ceil(factsPerSecond))))
-					taken := bucket.Take(time.Now())
-					wait := bucket.Wait(time.Now())
-					bucketMutex.Unlock()
-					if taken || !sleep(operation, max(wait, 5*time.Millisecond)) {
-						break
-					}
+				engine.factsWaiting.Add(1)
+				taken := engine.budgets.take(campaign.FactsBudget, time.Now())
+				for !taken && sleep(operation, budgetLeaseInterval/2) {
+					taken = engine.budgets.take(campaign.FactsBudget, time.Now())
 				}
-				engine.refreshFacts(operation, keys[0])
+				engine.factsWaiting.Add(-1)
+				if taken {
+					engine.refreshFacts(operation, keys[0])
+				}
 			}
 		}()
 	}

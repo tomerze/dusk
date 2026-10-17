@@ -139,9 +139,10 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 	engine.view.ApplyConnection(kafka.Connection{Envelope: kafka.Envelope{Time: kafka.FormatTime(now)}, Event: "connected", DeviceID: key.DeviceID, InstallationID: key.InstallationID,
 		NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 7, Instance: "nightfall-0", InnerAddress: "nightfall-0.nightfall-inner:8444", ConnectedAt: kafka.FormatTime(now)})
 	for identifier := range names {
+		engine.budgets.grant(identifier, 10, now)
 		engine.dispatcher.offer(identifier, key)
 	}
-	chosen, _ := engine.dispatcher.next(now.Add(time.Hour))
+	chosen, _ := engine.dispatcher.next(now)
 	if !chosen.found || len(chosen.campaigns) != len(definitions) {
 		test.Fatalf("the node due in %d campaigns went out with %+v", len(definitions), chosen)
 	}
@@ -178,7 +179,7 @@ func TestOneDispatchCarriesEveryDueCampaignInBatchOrder(test *testing.T) {
 		test.Fatalf("a script with two files and a 20 s log stream was given %d s", early.TimeoutSeconds)
 	}
 	for identifier := range names {
-		if tokens := engine.registry.get(identifier).bucket.tokens; tokens != 9 {
+		if tokens := engine.budgets.held[identifier].tokens; tokens != 9 {
 			test.Fatalf("%s holds %v tokens after one process", names[identifier], tokens)
 		}
 	}
@@ -234,8 +235,9 @@ func TestADispatchDawnRefusesFailsItsRowAndPausesTheCampaign(test *testing.T) {
 		now := time.Now()
 		engine.view.ApplyConnection(kafka.Connection{Envelope: kafka.Envelope{Time: kafka.FormatTime(now)}, Event: "connected", DeviceID: key.DeviceID, InstallationID: key.InstallationID,
 			NamespaceID: "5d2e9a1c7b3f8e04", Epoch: 7, Instance: "nightfall-0", InnerAddress: "nightfall-0.nightfall-inner:8444", ConnectedAt: kafka.FormatTime(now)})
+		engine.budgets.grant(created.ID, 1, now)
 		engine.dispatcher.offer(created.ID, key)
-		chosen, _ := engine.dispatcher.next(now.Add(time.Hour))
+		chosen, _ := engine.dispatcher.next(now)
 		if !chosen.found {
 			test.Fatalf("%s: nothing went out", scenario.name)
 		}
@@ -292,8 +294,9 @@ func TestDawnIsAskedOnlyForIntendedProcessesPublishedToNightfall(test *testing.T
 		now := time.Now()
 		engine.view.ApplyConnection(kafka.Connection{Envelope: kafka.Envelope{Time: kafka.FormatTime(now)}, Event: "connected", DeviceID: key.DeviceID, InstallationID: key.InstallationID,
 			NamespaceID: "5d2e9a1c7b3f8e05", Epoch: 7, Instance: "nightfall-0", InnerAddress: "nightfall-0.nightfall-inner:8444", ConnectedAt: kafka.FormatTime(now)})
+		engine.budgets.grant(created.ID, 1, now)
 		engine.dispatcher.offer(created.ID, key)
-		chosen, _ := engine.dispatcher.next(now.Add(time.Hour))
+		chosen, _ := engine.dispatcher.next(now)
 		if !chosen.found {
 			test.Fatal("nothing went out")
 		}

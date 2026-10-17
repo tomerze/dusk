@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"errors"
-	"math"
 	"math/rand/v2"
 	"net/http"
 	"sort"
@@ -32,28 +31,42 @@ type batch struct {
 }
 
 type dispatcher struct {
-	engine     *Engine
-	mutex      sync.Mutex
-	ready      map[NodeKey]map[uuid.UUID]bool
-	queues     map[uuid.UUID][]NodeKey
-	inFlight   map[NodeKey]*batch
-	reaps      *keyQueue
-	reapTokens *TokenBucket
-	wake       chan struct{}
-	workers    chan struct{}
+	engine   *Engine
+	mutex    sync.Mutex
+	ready    map[NodeKey]map[uuid.UUID]bool
+	queues   map[uuid.UUID][]NodeKey
+	inFlight map[NodeKey]*batch
+	reaps    *keyQueue
+	wake     chan struct{}
+	workers  chan struct{}
 }
 
 func newDispatcher(engine *Engine) *dispatcher {
-	reapsPerSecond := engine.Config.Engine.ReapsPerSecond
 	return &dispatcher{
-		engine:     engine,
-		ready:      map[NodeKey]map[uuid.UUID]bool{},
-		queues:     map[uuid.UUID][]NodeKey{},
-		inFlight:   map[NodeKey]*batch{},
-		reaps:      newKeyQueue(engine.Config.Engine.EvaluationQueue),
-		reapTokens: NewTokenBucket(float64(reapsPerSecond), reapsPerSecond, time.Now()),
-		wake:       make(chan struct{}, 1),
-		workers:    make(chan struct{}, engine.Config.Engine.DispatchWorkers),
+		engine:   engine,
+		ready:    map[NodeKey]map[uuid.UUID]bool{},
+		queues:   map[uuid.UUID][]NodeKey{},
+		inFlight: map[NodeKey]*batch{},
+		reaps:    newKeyQueue(engine.Config.Engine.EvaluationQueue),
+		wake:     make(chan struct{}, 1),
+		workers:  make(chan struct{}, engine.Config.Engine.DispatchWorkers),
+	}
+}
+
+func (current *dispatcher) queued() map[uuid.UUID]int {
+	current.mutex.Lock()
+	defer current.mutex.Unlock()
+	queued := make(map[uuid.UUID]int, len(current.queues))
+	for identifier, queue := range current.queues {
+		queued[identifier] = len(queue)
+	}
+	return queued
+}
+
+func (current *dispatcher) nudge() {
+	select {
+	case current.wake <- struct{}{}:
+	default:
 	}
 }
 
@@ -234,16 +247,17 @@ func (current *dispatcher) next(now time.Time) (pick, time.Duration) {
 		}
 	}
 	if current.reaps.size() > 0 {
-		reapsPerSecond := float64(current.engine.Config.Engine.ReapsPerSecond) * current.engine.ownership.share()
-		current.reapTokens.Reconfigure(reapsPerSecond, max(1, int(math.Ceil(reapsPerSecond))))
-		if !current.reapTokens.Available(now) {
-			return pick{}, min(wait, max(current.reapTokens.Wait(now), 5*time.Millisecond))
+		if available, until := current.engine.budgets.available(campaign.ReapsBudget, now); !available {
+			return pick{}, min(wait, max(until, 5*time.Millisecond))
 		}
 		for _, key := range current.reaps.take(1) {
 			if _, busy := current.inFlight[key]; busy {
 				continue
 			}
-			current.reapTokens.Take(now)
+			if !current.engine.budgets.take(campaign.ReapsBudget, now) {
+				current.reaps.offer(key)
+				break
+			}
 			current.inFlight[key] = &batch{pids: map[campaign.Pid]bool{}, deadline: now.Add(time.Minute)}
 			return pick{key: key, reap: true, found: true}, 0
 		}

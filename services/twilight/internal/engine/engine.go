@@ -67,22 +67,24 @@ var (
 
 type Engine struct {
 	Dependencies
-	view        *View
-	leadership  *Leadership
-	ownership   *ownership
-	registry    *registry
-	evaluations *evaluationQueue
-	dispatcher  *dispatcher
-	facts       *factsQueue
-	presence    *presenceWriter
-	feed        *Feed
-	sweeps      chan sweepRequest
-	presenceUp  atomic.Bool
-	topicsOK    atomic.Bool
-	partitioned atomic.Bool
-	random      *rand.Rand
-	randomMutex sync.Mutex
-	factsTried  *attemptLog
+	view         *View
+	leadership   *Leadership
+	ownership    *ownership
+	registry     *registry
+	evaluations  *evaluationQueue
+	dispatcher   *dispatcher
+	budgets      *budgets
+	facts        *factsQueue
+	factsWaiting atomic.Int32
+	presence     *presenceWriter
+	feed         *Feed
+	sweeps       chan sweepRequest
+	presenceUp   atomic.Bool
+	topicsOK     atomic.Bool
+	partitioned  atomic.Bool
+	random       *rand.Rand
+	randomMutex  sync.Mutex
+	factsTried   *attemptLog
 }
 
 func New(dependencies Dependencies) *Engine {
@@ -97,6 +99,7 @@ func New(dependencies Dependencies) *Engine {
 	}
 	engine.registry = newRegistry(engine)
 	engine.dispatcher = newDispatcher(engine)
+	engine.budgets = newBudgets(engine)
 	engine.ownership = newOwnership(engine)
 	engine.presence = newPresenceWriter(engine)
 	engine.feed = newFeed(engine)
@@ -271,6 +274,7 @@ func (engine *Engine) runSlices(operation context.Context) {
 		if assigned {
 			start(writing, &writers, "evaluations", engine.runEvaluations)
 			start(writing, &writers, "dispatcher", engine.dispatcher.run)
+			start(writing, &writers, "budgets", engine.budgets.run)
 			start(writing, &writers, "facts", engine.runFacts)
 			start(writing, &writers, "deadlines", engine.runDeadlines)
 			start(writing, &writers, "sweeps", engine.runSweeps)
