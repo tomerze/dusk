@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -54,8 +55,15 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 			logger.Error("kafka consumer could not be created", "consumer", name, "error", failure)
 		} else {
 			logger.Info("consumer started", "consumer", name, "group", group, "topic", topic)
+			var uncommitted []*kgo.Record
+			commitBackoff, commitDelay := commitRetryFirst, time.Duration(0)
 			for operation.Err() == nil {
-				fetches := client.PollFetches(operation)
+				polling, stop := operation, func() {}
+				if len(uncommitted) > 0 {
+					polling, stop = context.WithTimeout(operation, commitDelay)
+				}
+				fetches := client.PollFetches(polling)
+				stop()
 				if operation.Err() != nil {
 					break
 				}
@@ -65,15 +73,32 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 				}
 				backoff = time.Second
 				applied, stopped := applyPartitions(operation, name, logger, fetches, handle)
-				if len(applied) > 0 {
+				pending, moved := stillUncommitted(append(uncommitted, applied...), client.CommittedOffsets())
+				if len(moved) > 0 {
+					logger.Warn("the offsets of records applied here were not committed before their partitions moved; their next owner applies them again",
+						"consumer", name, "topic", topic, "partitions", moved)
+				}
+				uncommitted = nil
+				if len(pending) > 0 {
 					committing, cancel := context.WithTimeout(context.WithoutCancel(operation), 10*time.Second)
-					if failure := client.CommitRecords(committing, applied...); failure != nil {
-						logger.Warn("consumer offsets were not committed; records may be applied again", "consumer", name, "error", failure)
-					}
+					failure := client.CommitRecords(committing, pending...)
 					cancel()
+					if failure != nil {
+						uncommitted = pending
+						commitDelay = time.Duration(rand.Int64N(int64(commitBackoff))) + 1
+						commitBackoff = min(2*commitBackoff, commitRetryLimit)
+						logger.Warn("consumer offsets were not committed; they are committed again with the next records or after a wait", "consumer", name,
+							"partitions", len(pending), "retry_in_seconds", commitDelay.Seconds(), "error", failure)
+					} else {
+						commitBackoff = commitRetryFirst
+					}
 				}
 				rewind(client, stopped)
 				client.AllowRebalance()
+			}
+			if len(uncommitted) > 0 {
+				logger.Warn("the consumer stopped before the offsets of records it applied were committed; their partitions' next owner applies them again",
+					"consumer", name, "topic", topic, "partitions", len(uncommitted))
 			}
 			client.CloseAllowingRebalance()
 			logger.Info("consumer stopped", "consumer", name, "group", group)
@@ -85,6 +110,33 @@ func ConsumeGroup(operation context.Context, options []kgo.Opt, name, group, top
 		}
 		backoff = min(2*backoff, time.Minute)
 	}
+}
+
+const (
+	commitRetryFirst = 500 * time.Millisecond
+	commitRetryLimit = 30 * time.Second
+)
+
+func stillUncommitted(records []*kgo.Record, committed map[string]map[int32]kgo.EpochOffset) ([]*kgo.Record, []int32) {
+	latest := map[int32]*kgo.Record{}
+	for _, record := range records {
+		if previous := latest[record.Partition]; previous == nil || previous.Offset < record.Offset {
+			latest[record.Partition] = record
+		}
+	}
+	var kept []*kgo.Record
+	var moved []int32
+	for partition, record := range latest {
+		offset, assigned := committed[record.Topic][partition]
+		switch {
+		case !assigned:
+			moved = append(moved, partition)
+		case offset.Offset <= record.Offset:
+			kept = append(kept, record)
+		}
+	}
+	slices.Sort(moved)
+	return kept, moved
 }
 
 func rewind(client *kgo.Client, stopped []*kgo.Record) {

@@ -11,9 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kgo"
+
 	"dusk/services/twilight/internal/alerts"
 	"dusk/services/twilight/internal/campaign"
 	"dusk/services/twilight/internal/config"
+	"dusk/services/twilight/internal/kafka"
 	"dusk/services/twilight/internal/testsupport"
 )
 
@@ -130,7 +135,7 @@ func TestGatesKeepWatchingAPausedCampaign(test *testing.T) {
 			test.Fatal(failure)
 		}
 		for range 2 {
-			if failure := engine.gate(operation, paused); failure != nil {
+			if failure := engine.gate(operation, paused, true); failure != nil {
 				test.Fatal(failure)
 			}
 		}
@@ -202,7 +207,7 @@ func TestAGateThatPausesOrFailsACampaignRaisesAnAlert(test *testing.T) {
 				test.Fatal(failure)
 			}
 		}
-		if failure := engine.gate(operation, started); failure != nil {
+		if failure := engine.gate(operation, started, true); failure != nil {
 			test.Fatal(failure)
 		}
 		kind := alerts.KindCampaignPausedByGate
@@ -256,7 +261,7 @@ func TestGatesOpenTheNextPhaseOverAnEmptyOneAndWaitForEveryNodeOfASmallOne(test 
 	if target, failure = store.Transition(operation, target.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: created}); failure != nil {
 		test.Fatal(failure)
 	}
-	if failure := engine.gate(operation, target); failure != nil {
+	if failure := engine.gate(operation, target, true); failure != nil {
 		test.Fatal(failure)
 	}
 	if target, failure = store.Get(operation, target.ID); failure != nil || target.CurrentPhase != 0 {
@@ -268,7 +273,7 @@ func TestGatesOpenTheNextPhaseOverAnEmptyOneAndWaitForEveryNodeOfASmallOne(test 
 	if target, failure = store.Get(operation, target.ID); failure != nil {
 		test.Fatal(failure)
 	}
-	if failure := engine.gate(operation, target); failure != nil {
+	if failure := engine.gate(operation, target, true); failure != nil {
 		test.Fatal(failure)
 	}
 	if target, failure = store.Get(operation, target.ID); failure != nil || target.CurrentPhase != 1 {
@@ -289,5 +294,97 @@ func TestGatesOpenTheNextPhaseOverAnEmptyOneAndWaitForEveryNodeOfASmallOne(test 
 	}
 	if report, failure = engine.Report(operation, target); failure != nil || report.Verdict != VerdictPass {
 		test.Fatalf("a one-node phase under min_sample 5 with its node's result: %+v %v", report, failure)
+	}
+}
+
+func TestNoPhaseOpensBeforeTheResultsProducedEarlierAreApplied(test *testing.T) {
+	pool, _ := testsupport.Database(test)
+	brokers := testsupport.Brokers(test)
+	operation := context.Background()
+	store := campaign.NewStore(pool)
+	suffix := strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	settings := config.Default()
+	settings.Kafka.Brokers = []string{brokers}
+	settings.Kafka.AllowPlaintext = true
+	settings.Kafka.Topics.ProcessResults = "dusk.process-results." + suffix
+	settings.Kafka.ResultsGroup = "twilight-results-" + suffix
+	options, failure := kafka.Options(settings.Kafka, "test")
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	client, failure := kgo.NewClient(options...)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	defer client.Close()
+	admin := kadm.NewClient(client)
+	if _, failure := admin.CreateTopic(operation, testsupport.NodePartitions, 1, map[string]*string{"cleanup.policy": new("delete")}, settings.Kafka.Topics.ProcessResults); failure != nil {
+		test.Fatal(failure)
+	}
+	for index := range 6 {
+		key := fmt.Sprintf("%032x/%032x", index, index)
+		if failure := client.ProduceSync(operation, &kgo.Record{Topic: settings.Kafka.Topics.ProcessResults, Key: []byte(key), Value: []byte(`{}`)}).FirstErr(); failure != nil {
+			test.Fatal(failure)
+		}
+	}
+	engine := New(Dependencies{Config: settings, Pool: pool, Campaigns: store, KafkaOptions: options, Alerts: testsupport.AlertStore(test, pool), Logger: testsupport.Logger()})
+	created := time.Now().Add(-2 * time.Hour)
+	policy := campaign.Policy{Phases: []campaign.Phase{{Name: "half", Percent: 50, BakeSeconds: 60}, {Name: "all", Percent: 100, BakeSeconds: 60}},
+		NodeTimeoutSeconds: 60, Gates: campaign.Gates{MinSample: 1, MaxFailureRate: 0.1, MaxSilentRate: 1}}
+	target, failure := store.Create(operation, campaign.Definition{Name: "held back", Selector: "has(device_id)", Action: campaign.Action{Kind: campaign.KindRunScript, Script: "ps"}, Policy: policy}, "operator@example.org", created)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	if target, failure = store.Transition(operation, target.ID, campaign.TransitionRequest{Transition: campaign.TransitionStart, Actor: "operator@example.org", Now: created}); failure != nil {
+		test.Fatal(failure)
+	}
+	if _, failure := pool.Exec(operation, `insert into campaign_nodes (campaign_id, device_id, installation_id, phase, state, attempt, last_status, dispatched_at, finished_at, revision)
+		values ($1, $2, $3, 0, 'succeeded', 1, 'succeeded', $4, $4, 1)`, target.ID, strings.Repeat("a", 32), strings.Repeat("b", 32), created); failure != nil {
+		test.Fatal(failure)
+	}
+	if failure := engine.registry.load(operation); failure != nil {
+		test.Fatal(failure)
+	}
+	barrier := newResultsBarrier(engine, client)
+	opening, failure := barrier.passed(operation)
+	if failure != nil || opening {
+		test.Fatalf("the barrier passed before any result was committed: %v %v", opening, failure)
+	}
+	if failure := engine.gate(operation, target, opening); failure != nil {
+		test.Fatal(failure)
+	}
+	if target, failure = store.Get(operation, target.ID); failure != nil || target.CurrentPhase != 0 {
+		test.Fatalf("a phase opened before the results produced earlier were applied: %+v %v", target, failure)
+	}
+	events, failure := store.Events(operation, target.ID, 0, 100)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	holding := false
+	for _, event := range events {
+		holding = holding || (event.Kind == "gate_holding" && strings.Contains(string(event.Detail), "waiting for the process results produced before the gates started to be applied"))
+	}
+	if !holding {
+		test.Fatalf("the hold left no event: %+v", events)
+	}
+	listed, failure := admin.ListEndOffsets(operation, settings.Kafka.Topics.ProcessResults)
+	if failure != nil {
+		test.Fatal(failure)
+	}
+	offsets := kadm.Offsets{}
+	listed.Each(func(offset kadm.ListedOffset) {
+		offsets.Add(kadm.Offset{Topic: offset.Topic, Partition: offset.Partition, At: offset.Offset, LeaderEpoch: -1})
+	})
+	if _, failure := admin.CommitOffsets(operation, settings.Kafka.ResultsGroup, offsets); failure != nil {
+		test.Fatal(failure)
+	}
+	if opening, failure = barrier.passed(operation); failure != nil || !opening {
+		test.Fatalf("the barrier did not pass once every result was committed: %v %v", opening, failure)
+	}
+	if failure := engine.gate(operation, target, opening); failure != nil {
+		test.Fatal(failure)
+	}
+	if target, failure = store.Get(operation, target.ID); failure != nil || target.CurrentPhase != 1 {
+		test.Fatalf("the phase did not open once the results were applied: %+v %v", target, failure)
 	}
 }

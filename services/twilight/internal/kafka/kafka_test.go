@@ -398,3 +398,27 @@ func TestARewindMovesAStoppedPartitionBackWithoutPausingIt(test *testing.T) {
 		test.Fatalf("a rewind paused %v; a slice taken back before it must go on fetching", paused)
 	}
 }
+
+func TestAFailedCommitIsCarriedOnlyWhileItsPartitionStaysAssignedAndBehind(test *testing.T) {
+	record := func(partition int32, offset int64) *kgo.Record {
+		return &kgo.Record{Topic: "dusk.process-results", Partition: partition, Offset: offset}
+	}
+	carried := []*kgo.Record{record(0, 4), record(1, 9), record(2, 3), record(3, 6)}
+	applied := []*kgo.Record{record(0, 7)}
+	committed := map[string]map[int32]kgo.EpochOffset{"dusk.process-results": {
+		0: {Epoch: -1, Offset: 2},
+		1: {Epoch: -1, Offset: 10},
+		3: {Epoch: -1, Offset: 0},
+	}}
+	kept, moved := stillUncommitted(append(carried, applied...), committed)
+	offsets := map[int32]int64{}
+	for _, pending := range kept {
+		offsets[pending.Partition] = pending.Offset
+	}
+	if len(kept) != 2 || offsets[0] != 7 || offsets[3] != 6 {
+		test.Fatalf("kept %v; want partition 0 at its latest applied record, 7, and partition 3 at 6, and not partition 1, committed past 9 since", offsets)
+	}
+	if len(moved) != 1 || moved[0] != 2 {
+		test.Fatalf("moved %v; want partition 2, no longer assigned here", moved)
+	}
+}
