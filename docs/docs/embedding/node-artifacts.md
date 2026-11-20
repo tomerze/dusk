@@ -153,6 +153,13 @@ The script is compiled into the node while it is built: a script that does not
 compile fails the build, and changing the variable rebuilds the node. A script of
 several commands separates them with `;`.
 
+#### DUSK_NODE_CARGO_SUBCOMMAND
+
+What follows `cargo` on the command line that builds the node, `build` by
+default. The `windows-x64-msvc` preset sets it to `xwin build`; a target that
+needs another toolchain or `-Z build-std` sets it the same way, as
+[ESP-IDF](#esp-idf) does.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
