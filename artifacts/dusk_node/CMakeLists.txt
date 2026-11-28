@@ -23,6 +23,8 @@ set(DUSK_NODE_RUSTFLAGS "" CACHE STRING
     "Extra flags for rustc, separated by spaces as in RUSTFLAGS. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_INIT_SCRIPT "" CACHE STRING
     "The shell script the node runs at boot; empty leaves it to cargo: DUSK_NODE_INIT_SCRIPT in the environment, else .cargo/config.toml. See docs/docs/embedding/node-artifacts.md")
+set(DUSK_NODE_TASK_LIMIT "" CACHE STRING
+    "The most tasks the node runs at once; empty leaves it to cargo: DUSK_NODE_TASK_LIMIT in the environment, else 8192. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_CARGO_SUBCOMMAND "build" CACHE STRING
     "The cargo subcommand that builds the node. See docs/docs/embedding/node-artifacts.md")
 
@@ -127,6 +129,14 @@ if(NOT DUSK_NODE_INIT_SCRIPT STREQUAL "")
     endif()
     string(REPLACE ";" "$<SEMICOLON>" DUSK_NODE_INIT_SCRIPT_ESCAPED "${DUSK_NODE_INIT_SCRIPT}")
     set(DUSK_NODE_ENVIRONMENT_ARGUMENTS "DUSK_NODE_INIT_SCRIPT=${DUSK_NODE_INIT_SCRIPT_ESCAPED}")
+endif()
+if(NOT DUSK_NODE_TASK_LIMIT STREQUAL "")
+    if(NOT DUSK_NODE_TASK_LIMIT MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR
+            "DUSK_NODE_TASK_LIMIT is '${DUSK_NODE_TASK_LIMIT}'. It is the most tasks the "
+            "node runs at once: a whole number of at least 1.")
+    endif()
+    list(APPEND DUSK_NODE_ENVIRONMENT_ARGUMENTS "DUSK_NODE_TASK_LIMIT=${DUSK_NODE_TASK_LIMIT}")
 endif()
 
 if(DUSK_NODE_TRIPLE MATCHES "windows-msvc")

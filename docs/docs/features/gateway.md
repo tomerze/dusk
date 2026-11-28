@@ -146,7 +146,7 @@ A failure that happens *before* the stream starts - an unknown descriptor, a mal
 
 **An open stream costs a task, not a thread.** The gateway awaits each value rather than blocking on it, so a command that stays quiet for an hour occupies nothing but memory. Measured on a live node: 3,753 values drained on a single thread, and twelve simultaneous commands still on that one thread.
 
-**The limit you will actually hit is the node's.** A node runs each command in a shell task from a pool of 16 (`pool_size` in `base/sh/src/lib.rs`), so past roughly a dozen simultaneous commands *against one node* it answers `Busy - Too many instances of this task are already running`, which the gateway passes back to you: a `502` from `/v1/sh`, and an `error` event from `/v1/sh/stream`, since by then the response has already begun. This is a per-node limit, so more nodes means more concurrency; more gateways does not.
+**A node runs a limited number of tasks at once: 8,192, unless it was built with another [`DUSK_NODE_TASK_LIMIT`](../embedding/node-artifacts.md#dusk_node_task_limit).** Every session, every process and every script its shell is running is one task. At that limit the node refuses to start another and says so - `the node is at its limit of 8192 tasks` - which the gateway passes back to you: a `502` from `/v1/sh`, and an `error` event from `/v1/sh/stream`, since by then the response has already begun. This is a per-node limit, so more nodes means more concurrency; more gateways does not.
 
 Reading the stream from Python:
 
