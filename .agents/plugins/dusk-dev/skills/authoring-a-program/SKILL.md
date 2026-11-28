@@ -491,8 +491,8 @@ async fn main(&self, signal_receiver: …, ready: Ready) -> anyhow::Result<()> {
                     dusk_core::session(
                         task_id.clone(),
                         self.namespace().clone(),
-                        Box::pin(reader),
-                        Box::pin(writer),
+                        Box::pin(capnp_futures::io::FromFutures(reader)),
+                        Box::pin(capnp_futures::io::FromFutures(writer)),
                     ),
                 ) {
                     Ok(id) => task_id.set(id),

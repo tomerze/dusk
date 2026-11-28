@@ -13,6 +13,7 @@ pub const GIT_REV: &str = env!("GIT_REV");
 
 // Re-export Cap'n Proto crates for all dependent crates
 pub extern crate capnp;
+pub extern crate capnp_futures;
 pub extern crate capnp_rpc;
 
 pub mod prelude;
