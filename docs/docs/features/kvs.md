@@ -169,7 +169,7 @@ keys hold, platform by platform.
 | `dusk.os.process.pid` | `nix`, `std`, `windows` | The process id the operating system gave the node. |
 | `dusk.os.process.executable` | `nix`, `std`, `windows` | The path of the executable the node runs from. |
 | `dusk.os.process.working_directory` | `nix`, `std`, `windows` | The directory the node was started in. |
-| `dusk.os.process.parent_pid` | `nix`; `std` on Unix; `windows` | The process id of the process that started the node - e.g. `1` when init or systemd runs it. |
+| `dusk.os.process.parent_pid` | `nix`; `std` on Unix except ESP-IDF; `windows` | The process id of the process that started the node - e.g. `1` when init or systemd runs it. |
 | `dusk.os.time_zone` | `nix`; `std` except on Windows; `windows` | The system's time zone: its IANA name, e.g. `Europe/Berlin`, or on Windows the Windows time zone name, e.g. `Pacific Standard Time`. |
 | `dusk.os.nix.uname.sysname` | `nix` | The `sysname` field of `uname(2)`, e.g. `Linux`. |
 | `dusk.os.nix.uname.nodename` | `nix` | The `nodename` field of `uname(2)`: the name of the device on the network. |

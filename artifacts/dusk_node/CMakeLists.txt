@@ -159,7 +159,18 @@ elseif(DUSK_NODE_TRIPLE MATCHES "windows")
     set(DUSK_NODE_LIBRARY_PREFIX "lib")
     set(DUSK_NODE_LIBRARY_SUFFIX ".a")
     set(DUSK_NODE_EXECUTABLE_SUFFIX ".exe")
-elseif(DUSK_NODE_TRIPLE MATCHES "espidf|wasm|none|nuttx|vex|vxworks|qnx|trusty|sgx|l4re|solid|hermit|helenos|motor|vita")
+elseif(DUSK_NODE_TRIPLE MATCHES "espidf")
+    set(DUSK_NODE_SYSTEM_LIBRARIES
+        "$<TARGET_NAME_IF_EXISTS:idf::newlib>"
+        "$<TARGET_NAME_IF_EXISTS:idf::esp_libc>"
+        "$<TARGET_NAME_IF_EXISTS:idf::pthread>"
+        "$<TARGET_NAME_IF_EXISTS:idf::lwip>"
+        "$<TARGET_NAME_IF_EXISTS:idf::vfs>"
+        "$<TARGET_NAME_IF_EXISTS:idf::esp_hw_support>")
+    set(DUSK_NODE_LIBRARY_PREFIX "lib")
+    set(DUSK_NODE_LIBRARY_SUFFIX ".a")
+    set(DUSK_NODE_EXECUTABLE_SUFFIX "")
+elseif(DUSK_NODE_TRIPLE MATCHES "wasm|none|nuttx|vex|vxworks|qnx|trusty|sgx|l4re|solid|hermit|helenos|motor|vita")
     set(DUSK_NODE_SYSTEM_LIBRARIES "")
     set(DUSK_NODE_LIBRARY_PREFIX "lib")
     set(DUSK_NODE_LIBRARY_SUFFIX ".a")

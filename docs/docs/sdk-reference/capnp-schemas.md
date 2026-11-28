@@ -23,6 +23,7 @@ interface Dusk {
   time      @6 () -> (unix_time_ms :UInt64);
   settime   @7 (unix_time_ms :UInt64) -> ();
   programs  @8 () -> (program_entries :List(ProgramEntry));
+  namespaceId @9 () -> (result :UInt64);
 }
 ```
 
@@ -31,6 +32,8 @@ interface Dusk {
 - `ps` / `kill` / `waitpid` operate on running processes by pid.
 - `time` / `settime` read and set the node's wall-clock; `hostname` and
   `programs` describe the node and the program set linked into it.
+- `namespaceId` is the id of the node's namespace, drawn at random each time the
+  node starts. It tells apart several nodes running in one process.
 
 ### `Process`
 
