@@ -38,6 +38,7 @@ Nodes built with the `nix`, `std` and `windows` impls all record:
 | Which impl the node was built with, e.g. `nix`, `std` or `windows` | The node's own build |
 | The process id the operating system gave the node, the path of the program file it runs from, the directory it was started in, and the process id of the process that started it | The operating system |
 | The system's time zone | The operating system |
+| The locale - the language and region - the node runs with | The environment variables `LC_ALL`, `LC_MESSAGES` and `LANG`; on macOS and iOS, and with the `windows` impl, the user's language and region settings |
 | How many processor cores the node may use | The operating system |
 
 ## Linux
@@ -129,7 +130,6 @@ A node on these platforms does not record the device's total memory.
 ## Nodes built with the `std` impl
 
 A node built with the portable `std` impl, on any platform, records what
-[all platforms](#on-all-platforms) record - except, on Windows, the time zone,
-and, on Windows and ESP-IDF, the process id of the process that started it - and
-the device's id on Linux, macOS, Windows, the BSDs and illumos, from the same
-place as above.
+
+[all platforms](#on-all-platforms) record with some exceptions.
+

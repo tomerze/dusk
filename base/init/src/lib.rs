@@ -44,6 +44,7 @@ mod known_keys {
     );
     dusk_program_kvs_internal::known_key!(OS_PROCESS_PARENT_PID, "dusk.os.process.parent_pid");
     dusk_program_kvs_internal::known_key!(OS_TIME_ZONE, "dusk.os.time_zone");
+    dusk_program_kvs_internal::known_key!(OS_LOCALE, "dusk.os.locale");
     dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_SYSNAME, "dusk.os.nix.uname.sysname");
     dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_NODENAME, "dusk.os.nix.uname.nodename");
     dusk_program_kvs_internal::known_key!(OS_NIX_UNAME_RELEASE, "dusk.os.nix.uname.release");

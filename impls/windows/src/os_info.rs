@@ -15,6 +15,7 @@ use windows_sys::core::BOOL;
 pub(crate) fn set_kvs_os_info(kvs: &Kvs) {
     set_kvs_process(kvs);
     set_kvs_time_zone(kvs);
+    set_kvs_locale(kvs);
     set_kvs_windows_version(kvs);
     set_kvs_windows_emulation(kvs);
     set_kvs_windows_computer_name(kvs);
@@ -113,6 +114,29 @@ fn set_kvs_time_zone(kvs: &Kvs) {
         "time zone",
         vec![(
             String::from("dusk.os.time_zone"),
+            Value::String(String::from_utf16_lossy(&name[..length])),
+        )],
+    );
+}
+
+fn set_kvs_locale(kvs: &Kvs) {
+    use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
+    use windows_sys::Win32::System::SystemServices::LOCALE_NAME_MAX_LENGTH;
+    let mut name = [0u16; LOCALE_NAME_MAX_LENGTH as usize];
+    let written = unsafe { GetUserDefaultLocaleName(name.as_mut_ptr(), name.len() as i32) };
+    if written <= 0 {
+        tracing::warn!(error = %std::io::Error::last_os_error(), "GetUserDefaultLocaleName failed");
+        return;
+    }
+    let length = name
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(name.len());
+    set_kvs_values(
+        kvs,
+        "locale",
+        vec![(
+            String::from("dusk.os.locale"),
             Value::String(String::from_utf16_lossy(&name[..length])),
         )],
     );
