@@ -43,7 +43,7 @@ fn test_run_ps() {
         .success()
         .stdout(predicate::str::contains("init"))
         .stdout(predicate::str::contains("sh"))
-        .stdout(predicate::str::contains("program_id"));
+        .stdout(predicate::str::contains("Program ID"));
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn test_multiple_ps_calls() {
             .success()
             .stdout(predicate::str::contains("init"))
             .stdout(predicate::str::contains("sh"))
-            .stdout(predicate::str::contains("program_id"))
+            .stdout(predicate::str::contains("Program ID"))
             .get_output()
             .stdout
             .clone();
@@ -157,8 +157,8 @@ fn test_ps_output_structure() {
 
     // Verify output contains expected structure
     assert!(
-        output_str.contains("program_id"),
-        "Output should contain program_id header"
+        output_str.contains("Program ID"),
+        "Output should contain Program ID header"
     );
     assert!(
         output_str.contains("init"),
@@ -221,8 +221,8 @@ fn test_multiple_servers_parallel_connections() {
 
                 // Verify we got ps output from this server
                 assert!(
-                    output_str.contains("program_id"),
-                    "Server {} should show program_id in ps output",
+                    output_str.contains("Program ID"),
+                    "Server {} should show Program ID in ps output",
                     i
                 );
                 assert!(

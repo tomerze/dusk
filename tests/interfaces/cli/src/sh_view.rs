@@ -24,26 +24,18 @@ fn run(port: u16, command: &str) -> String {
 fn pid_of(port: u16, name: &str) -> u64 {
     let table = run(port, "ps");
     for line in table.lines() {
-        if !line.contains("\"Name\"") {
+        let Ok(serde_json::Value::Object(record)) = serde_json::from_str(line) else {
             continue;
-        }
-        let names: Vec<&str> = line
-            .split("\"Name\":[")
-            .nth(1)
-            .and_then(|rest| rest.split(']').next())
-            .expect("a Name column")
-            .split(',')
-            .collect();
-        let pids: Vec<&str> = line
-            .split("\"PID\":[")
-            .nth(1)
-            .and_then(|rest| rest.split(']').next())
-            .expect("a PID column")
-            .split(',')
-            .collect();
-        for (index, entry) in names.iter().enumerate() {
-            if entry.trim_matches('"') == name {
-                return pids[index].trim().parse().expect("a numeric pid");
+        };
+        for columns in record.values() {
+            let (Some(names), Some(pids)) = (columns["Name"].as_array(), columns["PID"].as_array())
+            else {
+                continue;
+            };
+            for (entry, pid) in names.iter().zip(pids) {
+                if entry.as_str() == Some(name) {
+                    return pid.as_u64().expect("a numeric pid");
+                }
             }
         }
     }
