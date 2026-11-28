@@ -6,3 +6,4 @@ license.workspace = true
 
 [dependencies]
 dusk_capnp = { path = "../dusk_capnp", public = true }
+capnpc = { version = "0.21.4", default-features = false }
