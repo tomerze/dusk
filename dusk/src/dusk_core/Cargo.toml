@@ -6,8 +6,6 @@ license.workspace = true
 
 [dependencies]
 
-# Declared for macro use, version pinned to match dusk_program
-embassy-executor = { version = "0.10.0", features = ["nightly"] }
 async-trait = "*"
 
 tracing = { version = "0.1.41", default-features = false }

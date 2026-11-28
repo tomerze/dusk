@@ -46,10 +46,13 @@ impl DuskServer {
         if let Some(process) = process {
             let task_id = Rc::new(Cell::new(0));
             let registered = Rc::new(Signal::<CriticalSectionRawMutex, ()>::new());
-            let spawn_token = process_task(task_id.clone(), process, registered.clone())
-                .map_err(|e| capnp::Error::failed(e.to_string()))?;
-            task_id.set(spawn_token.id());
-            namespace.spawner.spawn(spawn_token);
+            task_id.set(
+                crate::task::spawn(
+                    namespace.spawner,
+                    process_task(task_id.clone(), process, registered.clone()),
+                )
+                .map_err(|error| capnp::Error::failed(error.to_string()))?,
+            );
             // Wait for the process to be registered in the namespace maps before
             // replying - otherwise a follow-up `portal()` can race the registration
             // and see the pid as not-yet-running.
@@ -61,7 +64,6 @@ impl DuskServer {
     }
 }
 
-#[embassy_executor::task(pool_size = 16)]
 async fn process_task(
     task_id: Rc<Cell<u32>>,
     process: Box<dyn Process>,
@@ -281,12 +283,12 @@ impl dusk::Server for DuskServer {
         Promise::ok(())
     }
 
-    fn id(
+    fn namespace_id(
         &mut self,
-        _params: dusk::IdParams,
-        mut results: dusk::IdResults,
+        _params: dusk::NamespaceIdParams,
+        mut results: dusk::NamespaceIdResults,
     ) -> Promise<(), capnp::Error> {
-        debug!(method = "Dusk.id", "rpc call");
+        debug!(method = "Dusk.namespaceId", "rpc call");
         results.get().set_result(self.namespace.id);
         Promise::ok(())
     }

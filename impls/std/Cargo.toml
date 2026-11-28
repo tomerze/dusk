@@ -9,7 +9,7 @@ default = ["hosted"]
 hosted = ["critical-section/std", "embassy-executor/platform-std"]
 
 [dependencies]
-embassy-executor = { version = "0.10.0", default-features = false, features = ["trace", "nightly", "executor-thread"] }
+embassy-executor = { version = "0.10.0", default-features = false, features = ["trace", "executor-thread"] }
 embassy-time = { version = "0.5", features = ["std"] }
 async-trait = "*"
 
@@ -25,4 +25,4 @@ tracing = { version = "0.1.41", default-features = false }
 machine-uid = "0.6.0"
 
 [target.'cfg(not(windows))'.dependencies]
-iana-time-zone = "0.1.65"
+iana-time-zone = { version = "0.1.65", features = ["fallback"] }

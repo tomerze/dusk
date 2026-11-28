@@ -10,6 +10,9 @@ supercomputers - the programs and the policy are shared; only the driver changes
 `Driver` is a small `Send + Sync` trait of OS/hardware hooks:
 
 - **`hostname()`** - what this node calls itself,
+- **`random(buffer)`** - fill `buffer` with bytes from the platform's
+  cryptographic random source, or return an error when that source fails -
+  never weaker bytes in their place,
 - **`tid()`** - which thread is calling: the same number for the whole life of a
   thread, and a different one for every thread running a node at the same time.
   The logs program uses it to send each record to the node running on that
@@ -24,7 +27,7 @@ An impl implements `Driver` and registers it once with `dusk_driver_impl!`.
 `dusk_core` is `no_std` and depends on **no** impl, yet it has to call into one.
 It does this through a link-time shim. `dusk_driver_impl!` defines a `lazy_static`
 singleton for the driver plus `#[no_mangle]` extern functions - `_dusk_hostname`,
-`_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols as
+`_dusk_random`, `_dusk_tid` and `_dusk_exit`. `dusk_core::driver` declares those same symbols as
 `unsafe extern "Rust"` and calls through them. The linker resolves the symbols to
 whichever impl is linked into the final binary. Callers in `dusk_core`, programs,
 and other `no_std` crates only ever name `dusk_core::driver::*` and get whatever
@@ -44,7 +47,7 @@ inside the impl, call the underlying OS/hardware primitive directly.
 `dusk_core` owns every piece of policy that can be platform-agnostic - schedulers,
 queues, state machines all belong there, behind a thinner primitive exposed
 through `Driver`. An impl should own only what the platform forces: the hostname,
-how to halt the node, the program set to launch, the facts about itself, its
+its source of random bytes, how to halt the node, the program set to launch, the facts about itself, its
 platform and its device it writes into the
 [key-value store](../../features/kvs.md#what-the-impl-records) as the node starts,
 plus the platform's `embassy-time` driver and

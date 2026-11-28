@@ -3,6 +3,7 @@
 extern crate alloc;
 
 use alloc::rc::Rc;
+use dusk_core::driver::Driver;
 use dusk_core::driver::DuskImplExit;
 use dusk_program::embassy_executor::Executor;
 use dusk_program::namespace::Namespace;
@@ -45,7 +46,9 @@ pub fn run(
         executor.run(|spawner| {
             // And so it begins
             let mut seed = [0u8; 16];
-            getrandom::getrandom(&mut seed).expect("the operating system's random source failed");
+            driver::StdDriver
+                .random(&mut seed)
+                .expect("failed to read the namespace seed from the driver");
 
             let root = Rc::new(Namespace::new(
                 handle,

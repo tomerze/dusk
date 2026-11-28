@@ -36,6 +36,16 @@ document.querySelectorAll(".dusk-stack").forEach((stack) => {
         }
         front.style.opacity = 0;
         diagram.append(front);
+        for (const animation of front.getAnimations()) {
+          const twin = plate
+            .getAnimations()
+            .find(
+              (original) => original.animationName === animation.animationName,
+            );
+          if (animation.animationName && twin) {
+            animation.currentTime = twin.currentTime;
+          }
+        }
         getComputedStyle(front).opacity;
         front.style.opacity = 1;
       }
@@ -58,7 +68,7 @@ const visibility = new IntersectionObserver((entries) => {
   for (const entry of entries) {
     entry.target.classList.toggle("is-offscreen", !entry.isIntersecting);
     for (const network of entry.target.querySelectorAll(
-      ".dusk-fleet__network",
+      ".dusk-fleet__network, .dusk-stack__diagram",
     )) {
       if (entry.isIntersecting) {
         network.unpauseAnimations();
@@ -137,6 +147,9 @@ for (const sun of document.querySelectorAll(".dusk-hero__sun")) {
 
 for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
   const arms = [...fleet.querySelectorAll(".dusk-arm")];
+  const labels = [
+    ...fleet.querySelectorAll(".dusk-fleet__labels .dusk-node__label"),
+  ];
   const tinyLinks = [...fleet.querySelectorAll(".dusk-fleet__tiny path")];
   const tinyDots = [
     ...fleet.querySelectorAll(".dusk-fleet__tiny circle:not(.dusk-packet)"),
@@ -161,7 +174,6 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
     const cx = width / 2;
     const cy = margin + 10 + ry;
     const hubHeight = hubSize * 1.41;
-    fleet.setAttribute("viewBox", `0 0 ${width} ${height}`);
     hub.setAttribute("x", cx - hubSize / 2);
     hub.setAttribute("y", cy - hubHeight / 2);
     hub.setAttribute("width", hubSize);
@@ -184,14 +196,73 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       rim.push([length, point]);
       previous = point;
     }
-    arms.forEach((arm, index) => {
+    const below = ring + 21 * scale;
+    const spots = arms.map((arm, index) => {
       const along =
         (((index + 0.5) / arms.length) * length + Math.sin(index * 2.1) * 6) %
         length;
       const [, [px, py]] = rim.find(([at]) => at >= along);
       const out = 1 + 0.05 * Math.sin(index * 1.9);
-      const x = cx + (px - cx) * out;
-      const y = cy + (py - cy) * out;
+      const fraction = (index + 0.5) / arms.length;
+      return {
+        x: cx + (px - cx) * out,
+        y: cy + (py - cy) * out,
+        half: labels[index].getComputedTextLength() / 2,
+        end: Math.min(fraction, 1 - fraction, Math.abs(fraction - 0.5)) < 0.1,
+      };
+    });
+    let top = 0;
+    let bottom = height;
+    if (narrow) {
+      const clearance = 14;
+      const outer = ring + 5 * scale;
+      const boxes = (spot, y) => [
+        [spot.x - outer, y - outer, spot.x + outer, y + outer],
+        [spot.x - spot.half, y + below - 10, spot.x + spot.half, y + below + 3],
+      ];
+      const hubBand = [
+        -Infinity,
+        cy - hubHeight / 2,
+        Infinity,
+        cy + hubHeight / 2 + 40,
+      ];
+      const overlaps = (one, other) =>
+        one[0] < other[2] + clearance &&
+        other[0] < one[2] + clearance &&
+        one[1] < other[3] + clearance &&
+        other[1] < one[3] + clearance;
+      for (const spot of spots.filter((spot) => spot.end)) {
+        const obstacles = [
+          hubBand,
+          ...spots
+            .filter((other) => other !== spot)
+            .flatMap((other) => boxes(other, other.y)),
+        ];
+        const toward = Math.sign(cy - spot.y);
+        while (
+          !boxes(spot, spot.y + toward * 2).some((own) =>
+            obstacles.some((obstacle) => overlaps(own, obstacle)),
+          )
+        ) {
+          spot.y += toward * 2;
+        }
+      }
+      spots.forEach((spot, index) => {
+        const mirror = spots[spots.length - 1 - index];
+        if (spot.end) {
+          const reach = Math.max(
+            Math.abs(spot.y - cy),
+            Math.abs(mirror.y - cy),
+          );
+          spot.y = cy + Math.sign(spot.y - cy) * reach;
+        }
+      });
+      top = Math.min(...spots.map((spot) => spot.y - ring)) - 24;
+      bottom = Math.max(...spots.map((spot) => spot.y + below + 3)) + 24;
+    }
+    fleet.setAttribute("viewBox", `0 ${top} ${width} ${bottom - top}`);
+    arms.forEach((arm, index) => {
+      const { x, y } = spots[index];
       const dx = x - cx;
       const dy = y - cy;
       const reach = Math.hypot(dx, dy);
@@ -213,11 +284,29 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
         light.setAttribute("cx", dotX);
         light.setAttribute("cy", dotY);
       }
-      const label = arm.querySelector(".dusk-node__label");
+      const label = labels[index];
       label.setAttribute("x", x);
-      label.setAttribute("y", y + ring + 21 * scale);
+      label.setAttribute("y", y + below);
       taken.push([x, y, 70 * scale]);
     });
+    const placed = [];
+    for (const [index, label] of labels.entries()) {
+      const half = label.getComputedTextLength() / 2;
+      const x = Number(label.getAttribute("x"));
+      let y = Number(label.getAttribute("y"));
+      const clashes = (top) =>
+        placed.some(
+          (other) =>
+            Math.abs(other.y - top) < 18 * scale &&
+            x - half < other.right + 18 * scale &&
+            other.left < x + half + 18 * scale,
+        );
+      if (clashes(y)) {
+        y = taken[index][1] - ring - 10 * scale;
+        label.setAttribute("y", y);
+      }
+      placed.push({ left: x - half, right: x + half, y });
+    }
     let seed = 7;
     const random = () => {
       seed = (seed * 48271) % 2147483647;
@@ -232,6 +321,8 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
         x = cx + rx * 1.1 * out * Math.cos(angle);
         y = cy + ry * 1.1 * out * Math.sin(angle);
         if (
+          y > top + 8 &&
+          y < bottom - 8 &&
           Math.hypot(x - cx, y - cy) > hubSize * 0.75 &&
           taken.every(([tx, ty, room]) => Math.hypot(tx - x, ty - y) > room)
         ) {
@@ -244,12 +335,19 @@ for (const fleet of document.querySelectorAll(".dusk-fleet__network")) {
       tinyLinks[index].setAttribute("d", `M${cx} ${cy}L${x} ${y}`);
     });
   };
+  let current = 0;
   new ResizeObserver((entries) => {
     const width = entries[0].contentRect.width;
     if (width > 0) {
+      current = width;
       layout(width);
     }
   }).observe(fleet.parentElement);
+  document.fonts.ready.then(() => {
+    if (current > 0) {
+      layout(current);
+    }
+  });
 }
 
 const still = matchMedia("(prefers-reduced-motion: reduce)");
@@ -259,16 +357,18 @@ const tracked = [
     name: "--dusk-sunk",
     aim: () => Math.min(1, window.scrollY / (window.innerHeight * 0.6)),
   })),
-  ...[...document.querySelectorAll(".dusk-section > h2")].map((element) => ({
-    element,
-    name: "--dusk-passed",
-    aim: () => {
-      const box = element.getBoundingClientRect();
-      const passed =
-        (window.innerHeight - box.top) / (window.innerHeight + box.height);
-      return Math.max(0, Math.min(1, passed));
-    },
-  })),
+  ...[...document.querySelectorAll(".dusk-section > h2, .dusk-os__title")].map(
+    (element) => ({
+      element,
+      name: "--dusk-passed",
+      aim: () => {
+        const box = element.getBoundingClientRect();
+        const passed =
+          (window.innerHeight - box.top) / (window.innerHeight + box.height);
+        return Math.max(0, Math.min(1, passed));
+      },
+    }),
+  ),
 ].map((item) => ({ ...item, target: item.aim(), value: item.aim() }));
 let gliding = false;
 let lastGlide = 0;
@@ -306,4 +406,104 @@ window.addEventListener("scroll", follow, { passive: true });
 window.addEventListener("resize", follow);
 for (const item of tracked) {
   item.element.style.setProperty(item.name, item.value);
+}
+
+for (const head of document.querySelectorAll(".dusk-stack__head")) {
+  const layers = [...head.parentElement.querySelectorAll(".dusk-layer")];
+  let reading = null;
+  const read = () => {
+    const at = head.getBoundingClientRect().top;
+    const start = layers[0].getBoundingClientRect().top;
+    const end = layers.at(-1).getBoundingClientRect().bottom;
+    const layer =
+      at > start + 1 && at < end - 1
+        ? layers.find(
+            (candidate) => candidate.getBoundingClientRect().bottom > at,
+          )
+        : null;
+    if (layer === reading) {
+      return;
+    }
+    reading = layer;
+    head.classList.toggle("is-reading", Boolean(layer));
+    if (layer) {
+      head.dataset.layer = layer.dataset.layer;
+    }
+  };
+  window.addEventListener("scroll", read, { passive: true });
+  window.addEventListener("resize", read);
+  read();
+}
+
+for (const stage of document.querySelectorAll(".dusk-os__stage")) {
+  new ResizeObserver(() => {
+    stage
+      .closest(".dusk-os")
+      .style.setProperty("--dusk-os-height", `${stage.offsetHeight}px`);
+  }).observe(stage);
+}
+
+const namespaceId = Array.from(
+  crypto.getRandomValues(new Uint8Array(8)),
+  (byte) => byte.toString(16).padStart(2, "0"),
+).join("");
+for (const namespace of document.querySelectorAll(".dusk-os__namespace")) {
+  namespace.textContent = namespaceId;
+}
+
+const today = new Date();
+const instanceName = `instance-${today.getFullYear()}${String(
+  today.getMonth() + 1,
+).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+for (const instance of document.querySelectorAll(".dusk-os__instance")) {
+  instance.textContent = instanceName;
+}
+
+const latencySteps = {
+  17: { 16: { 17: 0.9 }, 17: { 16: 0.3, 18: 0.3 }, 18: { 17: 0.9 } },
+  66: {
+    65: { 66: 0.9 },
+    66: { 65: 0.3, 67: 0.18 },
+    67: { 66: 0.83, 68: 0.17 },
+    68: { 67: 0.32 },
+  },
+};
+for (const element of document.querySelectorAll(".dusk-os__latency")) {
+  const steps = latencySteps[element.textContent];
+  let latency = element.textContent;
+  const flicker = () => {
+    let roll = Math.random();
+    for (const [next, chance] of Object.entries(steps[latency])) {
+      if (roll < chance) {
+        latency = next;
+        break;
+      }
+      roll -= chance;
+    }
+    element.textContent = latency;
+    setTimeout(flicker, 250 + Math.random() * 550);
+  };
+  flicker();
+}
+
+if (
+  !CSS.supports("animation-timeline: view()") &&
+  !matchMedia("(prefers-reduced-motion: reduce)").matches
+) {
+  for (const tour of document.querySelectorAll(".dusk-os__tour")) {
+    tour.closest(".dusk-os").classList.add("is-touring");
+    const stage = tour.querySelector(".dusk-os__stage");
+    const follow = () => {
+      const progress =
+        (stage.getBoundingClientRect().top - tour.getBoundingClientRect().top) /
+        (tour.offsetHeight - stage.offsetHeight);
+      tour.style.setProperty(
+        "--dusk-os-progress",
+        Math.max(0, Math.min(1, progress)),
+      );
+    };
+    window.addEventListener("scroll", follow, { passive: true });
+    window.addEventListener("resize", follow);
+    follow();
+  }
 }

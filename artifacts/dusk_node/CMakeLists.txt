@@ -23,6 +23,8 @@ set(DUSK_NODE_RUSTFLAGS "" CACHE STRING
     "Extra flags for rustc, separated by spaces as in RUSTFLAGS. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_INIT_SCRIPT "" CACHE STRING
     "The shell script the node runs at boot; empty leaves it to cargo: DUSK_NODE_INIT_SCRIPT in the environment, else .cargo/config.toml. See docs/docs/embedding/node-artifacts.md")
+set(DUSK_NODE_TASK_LIMIT "" CACHE STRING
+    "The most tasks the node runs at once; empty leaves it to cargo: DUSK_NODE_TASK_LIMIT in the environment, else 8192. See docs/docs/embedding/node-artifacts.md")
 set(DUSK_NODE_CARGO_SUBCOMMAND "build" CACHE STRING
     "The cargo subcommand that builds the node. See docs/docs/embedding/node-artifacts.md")
 
@@ -128,6 +130,14 @@ if(NOT DUSK_NODE_INIT_SCRIPT STREQUAL "")
     string(REPLACE ";" "$<SEMICOLON>" DUSK_NODE_INIT_SCRIPT_ESCAPED "${DUSK_NODE_INIT_SCRIPT}")
     set(DUSK_NODE_ENVIRONMENT_ARGUMENTS "DUSK_NODE_INIT_SCRIPT=${DUSK_NODE_INIT_SCRIPT_ESCAPED}")
 endif()
+if(NOT DUSK_NODE_TASK_LIMIT STREQUAL "")
+    if(NOT DUSK_NODE_TASK_LIMIT MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR
+            "DUSK_NODE_TASK_LIMIT is '${DUSK_NODE_TASK_LIMIT}'. It is the most tasks the "
+            "node runs at once: a whole number of at least 1.")
+    endif()
+    list(APPEND DUSK_NODE_ENVIRONMENT_ARGUMENTS "DUSK_NODE_TASK_LIMIT=${DUSK_NODE_TASK_LIMIT}")
+endif()
 
 if(DUSK_NODE_TRIPLE MATCHES "windows-msvc")
     set(DUSK_NODE_SYSTEM_LIBRARIES bcrypt advapi32 kernel32 ntdll userenv ws2_32 dbghelp)
@@ -149,7 +159,18 @@ elseif(DUSK_NODE_TRIPLE MATCHES "windows")
     set(DUSK_NODE_LIBRARY_PREFIX "lib")
     set(DUSK_NODE_LIBRARY_SUFFIX ".a")
     set(DUSK_NODE_EXECUTABLE_SUFFIX ".exe")
-elseif(DUSK_NODE_TRIPLE MATCHES "espidf|wasm|none|nuttx|vex|vxworks|qnx|trusty|sgx|l4re|solid|hermit|helenos|motor|vita")
+elseif(DUSK_NODE_TRIPLE MATCHES "espidf")
+    set(DUSK_NODE_SYSTEM_LIBRARIES
+        "$<TARGET_NAME_IF_EXISTS:idf::newlib>"
+        "$<TARGET_NAME_IF_EXISTS:idf::esp_libc>"
+        "$<TARGET_NAME_IF_EXISTS:idf::pthread>"
+        "$<TARGET_NAME_IF_EXISTS:idf::lwip>"
+        "$<TARGET_NAME_IF_EXISTS:idf::vfs>"
+        "$<TARGET_NAME_IF_EXISTS:idf::esp_hw_support>")
+    set(DUSK_NODE_LIBRARY_PREFIX "lib")
+    set(DUSK_NODE_LIBRARY_SUFFIX ".a")
+    set(DUSK_NODE_EXECUTABLE_SUFFIX "")
+elseif(DUSK_NODE_TRIPLE MATCHES "wasm|none|nuttx|vex|vxworks|qnx|trusty|sgx|l4re|solid|hermit|helenos|motor|vita")
     set(DUSK_NODE_SYSTEM_LIBRARIES "")
     set(DUSK_NODE_LIBRARY_PREFIX "lib")
     set(DUSK_NODE_LIBRARY_SUFFIX ".a")
