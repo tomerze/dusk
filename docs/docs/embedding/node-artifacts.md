@@ -153,6 +153,18 @@ The script is compiled into the node while it is built: a script that does not
 compile fails the build, and changing the variable rebuilds the node. A script of
 several commands separates them with `;`.
 
+#### DUSK_NODE_TASK_LIMIT
+
+The most tasks the node runs at once, e.g. `-DDUSK_NODE_TASK_LIMIT=256`; 8192
+when it is not set. Every session, every process and every script the shell is
+running is one task, and a node at its limit refuses to start another. The
+memory a node holds for tasks grows to the most it has run at once and is not
+given back, so the limit bounds that too. Empty leaves it to cargo, as in
+[Building with cargo](#building-with-cargo).
+
+The limit is compiled into the node: changing the variable rebuilds the node,
+and a value that is not a whole number of at least 1 fails the configure.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
@@ -197,6 +209,10 @@ environment or in the `[env]` table of its own `.cargo/config.toml`:
 DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
   --target <target> -p dusk_node --no-default-features --features impl_nix
 ```
+
+The task limit is the `DUSK_NODE_TASK_LIMIT` environment variable, set the same
+way. Without it the limit is 8192, and a value that is not a whole number of at
+least 1 fails the build.
 
 A build without a `.git` directory - a Docker build whose context leaves it
 out - cannot ask git for the revision it is built from, which every program
