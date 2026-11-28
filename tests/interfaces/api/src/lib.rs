@@ -6,4 +6,6 @@ mod lifecycle;
 #[cfg(test)]
 mod logs;
 #[cfg(test)]
+mod waitpid;
+#[cfg(test)]
 mod tasks;
