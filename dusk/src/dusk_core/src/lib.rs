@@ -43,7 +43,6 @@ pub async fn local_client(
     dusk_client
 }
 
-#[embassy_executor::task(pool_size = 16)]
 pub async fn session(
     task_id: Rc<Cell<u32>>,
     namespace: Rc<dusk_program::namespace::Namespace>,
