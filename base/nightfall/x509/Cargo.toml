@@ -1,0 +1,9 @@
+[package]
+name = "dusk_program_nightfall_x509"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+anyhow = { version = "1.0", default-features = false, public = true }
+der = { version = "0.7", default-features = false }
