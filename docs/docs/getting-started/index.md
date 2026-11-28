@@ -1,20 +1,21 @@
 # Getting Started
 
 Dusk gives a system **fleet management** - analytics, diagnosis, and remote
-control of every device - without you having to build that infrastructure
+control of every node - without you having to build that infrastructure
 yourself.
 
 ## How you use Dusk
 
 Most often, you **embed Dusk into an application you already ship**. Dusk's node
 compiles to a small C library; you link it into your app, call one function, and
-every device running that app becomes a manageable node in a fleet. Think of the
-software inside a media player or a robot vacuum - each is a device in a fleet
-someone needs to observe and operate. Drop the Dusk library in, and that's done.
+every running copy of that app becomes a manageable node in a fleet. Think of a
+mobile app, a game, an agent harness, or the software inside a robot vacuum -
+each is a member of a fleet someone needs to observe and operate. Drop the Dusk
+library in, and that's done.
 
 Dusk runs in other shapes too:
 
-- as a **standalone application** that manages a single device,
+- as a **standalone application**, a node on its own,
 - as a small **embedded operating system** in its own right,
 - and as a **framework** for writing the programs and platform backends that run
   on a node.
@@ -28,11 +29,12 @@ But the headline is embedding: you bring Dusk to the software you already have.
 
 ## What you get
 
-Once your devices are Dusk nodes, three things open up - roughly in the order
+Once your software and hardware are Dusk nodes, three things open up - roughly
+in the order
 people reach for them:
 
 1. **Analytics** - understand your fleet: what's running, how it's behaving,
-   trends across many devices.
+   trends across many nodes.
     > **TODO:** fleet-wide analytics tooling is in progress. Today you can gather
     > raw data per node with the programs below.
 2. **Diagnosis** - inspect and fix a misbehaving nodes: list its processes
@@ -46,12 +48,12 @@ people reach for them:
 
 ## The mental model
 
-A device running embedded Dusk is a **node** - internally one
-[namespace](concepts/namespaces.md) holding the [processes](concepts/processes.md)
-running on it. You connect to a node, see what's running, and drive it. The pieces
-that differ from one device to the next live behind a
-[driver](concepts/drivers-and-impls.md), so the same tooling works across every
-device in the fleet.
+Anything running embedded Dusk - an app, a game, an agent, a device - is a
+**node**: internally one [namespace](concepts/namespaces.md) holding the
+[processes](concepts/processes.md) running on it. You connect to a node, see
+what's running, and drive it. The pieces that differ from one platform to the
+next live behind a [driver](concepts/drivers-and-impls.md), so the same tooling
+works across every node in the fleet.
 
 ## Where to go next
 

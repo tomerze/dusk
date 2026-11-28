@@ -153,6 +153,13 @@ The script is compiled into the node while it is built: a script that does not
 compile fails the build, and changing the variable rebuilds the node. A script of
 several commands separates them with `;`.
 
+#### DUSK_NODE_CARGO_SUBCOMMAND
+
+What follows `cargo` on the command line that builds the node, `build` by
+default. The `windows-x64-msvc` preset sets it to `xwin build`; a target that
+needs another toolchain or `-Z build-std` sets it the same way, as
+[ESP-IDF](#esp-idf) does.
+
 > **Side note:** if you set these in your CMakeLists.txt instead of a preset,
 > make them cache variables, e.g. `set(DUSK_NODE_IMPL nix CACHE STRING "")`.
 > A plain `set()` can get quietly dropped on the very first configure, then
@@ -185,6 +192,9 @@ windows), use `-p dusk_node_bin` instead of `-p dusk_node`.
   any impl, the same way as the std command.
 - Xtensa targets need the esp-rs fork of the compiler (`espup install`) and
   `cargo +esp`; the command is otherwise the same.
+- ESP-IDF targets abort on a panic, so they need
+  `-Z build-std=std,panic_abort`: with `-Z build-std=std` alone the build stops
+  at ``can't find crate for `panic_abort` ``.
 
 The init script is the `DUSK_NODE_INIT_SCRIPT` environment variable. The
 repository's `.cargo/config.toml` sets it to `nightfall -l 9090`, and a value in
@@ -197,6 +207,27 @@ environment or in the `[env]` table of its own `.cargo/config.toml`:
 DUSK_NODE_INIT_SCRIPT="nightfall -l 127.0.0.1:9091" cargo build --profile prod \
   --target <target> -p dusk_node --no-default-features --features impl_nix
 ```
+
+A build without a `.git` directory - a Docker build whose context leaves it
+out - cannot ask git for the revision it is built from, which every program
+records. Pass it in `DUSK_GIT_REV`, at least 16 hex digits, taken from a
+checkout that has one. In the stage of the `Dockerfile` that runs the build,
+take it as a build argument and set the variable from it:
+
+```dockerfile
+ARG GIT_REV
+ENV DUSK_GIT_REV=$GIT_REV
+RUN cargo build --profile prod --target <target> -p dusk_node_bin
+```
+
+and pass the argument from the checkout:
+
+```sh
+docker build --build-arg GIT_REV=$(git rev-parse HEAD) .
+```
+
+When `DUSK_GIT_REV` is set the build does not run git at all; when it is not set
+and git cannot answer, the build stops with an error that names `DUSK_GIT_REV`.
 
 ## 3. Link
 
@@ -269,6 +300,93 @@ to `base/sh/compiler/proc/Cargo.toml` and reference its `sh_entry` beside the
 `dusk_base::link_anchors()` call in `base/sh/compiler/proc/src/lib.rs`. On Linux, two nodes whose init scripts
 listen on the same port cannot run on one machine unless each listens on an
 address of its own rather than on every address - the second fails to bind.
+
+## ESP-IDF
+
+An ESP-IDF application links the node as a library, with the `std` impl. The
+settings and sizes below are for an ESP32-S3 with ESP-IDF v5.5.6 and the `esp`
+Rust toolchain 1.97.0.0 from `espup install`, the node at its default
+configuration and cargo's `release` profile.
+
+### Build
+
+In the `CMakeLists.txt` of the component that starts the node:
+
+```cmake
+idf_component_register(SRCS "main.c" INCLUDE_DIRS "."
+    PRIV_REQUIRES pthread vfs)
+
+set(DUSK_NODE_IMPL std CACHE STRING "")
+set(DUSK_NODE_CARGO_TARGET xtensa-esp32s3-espidf CACHE STRING "")
+set(DUSK_NODE_CARGO_SUBCOMMAND "+esp build -Z build-std=std,panic_abort" CACHE STRING "")
+set(DUSK_NODE_INIT_SCRIPT "nightfall -l 9090" CACHE STRING "")
+add_subdirectory(path/to/dusk/artifacts/dusk_node dusk_node)
+target_link_libraries(${COMPONENT_LIB} PRIVATE dusk::node)
+```
+
+`idf.py build` then runs cargo and links the node into the application. Add the
+components your own code uses to `PRIV_REQUIRES`; `dusk::node` brings the ones
+the library itself calls.
+
+An application that brings up Wi-Fi and starts the node is 2.2 MB, which does
+not fit the 1 MB app partition of ESP-IDF's default partition table: select a
+larger one, or your own, under `Partition Table` in `idf.py menuconfig`.
+
+### Run
+
+Before it starts the node, the application registers ESP-IDF's eventfd file
+system and sets the stack size of the node's thread:
+
+```c
+#include "esp_pthread.h"
+#include "esp_vfs_eventfd.h"
+
+#include "dusk.h"
+
+void app_main(void)
+{
+    esp_vfs_eventfd_config_t eventfd = ESP_VFS_EVENTD_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_vfs_eventfd_register(&eventfd));
+
+    esp_pthread_cfg_t node_thread = esp_pthread_get_default_config();
+    node_thread.stack_size = 64 * 1024;
+    ESP_ERROR_CHECK(esp_pthread_set_cfg(&node_thread));
+
+    dusk_spawn(NULL, NULL);
+}
+```
+
+- Without `esp_vfs_eventfd_register` the node panics as it starts, with
+  ``failed to initialize eventfd for polling, try calling `esp_vfs_eventfd_register` ``,
+  and the chip restarts.
+- `dusk_spawn` starts its thread with the stack size `esp_pthread_set_cfg` last
+  set on the calling task. The node's thread uses 6.8 KB, more than ESP-IDF's
+  default of 3072 bytes.
+- The node starts two threads of its own, with the stack size in
+  `CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT`. They use 1.4 KB and 2.0 KB.
+- The node listens from the moment it starts. A client reaches it once the
+  application has brought a network interface up, as any ESP-IDF application
+  does: `esp_netif_init()`, then Wi-Fi or Ethernet.
+
+### Memory
+
+The node takes 2.1 MB of heap, and the stacks of its three threads on top:
+1.97 MB for the log buffer the logs program reserves, and 130 KB for everything
+else. An ESP32-S3's internal RAM alone does not hold that, and the node stops
+as it starts with `memory allocation of 131072 bytes failed`.
+
+Turn PSRAM on: set these in `sdkconfig.defaults`, beside the PSRAM mode your
+module needs:
+
+```
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0
+```
+
+At `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`'s default of 16384 the node's small
+allocations fill internal RAM, and it stops with
+`cannot spawn async-io thread` once no thread stack fits there.
 
 ## Reference
 

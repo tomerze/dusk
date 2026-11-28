@@ -1,6 +1,6 @@
 # Security policy
 
-Dusk runs on machines its operators cannot reach, for a very long time,
+Dusk runs in places its operators cannot reach, for a very long time,
 so reports are handled privately until a fix is out.
 
 ## Reporting a vulnerability

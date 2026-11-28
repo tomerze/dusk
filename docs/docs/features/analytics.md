@@ -1,7 +1,7 @@
 # Analytics
 
 The first thing a fleet needs is to be **understood**: what Dusk is running across
-your devices, how those workloads are behaving, and how that changes over time.
+your nodes, how those workloads are behaving, and how that changes over time.
 Analytics is the payoff most people reach for first after embedding Dusk.
 
 > **TODO - in progress.** Fleet-wide analytics tooling is still being built. This
@@ -13,7 +13,7 @@ Analytics is the payoff most people reach for first after embedding Dusk.
 - A live view of every node - its processes, versions, and health - across the
   whole fleet.
 - Metrics and structured logs streamed off each node and rolled up centrally.
-- Trends over time, so you can watch a single device - or a whole rollout - drift
+- Trends over time, so you can watch a single node - or a whole rollout - drift
   before it becomes an incident.
 
 ## What you can do today

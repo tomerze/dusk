@@ -130,7 +130,6 @@ A node on these platforms does not record the device's total memory.
 ## Nodes built with the `std` impl
 
 A node built with the portable `std` impl, on any platform, records what
-[all platforms](#on-all-platforms) record - except, on Windows, the time zone
-and the process id of the process that started it - and the device's id on
-Linux, macOS, Windows, the BSDs and illumos, from the same place as above. It
-reads the locale from the environment variables alone, on every platform.
+
+[all platforms](#on-all-platforms) record with some exceptions.
+

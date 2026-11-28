@@ -281,12 +281,12 @@ impl dusk::Server for DuskServer {
         Promise::ok(())
     }
 
-    fn id(
+    fn namespace_id(
         &mut self,
-        _params: dusk::IdParams,
-        mut results: dusk::IdResults,
+        _params: dusk::NamespaceIdParams,
+        mut results: dusk::NamespaceIdResults,
     ) -> Promise<(), capnp::Error> {
-        debug!(method = "Dusk.id", "rpc call");
+        debug!(method = "Dusk.namespaceId", "rpc call");
         results.get().set_result(self.namespace.id);
         Promise::ok(())
     }

@@ -1,7 +1,7 @@
 # Diagnosis
 
 A Dusk node lets you see and control the work **Dusk itself is running** on a
-device, live and over the wire - the same way `docker ps` / `docker logs` /
+node, live and over the wire - the same way `docker ps` / `docker logs` /
 `docker exec` show and drive containers rather than the host. This is the Dusk
 layer you embedded, not the host operating system's process table.
 

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="236 210 588 602">
+  <defs>
+    <linearGradient
+      id="dusk-logo-d-gold"
+      gradientUnits="userSpaceOnUse"
+      x1="0"
+      y1="210"
+      x2="0"
+      y2="812"
+    >
+      <stop offset="0" stop-color="#f6c561" />
+      <stop offset="0.45" stop-color="#f0b441" />
+      <stop offset="1" stop-color="#bf8420" />
+    </linearGradient>
+    <linearGradient
+      id="dusk-logo-d-sun"
+      gradientUnits="userSpaceOnUse"
+      x1="420"
+      y1="540"
+      x2="630"
+      y2="730"
+    >
+      <stop offset="0" stop-color="#f7b153" />
+      <stop offset="1" stop-color="#d9452c" />
+    </linearGradient>
+    <radialGradient
+      id="dusk-logo-d-hill"
+      gradientUnits="userSpaceOnUse"
+      cx="545"
+      cy="716"
+      r="135"
+      gradientTransform="translate(545 716) scale(1 0.36) translate(-545 -716)"
+    >
+      <stop offset="0" stop-color="#7a3d06" stop-opacity="0.38" />
+      <stop offset="1" stop-color="#7a3d06" stop-opacity="0" />
+    </radialGradient>
+    <clipPath id="dusk-logo-d-body">
+      <path
+        clip-rule="evenodd"
+        d="M236 210H525C692.4 210 824 342.4 824 511C824 679.6 692.4 812 525 812H236ZM340 310H520C626.4 310 710 398 710 510C710 595.1 661.8 666.3 592 695.6C520 665 420 638 340 640Z"
+      />
+    </clipPath>
+  </defs>
+  <path
+    fill="url(#dusk-logo-d-gold)"
+    d="M537 494L512 363L487 494ZM610.6 526.5L639 425.4L567.1 501.9ZM456.9 501.9L385 425.4L413.4 526.5ZM651.6 576.1L689.3 516.4L621.5 536.2ZM402.5 536.2L334.7 516.4L372.4 576.1Z"
+  />
+  <circle cx="512" cy="650" r="135" fill="url(#dusk-logo-d-sun)" />
+  <path
+    fill="url(#dusk-logo-d-gold)"
+    fill-rule="evenodd"
+    d="M236 210H525C692.4 210 824 342.4 824 511C824 679.6 692.4 812 525 812H236ZM340 310H520C626.4 310 710 398 710 510C710 595.1 661.8 666.3 592 695.6C520 665 420 638 340 640Z"
+  />
+  <rect
+    x="236"
+    y="560"
+    width="588"
+    height="252"
+    fill="url(#dusk-logo-d-hill)"
+    clip-path="url(#dusk-logo-d-body)"
+  />
+</svg>
