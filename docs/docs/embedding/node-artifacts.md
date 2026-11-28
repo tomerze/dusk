@@ -21,6 +21,12 @@ decides which:
 | `windows` | `impl_windows` | Windows | library, executable (`.exe`) |
 | `std` | `impl_std` | Other platforms with the Rust standard library and threads: ESP-IDF, WebAssembly, QNX, VxWorks and more | library |
 
+On ESP-IDF, the std impl takes its random bytes, the node's namespace seed among
+them, from `esp_fill_random`. Those bytes are cryptographic only while Wi-Fi,
+Bluetooth or the voltage-noise entropy source that `bootloader_random_enable()`
+turns on is running. With all three off, ESP-IDF returns pseudo-random bytes once
+the boot process is over, and reports no error.
+
 Every supported operating system and its impl is in the
 [platform list](#platforms).
 
