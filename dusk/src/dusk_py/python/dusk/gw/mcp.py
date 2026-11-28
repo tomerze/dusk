@@ -25,13 +25,17 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import TASK_OPTIONAL, CallToolResult, TextContent, ToolExecution
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from typing import Any
 
     from mcp.server.experimental.task_context import ServerTaskContext
+    from mcp.server.session import ServerSession
     from mcp.types import ContentBlock, Tool
     from starlette.applications import Starlette
 
     from . import ConnectionRegistry
+
+    ConnectTool = Callable[[FastMCP, ConnectionRegistry], None]
 
 INSTRUCTIONS = """
 Think of each Dusk Node as its own self-contained operating system - not a Linux box.
@@ -107,7 +111,11 @@ field (e.g. `timeUnixNano`) is an integer count of nanoseconds since the Unix ep
 
 
 def build_application(
-    registry: "ConnectionRegistry", programs: "list[dict[str, Any]]", ip: str
+    registry: "ConnectionRegistry",
+    programs: "list[dict[str, Any]]",
+    ip: str,
+    connect: "ConnectTool | None" = None,
+    instructions: str = INSTRUCTIONS,
 ) -> "Starlette":
     """Build the MCP streamable-HTTP application over ``registry`` and ``programs``.
 
@@ -123,52 +131,20 @@ def build_application(
     a gateway bound to ``0.0.0.0`` would answer ``421 Misdirected Request`` to
     every client that reached it on a real interface address.
     """
-    server = FastMCP("Dusk", instructions=INSTRUCTIONS, host=ip)
-    register_tools(server, registry, programs)
+    server = FastMCP("Dusk", instructions=instructions, host=ip)
+    register_tools(server, registry, programs, connect)
     return server.streamable_http_app()
 
 
 def register_tools(
-    server: "FastMCP", registry: "ConnectionRegistry", programs: "list[dict[str, Any]]"
+    server: "FastMCP",
+    registry: "ConnectionRegistry",
+    programs: "list[dict[str, Any]]",
+    connect: "ConnectTool | None" = None,
 ) -> None:
     """Register every tool onto ``server``."""
 
-    async def connect(host: str, port: int, context: Context) -> str:
-        # Async so the session-end hook is registered on the event loop that
-        # owns the session; the blocking dusk connect runs off it in a thread.
-        session = context.session
-        descriptor, is_first_connection = await anyio.to_thread.run_sync(
-            registry.connect, session, host, port
-        )
-        if is_first_connection:
-
-            async def disconnect_owner_on_close() -> None:
-                # Runs from BaseSession.__aexit__'s exit-stack unwind, which on
-                # server shutdown happens while this task is already cancelled.
-                # to_thread.run_sync issues a cancellation checkpoint, so without
-                # the shield the CancelledError re-raises mid-unwind and corrupts
-                # anyio's cancel-scope stack ("Attempted to exit a cancel scope
-                # that isn't the current task's current cancel scope").
-                with anyio.CancelScope(shield=True):
-                    await anyio.to_thread.run_sync(registry.disconnect_owner, session)
-
-            session._exit_stack.push_async_callback(disconnect_owner_on_close)
-        return descriptor
-
-    server.add_tool(
-        connect,
-        name="connect",
-        title="Connect to a dusk server",
-        description=(
-            "Open a connection to a dusk server at the given host and port. "
-            "Returns a descriptor string - eight hexadecimal digits - that "
-            "identifies this connection; pass it to every program tool and to "
-            "the disconnect tool. You may hold several connections at once - "
-            "each call returns a new descriptor. Connections are closed "
-            "automatically when this session ends, but call disconnect when "
-            "you are done with one to free it sooner."
-        ),
-    )
+    (connect or add_connect_tool)(server, registry)
 
     async def disconnect(descriptor: str, context: Context) -> str:
         await anyio.to_thread.run_sync(registry.disconnect, context.session, descriptor)
@@ -187,6 +163,50 @@ def register_tools(
     for program in programs:
         _register_program_tool(server, registry, program)
     _register_task_support(server, frozenset(program["name"] for program in programs))
+
+
+def add_connect_tool(server: "FastMCP", registry: "ConnectionRegistry") -> None:
+    async def connect(host: str, port: int, context: Context) -> str:
+        # Async so the session-end hook is registered on the event loop that
+        # owns the session; the blocking dusk connect runs off it in a thread.
+        session = context.session
+        descriptor, is_first_connection = await anyio.to_thread.run_sync(
+            registry.connect, session, host, port
+        )
+        if is_first_connection:
+            close_with_session(registry, session)
+        return descriptor
+
+    server.add_tool(
+        connect,
+        name="connect",
+        title="Connect to a dusk server",
+        description=(
+            "Open a connection to a dusk server at the given host and port. "
+            "Returns a descriptor string - eight hexadecimal digits - that "
+            "identifies this connection; pass it to every program tool and to "
+            "the disconnect tool. You may hold several connections at once - "
+            "each call returns a new descriptor. Connections are closed "
+            "automatically when this session ends, but call disconnect when "
+            "you are done with one to free it sooner."
+        ),
+    )
+
+
+def close_with_session(
+    registry: "ConnectionRegistry", session: "ServerSession"
+) -> None:
+    async def disconnect_owner_on_close() -> None:
+        # Runs from BaseSession.__aexit__'s exit-stack unwind, which on
+        # server shutdown happens while this task is already cancelled.
+        # to_thread.run_sync issues a cancellation checkpoint, so without
+        # the shield the CancelledError re-raises mid-unwind and corrupts
+        # anyio's cancel-scope stack ("Attempted to exit a cancel scope
+        # that isn't the current task's current cancel scope").
+        with anyio.CancelScope(shield=True):
+            await anyio.to_thread.run_sync(registry.disconnect_owner, session)
+
+    session._exit_stack.push_async_callback(disconnect_owner_on_close)
 
 
 def _register_program_tool(

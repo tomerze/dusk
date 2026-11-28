@@ -293,6 +293,23 @@ The last two are what let the gateway's own tests run with no node and no compil
 
 **Serve a single worker.** The connection registry and the MCP task store are in-process state. With more than one worker process each holds its own, so a descriptor minted by one is unknown to another - see [Single worker only](#single-worker-only).
 
+### Building it into your own service
+
+`app()` opens connections to `host:port` and puts every REST caller under one owner. A service that authenticates its own callers, or reaches its nodes some other way, builds the two surfaces itself with `dusk.gw.rest.build_application(registry, programs, ...)` and `dusk.gw.mcp.build_application(registry, programs, ip, ...)` over one `ConnectionRegistry`, and passes what it does differently:
+
+| Parameter | Builder | What it is |
+|-----------|---------|-----------|
+| `owner` | REST | A function from the request to the owner of the descriptors it opens. `/disconnect`, `/sh` and `/sh/stream` find a descriptor under the caller's owner only, so one caller cannot use another's. Defaults to the one REST owner every caller shares. |
+| `connect` | REST | A function `(api, registry, owner)` that adds your `POST /connect` route to the FastAPI app in place of the `host:port` one. `owner` is the owner function; your route registers under `owner(request)`. Every other route stays. |
+| `connect` | MCP | A function `(server, registry)` that adds your `connect` tool to the FastMCP server in place of the `host:port` one. Every other tool stays. |
+| `instructions` | MCP | What the MCP server tells a client in its handshake, including how to connect. Defaults to `dusk.gw.mcp.INSTRUCTIONS`. |
+
+Your `connect` opens the connection its own way and passes it to `registry.register(owner, connection)`, which returns the descriptor and whether this is that owner's first connection. A connection needs only `Dusk`'s `sh(command)` and `disconnect()`. An MCP tool registers under `context.session` and, on that session's first connection, calls `dusk.gw.mcp.close_with_session(registry, context.session)` straight after `register`, with no `await` in between. That closes the session's connections when it ends; a cancellation at an `await` between the two would leave the connection open until the gateway stops.
+
+The REST app's `description`, the text at the top of its OpenAPI document and Swagger UI page, still says to connect with a host and port; set `description` on the FastAPI app `rest.build_application` returns to say how your `/connect` works.
+
+Put the two together the way `app()` does: set `DUSK_NON_INTERACTIVE=1` in the process (see [No interactive views](#no-interactive-views)), mount the REST app at `/v1` on the MCP app, whose lifespan runs MCP's session manager, and call `registry.disconnect_all()` when that lifespan ends.
+
 ### HTTPS
 
 `dusk_gw` and `serve` speak **plain HTTP**. Neither takes a certificate, so anything
