@@ -13,8 +13,8 @@ dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 dusk_program_kvs_internal = { path = "../kvs/internal" }
 embassy-executor = "0.10.0"
-anyhow = { version = "1.0", public = true }
-capnp = { version = "0.21", public = true }
+anyhow = { version = "1.0", default-features = false, public = true }
+capnp = { version = "0.21", default-features = false, features = ["alloc"], public = true }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
 # The client-side log viewer (viewer.rs) - all std-only, client feature.

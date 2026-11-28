@@ -12,9 +12,9 @@ dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
 tracing = { version = "0.1.41", default-features = false }
-anyhow = { version = "1.0", public = true }
+anyhow = { version = "1.0", default-features = false, public = true }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "0.21", public = false }
+capnp = { version = "0.21", default-features = false, features = ["alloc"], public = false }
 linkme = { version = "*", optional = true, public = false }
 clap = { version = "4", features = ["derive"], optional = true }
 chrono = { version = "0.4", optional = true }

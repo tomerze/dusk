@@ -9,14 +9,14 @@ dusk_capnp = { path = "../../dusk/src/dusk_capnp/", public = true}
 dusk_program = { path = "../../dusk/src/dusk_program", public = true }
 dusk_program_proc = { path = "../../dusk/src/dusk_program_proc", public = true }
 dusk_core = { path = "../../dusk/src/dusk_core/" }
-slab = { version = "0.4.11", public = true }
-anyhow = { version = "1.0.88", public = true }
+slab = { version = "0.4.11", default-features = false, public = true }
+anyhow = { version = "1.0.88", default-features = false, public = true }
 dusk_program_sh = { path = "../sh", public = true }
 dusk_program_sh_proc = { path = "../sh/proc", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
 tracing = { version = "0.1.41", default-features = false }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "0.21", public = false }
+capnp = { version = "0.21", default-features = false, features = ["alloc"], public = false }
 linkme = { version = "*", optional = true, public = false }
 
 [build-dependencies]
