@@ -106,7 +106,7 @@ impl ProgramArgsBuilder for LogsProgramArgsBuilder {
                     .as_deref()
                     .ok_or_else(|| anyhow::anyhow!("`logs stream` needs a destination url"))?;
                 let namespace_id = client
-                    .id_request()
+                    .namespace_id_request()
                     .send()
                     .promise
                     .await?
