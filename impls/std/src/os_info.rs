@@ -34,7 +34,7 @@ fn set_kvs_process(kvs: &Kvs) {
         )),
         Err(error) => tracing::warn!(error = %error, "reading the working directory failed"),
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "espidf")))]
     values.push((
         String::from("dusk.os.process.parent_pid"),
         Value::Uint(u64::from(std::os::unix::process::parent_id())),
