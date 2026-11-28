@@ -13,7 +13,7 @@ dusk_program_kvs_internal = { path = "../kvs/internal" }
 dusk_program_sh = { path = "../sh", public = true }
 tracing = { version = "0.1.41", default-features = false }
 # Declared for macro use, versions taken from dusk_program
-capnp = { version = "0.21", public = false }
+capnp = { version = "0.21", default-features = false, features = ["alloc"], public = false }
 
 [build-dependencies]
 dusk_build = { path = "../../dusk/src/dusk_build" }
