@@ -159,3 +159,20 @@ jobs:
       # vendor/capnproto submodule nor a target directory.
       - name: cargo fmt
         run: cargo fmt --all -- --check
+
+  rust-nightfall-tls:
+    name: Rust (nightfall's TLS provider, thumbv7em-none-eabihf)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Add the thumbv7em-none-eabihf target
+        run: rustup target add thumbv7em-none-eabihf
+
+      - name: cargo build --target thumbv7em-none-eabihf -p dusk_program_nightfall_tls
+        run: cargo build --target thumbv7em-none-eabihf -p dusk_program_nightfall_tls
